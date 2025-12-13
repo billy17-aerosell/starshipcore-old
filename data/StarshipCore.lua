@@ -3896,7 +3896,6 @@ local function CreateTab(name, icon, page)
 	btn.AutoButtonColor = false
 	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 
-	-- Label (hidden on mobile collapsed mode)
 	local lbl = Instance.new("TextLabel", btn)
 	lbl.Name = "Title"
 	lbl.Text = string.upper(name)
@@ -3946,9 +3945,7 @@ local function CreateTab(name, icon, page)
 			if lbl.Visible then
 				TweenService:Create(lbl, TweenInfo.new(0.2), { TextColor3 = C_TEXT }):Play()
 			end
-			if iconLbl then
-				TweenService:Create(iconLbl, TweenInfo.new(0.2), { TextColor3 = C_TEXT }):Play()
-			end
+
 			TweenService:Create(btn, TweenInfo.new(0.2), { BackgroundTransparency = 0.9 }):Play()
 		end
 	end)
@@ -3957,9 +3954,7 @@ local function CreateTab(name, icon, page)
 			if lbl.Visible then
 				TweenService:Create(lbl, TweenInfo.new(0.2), { TextColor3 = C_TEXT_DIM }):Play()
 			end
-			if iconLbl then
-				TweenService:Create(iconLbl, TweenInfo.new(0.2), { TextColor3 = C_TEXT_DIM }):Play()
-			end
+
 			TweenService:Create(btn, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
 		end
 	end)
