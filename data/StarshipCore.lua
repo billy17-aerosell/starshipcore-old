@@ -660,11 +660,12 @@ end
 
 -- CINEMATIC INTRO ANIMATION (Enhanced)
 local function StartLoader()
+	local LoaderGui = nil
 	local success, err = pcall(function()
 		local skipped = false
 
 		-- 1. Setup GUI & Effects
-		local LoaderGui = Instance.new("ScreenGui")
+		LoaderGui = Instance.new("ScreenGui")
 		LoaderGui.Name = "StarshipIntro"
 		LoaderGui.Parent = CoreGui
 		LoaderGui.IgnoreGuiInset = true
@@ -962,8 +963,6 @@ local function StartLoader()
 		TweenService:Create(LogoGlow, TweenInfo.new(0.3), { Thickness = 0 }):Play()
 		TweenService:Create(Title, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
 		TweenService:Create(Sub, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
-		TweenService:Create(ProgressContainer, TweenInfo.new(0.3), { BackgroundTransparency = 1 }):Play()
-		TweenService:Create(ProgressText, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
 		TweenService:Create(SkipHint, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
 
 		-- Tunggu elemen fade out selesai
@@ -1010,6 +1009,9 @@ local function StartLoader()
 		warn("Intro Failed: " .. tostring(err))
 		if game:GetService("Lighting"):FindFirstChild("BlurEffect") then
 			game:GetService("Lighting").BlurEffect:Destroy()
+		end
+		if LoaderGui then
+			LoaderGui:Destroy()
 		end
 		if Main then
 			Main.Visible = true
