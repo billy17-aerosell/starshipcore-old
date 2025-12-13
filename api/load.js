@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 
 export default function handler(req, res) {
-  // 1. Validasi Method (Hanya GET yang boleh)
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -14,23 +13,19 @@ export default function handler(req, res) {
   }
 
   try {
-    // 2. Baca Database Whitelist
     const whitelistPath = path.join(process.cwd(), 'data', 'whitelist.json');
     const whitelistData = fs.readFileSync(whitelistPath, 'utf8');
     const whitelist = JSON.parse(whitelistData);
 
-    // 3. Cek User di Whitelist
     const userData = whitelist[user];
 
     if (!userData) {
-      // User tidak terdaftar
       return res.status(403).json({ 
         status: 'denied',
         message: 'Not Whitelisted' 
       });
     }
 
-    // Cek Expiry (Jika ada)
     if (userData.expiry) {
       const now = Math.floor(Date.now() / 1000);
       if (now > userData.expiry) {
@@ -41,23 +36,21 @@ export default function handler(req, res) {
       }
     }
 
-    // 4. Baca Script Asli (StarshipCore.lua)
     const scriptPath = path.join(process.cwd(), 'data', 'StarshipCore.lua');
     
-    // Cek apakah file script ada
     if (!fs.existsSync(scriptPath)) {
       return res.status(500).json({ error: 'Script file missing on server' });
     }
 
-    let scriptContent = fs.readFileSync(scriptPath, 'utf8');
+    // BACA SEBAGAI BUFFER (PENTING!)
+    let scriptBuffer = fs.readFileSync(scriptPath);
 
-    // Hapus BOM jika ada (Pembersihan ekstra)
-    if (scriptContent.charCodeAt(0) === 0xFEFF) {
-      scriptContent = scriptContent.slice(1);
+    // Hapus BOM jika ada (3 byte pertama: EF BB BF)
+    if (scriptBuffer.length >= 3 && scriptBuffer[0] === 0xEF && scriptBuffer[1] === 0xBB && scriptBuffer[2] === 0xBF) {
+      scriptBuffer = scriptBuffer.subarray(3);
     }
 
-    // 5. Generate Dynamic Key (Kunci Sekali Pakai)
-    // Kunci ini hanya berlaku untuk request DETIK INI saja.
+    // Generate Dynamic Key
     const generateKey = (length) => {
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+';
       let result = '';
@@ -67,31 +60,24 @@ export default function handler(req, res) {
       return result;
     };
 
-    const dynamicKey = generateKey(64); // Kunci sangat panjang (64 karakter)
+    const dynamicKey = generateKey(64);
+    const keyBuffer = Buffer.from(dynamicKey);
 
-    // 6. Enkripsi Script dengan Kunci Dinamis
-    const xorEncrypt = (text, key) => {
-      let result = [];
-      for (let i = 0; i < text.length; i++) {
-        const charCode = text.charCodeAt(i);
-        const keyCode = key.charCodeAt(i % key.length);
-        result.push(String.fromCharCode(charCode ^ keyCode));
-      }
-      return result.join('');
-    };
+    // Enkripsi XOR (Buffer to Buffer)
+    const encryptedBuffer = Buffer.alloc(scriptBuffer.length);
+    for (let i = 0; i < scriptBuffer.length; i++) {
+      encryptedBuffer[i] = scriptBuffer[i] ^ keyBuffer[i % keyBuffer.length];
+    }
 
-    const encryptedScript = xorEncrypt(scriptContent, dynamicKey);
+    // Encode ke Base64
+    const base64Blob = encryptedBuffer.toString('base64');
 
-    // 7. Encode ke Base64 (Agar aman dikirim lewat JSON)
-    const base64Blob = Buffer.from(encryptedScript, 'binary').toString('base64');
-
-    // 8. Kirim Response
     res.status(200).json({
       status: 'success',
       role: userData.role || 'VIP',
       duration: userData.duration || 'LIFETIME',
-      key: dynamicKey, // Kunci untuk membuka gembok
-      blob: base64Blob // Gemboknya
+      key: dynamicKey,
+      blob: base64Blob
     });
 
   } catch (error) {
