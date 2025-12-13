@@ -1,0 +1,12 @@
+{
+  "9268011358": {
+    "role": "OWNER",
+    "duration": "LIFETIME",
+    "note": "Developer Account"
+  },
+  "1234567890": {
+    "role": "VIP",
+    "duration": "30DAYS",
+    "expiry": 1735689600
+  }
+}
