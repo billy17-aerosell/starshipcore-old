@@ -68,17 +68,7 @@ local C_MAIN, C_SIDE, C_ACCENT, C_TEXT, C_TEXT_DIM, C_ITEM, C_RED, C_YELLOW, C_G
 _G.StarshipColors = CurrentColors
 
 -- Mobile Detection & Responsive System (consolidated to reduce local count)
-local Mobile = {}
-Mobile.Camera = workspace.CurrentCamera
-Mobile.ViewportSize = Mobile.Camera.ViewportSize
-Mobile.IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-Mobile.IsSmallScreen = Mobile.ViewportSize.X < 600 or Mobile.ViewportSize.Y < 500
-Mobile.IsCompact = Mobile.IsMobile or Mobile.IsSmallScreen
-Mobile.UI_SCALE = Mobile.IsCompact and 0.85 or 1
-Mobile.SIDEBAR_WIDTH = Mobile.IsCompact and 50 or 130
-Mobile.SIDEBAR_COLLAPSED = Mobile.IsCompact
-Mobile.MAIN_WIDTH = Mobile.IsCompact and math.min(Mobile.ViewportSize.X - 20, 400) or 550
-Mobile.TOUCH_MIN_SIZE = 44
+
 local TAGS_API_URL = "https://starship-core.my.id/api/tags"
 _G.StarshipTags = {} -- Store tags here: { [UserId] = {role="VIP", tag="VIP"} }
 
@@ -2997,77 +2987,6 @@ local function SetTheme(c)
 	end
 end
 
--- === MOBILE UI INJECTION ===
-if Mobile.IsMobile then
-	local MobileUI = LoadModule("MobileUI")
-	if MobileUI then
-		local callbacks = {
-			GetMapList = function()
-				if isfolder(MERGER_FOLDER) then
-					local files = listfiles(MERGER_FOLDER)
-					local names = {}
-					for _, f in ipairs(files) do
-						table.insert(names, string.match(f, "[^/\\]+$") or f)
-					end
-					return names
-				end
-				return {}
-			end,
-			OnMapSelected = function(name)
-				currentPlaybackFile = name
-			end,
-			PlayRecording = function()
-				if currentPlaybackFile then
-					PlayRecording(currentPlaybackFile)
-				else
-					ShowToast("Error", "No map selected", "error", 2)
-				end
-			end,
-			StopPlayback = StopPlayback,
-			SetLoop = function(val)
-				isLooping = val
-			end,
-			SetReverse = function(val)
-				isReversing = val
-			end,
-			SetSpeed = function(val)
-				playbackSpeed = val
-			end,
-		}
-
-		-- God Mode Logic
-		local mobileGodLoop = nil
-		callbacks.SetGodMode = function(val)
-			isGodMode = val
-			if isGodMode then
-				mobileGodLoop = RunService.Heartbeat:Connect(function()
-					local c = LocalPlayer.Character
-					local h = c and c:FindFirstChild("Humanoid")
-					if h then
-						h.MaxHealth = math.huge
-						h.Health = math.huge
-					end
-				end)
-				table.insert(Connections, mobileGodLoop)
-			else
-				if mobileGodLoop then
-					mobileGodLoop:Disconnect()
-					mobileGodLoop = nil
-				end
-				local c = LocalPlayer.Character
-				local h = c and c:FindFirstChild("Humanoid")
-				if h then
-					h.MaxHealth = 100
-					h.Health = 100
-				end
-			end
-		end
-
-		MobileUI.Init(callbacks)
-		return -- Stop Desktop UI creation
-	end
-end
-
 local GUI_NAME = "StarshipCore"
 if CoreGui:FindFirstChild(GUI_NAME) then
 	CoreGui[GUI_NAME]:Destroy()
@@ -3091,8 +3010,8 @@ for _, descendant in pairs(ScreenGui:GetDescendants()) do
 end
 
 Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, Mobile.MAIN_WIDTH, 0, 380)
-Main.Position = UDim2.new(0.5, -Mobile.MAIN_WIDTH / 2, 0.5, -190)
+Main.Size = UDim2.new(0, 550, 0, 380)
+Main.Position = UDim2.new(0.5, -275, 0.5, -190)
 Main.BackgroundTransparency = 1
 Main.Active = true
 Main.Visible = false
@@ -3178,7 +3097,7 @@ ResizeHandle.InputBegan:Connect(function(input)
 
 			local currentMouse = UserInputService:GetMouseLocation()
 			local delta = currentMouse - startMouse
-			local minWidth = Mobile.IsCompact and 300 or 550
+			local minWidth = 550
 			local newWidth = math.max(minWidth, startSize.X + delta.X)
 			local newHeight = math.max(380, startSize.Y + delta.Y)
 
@@ -3326,7 +3245,7 @@ local function ToggleMin()
 end
 
 local ToggleMinConnection
-local topBtnSize = Mobile.IsCompact and Mobile.TOUCH_MIN_SIZE or 40
+local topBtnSize = 40
 local CloseBtn = Instance.new("TextButton", TopBar)
 CloseBtn.Text = "×"
 CloseBtn.Size = UDim2.new(0, topBtnSize, 1, 0)
@@ -3365,7 +3284,7 @@ local StatsContainer = Instance.new("Frame", TopBar)
 StatsContainer.Size = UDim2.new(0, 300, 1, 0)
 StatsContainer.Position = UDim2.new(1, -380, 0, 0) -- Left of buttons
 StatsContainer.BackgroundTransparency = 1
-StatsContainer.Visible = not Mobile.IsCompact -- Hide on mobile
+StatsContainer.Visible = true
 
 local UIListStats = Instance.new("UIListLayout", StatsContainer)
 UIListStats.FillDirection = Enum.FillDirection.Horizontal
