@@ -950,8 +950,8 @@ local function StartLoader()
 			return
 		end
 
-		-- 6. Loading Wait (5 Seconds)
-		task.wait(5)
+		-- 6. Loading Wait (3 Seconds)
+		task.wait(3)
 		if skipped then
 			return
 		end
