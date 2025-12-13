@@ -8,7 +8,7 @@
     "role": "VIP",
     "duration": "7DAYS",
     "durationDays": 7,
-    "expiry": null,
-    "activatedAt": null
+    "expiry": 1766233724,
+    "activatedAt": 1765628924
   }
 }
