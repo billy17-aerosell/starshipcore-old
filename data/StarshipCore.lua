@@ -655,6 +655,8 @@ local function ShowLoadingModal(visible, text, progress)
 	if LoadingBar then
 		local p = math.clamp(progress or 0, 0, 1)
 		LoadingBar.Size = UDim2.new(p, 0, 1, 0)
+	end
+end
 
 -- WHITELIST SYSTEM UI (Firebase - UserId based)
 
@@ -6978,7 +6980,7 @@ local function StartLoader()
 		Main.Visible = true
 		Main.ClipsDescendants = true
 		Main.Size = UDim2.new(0, 550, 0, TargetMainHeight)
-		
+
 		-- Ensure MainBackground is visible
 		local bg = Main:FindFirstChild("MainBackground")
 		if bg then
@@ -6995,7 +6997,7 @@ local function StartLoader()
 	if getgenv().ToggleNametags then
 		getgenv().ToggleNametags(true)
 	end
-	
+
 	-- Show ready toast
 	if UIModule and UIModule.ShowToast then
 		UIModule.ShowToast("System", "Starship Core Ready", "success", 3)
