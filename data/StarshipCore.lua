@@ -3305,9 +3305,7 @@ end
 UIHandlers.TopStats = {
 	FpsLbl = CreateTopStat("FPS", "⚡"),
 	PingLbl = CreateTopStat("Ping", "📶"),
-	SessLbl = CreateTopStat("Sess", "⏱️"),
 	KeyLbl = CreateTopStat("Key", "🔑"),
-	SessionStart = os.time(),
 	frameCount = 0,
 	lastFpsTime = os.clock(),
 }
@@ -3332,10 +3330,33 @@ task.spawn(function()
 		end)
 		TS.PingLbl.Text = string.format("📶 %dms", ping)
 		TS.PingLbl.TextColor3 = (ping > 200) and C_RED or C_GREEN
-		local diff = os.time() - TS.SessionStart
-		TS.SessLbl.Text =
-			string.format("⏱️ %02d:%02d:%02d", math.floor(diff / 3600), math.floor((diff % 3600) / 60), diff % 60)
-		TS.KeyLbl.Text = "🔑 " .. (GlobalKeyDuration or "N/A")
+
+		-- Update Key Duration from Global Session Data
+		local durationText = "N/A"
+		if getgenv().StarshipSession then
+			local sess = getgenv().StarshipSession
+			if sess.Expiry and type(sess.Expiry) == "number" then
+				local remaining = sess.Expiry - os.time()
+				if remaining > 0 then
+					local days = math.floor(remaining / 86400)
+					local hours = math.floor((remaining % 86400) / 3600)
+					local mins = math.floor((remaining % 3600) / 60)
+					local secs = remaining % 60
+
+					if days > 0 then
+						durationText = string.format("%dd %02dh %02dm", days, hours, mins)
+					else
+						durationText = string.format("%02dh %02dm %02ds", hours, mins, secs)
+					end
+				else
+					durationText = "EXPIRED"
+				end
+			else
+				durationText = sess.Duration or "LIFETIME"
+			end
+		end
+
+		TS.KeyLbl.Text = "🔑 " .. durationText
 		TS.KeyLbl.TextColor3 = C_ACCENT
 		task.wait(1)
 	end

@@ -76,6 +76,7 @@ export default function handler(req, res) {
       status: 'success',
       role: userData.role || 'VIP',
       duration: userData.duration || 'LIFETIME',
+      expiry: userData.expiry || null, // Kirim timestamp expiry
       key: dynamicKey,
       blob: base64Blob
     });
