@@ -3449,15 +3449,15 @@ UIListTabs.HorizontalAlignment = Enum.HorizontalAlignment.Center
 -- PROFILE SECTION (Restored & Polished) - Wrapped to release locals
 do
 	local ProfileFrame = Instance.new("Frame", Sidebar)
-	ProfileFrame.Size = Mobile.SIDEBAR_COLLAPSED and UDim2.new(1, 0, 0, 50) or UDim2.new(1, 0, 0, 55)
-	ProfileFrame.Position = Mobile.SIDEBAR_COLLAPSED and UDim2.new(0, 0, 1, -50) or UDim2.new(0, 0, 1, -55)
+	ProfileFrame.Size = UDim2.new(1, 0, 0, 55)
+	ProfileFrame.Position = UDim2.new(0, 0, 1, -55)
 	ProfileFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 	ProfileFrame.BorderSizePixel = 0
 	RegisterTheme(ProfileFrame, "BackgroundColor3", "Side")
 
 	local ProfileImg = Instance.new("ImageLabel", ProfileFrame)
-	ProfileImg.Size = Mobile.SIDEBAR_COLLAPSED and UDim2.new(0, 30, 0, 30) or UDim2.new(0, 32, 0, 32)
-	ProfileImg.Position = Mobile.SIDEBAR_COLLAPSED and UDim2.new(0.5, -15, 0.5, -15) or UDim2.new(0, 10, 0.5, -16)
+	ProfileImg.Size = UDim2.new(0, 32, 0, 32)
+	ProfileImg.Position = UDim2.new(0, 10, 0.5, -16)
 	ProfileImg.BackgroundColor3 = C_ITEM
 	Instance.new("UICorner", ProfileImg).CornerRadius = UDim.new(1, 0)
 	RegisterTheme(ProfileImg, "BackgroundColor3", "Item")
