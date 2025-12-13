@@ -902,8 +902,8 @@ local function StartLoader()
 		end
 
 		-- 3. Logo Appear with Pulse
-		TweenService:Create(Logo, TweenInfo.new(0.5, Enum.EasingStyle.Back), { TextTransparency = 0 }):Play()
-		TweenService:Create(LogoGlow, TweenInfo.new(0.5), { Thickness = 3 }):Play()
+		TweenService:Create(Logo, TweenInfo.new(0.4, Enum.EasingStyle.Back), { TextTransparency = 0 }):Play()
+		TweenService:Create(LogoGlow, TweenInfo.new(0.4), { Thickness = 3 }):Play()
 
 		-- Logo Rainbow Animation
 		task.spawn(function()
@@ -919,7 +919,7 @@ local function StartLoader()
 				task.wait(0.02)
 			end
 		end)
-		task.wait(0.5)
+		task.wait(0.2)
 		if skipped then
 			return
 		end
@@ -950,8 +950,8 @@ local function StartLoader()
 			return
 		end
 
-		-- 6. Loading Wait (3 Seconds)
-		task.wait(3)
+		-- 6. Loading Wait (1.5 Seconds)
+		task.wait(1.5)
 		if skipped then
 			return
 		end
