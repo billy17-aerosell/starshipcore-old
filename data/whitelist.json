@@ -4,10 +4,10 @@
     "duration": "LIFETIME",
     "note": "Developer Account"
   },
-  "1234567890": {
+  "9337569193": {
     "role": "VIP",
-    "duration": "30DAYS",
-    "durationDays": 30,
+    "duration": "7DAYS",
+    "durationDays": 7,
     "expiry": null,
     "activatedAt": null
   }
