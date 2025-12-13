@@ -1,7 +1,93 @@
 import fs from 'fs';
 import path from 'path';
 
-export default function handler(req, res) {
+// GitHub API Configuration
+const GITHUB_API = 'https://api.github.com';
+const WHITELIST_PATH = 'data/whitelist.json';
+
+/**
+ * Update whitelist.json di GitHub Repository
+ * @param {object} newWhitelist - Data whitelist yang sudah diupdate
+ * @param {string} currentSha - SHA file saat ini (untuk update)
+ */
+async function updateWhitelistOnGitHub(newWhitelist, currentSha) {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPO;
+
+  if (!token || !repo) {
+    console.error('GitHub credentials not configured');
+    return false;
+  }
+
+  try {
+    const content = Buffer.from(JSON.stringify(newWhitelist, null, 2)).toString('base64');
+    
+    const response = await fetch(`${GITHUB_API}/repos/${repo}/contents/${WHITELIST_PATH}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github.v3+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      },
+      body: JSON.stringify({
+        message: `[Auto] Activate license for user`,
+        content: content,
+        sha: currentSha
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('GitHub API Error:', errorData);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('GitHub Update Error:', error);
+    return false;
+  }
+}
+
+/**
+ * Get current whitelist from GitHub (untuk dapat SHA terbaru)
+ */
+async function getWhitelistFromGitHub() {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPO;
+
+  if (!token || !repo) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${GITHUB_API}/repos/${repo}/contents/${WHITELIST_PATH}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      }
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const content = Buffer.from(data.content, 'base64').toString('utf8');
+    
+    return {
+      sha: data.sha,
+      whitelist: JSON.parse(content)
+    };
+  } catch (error) {
+    console.error('GitHub Fetch Error:', error);
+    return null;
+  }
+}
+
+export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -13,9 +99,10 @@ export default function handler(req, res) {
   }
 
   try {
+    // Baca whitelist dari file lokal dulu
     const whitelistPath = path.join(process.cwd(), 'data', 'whitelist.json');
     const whitelistData = fs.readFileSync(whitelistPath, 'utf8');
-    const whitelist = JSON.parse(whitelistData);
+    let whitelist = JSON.parse(whitelistData);
 
     const userData = whitelist[user];
 
@@ -26,16 +113,55 @@ export default function handler(req, res) {
       });
     }
 
+    const now = Math.floor(Date.now() / 1000);
+
+    // === ACTIVATION ON FIRST RUN ===
+    // Jika expiry null DAN ada durationDays, ini adalah aktivasi pertama
+    if (userData.expiry === null && userData.durationDays) {
+      console.log(`Activating license for user ${user}...`);
+      
+      // Hitung expiry berdasarkan durationDays
+      const durationSeconds = userData.durationDays * 24 * 60 * 60; // days to seconds
+      const newExpiry = now + durationSeconds;
+      
+      // Update data user
+      userData.expiry = newExpiry;
+      userData.activatedAt = now;
+      whitelist[user] = userData;
+
+      // Update ke GitHub
+      const githubData = await getWhitelistFromGitHub();
+      
+      if (githubData) {
+        // Update whitelist dari GitHub (untuk sinkronisasi)
+        githubData.whitelist[user] = userData;
+        
+        const updateSuccess = await updateWhitelistOnGitHub(githubData.whitelist, githubData.sha);
+        
+        if (updateSuccess) {
+          console.log(`License activated for user ${user}. Expiry: ${new Date(newExpiry * 1000).toISOString()}`);
+        } else {
+          console.error(`Failed to update GitHub for user ${user}`);
+          // Tetap lanjutkan walaupun GitHub update gagal (pakai local)
+        }
+      } else {
+        console.warn('Could not fetch GitHub data, using local whitelist');
+      }
+    }
+    // === END ACTIVATION ===
+
+    // Cek expiry (skip jika LIFETIME / tidak ada expiry)
     if (userData.expiry) {
-      const now = Math.floor(Date.now() / 1000);
       if (now > userData.expiry) {
         return res.status(403).json({
           status: 'denied',
-          message: 'License Expired'
+          message: 'License Expired',
+          expiredAt: new Date(userData.expiry * 1000).toISOString()
         });
       }
     }
 
+    // === Load dan encrypt script ===
     const scriptPath = path.join(process.cwd(), 'data', 'StarshipCore.lua');
     
     if (!fs.existsSync(scriptPath)) {
@@ -72,11 +198,19 @@ export default function handler(req, res) {
     // Encode ke Base64
     const base64Blob = encryptedBuffer.toString('base64');
 
+    // Hitung remaining time
+    let remainingDays = null;
+    if (userData.expiry) {
+      remainingDays = Math.ceil((userData.expiry - now) / 86400);
+    }
+
     res.status(200).json({
       status: 'success',
       role: userData.role || 'VIP',
       duration: userData.duration || 'LIFETIME',
-      expiry: userData.expiry || null, // Kirim timestamp expiry
+      expiry: userData.expiry || null,
+      remainingDays: remainingDays,
+      activatedAt: userData.activatedAt || null,
       key: dynamicKey,
       blob: base64Blob
     });

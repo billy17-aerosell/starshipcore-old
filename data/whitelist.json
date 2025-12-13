@@ -7,6 +7,8 @@
   "1234567890": {
     "role": "VIP",
     "duration": "30DAYS",
-    "expiry": 1735689600
+    "durationDays": 30,
+    "expiry": null,
+    "activatedAt": null
   }
 }
