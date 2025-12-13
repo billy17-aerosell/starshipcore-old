@@ -3402,7 +3402,7 @@ end)
 
 -- SIDEBAR
 local Sidebar = Instance.new("Frame", Main)
-Sidebar.Size = UDim2.new(0, Mobile.SIDEBAR_WIDTH, 1, -40)
+Sidebar.Size = UDim2.new(0, 130, 1, -40)
 Sidebar.Position = UDim2.new(0, 0, 0, 40)
 Sidebar.BackgroundColor3 = C_SIDE
 Sidebar.BorderSizePixel = 0
@@ -3411,42 +3411,6 @@ SidebarCorner.CornerRadius = UDim.new(0, 0) -- Flat left side
 RegisterTheme(Sidebar, "BackgroundColor3", "Side")
 
 -- Sidebar Toggle Button for Mobile - Wrapped to release locals
-if Mobile.SIDEBAR_COLLAPSED then
-	do
-		local SidebarToggle = Instance.new("TextButton", Main)
-		SidebarToggle.Name = "SidebarToggle"
-		SidebarToggle.Size = UDim2.new(0, 30, 0, 30)
-		SidebarToggle.Position = UDim2.new(0, Mobile.SIDEBAR_WIDTH + 5, 0, 45)
-		SidebarToggle.BackgroundColor3 = C_ITEM
-		SidebarToggle.Text = "☰"
-		SidebarToggle.TextColor3 = C_TEXT
-		SidebarToggle.TextSize = 16
-		SidebarToggle.Font = Enum.Font.GothamBold
-		SidebarToggle.ZIndex = 10
-		Instance.new("UICorner", SidebarToggle).CornerRadius = UDim.new(0, 6)
-		RegisterTheme(SidebarToggle, "BackgroundColor3", "Item")
-		RegisterTheme(SidebarToggle, "TextColor3", "Text")
-
-		local sidebarExpanded = false
-		SidebarToggle.MouseButton1Click:Connect(function()
-			sidebarExpanded = not sidebarExpanded
-			local targetWidth = sidebarExpanded and 130 or 50
-			TweenService
-				:Create(
-					Sidebar,
-					TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-					{ Size = UDim2.new(0, targetWidth, 1, -40) }
-				)
-				:Play()
-			SidebarToggle.Text = sidebarExpanded and "✕" or "☰"
-			local contentOffset = targetWidth + 10
-			TweenService:Create(ContentArea, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
-				Position = UDim2.new(0, contentOffset, 0, 45),
-				Size = UDim2.new(1, -(contentOffset + 10), 1, -55),
-			}):Play()
-		end)
-	end
-end
 
 -- Separator Line (Gradient Fade) - Wrapped
 do
@@ -3522,7 +3486,7 @@ do
 	ProfileName.TextSize = 11
 	ProfileName.TextXAlignment = Enum.TextXAlignment.Left
 	ProfileName.TextTruncate = Enum.TextTruncate.AtEnd
-	ProfileName.Visible = not Mobile.SIDEBAR_COLLAPSED
+	ProfileName.Visible = true
 	RegisterTheme(ProfileName, "TextColor3", "Text")
 
 	local ProfileRank = Instance.new("TextLabel", ProfileFrame)
@@ -3532,7 +3496,7 @@ do
 	ProfileRank.Font = Enum.Font.GothamMedium
 	ProfileRank.TextSize = 9
 	ProfileRank.TextXAlignment = Enum.TextXAlignment.Left
-	ProfileRank.Visible = not Mobile.SIDEBAR_COLLAPSED
+	ProfileRank.Visible = true
 
 	-- Fetch rank from Pastebin (same as nametag system)
 	ProfileRank.Text = "LOADING..."
@@ -3608,7 +3572,7 @@ TabContainer.Size = UDim2.new(1, 0, 1, -95)
 
 -- CONTENT AREA (Adjusted for Padding/Gap)
 local ContentArea = Instance.new("Frame", Main)
-local contentOffset = Mobile.SIDEBAR_WIDTH + 10
+local contentOffset = 130 + 10
 ContentArea.Size = UDim2.new(1, -(contentOffset + 10), 1, -55) -- Sidebar + Gap
 ContentArea.Position = UDim2.new(0, contentOffset, 0, 45) -- Starts after sidebar with gap
 ContentArea.BackgroundTransparency = 1
