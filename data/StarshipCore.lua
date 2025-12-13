@@ -4099,37 +4099,36 @@ end
 -- ========================
 
 -- Calculate Dynamic UI Height based on Tab Count (wrapped to release locals)
-	local TAB_HEIGHT = 45
-	local TAB_MARGIN_TOP = 10
-	local TAB_MARGIN_BOTTOM = 60
-	local TOPBAR_HEIGHT = 35
-	local MIN_UI_HEIGHT = 500
-	local MAX_UI_HEIGHT = 700
+local TAB_HEIGHT = 45
+local TAB_MARGIN_TOP = 10
+local TAB_MARGIN_BOTTOM = 60
+local TOPBAR_HEIGHT = 35
+local MIN_UI_HEIGHT = 500
+local MAX_UI_HEIGHT = 700
 
-	local tabList = {
-		{ "Dashboard", "", PageDashboard },
-		{ "Recorder", "rbxassetid://10709782497", PageRecord },
-		{ "Merger", "rbxassetid://10709782823", PageMerge },
-		{ "List Map", "", PageListMap },
-		{ "Warp", "", PageWarp },
-		{ "Tools", "", PageTools },
-		{ "Helper", "", PageHelper },
-		{ "Fun", "", PageFun },
-		{ "Config", "", PageConfig },
-	}
+local tabList = {
+	{ "Dashboard", "", PageDashboard },
+	{ "Recorder", "rbxassetid://10709782497", PageRecord },
+	{ "Merger", "rbxassetid://10709782823", PageMerge },
+	{ "List Map", "", PageListMap },
+	{ "Warp", "", PageWarp },
+	{ "Tools", "", PageTools },
+	{ "Helper", "", PageHelper },
+	{ "Fun", "", PageFun },
+	{ "Config", "", PageConfig },
+}
 
-	local tabCount = #tabList
-	local requiredHeight = TOPBAR_HEIGHT + TAB_MARGIN_TOP + (tabCount * TAB_HEIGHT) + TAB_MARGIN_BOTTOM
-	requiredHeight = math.clamp(requiredHeight, MIN_UI_HEIGHT, MAX_UI_HEIGHT)
-	TargetMainHeight = requiredHeight
+local tabCount = #tabList
+local requiredHeight = TOPBAR_HEIGHT + TAB_MARGIN_TOP + (tabCount * TAB_HEIGHT) + TAB_MARGIN_BOTTOM
+requiredHeight = math.clamp(requiredHeight, MIN_UI_HEIGHT, MAX_UI_HEIGHT)
+TargetMainHeight = requiredHeight
 
-	-- Update Main UI Size
-	Main.Size = UDim2.new(0, 550, 0, requiredHeight)
-	Main.Position = UDim2.new(0.5, -275, 0.5, -requiredHeight / 2)
+-- Update Main UI Size
+Main.Size = UDim2.new(0, 550, 0, requiredHeight)
+Main.Position = UDim2.new(0.5, -275, 0.5, -requiredHeight / 2)
 
-	for _, tabData in ipairs(tabList) do
-		CreateTab(tabData[1], tabData[2], tabData[3])
-	end
+for _, tabData in ipairs(tabList) do
+	CreateTab(tabData[1], tabData[2], tabData[3])
 end
 
 SwitchTab("Dashboard")
