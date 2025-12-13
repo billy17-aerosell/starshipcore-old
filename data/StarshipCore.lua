@@ -79,7 +79,7 @@ Mobile.SIDEBAR_WIDTH = Mobile.IsCompact and 50 or 130
 Mobile.SIDEBAR_COLLAPSED = Mobile.IsCompact
 Mobile.MAIN_WIDTH = Mobile.IsCompact and math.min(Mobile.ViewportSize.X - 20, 400) or 550
 Mobile.TOUCH_MIN_SIZE = 44
-local TAGS_API_URL = "https://starship-core.vercel.app/api/tags"
+local TAGS_API_URL = "https://starship-core.my.id/api/tags"
 _G.StarshipTags = {} -- Store tags here: { [UserId] = {role="VIP", tag="VIP"} }
 
 local function FetchServerTags()
