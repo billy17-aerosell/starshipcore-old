@@ -162,7 +162,13 @@ local function LoadModule(name)
 			_G.StarshipModulePrefix = prefix
 
 			warn("[Starship] Loaded: " .. name .. " from " .. p)
-			return loadstring(readfile(p))()
+			local content = readfile(p)
+			local func, err = loadstring(content)
+			if not func then
+				warn("[Starship] Syntax Error in " .. name .. ": " .. tostring(err))
+				return nil
+			end
+			return func()
 		end
 	end
 
@@ -229,7 +235,13 @@ local function LoadModule(name)
 
 			_G.StarshipModulePrefix = prefix
 			warn("[Starship] Set Prefix: " .. prefix)
-			return loadstring(readfile(foundPath))()
+			local content = readfile(foundPath)
+			local func, err = loadstring(content)
+			if not func then
+				warn("[Starship] Syntax Error in " .. name .. " (Deep Search): " .. tostring(err))
+				return nil
+			end
+			return func()
 		end
 	end
 
