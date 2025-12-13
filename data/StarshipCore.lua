@@ -3896,19 +3896,6 @@ local function CreateTab(name, icon, page)
 	btn.AutoButtonColor = false
 	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 
-	local iconLbl = nil
-	if Mobile.SIDEBAR_COLLAPSED then
-		iconLbl = Instance.new("TextLabel", btn)
-		iconLbl.Name = "Icon"
-		iconLbl.Text = TAB_ICONS[name] or "●"
-		iconLbl.Size = UDim2.new(1, 0, 1, 0)
-		iconLbl.BackgroundTransparency = 1
-		iconLbl.TextColor3 = C_TEXT_DIM
-		iconLbl.Font = Enum.Font.GothamBold
-		iconLbl.TextSize = 18
-		RegisterTheme(iconLbl, "TextColor3", "TextDim")
-	end
-
 	-- Label (hidden on mobile collapsed mode)
 	local lbl = Instance.new("TextLabel", btn)
 	lbl.Name = "Title"
@@ -3920,7 +3907,7 @@ local function CreateTab(name, icon, page)
 	lbl.Font = Enum.Font.GothamMedium
 	lbl.TextSize = 11
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Visible = not Mobile.SIDEBAR_COLLAPSED
+	lbl.Visible = true
 
 	-- Gradient for Active State
 	local grad = Instance.new("UIGradient", btn)
@@ -3934,7 +3921,7 @@ local function CreateTab(name, icon, page)
 	local ind = Instance.new("Frame", btn)
 	ind.Name = "Indicator"
 	ind.Size = UDim2.new(0, 4, 0, 4)
-	ind.Position = Mobile.SIDEBAR_COLLAPSED and UDim2.new(0.5, -2, 1, -6) or UDim2.new(0, 5, 0.5, -2)
+	ind.Position = UDim2.new(0, 5, 0.5, -2)
 	ind.BackgroundColor3 = C_ACCENT
 	ind.BorderSizePixel = 0
 	ind.BackgroundTransparency = 1 -- Hidden by default
