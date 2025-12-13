@@ -3884,34 +3884,18 @@ local function SwitchTab(name)
 	end
 end
 
--- Tab Icons for mobile mode
-local TAB_ICONS = {
-	Dashboard = "📊",
-	Recorder = "⏺",
-	Merger = "🔗",
-	["List Map"] = "📋",
-	Warp = "⚡",
-	Tools = "🔧",
-	Helper = "🛠",
-	Fun = "🎮",
-	Config = "⚙",
-}
-
 local function CreateTab(name, icon, page)
 	local btn = Instance.new("TextButton", TabContainer)
 	btn.Name = name
 	btn.Text = "" -- Using label for better control
 
-	-- Mobile: smaller square buttons, Desktop: wider buttons
-	local btnHeight = Mobile.SIDEBAR_COLLAPSED and Mobile.TOUCH_MIN_SIZE or 35
-	btn.Size = Mobile.SIDEBAR_COLLAPSED and UDim2.new(0, Mobile.TOUCH_MIN_SIZE, 0, btnHeight)
-		or UDim2.new(0.85, 0, 0, btnHeight)
+	local btnHeight = 35
+	btn.Size = UDim2.new(0.85, 0, 0, btnHeight)
 	btn.BackgroundColor3 = C_ACCENT
 	btn.BackgroundTransparency = 1
 	btn.AutoButtonColor = false
 	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 
-	-- Icon for mobile (emoji)
 	local iconLbl = nil
 	if Mobile.SIDEBAR_COLLAPSED then
 		iconLbl = Instance.new("TextLabel", btn)
