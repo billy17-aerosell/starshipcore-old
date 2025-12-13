@@ -4099,13 +4099,12 @@ end
 -- ========================
 
 -- Calculate Dynamic UI Height based on Tab Count (wrapped to release locals)
-do
-	local TAB_HEIGHT = Mobile.SIDEBAR_COLLAPSED and (Mobile.TOUCH_MIN_SIZE + 4) or 45
+	local TAB_HEIGHT = 45
 	local TAB_MARGIN_TOP = 10
-	local TAB_MARGIN_BOTTOM = Mobile.SIDEBAR_COLLAPSED and 55 or 60
+	local TAB_MARGIN_BOTTOM = 60
 	local TOPBAR_HEIGHT = 35
-	local MIN_UI_HEIGHT = Mobile.IsCompact and math.min(Mobile.ViewportSize.Y - 40, 450) or 500
-	local MAX_UI_HEIGHT = Mobile.IsCompact and math.min(Mobile.ViewportSize.Y - 20, 550) or 700
+	local MIN_UI_HEIGHT = 500
+	local MAX_UI_HEIGHT = 700
 
 	local tabList = {
 		{ "Dashboard", "", PageDashboard },
@@ -4125,8 +4124,8 @@ do
 	TargetMainHeight = requiredHeight
 
 	-- Update Main UI Size
-	Main.Size = UDim2.new(0, Mobile.MAIN_WIDTH, 0, requiredHeight)
-	Main.Position = UDim2.new(0.5, -Mobile.MAIN_WIDTH / 2, 0.5, -requiredHeight / 2)
+	Main.Size = UDim2.new(0, 550, 0, requiredHeight)
+	Main.Position = UDim2.new(0.5, -275, 0.5, -requiredHeight / 2)
 
 	for _, tabData in ipairs(tabList) do
 		CreateTab(tabData[1], tabData[2], tabData[3])
