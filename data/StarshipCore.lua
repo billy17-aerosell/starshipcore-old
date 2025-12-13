@@ -950,42 +950,8 @@ local function StartLoader()
 			return
 		end
 
-		-- 6. Loading Steps
-		SetProgress(15, "Loading Assets...")
-		task.wait(0.4)
-		if skipped then
-			return
-		end
-
-		SetProgress(35, "Initializing UI...")
-		task.wait(0.3)
-		if skipped then
-			return
-		end
-
-		SetProgress(55, "Loading Configurations...")
-		task.wait(0.3)
-		if skipped then
-			return
-		end
-
-		SetProgress(75, "Verifying Session...")
-		task.wait(0.3)
-		if skipped then
-			return
-		end
-
-		SetProgress(90, "Preparing Workspace...")
-		task.wait(0.2)
-		if skipped then
-			return
-		end
-
-		SetProgress(100, "READY!")
-		Sub.TextColor3 = C_GREEN
-		ProgressFill.BackgroundColor3 = C_GREEN
-		ProgressText.TextColor3 = C_GREEN
-		task.wait(0.5)
+		-- 6. Loading Wait (5 Seconds)
+		task.wait(5)
 		if skipped then
 			return
 		end
