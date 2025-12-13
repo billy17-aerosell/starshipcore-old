@@ -2997,6 +2997,77 @@ local function SetTheme(c)
 	end
 end
 
+-- === MOBILE UI INJECTION ===
+if Mobile.IsMobile then
+	local MobileUI = LoadModule("MobileUI")
+	if MobileUI then
+		local callbacks = {
+			GetMapList = function()
+				if isfolder(MERGER_FOLDER) then
+					local files = listfiles(MERGER_FOLDER)
+					local names = {}
+					for _, f in ipairs(files) do
+						table.insert(names, string.match(f, "[^/\\]+$") or f)
+					end
+					return names
+				end
+				return {}
+			end,
+			OnMapSelected = function(name)
+				currentPlaybackFile = name
+			end,
+			PlayRecording = function()
+				if currentPlaybackFile then
+					PlayRecording(currentPlaybackFile)
+				else
+					ShowToast("Error", "No map selected", "error", 2)
+				end
+			end,
+			StopPlayback = StopPlayback,
+			SetLoop = function(val)
+				isLooping = val
+			end,
+			SetReverse = function(val)
+				isReversing = val
+			end,
+			SetSpeed = function(val)
+				playbackSpeed = val
+			end,
+		}
+
+		-- God Mode Logic
+		local mobileGodLoop = nil
+		callbacks.SetGodMode = function(val)
+			isGodMode = val
+			if isGodMode then
+				mobileGodLoop = RunService.Heartbeat:Connect(function()
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChild("Humanoid")
+					if h then
+						h.MaxHealth = math.huge
+						h.Health = math.huge
+					end
+				end)
+				table.insert(Connections, mobileGodLoop)
+			else
+				if mobileGodLoop then
+					mobileGodLoop:Disconnect()
+					mobileGodLoop = nil
+				end
+				local c = LocalPlayer.Character
+				local h = c and c:FindFirstChild("Humanoid")
+				if h then
+					h.MaxHealth = 100
+					h.Health = 100
+				end
+			end
+		end
+
+		MobileUI.Init(callbacks)
+		return -- Stop Desktop UI creation
+	end
+end
+
 local GUI_NAME = "StarshipCore"
 if CoreGui:FindFirstChild(GUI_NAME) then
 	CoreGui[GUI_NAME]:Destroy()
