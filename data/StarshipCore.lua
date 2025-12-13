@@ -6975,17 +6975,71 @@ SetTheme(C_ACCENT)
 
 -- Start Key System & Loader
 local function StartLoader()
-	-- Immediate Startup (Intro handled by Loader.lua)
+	-- Smooth Entrance Animation for Main UI
 	if Main then
+		-- Start hidden/collapsed
 		Main.Visible = true
 		Main.ClipsDescendants = true
-		Main.Size = UDim2.new(0, 550, 0, TargetMainHeight)
+		Main.Size = UDim2.new(0, 550, 0, 0) -- Start as a horizontal line
+		Main.Position = UDim2.new(0.5, -275, 0.5, 0) -- Center position
 
-		-- Ensure MainBackground is visible
+		-- Hide all children initially
 		local bg = Main:FindFirstChild("MainBackground")
 		if bg then
-			bg.BackgroundTransparency = 0.05
+			bg.BackgroundTransparency = 1
 		end
+
+		-- Small delay to ensure intro is fully gone
+		task.wait(0.1)
+
+		-- === SMOOTH UNFOLD ANIMATION ===
+		local targetHeight = TargetMainHeight
+		local targetPosition = UDim2.new(0.5, -275, 0.5, -targetHeight / 2)
+
+		-- 1. Expand Main UI with smooth Back easing (bouncy feel)
+		local expandTween =
+			TweenService:Create(Main, TweenInfo.new(0.8, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+				Size = UDim2.new(0, 550, 0, targetHeight),
+				Position = targetPosition,
+			})
+		expandTween:Play()
+
+		-- 2. Fade in background slightly delayed
+		task.delay(0.15, function()
+			if bg then
+				TweenService:Create(
+					bg,
+					TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{ BackgroundTransparency = 0.05 }
+				):Play()
+			end
+		end)
+
+		-- 3. Fade in all UI elements with staggered timing
+		task.delay(0.3, function()
+			for _, element in pairs(Main:GetDescendants()) do
+				if element:IsA("TextLabel") and element.TextTransparency == 1 then
+					TweenService:Create(
+						element,
+						TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+						{ TextTransparency = 0 }
+					):Play()
+				elseif element:IsA("Frame") and element ~= Main and element.Name ~= "MainBackground" then
+					-- Only animate frames that were initially hidden
+					if element.BackgroundTransparency == 1 then
+						TweenService:Create(
+							element,
+							TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+							{ BackgroundTransparency = 0 }
+						):Play()
+					end
+				end
+			end
+		end)
+
+		-- Wait for animation to complete
+		task.wait(0.9)
+		Main.ClipsDescendants = false
 	end
 
 	-- Cleanup any leftover blur from Loader.lua if it wasn't destroyed
@@ -6998,10 +7052,10 @@ local function StartLoader()
 		getgenv().ToggleNametags(true)
 	end
 
-	-- Show ready toast
-	if UIModule and UIModule.ShowToast then
-		UIModule.ShowToast("System", "Starship Core Ready", "success", 3)
-	end
+	-- Show ready toast with slight delay for polish
+	task.delay(0.5, function()
+		ShowToast("Welcome", "Starship Core Ready", "success", 3)
+	end)
 end
 
 -- Start Loader Directly (Auth handled by Vercel API)
