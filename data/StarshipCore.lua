@@ -766,30 +766,6 @@ local function StartLoader()
 		Sub.TextSize = 14
 		Sub.TextTransparency = 1
 
-		-- Progress Bar Container
-		local ProgressContainer = Instance.new("Frame", MainFrame)
-		ProgressContainer.Size = UDim2.new(0.3, 0, 0, 4)
-		ProgressContainer.Position = UDim2.new(0.35, 0, 0.6, 0)
-		ProgressContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-		ProgressContainer.BackgroundTransparency = 1
-		Instance.new("UICorner", ProgressContainer).CornerRadius = UDim.new(1, 0)
-
-		local ProgressFill = Instance.new("Frame", ProgressContainer)
-		ProgressFill.Size = UDim2.new(0, 0, 1, 0)
-		ProgressFill.BackgroundColor3 = C_ACCENT
-		Instance.new("UICorner", ProgressFill).CornerRadius = UDim.new(1, 0)
-
-		-- Progress Percentage
-		local ProgressText = Instance.new("TextLabel", MainFrame)
-		ProgressText.Text = "0%"
-		ProgressText.Size = UDim2.new(1, 0, 0, 20)
-		ProgressText.Position = UDim2.new(0, 0, 0.63, 0)
-		ProgressText.BackgroundTransparency = 1
-		ProgressText.TextColor3 = C_ACCENT
-		ProgressText.Font = Enum.Font.GothamBold
-		ProgressText.TextSize = 12
-		ProgressText.TextTransparency = 1
-
 		-- Welcome Message
 		local WelcomeMsg = Instance.new("TextLabel", MainFrame)
 		WelcomeMsg.Text = "Welcome back, " .. LocalPlayer.Name .. "!"
@@ -847,8 +823,7 @@ local function StartLoader()
 			if skipped then
 				return
 			end
-			TweenService:Create(ProgressFill, TweenInfo.new(0.3), { Size = UDim2.new(percent / 100, 0, 1, 0) }):Play()
-			ProgressText.Text = percent .. "%"
+			-- Progress bar removed
 			if statusText then
 				GlitchText(Sub, statusText, 6)
 			end
@@ -865,8 +840,6 @@ local function StartLoader()
 			TweenService:Create(Logo, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
 			TweenService:Create(Title, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
 			TweenService:Create(Sub, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
-			TweenService:Create(ProgressContainer, TweenInfo.new(0.15), { BackgroundTransparency = 1 }):Play()
-			TweenService:Create(ProgressText, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
 			TweenService:Create(WelcomeMsg, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
 			TweenService:Create(SkipHint, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
 
@@ -970,17 +943,15 @@ local function StartLoader()
 			end
 		end)
 
-		-- 5. Show Progress Bar
+		-- 5. Show Progress Bar (Removed)
 		TweenService:Create(Sub, TweenInfo.new(0.4), { TextTransparency = 0 }):Play()
-		TweenService:Create(ProgressContainer, TweenInfo.new(0.4), { BackgroundTransparency = 0 }):Play()
-		TweenService:Create(ProgressText, TweenInfo.new(0.4), { TextTransparency = 0 }):Play()
 		task.wait(0.2)
 		if skipped then
 			return
 		end
 
 		-- 6. Loading Steps
-		SetProgress(15, "Loading Modules...")
+		SetProgress(15, "Loading Assets...")
 		task.wait(0.4)
 		if skipped then
 			return
