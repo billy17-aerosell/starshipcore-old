@@ -1,18 +1,20 @@
-// Quick test script to add VIP user directly to keys.json
-// This bypasses the API and adds user directly to file
+// Quick VIP User Management Script
+// This is the EASIEST way to add VIP users!
 // Run: node test-add-vip.js
 
 const fs = require('fs');
 const path = require('path');
 
-// Configuration - EDIT THIS!
+// ============================================
+// 👉 EDIT THIS SECTION TO ADD NEW VIP USER
+// ============================================
 const NEW_VIP_USER = {
-  userId: "123456789",        // Change this to actual User ID
-  username: "TestVIP_User",   // Change this to username
-  type: "vip",
-  expiresAt: null,            // null = lifetime, or use "2026-12-31T23:59:59Z"
-  maxDevices: 5,
-  notes: "Test VIP user added via script"
+  userId: "999888777",        // ⬅️ CHANGE: Roblox User ID
+  username: "NewVIP_Name",    // ⬅️ CHANGE: Username/Display name  
+  type: "vip",                // Options: "vip", "premium", "standard"
+  expiresAt: null,            // null = lifetime, or "2026-12-31T23:59:59Z"
+  maxDevices: 5,              // Max devices per day
+  notes: "Added via script"   // Your notes
 };
 
 function addVIPUser() {
