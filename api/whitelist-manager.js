@@ -30,12 +30,9 @@ const KEYS_FILE_PATH = path.join(process.cwd(), 'data', 'keys.json');
 
 // === REDIS FUNCTIONS ===
 async function getWhitelistFromRedis() {
-  const data = await redis.hgetall(WHITELIST_KEY);
-  const parsed = {};
-  for (const [userId, jsonData] of Object.entries(data || {})) {
-    parsed[userId] = JSON.parse(jsonData);
-  }
-  return parsed;
+  // Get all whitelist data as a single JSON string
+  const data = await redis.get(WHITELIST_KEY);
+  return data ? JSON.parse(data) : {};
 }
 
 async function getMetadataFromRedis() {
@@ -43,12 +40,8 @@ async function getMetadataFromRedis() {
   return data ? JSON.parse(data) : { totalWhitelisted: 0, lastUpdated: new Date().toISOString() };
 }
 
-async function saveUserToRedis(userId, userData) {
-  await redis.hset(WHITELIST_KEY, userId, JSON.stringify(userData));
-}
-
-async function removeUserFromRedis(userId) {
-  await redis.hdel(WHITELIST_KEY, userId);
+async function saveWhitelistToRedis(whitelist) {
+  await redis.set(WHITELIST_KEY, JSON.stringify(whitelist));
 }
 
 async function saveMetadataToRedis(metadata) {
@@ -171,8 +164,11 @@ export default async function handler(req, res) {
         notes
       };
       
-      await saveUserToRedis(userId, newUser);
+      // Add user to whitelist
+      whitelist[userId] = newUser;
+      await saveWhitelistToRedis(whitelist);
       
+      // Update metadata
       const metadata = await getMetadataFromRedis();
       metadata.totalWhitelisted++;
       await saveMetadataToRedis(metadata);
@@ -206,7 +202,8 @@ export default async function handler(req, res) {
       if (updates.maxDevices !== undefined) user.restrictions.maxDevices = updates.maxDevices;
       user.updatedAt = new Date().toISOString();
       
-      await saveUserToRedis(userId, user);
+      whitelist[userId] = user;
+      await saveWhitelistToRedis(whitelist);
       
       return res.status(200).json({ success: true, message: `User ${userId} updated`, data: user });
     } catch (error) {
@@ -224,7 +221,8 @@ export default async function handler(req, res) {
       if (!whitelist[userId]) return res.status(404).json({ error: 'User not found' });
       
       const username = whitelist[userId].username;
-      await removeUserFromRedis(userId);
+      delete whitelist[userId];
+      await saveWhitelistToRedis(whitelist);
       
       const metadata = await getMetadataFromRedis();
       metadata.totalWhitelisted--;
@@ -247,7 +245,7 @@ export default async function handler(req, res) {
       
       whitelist[userId].status = 'suspended';
       whitelist[userId].suspendedAt = new Date().toISOString();
-      await saveUserToRedis(userId, whitelist[userId]);
+      await saveWhitelistToRedis(whitelist);
       
       return res.status(200).json({ success: true, message: `User ${userId} suspended`, data: whitelist[userId] });
     } catch (error) {
@@ -267,7 +265,7 @@ export default async function handler(req, res) {
       whitelist[userId].status = 'active';
       whitelist[userId].reactivatedAt = new Date().toISOString();
       delete whitelist[userId].suspendedAt;
-      await saveUserToRedis(userId, whitelist[userId]);
+      await saveWhitelistToRedis(whitelist);
       
       return res.status(200).json({ success: true, message: `User ${userId} reactivated`, data: whitelist[userId] });
     } catch (error) {
