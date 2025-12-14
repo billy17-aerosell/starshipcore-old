@@ -264,7 +264,7 @@ export default async function handler(req, res) {
             if (!trackedDevices.includes(clientIP)) {
               trackedDevices.push(clientIP);
               // Save back to Redis with 30 days expiry
-              await redisClient.set(deviceTrackingKey, JSON.stringify(trackedDevices), { EX: 2592000 });
+              await redisClient.set(deviceTrackingKey, JSON.stringify(trackedDevices), 'EX', 2592000);
               console.log(`[${timestamp}] 📱 New device added for ${vipUser.username}: ${clientIP}`);
             }
             
@@ -335,8 +335,8 @@ export default async function handler(req, res) {
               console.log(`[${timestamp}] ✅ Webhook sent successfully`);
               
               // Update last notification time and IP
-              await redisClient.set(redisKey, now.toString(), { EX: 86400 }); // 24 hours expiry
-              await redisClient.set(ipKey, clientIP, { EX: 86400 });
+              await redisClient.set(redisKey, now.toString(), 'EX', 86400); // 24 hours expiry
+              await redisClient.set(ipKey, clientIP, 'EX', 86400);
               
               console.log(`[${timestamp}] 💾 Updated Redis cooldown data`);
             } else {
