@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIP User Management - StarshipCore</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .auth-section {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s;
+            background: white;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+        }
+
+        .users-list {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .user-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+
+        .user-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .user-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .user-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .user-type {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .type-owner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .type-vip {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .type-premium {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .user-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+
+        .detail-item {
+            color: #666;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .status-active {
+            color: #38ef7d;
+            font-weight: 700;
+        }
+
+        .status-suspended {
+            color: #f5576c;
+            font-weight: 700;
+        }
+
+        .notification {
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            display: none;
+            animation: slideIn 0.3s;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .notification.success {
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid #28a745;
+        }
+
+        .notification.error {
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #dc3545;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 VIP User Management</h1>
+            <p class="subtitle">StarshipCore Whitelist Manager</p>
+        </div>
+
+        <div id="notification" class="notification"></div>
+
+        <div class="auth-section">
+            <h2 style="margin-bottom: 20px; color: #333;">🔐 Admin Authentication</h2>
+            <div class="input-group">
+                <label for="adminSecret">Admin Secret Key</label>
+                <input type="password" id="adminSecret" placeholder="Enter your admin secret key">
+            </div>
+            <button class="btn btn-primary" onclick="loadUsers()">🔓 Connect & Load Users</button>
+        </div>
+
+        <div class="auth-section">
+            <h2 style="margin-bottom: 20px; color: #333;">➕ Add New VIP User</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                <div class="input-group">
+                    <label for="userId">User ID *</label>
+                    <input type="text" id="userId" placeholder="e.g., 123456789">
+                </div>
+                <div class="input-group">
+                    <label for="username">Username *</label>
+                    <input type="text" id="username" placeholder="e.g., JohnDoe_VIP">
+                </div>
+                <div class="input-group">
+                    <label for="userType">Type</label>
+                    <select id="userType">
+                        <option value="vip">VIP</option>
+                        <option value="premium">Premium</option>
+                        <option value="standard">Standard</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="expiresAt">Expires At (leave empty for lifetime)</label>
+                    <input type="datetime-local" id="expiresAt">
+                </div>
+                <div class="input-group">
+                    <label for="maxDevices">Max Devices</label>
+                    <input type="number" id="maxDevices" value="5" min="1">
+                </div>
+            </div>
+            <div class="input-group">
+                <label for="notes">Notes</label>
+                <textarea id="notes" rows="2" placeholder="Add any notes about this user..."></textarea>
+            </div>
+            <button class="btn btn-success" onclick="addUser()">➕ Add VIP User</button>
+        </div>
+
+        <div class="users-list">
+            <h2 style="margin-bottom: 20px; color: #333;">👥 Whitelisted Users</h2>
+            <div id="loadingIndicator" class="loading hidden">Loading users...</div>
+            <div id="usersList"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.style.display = 'block';
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 5000);
+        }
+
+        function getAdminSecret() {
+            return document.getElementById('adminSecret').value;
+        }
+
+        async function loadUsers() {
+            const secret = getAdminSecret();
+            if (!secret) {
+                showNotification('Please enter admin secret key', 'error');
+                return;
+            }
+
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+            document.getElementById('usersList').innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=list`, {
+                    headers: {
+                        'X-Admin-Secret': secret
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.message || 'Failed to load users');
+                }
+
+                displayUsers(data.whitelist);
+                showNotification(`✅ Loaded ${Object.keys(data.whitelist).length} users`, 'success');
+            } catch (error) {
+                showNotification(`❌ Error: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+            }
+        }
+
+        function displayUsers(whitelist) {
+            const container = document.getElementById('usersList');
+            
+            if (!whitelist || Object.keys(whitelist).length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #999;">No users found</p>';
+                return;
+            }
+
+            container.innerHTML = Object.values(whitelist).map(user => `
+                <div class="user-card">
+                    <div class="user-header">
+                        <div>
+                            <div class="user-name">${user.username}</div>
+                            <div style="color: #666; font-size: 12px; margin-top: 3px;">ID: ${user.userId}</div>
+                        </div>
+                        <span class="user-type type-${user.type}">${user.type}</span>
+                    </div>
+                    <div class="user-details">
+                        <div class="detail-item">
+                            <span class="detail-label">Status:</span> 
+                            <span class="status-${user.status}">${user.status.toUpperCase()}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Max Devices:</span> ${user.restrictions.maxDevices || 'Unlimited'}
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Expires:</span> ${user.expiresAt ? new Date(user.expiresAt).toLocaleDateString() : 'Never'}
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Added:</span> ${new Date(user.addedAt).toLocaleDateString()}
+                        </div>
+                    </div>
+                    ${user.notes ? `<div style="color: #666; font-size: 13px; margin-top: 10px; font-style: italic;">📝 ${user.notes}</div>` : ''}
+                    <div style="margin-top: 15px;">
+                        ${user.status === 'active' && user.type !== 'owner' ? 
+                            `<button class="btn btn-warning" onclick="suspendUser('${user.userId}')">⏸️ Suspend</button>` : 
+                            user.status === 'suspended' ? 
+                            `<button class="btn btn-success" onclick="reactivateUser('${user.userId}')">▶️ Reactivate</button>` : ''
+                        }
+                        ${user.type !== 'owner' ? 
+                            `<button class="btn btn-danger" onclick="removeUser('${user.userId}', '${user.username}')">🗑️ Remove</button>` : ''
+                        }
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function addUser() {
+            const secret = getAdminSecret();
+            if (!secret) {
+                showNotification('Please enter admin secret key', 'error');
+                return;
+            }
+
+            const userId = document.getElementById('userId').value;
+            const username = document.getElementById('username').value;
+            const userType = document.getElementById('userType').value;
+            const expiresAt = document.getElementById('expiresAt').value;
+            const maxDevices = parseInt(document.getElementById('maxDevices').value);
+            const notes = document.getElementById('notes').value;
+
+            if (!userId || !username) {
+                showNotification('User ID and Username are required', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=add`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Admin-Secret': secret,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId,
+                        username,
+                        type: userType,
+                        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+                        maxDevices,
+                        notes
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.message || data.error || 'Failed to add user');
+                }
+
+                showNotification(`✅ ${data.message}`, 'success');
+                
+                // Clear form
+                document.getElementById('userId').value = '';
+                document.getElementById('username').value = '';
+                document.getElementById('expiresAt').value = '';
+                document.getElementById('maxDevices').value = '5';
+                document.getElementById('notes').value = '';
+                
+                // Reload users
+                loadUsers();
+            } catch (error) {
+                showNotification(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function suspendUser(userId) {
+            if (!confirm(`Are you sure you want to suspend user ${userId}?`)) return;
+
+            const secret = getAdminSecret();
+            try {
+                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=suspend`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Admin-Secret': secret,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ userId })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.message || 'Failed to suspend user');
+                }
+
+                showNotification(`✅ ${data.message}`, 'success');
+                loadUsers();
+            } catch (error) {
+                showNotification(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function reactivateUser(userId) {
+            const secret = getAdminSecret();
+            try {
+                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=reactivate`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Admin-Secret': secret,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ userId })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.message || 'Failed to reactivate user');
+                }
+
+                showNotification(`✅ ${data.message}`, 'success');
+                loadUsers();
+            } catch (error) {
+                showNotification(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function removeUser(userId, username) {
+            if (!confirm(`Are you sure you want to REMOVE user ${username} (${userId})? This cannot be undone!`)) return;
+
+            const secret = getAdminSecret();
+            try {
+                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=remove`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-Admin-Secret': secret,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ userId })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.message || 'Failed to remove user');
+                }
+
+                showNotification(`✅ ${data.message}`, 'success');
+                loadUsers();
+            } catch (error) {
+                showNotification(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

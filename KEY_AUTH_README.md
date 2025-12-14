@@ -117,6 +117,84 @@ curl "https://www.starship-core.my.id/api/key-manager?action=stats&key=premium-a
 
 ---
 
+## 👑 VIP/Whitelist Management
+
+### What is Whitelisting?
+
+The whitelist system allows you to grant access to specific users **without requiring keys**. Users in the whitelist are identified by their **Roblox User ID** and can include VIP members, premium users, or even the owner.
+
+### Access the Dashboard
+
+We've created a **beautiful web dashboard** for easy VIP management:
+
+🌐 **Dashboard URL**: `https://www.starship-core.my.id/vip-dashboard.html`
+
+Features:
+
+- ✅ Add new VIP users
+- ✅ View all whitelisted users
+- ✅ Suspend/Reactivate users
+- ✅ Remove users
+- ✅ Modern, responsive UI with real-time updates
+
+### API Endpoints
+
+All whitelist operations are available via `/api/whitelist-manager`:
+
+#### Add VIP User
+
+```bash
+curl -X POST "https://www.starship-core.my.id/api/whitelist-manager?action=add" \
+  -H "X-Admin-Secret: your_super_secret_password_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "123456789",
+    "username": "JohnDoe_VIP",
+    "type": "vip",
+    "expiresAt": "2026-12-31T23:59:59Z",
+    "maxDevices": 5,
+    "notes": "VIP Member - Annual subscription"
+  }'
+```
+
+#### List All Whitelisted Users
+
+```bash
+curl "https://www.starship-core.my.id/api/whitelist-manager?action=list" \
+  -H "X-Admin-Secret: your_super_secret_password_here"
+```
+
+#### Suspend User
+
+```bash
+curl -X POST "https://www.starship-core.my.id/api/whitelist-manager?action=suspend" \
+  -H "X-Admin-Secret: your_super_secret_password_here" \
+  -H "Content-Type: application/json" \
+  -d '{"userId": "123456789"}'
+```
+
+#### Remove User
+
+```bash
+curl -X DELETE "https://www.starship-core.my.id/api/whitelist-manager?action=remove" \
+  -H "X-Admin-Secret: your_super_secret_password_here" \
+  -H "Content-Type: application/json" \
+  -d '{"userId": "123456789"}'
+```
+
+### User Types
+
+- **`owner`** - Developer/Owner with full unlimited access
+- **`vip`** - VIP members with premium features
+- **`premium`** - Premium users
+- **`standard`** - Regular whitelisted users
+
+### Complete Documentation
+
+For complete API documentation, see: [`WHITELIST_API.md`](./WHITELIST_API.md)
+
+---
+
 ## 📊 Monitoring & Logs
 
 ### Access Logs
