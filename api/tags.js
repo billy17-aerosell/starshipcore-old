@@ -15,10 +15,13 @@ export default function handler(req, res) {
       return res.status(400).json({ error: 'Invalid userIds format. Must be an array.' });
     }
 
-    // 3. Baca Database Whitelist
-    const whitelistPath = path.join(process.cwd(), 'data', 'whitelist.json');
-    const whitelistData = fs.readFileSync(whitelistPath, 'utf8');
-    const whitelist = JSON.parse(whitelistData);
+    // 3. Baca Database dari keys.json (CONSOLIDATED)
+    const keysPath = path.join(process.cwd(), 'data', 'keys.json');
+    const keysData = fs.readFileSync(keysPath, 'utf8');
+    const data = JSON.parse(keysData);
+    
+    // Get whitelist from consolidated keys.json
+    const whitelist = data.whitelist || {};
 
     // 4. Filter User yang Cocok
     const results = {};
@@ -28,8 +31,8 @@ export default function handler(req, res) {
       if (whitelist[strId]) {
         // Hanya kirim Role/Tag. JANGAN kirim data sensitif lain.
         results[strId] = {
-          role: whitelist[strId].role || "VIP",
-          tag: whitelist[strId].tag || whitelist[strId].role || "VIP" // Custom tag support
+          role: whitelist[strId].type || whitelist[strId].role || "VIP",
+          tag: whitelist[strId].tag || whitelist[strId].type || whitelist[strId].role || "VIP"
         };
       }
     });

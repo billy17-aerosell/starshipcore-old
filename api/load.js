@@ -3,14 +3,14 @@ import path from 'path';
 
 // GitHub API Configuration
 const GITHUB_API = 'https://api.github.com';
-const WHITELIST_PATH = 'data/whitelist.json';
+const KEYS_PATH = 'data/keys.json'; // Changed from whitelist.json
 
 /**
- * Update whitelist.json di GitHub Repository
- * @param {object} newWhitelist - Data whitelist yang sudah diupdate
+ * Update keys.json di GitHub Repository
+ * @param {object} newKeysData - Complete keys.json data
  * @param {string} currentSha - SHA file saat ini (untuk update)
  */
-async function updateWhitelistOnGitHub(newWhitelist, currentSha) {
+async function updateKeysOnGitHub(newKeysData, currentSha) {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPO;
 
@@ -20,9 +20,9 @@ async function updateWhitelistOnGitHub(newWhitelist, currentSha) {
   }
 
   try {
-    const content = Buffer.from(JSON.stringify(newWhitelist, null, 2)).toString('base64');
+    const content = Buffer.from(JSON.stringify(newKeysData, null, 2)).toString('base64');
     
-    const response = await fetch(`${GITHUB_API}/repos/${repo}/contents/${WHITELIST_PATH}`, {
+    const response = await fetch(`${GITHUB_API}/repos/${repo}/contents/${KEYS_PATH}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -51,9 +51,9 @@ async function updateWhitelistOnGitHub(newWhitelist, currentSha) {
 }
 
 /**
- * Get current whitelist from GitHub (untuk dapat SHA terbaru)
+ * Get current keys.json from GitHub (untuk dapat SHA terbaru)
  */
-async function getWhitelistFromGitHub() {
+async function getKeysFromGitHub() {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPO;
 
@@ -62,7 +62,7 @@ async function getWhitelistFromGitHub() {
   }
 
   try {
-    const response = await fetch(`${GITHUB_API}/repos/${repo}/contents/${WHITELIST_PATH}`, {
+    const response = await fetch(`${GITHUB_API}/repos/${repo}/contents/${KEYS_PATH}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github.v3+json',
@@ -79,7 +79,7 @@ async function getWhitelistFromGitHub() {
     
     return {
       sha: data.sha,
-      whitelist: JSON.parse(content)
+      keysData: JSON.parse(content)
     };
   } catch (error) {
     console.error('GitHub Fetch Error:', error);
@@ -99,11 +99,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Baca whitelist dari file lokal dulu
-    const whitelistPath = path.join(process.cwd(), 'data', 'whitelist.json');
-    const whitelistData = fs.readFileSync(whitelistPath, 'utf8');
-    let whitelist = JSON.parse(whitelistData);
-
+    // Baca keys.json dari file lokal (CONSOLIDATED)
+    const keysPath = path.join(process.cwd(), 'data', 'keys.json');
+    const keysFileData = fs.readFileSync(keysPath, 'utf8');
+    let keysData = JSON.parse(keysFileData);
+    
+    // Get whitelist from keys.json
+    const whitelist = keysData.whitelist || {};
     const userData = whitelist[user];
 
     if (!userData) {
@@ -127,16 +129,19 @@ export default async function handler(req, res) {
       // Update data user
       userData.expiry = newExpiry;
       userData.activatedAt = now;
-      whitelist[user] = userData;
+      keysData.whitelist[user] = userData;
 
       // Update ke GitHub
-      const githubData = await getWhitelistFromGitHub();
+      const githubData = await getKeysFromGitHub();
       
       if (githubData) {
-        // Update whitelist dari GitHub (untuk sinkronisasi)
-        githubData.whitelist[user] = userData;
+        // Update whitelist dalam keys.json dari GitHub (untuk sinkronisasi)
+        if (!githubData.keysData.whitelist) {
+          githubData.keysData.whitelist = {};
+        }
+        githubData.keysData.whitelist[user] = userData;
         
-        const updateSuccess = await updateWhitelistOnGitHub(githubData.whitelist, githubData.sha);
+        const updateSuccess = await updateKeysOnGitHub(githubData.keysData, githubData.sha);
         
         if (updateSuccess) {
           console.log(`License activated for user ${user}. Expiry: ${new Date(newExpiry * 1000).toISOString()}`);
@@ -145,7 +150,7 @@ export default async function handler(req, res) {
           // Tetap lanjutkan walaupun GitHub update gagal (pakai local)
         }
       } else {
-        console.warn('Could not fetch GitHub data, using local whitelist');
+        console.warn('Could not fetch GitHub data, using local keys.json');
       }
     }
     // === END ACTIVATION ===
