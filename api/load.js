@@ -308,12 +308,20 @@ export default async function handler(req, res) {
               if (shouldSendWebhook) {
                 console.log(`[${timestamp}] 📤 Sending Discord webhook...`);
                 
+                // Get device info from vipUser data
+                const maxDevices = vipUser.maxDevices || vipUser.restrictions?.maxDevices || 'Unlimited';
+                const currentDevices = vipUser.deviceCount || vipUser.devices?.length || 0;
+                const deviceInfo = maxDevices === 'Unlimited' || maxDevices === null || maxDevices === 0
+                  ? `${currentDevices} device(s)` 
+                  : `${currentDevices}/${maxDevices} devices`;
+                
                 await sendDiscordLog({
                   title: `💎 VIP Access Granted`,
                   status: 'success',
                   authType: `VIP (${vipUser.type})`,
                   owner: vipUser.username,
                   ip: ipChanged ? `${lastIP} → ${clientIP}` : clientIP,
+                  deviceCount: deviceInfo,
                   timestamp: timestamp,
                   message: `✅ ${webhookReason}\n💎 VIP script delivered to ${vipUser.username}${ipChanged ? '\n⚠️ IP Address Changed!' : ''}`
                 });
@@ -332,12 +340,19 @@ export default async function handler(req, res) {
               // Redis not available, send webhook anyway (fallback)
               console.log(`[${timestamp}] 🔄 Fallback: Sending webhook (Redis unavailable)`);
               
+              const maxDevices = vipUser.maxDevices || vipUser.restrictions?.maxDevices || 'Unlimited';
+              const currentDevices = vipUser.deviceCount || vipUser.devices?.length || 0;
+              const deviceInfo = maxDevices === 'Unlimited' || maxDevices === null || maxDevices === 0
+                ? `${currentDevices} device(s)` 
+                : `${currentDevices}/${maxDevices} devices`;
+              
               await sendDiscordLog({
                 title: `💎 VIP Access Granted`,
                 status: 'success',
                 authType: `VIP (${vipUser.type})`,
                 owner: vipUser.username,
                 ip: clientIP,
+                deviceCount: deviceInfo,
                 timestamp: timestamp,
                 message: `✅ VIP script delivered to ${vipUser.username}\n⚠️ (Fallback mode - Rate limiting unavailable)`
               });
@@ -346,12 +361,19 @@ export default async function handler(req, res) {
             console.error(`[${timestamp}] ❌ Webhook error:`, error);
             // On error, still try to send webhook
             try {
+              const maxDevices = vipUser.maxDevices || vipUser.restrictions?.maxDevices || 'Unlimited';
+              const currentDevices = vipUser.deviceCount || vipUser.devices?.length || 0;
+              const deviceInfo = maxDevices === 'Unlimited' || maxDevices === null || maxDevices === 0
+                ? `${currentDevices} device(s)` 
+                : `${currentDevices}/${maxDevices} devices`;
+              
               await sendDiscordLog({
                 title: `💎 VIP Access Granted`,
                 status: 'success',
                 authType: `VIP (${vipUser.type})`,
                 owner: vipUser.username,
                 ip: clientIP,
+                deviceCount: deviceInfo,
                 timestamp: timestamp,
                 message: `✅ VIP script delivered to ${vipUser.username}\n⚠️ (Error fallback)`
               });
