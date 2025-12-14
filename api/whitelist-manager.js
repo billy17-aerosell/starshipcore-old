@@ -16,11 +16,12 @@ async function initRedis() {
   try {
     const redisModule = await import('../lib/redis.js');
     redis = redisModule.default;
-    // Test connection
-    await redis.ping();
+    // Don't test connection here - let it connect lazily
+    // Connection will be tested on first actual use
     useRedis = true;
+    console.log('✅ Redis client initialized');
   } catch (error) {
-    console.warn('Redis not available, using file system fallback:', error.message);
+    console.warn('⚠️ Redis not available, using file system fallback:', error.message);
     useRedis = false;
   }
   
