@@ -219,6 +219,7 @@ export default async function handler(req, res) {
           try {
             // Check if Redis is available
             const redisClient = await getRedis();
+            const now = Date.now();
             
             if (!redisClient) {
               console.log(`[${timestamp}] ⚠️ Redis not available - sending webhook in fallback mode`);
@@ -227,7 +228,7 @@ export default async function handler(req, res) {
               
               // Get device info from vipUser data
               const maxDevices = vipUser.maxDevices || vipUser.restrictions?.maxDevices || null;
-              const currentDevices = vipUser.deviceCount || vipUser.devices?.length || 0;
+              const currentDevices = 0;  // Cannot track devices without Redis
               const deviceInfo = !maxDevices || maxDevices === 'Unlimited'
                 ? `${currentDevices} device(s)` 
                 : `${currentDevices}/${maxDevices} devices`;
@@ -241,7 +242,9 @@ export default async function handler(req, res) {
                 ip: clientIP,
                 deviceCount: deviceInfo,
                 timestamp: timestamp,
-                message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username}\n⚠️ (Rate limiting unavailable)`
+                message: `✅ ${webhookReason}
+💎 VIP loader delivered to ${vipUser.username}
+⚠️ (Rate limiting unavailable)`
               });
               
               console.log(`[${timestamp}] ✅ Fallback webhook sent`);
@@ -249,7 +252,24 @@ export default async function handler(req, res) {
               // Redis is available - use rate limiting
               const lastNotification = await redisClient.get(redisKey);
               const lastIP = await redisClient.get(ipKey);
-              const now = Date.now();
+              const deviceTrackingKey = `devices:${userId}`;
+            
+            // === DEVICE TRACKING ===
+            // Track all unique IPs for this user
+            let trackedDevices = [];
+            const devicesData = await redisClient.get(deviceTrackingKey);
+            trackedDevices = devicesData ? JSON.parse(devicesData) : [];
+            
+            // Add current IP if not already tracked
+            if (!trackedDevices.includes(clientIP)) {
+              trackedDevices.push(clientIP);
+              // Save back to Redis with 30 days expiry
+              await redisClient.set(deviceTrackingKey, JSON.stringify(trackedDevices), { EX: 2592000 });
+              console.log(`[${timestamp}] 📱 New device added for ${vipUser.username}: ${clientIP}`);
+            }
+            
+            const currentDeviceCount = trackedDevices.length;
+            console.log(`[${timestamp}] 📊 Device Count: ${currentDeviceCount}`);
             
             console.log(`[${timestamp}] 📝 Last notification: ${lastNotification ? new Date(parseInt(lastNotification)).toLocaleString() : 'Never'}`);
             console.log(`[${timestamp}] 📝 Last IP: ${lastIP || 'Unknown'} | Current IP: ${clientIP}`);
@@ -295,7 +315,7 @@ export default async function handler(req, res) {
               
               // Get device info from vipUser data
               const maxDevices = vipUser.maxDevices || vipUser.restrictions?.maxDevices || null;
-              const currentDevices = vipUser.deviceCount || vipUser.devices?.length || 0;
+              const currentDevices = currentDeviceCount;  // Use tracked count from Redis
               const deviceInfo = !maxDevices || maxDevices === 'Unlimited'
                 ? `${currentDevices} device(s)` 
                 : `${currentDevices}/${maxDevices} devices`;
@@ -330,7 +350,7 @@ export default async function handler(req, res) {
             
             // Get device info from vipUser data
             const maxDevices = vipUser.maxDevices || vipUser.restrictions?.maxDevices || null;
-            const currentDevices = vipUser.deviceCount || vipUser.devices?.length || 0;
+            const currentDevices = 0;  // Cannot get tracked count due to error
             const deviceInfo = !maxDevices || maxDevices === 'Unlimited'
               ? `${currentDevices} device(s)` 
               : `${currentDevices}/${maxDevices} devices`;
