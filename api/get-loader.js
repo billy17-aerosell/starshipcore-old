@@ -211,11 +211,16 @@ export default async function handler(req, res) {
           let shouldSendWebhook = false;
           let webhookReason = 'Regular Access';
           
+          console.log(`[${timestamp}] 📊 Webhook Rate Limiting Check for VIP user: ${vipUser.username}`);
+          
           try {
             // Get last notification time and IP
             const lastNotification = await redis.get(redisKey);
             const lastIP = await redis.get(ipKey);
             const now = Date.now();
+            
+            console.log(`[${timestamp}] 📝 Last notification: ${lastNotification ? new Date(parseInt(lastNotification)).toLocaleString() : 'Never'}`);
+            console.log(`[${timestamp}] 📝 Last IP: ${lastIP || 'Unknown'} | Current IP: ${clientIP}`);
             
             // Check if this is first execution of the day
             const today = new Date().toDateString();
@@ -224,6 +229,8 @@ export default async function handler(req, res) {
             
             // Check if IP changed (security alert)
             const ipChanged = lastIP && lastIP !== clientIP;
+            
+            console.log(`[${timestamp}] 🔍 Checks - First Today: ${isFirstToday}, IP Changed: ${ipChanged}`);
             
             // Determine if we should send webhook
             if (isFirstToday) {
@@ -238,6 +245,9 @@ export default async function handler(req, res) {
             } else {
               const timeSinceLastNotif = now - parseInt(lastNotification);
               const cooldownMs = COOLDOWN_MINUTES * 60 * 1000;
+              const minutesSinceLastNotif = Math.floor(timeSinceLastNotif / 60000);
+              
+              console.log(`[${timestamp}] ⏰ Time since last notification: ${minutesSinceLastNotif} minutes (Cooldown: ${COOLDOWN_MINUTES} minutes)`);
               
               if (timeSinceLastNotif >= cooldownMs) {
                 shouldSendWebhook = true;
@@ -245,8 +255,12 @@ export default async function handler(req, res) {
               }
             }
             
+            console.log(`[${timestamp}] 🎯 Should send webhook: ${shouldSendWebhook} - Reason: ${webhookReason}`);
+            
             // Send webhook if needed
             if (shouldSendWebhook) {
+              console.log(`[${timestamp}] 📤 Sending Discord webhook...`);
+              
               await sendDiscordLog({
                 title: `💎 VIP Access Granted`,
                 status: 'success',
@@ -259,15 +273,21 @@ export default async function handler(req, res) {
                 message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username}${ipChanged ? '\n⚠️ IP Address Changed!' : ''}`
               });
               
+              console.log(`[${timestamp}] ✅ Webhook sent successfully`);
+              
               // Update last notification time and IP
               await redis.set(redisKey, now.toString(), { EX: 86400 }); // 24 hours expiry
               await redis.set(ipKey, clientIP, { EX: 86400 });
+              
+              console.log(`[${timestamp}] 💾 Updated Redis cooldown data`);
             } else {
               console.log(`[${timestamp}] 🔕 Webhook skipped for ${vipUser.username} - Cooldown active`);
             }
           } catch (error) {
-            console.error('Rate limiting error:', error);
+            console.error(`[${timestamp}] ❌ Rate limiting error:`, error);
             // If Redis fails, send webhook anyway (fallback)
+            console.log(`[${timestamp}] 🔄 Fallback: Sending webhook anyway due to error`);
+            
             await sendDiscordLog({
               title: `💎 VIP Access Granted`,
               status: 'success',
@@ -277,12 +297,14 @@ export default async function handler(req, res) {
               ip: clientIP,
               deviceCount: 'N/A',
               timestamp: timestamp,
-              message: `✅ VIP loader delivered to ${vipUser.username}`
+              message: `✅ VIP loader delivered to ${vipUser.username}\n⚠️ (Fallback mode - Rate limiting unavailable)`
             });
+            
+            console.log(`[${timestamp}] ✅ Fallback webhook sent`);
           }
         } else {
           // Owner: Silent access, no webhook
-          console.log(`[${timestamp}] 🔕 Owner access - No webhook sent`);
+          console.log(`[${timestamp}] 🔕 Owner access - No webhook sent (UserID: ${userId})`);
         }
         
         // Read and return loader script
