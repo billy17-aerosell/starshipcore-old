@@ -1,5 +1,6 @@
 // Simple Key Authentication API (Read-Only Version)
 // This version doesn't write to filesystem (Vercel compatible)
+// With Discord Webhook Logging Integration
 
 import fs from 'fs';
 import path from 'path';
@@ -21,6 +22,104 @@ function getKeysData() {
   } catch (error) {
     console.error('Error reading keys:', error);
     return { keys: {} };
+  }
+}
+
+// Helper function to send Discord webhook notification
+async function sendDiscordLog(logData) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  
+  // Skip if webhook not configured
+  if (!webhookUrl) {
+    console.log('[Discord] Webhook not configured, skipping notification');
+    return;
+  }
+  
+  try {
+    // Determine embed color based on status
+    const colors = {
+      success: 0x00FF00,    // Green
+      blocked: 0xFF0000,    // Red
+      invalid: 0xFFA500,    // Orange
+      warning: 0xFFFF00     // Yellow
+    };
+    
+    // Determine emoji based on status
+    const emojis = {
+      success: '🟢',
+      blocked: '🔴',
+      invalid: '🟠',
+      warning: '🟡'
+    };
+    
+    const color = colors[logData.status] || 0x808080;
+    const emoji = emojis[logData.status] || '⚪';
+    
+    // Create rich embed
+    const embed = {
+      title: `${emoji} ${logData.title || 'Access Log'}`,
+      color: color,
+      fields: [
+        {
+          name: '👤 Key Owner',
+          value: logData.owner || 'Unknown',
+          inline: true
+        },
+        {
+          name: '🔑 Key',
+          value: `\`${logData.key || 'N/A'}\``,
+          inline: true
+        },
+        {
+          name: '🌐 IP Address',
+          value: `\`${logData.ip}\``,
+          inline: true
+        },
+        {
+          name: '📱 Device Count',
+          value: logData.deviceCount || 'N/A',
+          inline: true
+        },
+        {
+          name: '⏰ Timestamp',
+          value: logData.timestamp,
+          inline: true
+        },
+        {
+          name: '✅ Status',
+          value: logData.statusMessage || logData.status,
+          inline: true
+        }
+      ],
+      timestamp: new Date().toISOString(),
+      footer: {
+        text: 'StarshipCore Access Monitor'
+      }
+    };
+    
+    // Add additional info if present
+    if (logData.message) {
+      embed.description = logData.message;
+    }
+    
+    // Send to Discord
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        embeds: [embed]
+      })
+    });
+    
+    if (!response.ok) {
+      console.error('[Discord] Failed to send webhook:', response.status);
+    } else {
+      console.log('[Discord] ✅ Log sent successfully');
+    }
+  } catch (error) {
+    console.error('[Discord] Error sending webhook:', error.message);
   }
 }
 
@@ -53,6 +152,20 @@ export default async function handler(req, res) {
   // Check if key exists
   if (!keyData) {
     console.log(`[${timestamp}] Invalid key attempt: ${key} from IP: ${clientIP}`);
+    
+    // Send Discord notification
+    await sendDiscordLog({
+      title: 'Invalid Key Attempt',
+      status: 'invalid',
+      statusMessage: '❌ Invalid Key',
+      key: key,
+      owner: 'Unknown',
+      ip: clientIP,
+      deviceCount: 'N/A',
+      timestamp: timestamp,
+      message: '⚠️ Someone tried to use an invalid authentication key!'
+    });
+    
     return res.status(403).send(
       `-- ERROR: Invalid authentication key\n` +
       `-- Key: ${key}\n` +
@@ -64,6 +177,20 @@ export default async function handler(req, res) {
   // Check if key is active
   if (keyData.status !== 'active') {
     console.log(`[${timestamp}] Inactive key used: ${key} (${keyData.status}) from IP: ${clientIP}`);
+    
+    // Send Discord notification
+    await sendDiscordLog({
+      title: 'Inactive Key Used',
+      status: 'blocked',
+      statusMessage: `🚫 Key is ${keyData.status}`,
+      key: key,
+      owner: keyData.owner,
+      ip: clientIP,
+      deviceCount: 'N/A',
+      timestamp: timestamp,
+      message: `⚠️ Attempted to use ${keyData.status} key!`
+    });
+    
     return res.status(403).send(
       `-- ERROR: Key is ${keyData.status}\n` +
       `-- Owner: ${keyData.owner}\n` +
@@ -77,6 +204,20 @@ export default async function handler(req, res) {
     const expiryDate = new Date(keyData.expiresAt);
     if (expiryDate < new Date()) {
       console.log(`[${timestamp}] Expired key used: ${key} from IP: ${clientIP}`);
+      
+      // Send Discord notification
+      await sendDiscordLog({
+        title: 'Expired Key Used',
+        status: 'blocked',
+        statusMessage: '🚫 Key Expired',
+        key: key,
+        owner: keyData.owner,
+        ip: clientIP,
+        deviceCount: 'N/A',
+        timestamp: timestamp,
+        message: `⚠️ Key expired on ${expiryDate.toDateString()}`
+      });
+      
       return res.status(403).send(
         `-- ERROR: Key expired\n` +
         `-- Expired on: ${expiryDate.toDateString()}\n` +
@@ -88,6 +229,19 @@ export default async function handler(req, res) {
   
   // Log successful access to console
   console.log(`[${timestamp}] ✅ Valid access - Key: ${key} | Owner: ${keyData.owner} | IP: ${clientIP}`);
+  
+  // Send Discord notification for successful access
+  await sendDiscordLog({
+    title: 'Access Granted',
+    status: 'success',
+    statusMessage: '✅ Authorized',
+    key: key,
+    owner: keyData.owner,
+    ip: clientIP,
+    deviceCount: 'N/A', // Can be enhanced with device tracking
+    timestamp: timestamp,
+    message: `✅ Loader script successfully delivered to ${keyData.owner}`
+  });
   
   // Read and return the obfuscated loader script
   try {
