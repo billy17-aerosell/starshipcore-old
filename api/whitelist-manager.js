@@ -6,26 +6,21 @@ import path from 'path';
 
 // Try to initialize Redis
 let redis = null;
-let useRedis = false;
+let redisInitAttempted = false;
 
-async function initRedis() {
-  if (redis !== null) return useRedis;
-  
-  try {
-    const redisModule = await import('../lib/redis.js');
-    redis = redisModule.default;
-    
-    // Test connection with a simple ping
-    await redis.ping();
-    useRedis = true;
-    console.log('✅ Redis initialized successfully');
-  } catch (error) {
-    console.error('⚠️ Redis init failed:', error.message);
-    redis = null;
-   useRedis = false;
+async function getRedis() {
+  if (!redisInitAttempted) {
+    try {
+      const redisModule = await import('../lib/redis.js');
+      redis = redisModule.default;
+      console.log('✅ Redis module loaded');
+    } catch (error) {
+      console.error('⚠️ Redis module load failed:', error.message);
+      redis = null;
+    }
+    redisInitAttempted = true;
   }
-  
-  return useRedis;
+  return redis;
 }
 
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'CHANGE_ME_PLEASE';
@@ -73,8 +68,8 @@ function getKeysDataFromFile() {
 
 // === MAIN HANDLER ===
 export default async function handler(req, res) {
-  // Initialize Redis
-  const redisReady = await initRedis();
+  // Get Redis client (may be null)
+  const redisClient = await getRedis();
   
   // Check admin auth
   const adminAuth = req.headers['x-admin-secret'];
@@ -83,22 +78,32 @@ export default async function handler(req, res) {
   }
   
   const { action } = req.query;
-  res.setHeader('X-Storage-Backend', redisReady ? 'Redis' : 'FileSystem');
   
   // ==== LIST ====
   if (action === 'list' && req.method === 'GET') {
     try {
       let whitelist, metadata;
+      let backend = 'FileSystem';
       
-      if (redisReady) {
-        whitelist = await getWhitelistFromRedis();
-        metadata = await getMetadataFromRedis();
+      // Try Redis first
+      if (redisClient) {
+        try {
+          whitelist = await getWhitelistFromRedis();
+          metadata = await getMetadataFromRedis();
+          backend = 'Redis';
+        } catch (redisError) {
+          console.warn('Redis read failed, falling back to file:', redisError.message);
+          const fileData = getKeysDataFromFile();
+          whitelist = fileData.whitelist || {};
+          metadata = fileData.metadata || {};
+        }
       } else {
         const fileData = getKeysDataFromFile();
         whitelist = fileData.whitelist || {};
         metadata = fileData.metadata || {};
       }
       
+      res.setHeader('X-Storage-Backend', backend);
       return res.status(200).json({ whitelist, metadata });
     } catch (error) {
       return res.status(500).json({ error: 'Failed to list users', message: error.message });
@@ -112,8 +117,13 @@ export default async function handler(req, res) {
     
     try {
       let whitelist;
-      if (redisReady) {
-        whitelist = await getWhitelistFromRedis();
+      
+      if (redisClient) {
+        try {
+          whitelist = await getWhitelistFromRedis();
+        } catch (redisError) {
+          whitelist = getKeysDataFromFile().whitelist || {};
+        }
       } else {
         whitelist = getKeysDataFromFile().whitelist || {};
       }
@@ -128,21 +138,20 @@ export default async function handler(req, res) {
     }
   }
   
-  // For write operations, Redis is REQUIRED
-  if (!redisReady && ['add', 'update', 'remove', 'suspend', 'reactivate'].includes(action)) {
-    return res.status(503).json({
-      error: 'Redis not available',
-      message: 'Write operations require Redis connection',
-      debug: 'Check REDIS_URL environment variable and Redis server status'
-    });
-  }
-  
   // ==== ADD ====
   if (action === 'add' && req.method === 'POST') {
     const { userId, username, type = 'vip', expiresAt = null, maxDevices = 5, notes = '' } = req.body;
     
     if (!userId || !username) {
       return res.status(400).json({ error: 'userId and username required' });
+    }
+    
+    if (!redisClient) {
+      return res.status(503).json({
+        error: 'Redis not available',
+        message: 'Redis client failed to initialize. Check REDIS_URL environment variable.',
+        solution: 'Verify REDIS_URL is set correctly in Vercel environment variables'
+      });
     }
     
     try {
@@ -170,7 +179,12 @@ export default async function handler(req, res) {
       
       return res.status(201).json({ success: true, message: `User ${username} added`, data: newUser });
     } catch (error) {
-      return res.status(500).json({ error: 'Failed to add user', message: error.message });
+      console.error('Redis ADD error:', error);
+      return res.status(500).json({ 
+        error: 'Failed to add user', 
+        message: error.message,
+        details: 'Redis operation failed. Server logs may have more details.'
+      });
     }
   }
   
