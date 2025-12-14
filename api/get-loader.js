@@ -197,19 +197,92 @@ export default async function handler(req, res) {
         const isOwner = userId === "9268011358";
         console.log(`[${timestamp}] ${isOwner ? '👑 OWNER' : '💎 VIP'} ACCESS - UserID: ${userId} (${vipUser.username}) | IP: ${clientIP}`);
         
-        // Send Discord notification (unless owner and noLogging is true)
-        if (!isOwner || !vipUser.permissions?.noLogging) {
-          await sendDiscordLog({
-            title: `${isOwner ? '👑 Owner' : '💎 VIP'} Access Granted`,
-            status: 'success',
-            statusMessage: '✅ Authorized (VIP)',
-            authType: isOwner ? 'Owner' : `VIP (${vipUser.type})`,
-            owner: vipUser.username,
-            ip: clientIP,
-            deviceCount: 'N/A',
-            timestamp: timestamp,
-            message: `✅ ${isOwner ? 'Owner' : 'VIP'} loader delivered to ${vipUser.username}`
-          });
+        // Discord webhook with rate limiting
+        // - Owner: NO webhook (silent access)
+        // - VIP: 10 minute cooldown, but ALWAYS send for:
+        //   * First execution of the day
+        //   * IP address changes (security alert)
+        
+        if (!isOwner) {
+          const COOLDOWN_MINUTES = 10;
+          const redisKey = `webhook_cooldown:${userId}`;
+          const ipKey = `last_ip:${userId}`;
+          
+          let shouldSendWebhook = false;
+          let webhookReason = 'Regular Access';
+          
+          try {
+            // Get last notification time and IP
+            const lastNotification = await redis.get(redisKey);
+            const lastIP = await redis.get(ipKey);
+            const now = Date.now();
+            
+            // Check if this is first execution of the day
+            const today = new Date().toDateString();
+            const lastDate = lastNotification ? new Date(parseInt(lastNotification)).toDateString() : null;
+            const isFirstToday = !lastDate || lastDate !== today;
+            
+            // Check if IP changed (security alert)
+            const ipChanged = lastIP && lastIP !== clientIP;
+            
+            // Determine if we should send webhook
+            if (isFirstToday) {
+              shouldSendWebhook = true;
+              webhookReason = '🌅 First Execution Today';
+            } else if (ipChanged) {
+              shouldSendWebhook = true;
+              webhookReason = '🔒 IP Address Changed';
+            } else if (!lastNotification) {
+              shouldSendWebhook = true;
+              webhookReason = '🎉 First Time Access';
+            } else {
+              const timeSinceLastNotif = now - parseInt(lastNotification);
+              const cooldownMs = COOLDOWN_MINUTES * 60 * 1000;
+              
+              if (timeSinceLastNotif >= cooldownMs) {
+                shouldSendWebhook = true;
+                webhookReason = 'Cooldown Expired';
+              }
+            }
+            
+            // Send webhook if needed
+            if (shouldSendWebhook) {
+              await sendDiscordLog({
+                title: `💎 VIP Access Granted`,
+                status: 'success',
+                statusMessage: '✅ Authorized (VIP)',
+                authType: `VIP (${vipUser.type})`,
+                owner: vipUser.username,
+                ip: ipChanged ? `${lastIP} → ${clientIP}` : clientIP,
+                deviceCount: 'N/A',
+                timestamp: timestamp,
+                message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username}${ipChanged ? '\n⚠️ IP Address Changed!' : ''}`
+              });
+              
+              // Update last notification time and IP
+              await redis.set(redisKey, now.toString(), { EX: 86400 }); // 24 hours expiry
+              await redis.set(ipKey, clientIP, { EX: 86400 });
+            } else {
+              console.log(`[${timestamp}] 🔕 Webhook skipped for ${vipUser.username} - Cooldown active`);
+            }
+          } catch (error) {
+            console.error('Rate limiting error:', error);
+            // If Redis fails, send webhook anyway (fallback)
+            await sendDiscordLog({
+              title: `💎 VIP Access Granted`,
+              status: 'success',
+              statusMessage: '✅ Authorized (VIP)',
+              authType: `VIP (${vipUser.type})`,
+              owner: vipUser.username,
+              ip: clientIP,
+              deviceCount: 'N/A',
+              timestamp: timestamp,
+              message: `✅ VIP loader delivered to ${vipUser.username}`
+            });
+          }
+        } else {
+          // Owner: Silent access, no webhook
+          console.log(`[${timestamp}] 🔕 Owner access - No webhook sent`);
         }
         
         // Read and return loader script
