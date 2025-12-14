@@ -129,24 +129,57 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   
-  // Get key from query parameter
-  const { key } = req.query;
+  // Get parameters (support both 'key' and 'userId')
+  const { key, userId } = req.query;
   
   // Get client information
   const clientIP = getClientIP(req);
   const timestamp = new Date().toISOString();
   
+  // Get keys database
+  const keysData = getKeysData();
+  
+  // === PRIORITY 1: Check User ID Whitelist (DEV/Owner Bypass) ===
+  if (userId) {
+    const whitelisted = keysData.whitelist?.[userId];
+    
+    if (whitelisted && whitelisted.status === 'active') {
+      // Owner/Dev detected - BYPASS all checks, NO webhook
+      console.log(`[${timestamp}] 👑 OWNER ACCESS - UserID: ${userId} | IP: ${clientIP}`);
+      
+      // Read and return loader script immediately
+      try {
+        const loaderPath = path.join(process.cwd(), 'protected', 'loader.lua');
+        
+        if (!fs.existsSync(loaderPath)) {
+          return res.status(500).send(`error("Loader not found")`);
+        }
+        
+        const loaderScript = fs.readFileSync(loaderPath, 'utf8');
+        
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('X-Access-Type', 'owner');
+        
+        return res.status(200).send(loaderScript);
+        
+      } catch (error) {
+        console.error('Error:', error);
+        return res.status(500).send(`error("Server error")`);
+      }
+    }
+  }
+  
+  // === PRIORITY 2: Normal Key Authentication ===
   // Check if key is provided
   if (!key) {
     return res.status(400).send(
-      `-- ERROR: No authentication key provided\n` +
-      `-- Usage: https://www.starship-core.my.id/api/get-loader?key=YOUR_KEY\n` +
-      `error("Authentication key required")`
-    );
+      `-- ERROR: No authentication provided\n` +
+      `-- Usage: ?key=YOUR_KEY or ?userId=YOUR_ROBLOX_ID\n` +
+      `error("Authentication required")`
+    );  
   }
   
-  // Get keys database
-  const keysData = getKeysData();
   const keyData = keysData.keys[key];
   
   // Check if key exists

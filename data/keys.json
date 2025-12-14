@@ -1,35 +1,30 @@
 {
-  "keys": {
-    "demo-premium-2024": {
-      "owner": "Demo User",
-      "type": "premium",
+  "keys": {},
+  "whitelist": {
+    "9268011358": {
+      "userId": "9268011358",
+      "username": "DEV/Owner",
+      "type": "owner",
       "status": "active",
-      "createdAt": "2024-12-14T09:00:00Z",
+      "addedAt": "2024-12-14T11:05:00Z",
       "expiresAt": null,
-      "totalRequests": 0,
-      "lastUsed": null,
-      "lastIP": null,
-      "maxDevices": 3,
-      "ipTracking": {},
-      "notes": "Demo premium key for testing"
-    },
-    "trial-test-123": {
-      "owner": "Trial User",
-      "type": "trial",
-      "status": "active",
-      "createdAt": "2024-12-14T09:00:00Z",
-      "expiresAt": "2024-12-21T23:59:59Z",
-      "totalRequests": 0,
-      "lastUsed": null,
-      "lastIP": null,
-      "maxDevices": 2,
-      "ipTracking": {},
-      "notes": "7-day trial key"
+      "restrictions": {
+        "maxDevices": null,
+        "ipTracking": false,
+        "webhookNotify": false
+      },
+      "permissions": {
+        "bypassAll": true,
+        "unlimitedAccess": true,
+        "noLogging": false
+      },
+      "notes": "Developer/Owner - Lifetime access, no restrictions"
     }
   },
   "metadata": {
-    "totalKeys": 2,
-    "activeKeys": 2,
-    "lastUpdated": "2024-12-14T09:00:00Z"
+    "totalKeys": 0,
+    "activeKeys": 0,
+    "totalWhitelisted": 1,
+    "lastUpdated": "2024-12-14T11:05:00Z"
   }
 }
