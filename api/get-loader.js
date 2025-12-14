@@ -65,9 +65,12 @@ async function sendDiscordLog(logData) {
   
   // Skip if webhook not configured
   if (!webhookUrl) {
-    console.log('[Discord] Webhook not configured, skipping notification');
+    console.log('[Discord] ⚠️ WEBHOOK NOT CONFIGURED - Set DISCORD_WEBHOOK_URL environment variable');
+    console.log('[Discord] Skipping notification for:', logData.title);
     return;
   }
+  
+  console.log('[Discord] ✅ Webhook URL is configured, attempting to send...');
   
   try {
     // Determine embed color based on status
@@ -214,10 +217,39 @@ export default async function handler(req, res) {
           console.log(`[${timestamp}] 📊 Webhook Rate Limiting Check for VIP user: ${vipUser.username}`);
           
           try {
-            // Get last notification time and IP
-            const lastNotification = await redis.get(redisKey);
-            const lastIP = await redis.get(ipKey);
-            const now = Date.now();
+            // Check if Redis is available
+            const redisClient = await getRedis();
+            
+            if (!redisClient) {
+              console.log(`[${timestamp}] ⚠️ Redis not available - sending webhook in fallback mode`);
+              shouldSendWebhook = true;
+              webhookReason = '⚠️ Fallback Mode (Redis Unavailable)';
+              
+              // Get device info from vipUser data
+              const maxDevices = vipUser.maxDevices || vipUser.restrictions?.maxDevices || null;
+              const currentDevices = vipUser.deviceCount || vipUser.devices?.length || 0;
+              const deviceInfo = !maxDevices || maxDevices === 'Unlimited'
+                ? `${currentDevices} device(s)` 
+                : `${currentDevices}/${maxDevices} devices`;
+              
+              await sendDiscordLog({
+                title: `💎 VIP Access Granted`,
+                status: 'success',
+                statusMessage: '✅ Authorized (VIP)',
+                authType: `VIP (${vipUser.type})`,
+                owner: vipUser.username,
+                ip: clientIP,
+                deviceCount: deviceInfo,
+                timestamp: timestamp,
+                message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username}\n⚠️ (Rate limiting unavailable)`
+              });
+              
+              console.log(`[${timestamp}] ✅ Fallback webhook sent`);
+            } else {
+              // Redis is available - use rate limiting
+              const lastNotification = await redisClient.get(redisKey);
+              const lastIP = await redisClient.get(ipKey);
+              const now = Date.now();
             
             console.log(`[${timestamp}] 📝 Last notification: ${lastNotification ? new Date(parseInt(lastNotification)).toLocaleString() : 'Never'}`);
             console.log(`[${timestamp}] 📝 Last IP: ${lastIP || 'Unknown'} | Current IP: ${clientIP}`);
@@ -283,13 +315,14 @@ export default async function handler(req, res) {
               console.log(`[${timestamp}] ✅ Webhook sent successfully`);
               
               // Update last notification time and IP
-              await redis.set(redisKey, now.toString(), { EX: 86400 }); // 24 hours expiry
-              await redis.set(ipKey, clientIP, { EX: 86400 });
+              await redisClient.set(redisKey, now.toString(), { EX: 86400 }); // 24 hours expiry
+              await redisClient.set(ipKey, clientIP, { EX: 86400 });
               
               console.log(`[${timestamp}] 💾 Updated Redis cooldown data`);
             } else {
               console.log(`[${timestamp}] 🔕 Webhook skipped for ${vipUser.username} - Cooldown active`);
             }
+            } // End of Redis availability check
           } catch (error) {
             console.error(`[${timestamp}] ❌ Rate limiting error:`, error);
             // If Redis fails, send webhook anyway (fallback)
