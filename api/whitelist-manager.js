@@ -5,17 +5,26 @@
 import fs from 'fs';
 import path from 'path';
 
-// Try to import redis, fallback to file system if not available
+// Lazy load redis
 let redis = null;
+let redisInitialized = false;
 let useRedis = false;
 
-try {
-  const redisModule = await import('../lib/redis.js');
-  redis = redisModule.default;
-  useRedis = true;
-} catch (error) {
-  console.warn('Redis not available, using file system fallback');
-  useRedis = false;
+async function initRedis() {
+  if (redisInitialized) return;
+  
+  try {
+    const redisModule = await import('../lib/redis.js');
+    redis = redisModule.default;
+    // Test connection
+    await redis.ping();
+    useRedis = true;
+  } catch (error) {
+    console.warn('Redis not available, using file system fallback:', error.message);
+    useRedis = false;
+  }
+  
+  redisInitialized = true;
 }
 
 // Admin secret - must match the one in key-manager.js
@@ -152,6 +161,9 @@ function clearCache() {
 }
 
 export default async function handler(req, res) {
+  // Initialize Redis (lazy load)
+  await initRedis();
+  
   // Check admin authentication
   const adminAuth = req.headers['x-admin-secret'];
   
