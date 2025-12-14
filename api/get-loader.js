@@ -1,9 +1,43 @@
 // Simple Key Authentication API (Read-Only Version)
 // This version doesn't write to filesystem (Vercel compatible)
 // With Discord Webhook Logging Integration
+// UPDATED: Now checks Redis whitelist for VIP users!
 
 import fs from 'fs';
 import path from 'path';
+
+// Get Redis client
+let redis = null;
+let redisInitAttempted = false;
+
+async function getRedis() {
+  if (!redisInitAttempted) {
+    try {
+      const redisModule = await import('../lib/redis.js');
+      redis = redisModule.default;
+      console.log('✅ Redis module loaded for get-loader');
+    } catch (error) {
+      console.error('⚠️ Redis module load failed:', error.message);
+      redis = null;
+    }
+    redisInitAttempted = true;
+  }
+  return redis;
+}
+
+// Helper to get whitelist from Redis
+async function getWhitelistFromRedis() {
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return null;
+    
+    const data = await redisClient.get('starship:whitelist');
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    console.error('Redis whitelist read error:', error.message);
+    return null;
+  }
+}
 
 // Helper function to get client IP
 function getClientIP(req) {
@@ -21,7 +55,7 @@ function getKeysData() {
     return JSON.parse(data);
   } catch (error) {
     console.error('Error reading keys:', error);
-    return { keys: {} };
+    return { keys: {}, whitelist: {} };
   }
 }
 
@@ -61,13 +95,13 @@ async function sendDiscordLog(logData) {
       color: color,
       fields: [
         {
-          name: '👤 Key Owner',
+          name: '👤 User',
           value: logData.owner || 'Unknown',
           inline: true
         },
         {
-          name: '🔑 Key',
-          value: `\`${logData.key || 'N/A'}\``,
+          name: '🔑 Auth Type',
+          value: `\`${logData.authType || 'Key'}\``,
           inline: true
         },
         {
@@ -136,33 +170,96 @@ export default async function handler(req, res) {
   const clientIP = getClientIP(req);
   const timestamp = new Date().toISOString();
   
-  // Get keys database
-  const keysData = getKeysData();
-  
-  // === PRIORITY 1: Check User ID Whitelist (DEV/Owner Bypass) ===
+  // === PRIORITY 1: Check User ID Whitelist (Owner + VIP) ===
   if (userId) {
-    const whitelisted = keysData.whitelist?.[userId];
+    // First, check Redis whitelist (for VIP users)
+    const redisWhitelist = await getWhitelistFromRedis();
     
-    if (whitelisted && whitelisted.status === 'active') {
-      // Owner/Dev detected - BYPASS all checks, NO webhook
-      console.log(`[${timestamp}] 👑 OWNER ACCESS - UserID: ${userId} | IP: ${clientIP}`);
+    if (redisWhitelist && redisWhitelist[userId]) {
+      const vipUser = redisWhitelist[userId];
       
-      // Read and return loader script immediately
+      // Check if user is active
+      if (vipUser.status === 'active') {
+        // Check expiry if set
+        if (vipUser.expiresAt) {
+          const expiryDate = new Date(vipUser.expiresAt);
+          if (expiryDate < new Date()) {
+            console.log(`[${timestamp}] ❌ VIP expired - UserID: ${userId} | IP: ${clientIP}`);
+            return res.status(403).send(
+              `-- ERROR: VIP access expired\n` +
+              `-- Expired on: ${expiryDate.toDateString()}\n` +
+              `error("VIP access expired")`
+            );
+          }
+        }
+        
+        // VIP user - grant access
+        const isOwner = userId === "9268011358";
+        console.log(`[${timestamp}] ${isOwner ? '👑 OWNER' : '💎 VIP'} ACCESS - UserID: ${userId} (${vipUser.username}) | IP: ${clientIP}`);
+        
+        // Send Discord notification (unless owner and noLogging is true)
+        if (!isOwner || !vipUser.permissions?.noLogging) {
+          await sendDiscordLog({
+            title: `${isOwner ? '👑 Owner' : '💎 VIP'} Access Granted`,
+            status: 'success',
+            statusMessage: '✅ Authorized (VIP)',
+            authType: isOwner ? 'Owner' : `VIP (${vipUser.type})`,
+            owner: vipUser.username,
+            ip: clientIP,
+            deviceCount: 'N/A',
+            timestamp: timestamp,
+            message: `✅ ${isOwner ? 'Owner' : 'VIP'} loader delivered to ${vipUser.username}`
+          });
+        }
+        
+        // Read and return loader script
+        try {
+          const loaderPath = path.join(process.cwd(), 'protected', 'loader.lua');
+          
+          if (!fs.existsSync(loaderPath)) {
+            return res.status(500).send(`error("Loader not found")`);
+          }
+          
+          const loaderScript = fs.readFileSync(loaderPath, 'utf8');
+          
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('X-Access-Type', isOwner ? 'owner' : 'vip');
+          res.setHeader('X-User-Type', vipUser.type);
+          
+          return res.status(200).send(loaderScript);
+          
+        } catch (error) {
+          console.error('Error:', error);
+          return res.status(500).send(`error("Server error")`);
+        }
+      } else if (vipUser.status === 'suspended') {
+        console.log(`[${timestamp}] 🚫 SUSPENDED VIP - UserID: ${userId} | IP: ${clientIP}`);
+        return res.status(403).send(
+          `-- ERROR: Your VIP access has been suspended\n` +
+          `-- Contact administrator\n` +
+          `error("VIP access suspended")`
+        );
+      }
+    }
+    
+    // Fallback: check file-based whitelist (legacy)
+    const keysData = getKeysData();
+    const fileWhitelist = keysData.whitelist?.[userId];
+    
+    if (fileWhitelist && fileWhitelist.status === 'active') {
+      console.log(`[${timestamp}] 👑 OWNER ACCESS (file) - UserID: ${userId} | IP: ${clientIP}`);
+      
       try {
         const loaderPath = path.join(process.cwd(), 'protected', 'loader.lua');
-        
         if (!fs.existsSync(loaderPath)) {
           return res.status(500).send(`error("Loader not found")`);
         }
-        
         const loaderScript = fs.readFileSync(loaderPath, 'utf8');
-        
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('X-Access-Type', 'owner');
-        
         return res.status(200).send(loaderScript);
-        
       } catch (error) {
         console.error('Error:', error);
         return res.status(500).send(`error("Server error")`);
