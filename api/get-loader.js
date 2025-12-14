@@ -261,6 +261,13 @@ export default async function handler(req, res) {
             if (shouldSendWebhook) {
               console.log(`[${timestamp}] 📤 Sending Discord webhook...`);
               
+              // Get device info from vipUser data
+              const maxDevices = vipUser.maxDevices || vipUser.restrictions?.maxDevices || null;
+              const currentDevices = vipUser.deviceCount || vipUser.devices?.length || 0;
+              const deviceInfo = !maxDevices || maxDevices === 'Unlimited'
+                ? `${currentDevices} device(s)` 
+                : `${currentDevices}/${maxDevices} devices`;
+              
               await sendDiscordLog({
                 title: `💎 VIP Access Granted`,
                 status: 'success',
@@ -268,7 +275,7 @@ export default async function handler(req, res) {
                 authType: `VIP (${vipUser.type})`,
                 owner: vipUser.username,
                 ip: ipChanged ? `${lastIP} → ${clientIP}` : clientIP,
-                deviceCount: 'N/A',
+                deviceCount: deviceInfo,
                 timestamp: timestamp,
                 message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username}${ipChanged ? '\n⚠️ IP Address Changed!' : ''}`
               });
@@ -288,6 +295,13 @@ export default async function handler(req, res) {
             // If Redis fails, send webhook anyway (fallback)
             console.log(`[${timestamp}] 🔄 Fallback: Sending webhook anyway due to error`);
             
+            // Get device info from vipUser data
+            const maxDevices = vipUser.maxDevices || vipUser.restrictions?.maxDevices || null;
+            const currentDevices = vipUser.deviceCount || vipUser.devices?.length || 0;
+            const deviceInfo = !maxDevices || maxDevices === 'Unlimited'
+              ? `${currentDevices} device(s)` 
+              : `${currentDevices}/${maxDevices} devices`;
+            
             await sendDiscordLog({
               title: `💎 VIP Access Granted`,
               status: 'success',
@@ -295,7 +309,7 @@ export default async function handler(req, res) {
               authType: `VIP (${vipUser.type})`,
               owner: vipUser.username,
               ip: clientIP,
-              deviceCount: 'N/A',
+              deviceCount: deviceInfo,
               timestamp: timestamp,
               message: `✅ VIP loader delivered to ${vipUser.username}\n⚠️ (Fallback mode - Rate limiting unavailable)`
             });
