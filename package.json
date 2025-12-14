@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Secure Dynamic Key API for StarshipCore",
   "license": "UNLICENSED",
+  "type": "module",
   "dependencies": {
     "ioredis": "^5.3.2"
   }
