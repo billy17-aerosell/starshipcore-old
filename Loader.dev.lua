@@ -48,7 +48,6 @@ local function decrypt(encryptedBase64)
 	local encrypted = base64Decode(encryptedBase64)
 	return xorEncrypt(encrypted, ENCRYPTION_KEY)
 end
-
 local function setupFolders()
 	if not isfolder(FOLDER_NAME) then
 		makefolder(FOLDER_NAME)

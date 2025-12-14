@@ -1,5 +1,5 @@
-// Smart Key Authentication API
-// This endpoint validates keys and returns the obfuscated loader script
+// Simple Key Authentication API (Read-Only Version)
+// This version doesn't write to filesystem (Vercel compatible)
 
 import fs from 'fs';
 import path from 'path';
@@ -10,11 +10,6 @@ function getClientIP(req) {
          req.headers['x-real-ip'] || 
          req.connection?.remoteAddress || 
          'unknown';
-}
-
-// Helper function to get current date (YYYY-MM-DD)
-function getCurrentDate() {
-  return new Date().toISOString().split('T')[0];
 }
 
 // Helper function to read keys database
@@ -29,98 +24,7 @@ function getKeysData() {
   }
 }
 
-// Helper function to update key data
-function updateKeyData(keyId, updates) {
-  try {
-    const keysPath = path.join(process.cwd(), 'data', 'keys.json');
-    const keysData = getKeysData();
-    
-    if (keysData.keys[keyId]) {
-      keysData.keys[keyId] = {
-        ...keysData.keys[keyId],
-        ...updates
-      };
-      fs.writeFileSync(keysPath, JSON.stringify(keysData, null, 2));
-      return true;
-    }
-    return false;
-  } catch (error) {
-    console.error('Error updating key:', error);
-    return false;
-  }
-}
-
-// Helper function to log access
-function logAccess(logEntry) {
-  try {
-    const logsDir = path.join(process.cwd(), 'data', 'logs');
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
-    }
-    
-    const today = getCurrentDate();
-    const logFile = path.join(logsDir, `${today}.json`);
-    
-    let logs = [];
-    if (fs.existsSync(logFile)) {
-      logs = JSON.parse(fs.readFileSync(logFile, 'utf8'));
-    }
-    
-    logs.push(logEntry);
-    fs.writeFileSync(logFile, JSON.stringify(logs, null, 2));
-  } catch (error) {
-    console.error('Error logging access:', error);
-  }
-}
-
-// Smart validation: Check if IP usage is suspicious
-function validateIPUsage(keyData, currentIP) {
-  const today = getCurrentDate();
-  
-  // Initialize tracking if not exists
-  if (!keyData.ipTracking) {
-    keyData.ipTracking = {};
-  }
-  
-  if (!keyData.ipTracking[today]) {
-    keyData.ipTracking[today] = [];
-  }
-  
-  const ipsToday = keyData.ipTracking[today];
-  
-  // Add current IP if not already in today's list
-  if (!ipsToday.includes(currentIP)) {
-    ipsToday.push(currentIP);
-  }
-  
-  // SMART RULES:
-  const uniqueIPsToday = ipsToday.length;
-  
-  // Rule 1: Max 3 different IPs per day (OK)
-  if (uniqueIPsToday <= 3) {
-    return { valid: true, warning: false, message: 'OK' };
-  }
-  
-  // Rule 2: 4-5 IPs = Warning but still allow
-  if (uniqueIPsToday <= 5) {
-    return { 
-      valid: true, 
-      warning: true, 
-      message: `Warning: ${uniqueIPsToday} different IPs detected today` 
-    };
-  }
-  
-  // Rule 3: More than 5 IPs = Suspicious, block
-  return { 
-    valid: false, 
-    warning: true, 
-    message: `Too many devices (${uniqueIPsToday} IPs). Possible key sharing detected.` 
-  };
-}
-
 export default async function handler(req, res) {
-  const startTime = Date.now();
-  
   // Only allow GET requests
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -132,24 +36,14 @@ export default async function handler(req, res) {
   // Get client information
   const clientIP = getClientIP(req);
   const timestamp = new Date().toISOString();
-  const userAgent = req.headers['user-agent'] || 'unknown';
   
   // Check if key is provided
   if (!key) {
-    const logEntry = {
-      timestamp,
-      ip: clientIP,
-      key: null,
-      status: 'failed',
-      reason: 'No key provided',
-      userAgent
-    };
-    logAccess(logEntry);
-    
-    return res.status(400).json({ 
-      error: 'Authentication key required',
-      message: 'Please provide a valid key in the URL: ?key=YOUR_KEY'
-    });
+    return res.status(400).send(
+      `-- ERROR: No authentication key provided\n` +
+      `-- Usage: https://www.starship-core.my.id/api/get-loader?key=YOUR_KEY\n` +
+      `error("Authentication key required")`
+    );
   }
   
   // Get keys database
@@ -158,148 +52,82 @@ export default async function handler(req, res) {
   
   // Check if key exists
   if (!keyData) {
-    const logEntry = {
-      timestamp,
-      ip: clientIP,
-      key,
-      status: 'failed',
-      reason: 'Invalid key',
-      userAgent
-    };
-    logAccess(logEntry);
-    
-    return res.status(403).json({ 
-      error: 'Invalid authentication key',
-      message: 'The provided key is not valid. Please contact administrator.'
-    });
+    console.log(`[${timestamp}] Invalid key attempt: ${key} from IP: ${clientIP}`);
+    return res.status(403).send(
+      `-- ERROR: Invalid authentication key\n` +
+      `-- Key: ${key}\n` +
+      `-- Contact administrator for access\n` +
+      `error("Invalid authentication key")`
+    );
   }
   
   // Check if key is active
   if (keyData.status !== 'active') {
-    const logEntry = {
-      timestamp,
-      ip: clientIP,
-      key,
-      owner: keyData.owner,
-      status: 'failed',
-      reason: `Key is ${keyData.status}`,
-      userAgent
-    };
-    logAccess(logEntry);
-    
-    return res.status(403).json({ 
-      error: 'Key is inactive',
-      message: `This key has been ${keyData.status}. Please contact administrator.`
-    });
+    console.log(`[${timestamp}] Inactive key used: ${key} (${keyData.status}) from IP: ${clientIP}`);
+    return res.status(403).send(
+      `-- ERROR: Key is ${keyData.status}\n` +
+      `-- Owner: ${keyData.owner}\n` +
+      `-- Contact administrator\n` +
+      `error("Key is ${keyData.status}")`
+    );
   }
   
   // Check expiration (if set)
   if (keyData.expiresAt) {
     const expiryDate = new Date(keyData.expiresAt);
     if (expiryDate < new Date()) {
-      // Update key status to expired
-      updateKeyData(key, { status: 'expired' });
-      
-      const logEntry = {
-        timestamp,
-        ip: clientIP,
-        key,
-        owner: keyData.owner,
-        status: 'failed',
-        reason: 'Key expired',
-        userAgent
-      };
-      logAccess(logEntry);
-      
-      return res.status(403).json({ 
-        error: 'Key expired',
-        message: `This key expired on ${expiryDate.toDateString()}.`
-      });
+      console.log(`[${timestamp}] Expired key used: ${key} from IP: ${clientIP}`);
+      return res.status(403).send(
+        `-- ERROR: Key expired\n` +
+        `-- Expired on: ${expiryDate.toDateString()}\n` +
+        `-- Contact administrator for renewal\n` +
+        `error("Key expired")`
+      );
     }
   }
   
-  // SMART IP VALIDATION
-  const ipValidation = validateIPUsage(keyData, clientIP);
-  
-  if (!ipValidation.valid) {
-    const logEntry = {
-      timestamp,
-      ip: clientIP,
-      key,
-      owner: keyData.owner,
-      status: 'blocked',
-      reason: ipValidation.message,
-      userAgent,
-      uniqueIPsToday: keyData.ipTracking[getCurrentDate()]?.length || 0
-    };
-    logAccess(logEntry);
-    
-    return res.status(429).json({ 
-      error: 'Too many devices detected',
-      message: ipValidation.message,
-      contact: 'Please contact administrator if this is a mistake.'
-    });
-  }
-  
-  // Update key usage statistics
-  const updatedKeyData = {
-    ...keyData,
-    lastUsed: timestamp,
-    lastIP: clientIP,
-    totalRequests: (keyData.totalRequests || 0) + 1,
-    ipTracking: keyData.ipTracking
-  };
-  updateKeyData(key, updatedKeyData);
-  
-  // Log successful access
-  const logEntry = {
-    timestamp,
-    ip: clientIP,
-    key,
-    owner: keyData.owner,
-    keyType: keyData.type,
-    status: 'success',
-    warning: ipValidation.warning,
-    warningMessage: ipValidation.warning ? ipValidation.message : null,
-    userAgent,
-    responseTime: `${Date.now() - startTime}ms`
-  };
-  logAccess(logEntry);
+  // Log successful access to console
+  console.log(`[${timestamp}] ✅ Valid access - Key: ${key} | Owner: ${keyData.owner} | IP: ${clientIP}`);
   
   // Read and return the obfuscated loader script
   try {
     const loaderPath = path.join(process.cwd(), 'public', 'loader.lua');
+    
+    // Check if file exists
+    if (!fs.existsSync(loaderPath)) {
+      console.error(`Loader script not found at: ${loaderPath}`);
+      return res.status(500).send(
+        `-- ERROR: Loader script not found\n` +
+        `-- Path: ${loaderPath}\n` +
+        `error("Internal server error: Script not found")`
+      );
+    }
+    
     const loaderScript = fs.readFileSync(loaderPath, 'utf8');
+    
+    // Validate script content
+    if (!loaderScript || loaderScript.length < 100) {
+      console.error(`Loader script is empty or too short`);
+      return res.status(500).send(
+        `-- ERROR: Invalid loader script\n` +
+        `error("Internal server error: Invalid script")`
+      );
+    }
     
     // Set appropriate headers
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    
-    // Add warning header if applicable
-    if (ipValidation.warning) {
-      res.setHeader('X-Warning', ipValidation.message);
-    }
+    res.setHeader('X-Key-Owner', keyData.owner);
+    res.setHeader('X-Key-Type', keyData.type);
     
     return res.status(200).send(loaderScript);
     
   } catch (error) {
     console.error('Error reading loader script:', error);
-    
-    const errorLogEntry = {
-      timestamp,
-      ip: clientIP,
-      key,
-      owner: keyData.owner,
-      status: 'error',
-      reason: 'Failed to load script',
-      error: error.message,
-      userAgent
-    };
-    logAccess(errorLogEntry);
-    
-    return res.status(500).json({ 
-      error: 'Internal server error',
-      message: 'Failed to load script. Please try again later.'
-    });
+    return res.status(500).send(
+      `-- ERROR: Failed to load script\n` +
+      `-- Error: ${error.message}\n` +
+      `error("Internal server error")`
+    );
   }
 }
