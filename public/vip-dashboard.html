@@ -258,7 +258,19 @@
                 <label for="adminSecret">Admin Secret Key</label>
                 <input type="password" id="adminSecret" placeholder="Enter your admin secret key">
             </div>
-            <button class="btn btn-primary" onclick="loadUsers()">🔓 Connect & Load Users</button>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                <input type="checkbox" id="rememberSecret" style="width: auto; cursor: pointer;">
+                <label for="rememberSecret" style="margin: 0; cursor: pointer; font-weight: 400; font-size: 13px;">
+                    💾 Remember secret key (saved in browser)
+                </label>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="saveAndConnect()">🔓 Connect & Load Users</button>
+                <button class="btn btn-warning" onclick="forgetSecret()" id="forgetBtn" style="display: none;">🗑️ Forget Secret</button>
+            </div>
+            <div id="savedSecretIndicator" style="margin-top: 10px; padding: 10px; background: #d4edda; border-radius: 8px; color: #155724; font-size: 13px; display: none;">
+                ✅ <strong>Secret key saved!</strong> You don't need to enter it again.
+            </div>
         </div>
 
         <div class="auth-section">
@@ -305,6 +317,56 @@
 
     <script>
         const API_BASE = window.location.origin;
+        const SECRET_STORAGE_KEY = 'vip_admin_secret';
+
+        // Load saved secret on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSavedSecret();
+        });
+
+        function loadSavedSecret() {
+            const savedSecret = localStorage.getItem(SECRET_STORAGE_KEY);
+            if (savedSecret) {
+                document.getElementById('adminSecret').value = savedSecret;
+                document.getElementById('rememberSecret').checked = true;
+                document.getElementById('savedSecretIndicator').style.display = 'block';
+                document.getElementById('forgetBtn').style.display = 'inline-block';
+                // Auto-load users if secret is saved
+                loadUsers();
+            }
+        }
+
+        function saveSecretToStorage(secret) {
+            const remember = document.getElementById('rememberSecret').checked;
+            if (remember) {
+                localStorage.setItem(SECRET_STORAGE_KEY, secret);
+                document.getElementById('savedSecretIndicator').style.display = 'block';
+                document.getElementById('forgetBtn').style.display = 'inline-block';
+                showNotification('✅ Secret key saved to browser!', 'success');
+            }
+        }
+
+        function forgetSecret() {
+            if (confirm('Are you sure you want to forget the saved secret key?')) {
+                localStorage.removeItem(SECRET_STORAGE_KEY);
+                document.getElementById('adminSecret').value = '';
+                document.getElementById('rememberSecret').checked = false;
+                document.getElementById('savedSecretIndicator').style.display = 'none';
+                document.getElementById('forgetBtn').style.display = 'none';
+                document.getElementById('usersList').innerHTML = '';
+                showNotification('🗑️ Secret key removed from browser', 'success');
+            }
+        }
+
+        function saveAndConnect() {
+            const secret = getAdminSecret();
+            if (!secret) {
+                showNotification('Please enter admin secret key', 'error');
+                return;
+            }
+            saveSecretToStorage(secret);
+            loadUsers();
+        }
 
         function showNotification(message, type = 'success') {
             const notification = document.getElementById('notification');

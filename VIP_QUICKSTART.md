@@ -8,12 +8,20 @@
 
    - URL: `https://www.starship-core.my.id/vip-dashboard.html`
 
-2. **Login dengan Admin Secret**
+2. **Login dengan Admin Secret** (Hanya Sekali!)
 
    - Masukkan `ADMIN_SECRET` Anda di field yang tersedia
-   - Klik "Connect & Load Users"
+   - ✅ **Centang "💾 Remember secret key"** agar tidak perlu input lagi
+   - Klik "🔓 Connect & Load Users"
+   - 🎉 Secret key akan tersimpan di browser Anda!
 
-3. **Tambah VIP User**
+3. **Kunjungan Berikutnya** (Next Time)
+
+   - Dashboard akan **otomatis login** dan load users
+   - Tidak perlu input secret key lagi!
+   - Jika ingin hapus secret: klik tombol "🗑️ Forget Secret"
+
+4. **Tambah VIP User**
 
    - Isi form:
      - **User ID**: Roblox User ID (contoh: `123456789`)
@@ -22,9 +30,9 @@
      - **Expires At**: Tanggal expired (kosongkan untuk lifetime)
      - **Max Devices**: Maksimal device (default: 5)
      - **Notes**: Catatan tambahan
-   - Klik "Add VIP User"
+   - Klik "➕ Add VIP User"
 
-4. **Done!** ✅
+5. **Done!** ✅
    - User langsung bisa akses tanpa key
 
 ---
