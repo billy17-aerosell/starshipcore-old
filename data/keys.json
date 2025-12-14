@@ -1,6 +1,25 @@
 {
   "keys": {},
   "whitelist": {
+    "123456789": {
+      "userId": "123456789",
+      "username": "TestVIP_User",
+      "type": "vip",
+      "status": "active",
+      "addedAt": "2025-12-14T11:30:22.747Z",
+      "expiresAt": null,
+      "restrictions": {
+        "maxDevices": 5,
+        "ipTracking": true,
+        "webhookNotify": true
+      },
+      "permissions": {
+        "bypassAll": false,
+        "unlimitedAccess": false,
+        "noLogging": false
+      },
+      "notes": "Test VIP user added via script"
+    },
     "9268011358": {
       "userId": "9268011358",
       "username": "DEV/Owner",
@@ -24,7 +43,7 @@
   "metadata": {
     "totalKeys": 0,
     "activeKeys": 0,
-    "totalWhitelisted": 1,
-    "lastUpdated": "2024-12-14T11:05:00Z"
+    "totalWhitelisted": 2,
+    "lastUpdated": "2025-12-14T11:30:22.747Z"
   }
 }
