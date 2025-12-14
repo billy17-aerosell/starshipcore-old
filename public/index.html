@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StarshipCore - Roblox Script Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        
+        .container {
+            text-align: center;
+            padding: 3rem;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            max-width: 600px;
+        }
+        
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #fff, #e0e0e0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 0.5rem 1.5rem;
+            background: rgba(76, 175, 80, 0.3);
+            border: 2px solid #4CAF50;
+            border-radius: 25px;
+            margin-bottom: 2rem;
+            font-weight: bold;
+        }
+        
+        .info {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-top: 2rem;
+            text-align: left;
+        }
+        
+        .info p {
+            margin: 0.5rem 0;
+            line-height: 1.6;
+        }
+        
+        code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        
+        .warning {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(255, 152, 0, 0.2);
+            border-left: 4px solid #FF9800;
+            border-radius: 4px;
+            text-align: left;
+        }
+        
+        .links {
+            margin-top: 2rem;
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+        
+        .btn {
+            padding: 0.8rem 1.5rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 StarshipCore</h1>
+        <p class="subtitle">Roblox Script Platform</p>
+        
+        <div class="status">
+            ✅ System Online
+        </div>
+        
+        <div class="info">
+            <p><strong>📡 API Status:</strong> Active</p>
+            <p><strong>🔐 Authentication:</strong> Required</p>
+            <p><strong>🌐 API Endpoint:</strong></p>
+            <code>https://www.starship-core.my.id/api/get-loader?key=YOUR_KEY</code>
+        </div>
+        
+        <div class="warning">
+            <p><strong>⚠️ Notice:</strong></p>
+            <p>Direct access to scripts requires authentication. Please use a valid API key.</p>
+            <p>Contact administrator for access.</p>
+        </div>
+        
+        <div class="links">
+            <a href="https://github.com/billy17-netizen/StarshipCore" class="btn" target="_blank">
+                📚 GitHub
+            </a>
+            <a href="https://discord.gg/starshipcore" class="btn" target="_blank">
+                💬 Discord
+            </a>
+        </div>
+    </div>
+</body>
+</html>

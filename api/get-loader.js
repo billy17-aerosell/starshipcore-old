@@ -91,7 +91,7 @@ export default async function handler(req, res) {
   
   // Read and return the obfuscated loader script
   try {
-    const loaderPath = path.join(process.cwd(), 'public', 'loader.lua');
+    const loaderPath = path.join(process.cwd(), 'protected', 'loader.lua');
     
     // Check if file exists
     if (!fs.existsSync(loaderPath)) {
