@@ -227,8 +227,55 @@ export default async function handler(req, res) {
     }
   }
   
+  // === DEVICE TRACKING & LIMITING ===
+  // Initialize tracking if not exists
+  if (!keyData.ipTracking) {
+    keyData.ipTracking = {};
+  }
+  
+  // Get current unique IPs
+  const currentIPs = Object.keys(keyData.ipTracking);
+  const maxDevices = keyData.maxDevices || 5; // Default 5 if not set
+  
+  // Check if this is a new IP
+  const isNewIP = !keyData.ipTracking[clientIP];
+  
+  if (isNewIP) {
+    // Check if we've exceeded device limit
+    if (currentIPs.length >= maxDevices) {
+      console.log(`[${timestamp}] 🚫 Device limit exceeded - Key: ${key} | Current: ${currentIPs.length}/${maxDevices} | New IP: ${clientIP}`);
+      
+      // Send Discord notification for blocked access
+      await sendDiscordLog({
+        title: '🚫 Access Blocked - Device Limit Exceeded',
+        status: 'blocked',
+        statusMessage: '🚫 Too Many Devices',
+        key: key,
+        owner: keyData.owner,
+        ip: clientIP,
+        deviceCount: `${currentIPs.length + 1}/${maxDevices} (EXCEEDED!)`,
+        timestamp: timestamp,
+        message: `⚠️ Attempted to use key from new device, but limit already reached!\n\n**Current IPs:** ${currentIPs.length}\n**New IP:** \`${clientIP}\``
+      });
+      
+      return res.status(403).send(
+        `-- ERROR: Device limit exceeded\n` +
+        `-- Current devices: ${currentIPs.length}/${maxDevices}\n` +
+        `-- Your IP: ${clientIP}\n` +
+        `-- This key is already in use on ${currentIPs.length} device(s)\n` +
+        `-- Contact ${keyData.owner} if this is your key\n` +
+        `error("Device limit exceeded")`
+      );
+    }
+  }
+  
+  // Note: In Vercel serverless environment, we can't write to filesystem
+  // But we can still track in-memory for this request
+  // (In production, use external database like Firebase/Supabase for persistent tracking)
+  const deviceCount = isNewIP ? currentIPs.length + 1 : currentIPs.length;
+  
   // Log successful access to console
-  console.log(`[${timestamp}] ✅ Valid access - Key: ${key} | Owner: ${keyData.owner} | IP: ${clientIP}`);
+  console.log(`[${timestamp}] ✅ Valid access - Key: ${key} | Owner: ${keyData.owner} | IP: ${clientIP} | Devices: ${deviceCount}/${maxDevices}`);
   
   // Send Discord notification for successful access
   await sendDiscordLog({
@@ -238,9 +285,9 @@ export default async function handler(req, res) {
     key: key,
     owner: keyData.owner,
     ip: clientIP,
-    deviceCount: 'N/A', // Can be enhanced with device tracking
+    deviceCount: `${deviceCount}/${maxDevices}`,
     timestamp: timestamp,
-    message: `✅ Loader script successfully delivered to ${keyData.owner}`
+    message: `✅ Loader script successfully delivered to ${keyData.owner}${isNewIP ? '\n🆕 New device detected!' : '\n♻️ Known device'}`
   });
   
   // Read and return the obfuscated loader script
