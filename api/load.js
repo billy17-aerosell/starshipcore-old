@@ -1,6 +1,39 @@
 import fs from 'fs';
 import path from 'path';
 
+// Get Redis client
+let redis = null;
+let redisInitAttempted = false;
+
+async function getRedis() {
+  if (!redisInitAttempted) {
+    try {
+      const redisModule = await import('../lib/redis.js');
+      redis = redisModule.default;
+      console.log('✅ Redis module loaded for /api/load');
+    } catch (error) {
+      console.error('⚠️ Redis module load failed:', error.message);
+      redis = null;
+    }
+    redisInitAttempted = true;
+  }
+  return redis;
+}
+
+// Helper to get whitelist from Redis
+async function getWhitelistFromRedis() {
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return null;
+    
+    const data = await redisClient.get('starship:whitelist');
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    console.error('Redis whitelist read error:', error.message);
+    return null;
+  }
+}
+
 // GitHub API Configuration
 const GITHUB_API = 'https://api.github.com';
 const KEYS_PATH = 'data/keys.json'; // Changed from whitelist.json
@@ -98,7 +131,101 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing User ID' });
   }
 
+  const now = Math.floor(Date.now() / 1000);
+  const timestamp = new Date().toISOString();
+
   try {
+    // === PRIORITY 1: Check Redis Whitelist (VIP Users) ===
+    const redisWhitelist = await getWhitelistFromRedis();
+    
+    if (redisWhitelist && redisWhitelist[user]) {
+      const vipUser = redisWhitelist[user];
+      
+      // Check if user is active
+      if (vipUser.status === 'active') {
+        // Check expiry if set
+        if (vipUser.expiresAt) {
+          const expiryDate = new Date(vipUser.expiresAt);
+          const expiryTimestamp = Math.floor(expiryDate.getTime() / 1000);
+          
+          if (expiryTimestamp < now) {
+            console.log(`[${timestamp}] ❌ VIP expired - UserID: ${user}`);
+            return res.status(403).json({
+              status: 'denied',
+              message: 'VIP access expired',
+              expiredAt: expiryDate.toISOString()
+            });
+          }
+        }
+        
+        // VIP user - grant access
+        const isOwner = user === "9268011358";
+        console.log(`[${timestamp}] ${isOwner ? '👑 OWNER' : '💎 VIP'} ACCESS via Redis - UserID: ${user} (${vipUser.username})`);
+        
+        // Read and encrypt script
+        const scriptPath = path.join(process.cwd(), 'data', 'StarshipCore.lua');
+        
+        if (!fs.existsSync(scriptPath)) {
+          return res.status(500).json({ error: 'Script file missing on server' });
+        }
+
+        // Read as buffer
+        let scriptBuffer = fs.readFileSync(scriptPath);
+
+        // Remove BOM if present
+        if (scriptBuffer.length >= 3 && scriptBuffer[0] === 0xEF && scriptBuffer[1] === 0xBB && scriptBuffer[2] === 0xBF) {
+          scriptBuffer = scriptBuffer.subarray(3);
+        }
+
+        // Generate Dynamic Key
+        const generateKey = (length) => {
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+';
+          let result = '';
+          for (let i = 0; i < length; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+          }
+          return result;
+        };
+
+        const dynamicKey = generateKey(64);
+        const keyBuffer = Buffer.from(dynamicKey);
+
+        // XOR Encryption
+        const encryptedBuffer = Buffer.alloc(scriptBuffer.length);
+        for (let i = 0; i < scriptBuffer.length; i++) {
+          encryptedBuffer[i] = scriptBuffer[i] ^ keyBuffer[i % keyBuffer.length];
+        }
+
+        // Encode to Base64
+        const base64Blob = encryptedBuffer.toString('base64');
+
+        // Calculate remaining time if has expiry
+        let remainingDays = null;
+        if (vipUser.expiresAt) {
+          const expiryTimestamp = Math.floor(new Date(vipUser.expiresAt).getTime() / 1000);
+          remainingDays = Math.ceil((expiryTimestamp - now) / 86400);
+        }
+
+        return res.status(200).json({
+          status: 'success',
+          role: vipUser.type || 'VIP',
+          duration: vipUser.expiresAt ? `${remainingDays} days` : 'LIFETIME',
+          expiry: vipUser.expiresAt ? Math.floor(new Date(vipUser.expiresAt).getTime() / 1000) : null,
+          remainingDays: remainingDays,
+          activatedAt: vipUser.addedAt ? Math.floor(new Date(vipUser.addedAt).getTime() / 1000) : null,
+          key: dynamicKey,
+          blob: base64Blob
+        });
+      } else if (vipUser.status === 'suspended') {
+        console.log(`[${timestamp}] 🚫 SUSPENDED VIP - UserID: ${user}`);
+        return res.status(403).json({
+          status: 'denied',
+          message: 'VIP access suspended'
+        });
+      }
+    }
+
+    // === PRIORITY 2: Check File-based Whitelist (Fallback/Legacy) ===
     // Baca keys.json dari file lokal (CONSOLIDATED)
     const keysPath = path.join(process.cwd(), 'data', 'keys.json');
     const keysFileData = fs.readFileSync(keysPath, 'utf8');
@@ -109,13 +236,12 @@ export default async function handler(req, res) {
     const userData = whitelist[user];
 
     if (!userData) {
+      console.log(`[${timestamp}] ❌ NOT WHITELISTED - UserID: ${user}`);
       return res.status(403).json({ 
         status: 'denied',
         message: 'Not Whitelisted' 
       });
     }
-
-    const now = Math.floor(Date.now() / 1000);
 
     // === ACTIVATION ON FIRST RUN ===
     // Jika expiry null DAN ada durationDays, ini adalah aktivasi pertama
