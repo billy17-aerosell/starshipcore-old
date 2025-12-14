@@ -2,5 +2,8 @@
   "name": "starship-secure-api",
   "version": "1.0.0",
   "description": "Secure Dynamic Key API for StarshipCore",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@upstash/redis": "^1.28.0"
+  }
 }

@@ -1,49 +1,75 @@
-// Whitelist Management API
+// Whitelist Management API - Redis/KV Version
 // Endpoints to add, remove, and manage VIP/whitelisted users
+// Now using Upstash Redis for persistent storage!
 
-import fs from 'fs';
-import path from 'path';
+import redis from '../lib/redis.js';
 
 // Admin secret - must match the one in key-manager.js
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'CHANGE_ME_PLEASE';
 
-// Helper to read keys data
-function getKeysData() {
-  try {
-    const keysPath = path.join(process.cwd(), 'data', 'keys.json');
-    const data = fs.readFileSync(keysPath, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    return { 
-      keys: {}, 
-      whitelist: {},
-      metadata: { 
-        totalKeys: 0, 
-        activeKeys: 0,
-        totalWhitelisted: 0,
-        lastUpdated: new Date().toISOString()
-      } 
-    };
+// Owner user ID - hardcoded bypass (0 commands used!)
+const OWNER_USER_ID = '9268011358';
+
+// Redis keys
+const WHITELIST_KEY = 'starship:whitelist';
+const METADATA_KEY = 'starship:metadata';
+
+// In-memory cache to reduce Redis commands
+let cache = {
+  whitelist: null,
+  metadata: null,
+  timestamp: null,
+  ttl: 2 * 60 * 1000 // 2 minutes cache
+};
+
+// Helper to get whitelist with caching
+async function getWhitelist(useCache = true) {
+  if (useCache && cache.whitelist && cache.timestamp && (Date.now() - cache.timestamp < cache.ttl)) {
+    return cache.whitelist;
   }
+  
+  const whitelist = await redis.hgetall(WHITELIST_KEY) || {};
+  
+  // Parse JSON strings back to objects
+  const parsed = {};
+  for (const [userId, data] of Object.entries(whitelist)) {
+    parsed[userId] = typeof data === 'string' ? JSON.parse(data) : data;
+  }
+  
+  cache.whitelist = parsed;
+  cache.timestamp = Date.now();
+  
+  return parsed;
 }
 
-// Helper to save keys data
-function saveKeysData(keysData) {
-  try {
-    const keysPath = path.join(process.cwd(), 'data', 'keys.json');
-    const dataDir = path.dirname(keysPath);
-    
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    
-    keysData.metadata.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(keysPath, JSON.stringify(keysData, null, 2));
-    return true;
-  } catch (error) {
-    console.error('Error saving keys:', error);
-    return false;
+// Helper to get metadata
+async function getMetadata() {
+  if (cache.metadata && cache.timestamp && (Date.now() - cache.timestamp < cache.ttl)) {
+    return cache.metadata;
   }
+  
+  const metadata = await redis.get(METADATA_KEY);
+  const parsed = metadata ? (typeof metadata === 'string' ? JSON.parse(metadata) : metadata) : {
+    totalWhitelisted: 0,
+   lastUpdated: new Date().toISOString()
+  };
+  
+  cache.metadata = parsed;
+  return parsed;
+}
+
+// Helper to save metadata
+async function saveMetadata(metadata) {
+  cache.metadata = metadata;
+  metadata.lastUpdated = new Date().toISOString();
+  await redis.set(METADATA_KEY, JSON.stringify(metadata));
+}
+
+// Clear cache
+function clearCache() {
+  cache.whitelist = null;
+  cache.metadata = null;
+  cache.timestamp = null;
 }
 
 export default async function handler(req, res) {
@@ -61,13 +87,12 @@ export default async function handler(req, res) {
   
   // LIST all whitelisted users
   if (action === 'list' && req.method === 'GET') {
-    const keysData = getKeysData();
+    const whitelist = await getWhitelist();
+    const metadata = await getMetadata();
+    
     return res.status(200).json({
-      whitelist: keysData.whitelist || {},
-      metadata: {
-        totalWhitelisted: keysData.metadata.totalWhitelisted || 0,
-        lastUpdated: keysData.metadata.lastUpdated
-      }
+      whitelist,
+      metadata
     });
   }
   
@@ -95,28 +120,18 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'username is required' });
     }
     
-    const keysData = getKeysData();
-    
-    // Initialize whitelist if it doesn't exist
-    if (!keysData.whitelist) {
-      keysData.whitelist = {};
-    }
-    
-    // Initialize metadata if it doesn't exist
-    if (!keysData.metadata.totalWhitelisted) {
-      keysData.metadata.totalWhitelisted = 0;
-    }
-    
     // Check if user already exists
-    if (keysData.whitelist[userId]) {
+    const whitelist = await getWhitelist(false); // Force fresh data
+    
+    if (whitelist[userId]) {
       return res.status(409).json({ 
         error: 'User already exists',
         message: `User ${userId} is already whitelisted`
       });
     }
     
-    // Add new whitelisted user
-    keysData.whitelist[userId] = {
+    // Create new user object
+    const newUser = {
       userId,
       username,
       type,
@@ -136,14 +151,21 @@ export default async function handler(req, res) {
       notes
     };
     
-    keysData.metadata.totalWhitelisted++;
+    // Save to Redis
+    await redis.hset(WHITELIST_KEY, userId, JSON.stringify(newUser));
     
-    saveKeysData(keysData);
+    // Update metadata
+    const metadata = await getMetadata();
+    metadata.totalWhitelisted++;
+    await saveMetadata(metadata);
+    
+    // Clear cache
+    clearCache();
     
     return res.status(201).json({ 
       success: true,
       message: `User ${username} (${userId}) has been whitelisted`,
-      data: keysData.whitelist[userId]
+      data: newUser
     });
   }
   
@@ -155,58 +177,43 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'userId is required' });
     }
     
-    const keysData = getKeysData();
+    const whitelist = await getWhitelist(false);
     
-    if (!keysData.whitelist || !keysData.whitelist[userId]) {
+    if (!whitelist[userId]) {
       return res.status(404).json({ error: 'User not found in whitelist' });
     }
     
+    const user = whitelist[userId];
+    
     // Update allowed fields
-    const allowedUpdates = {
-      username: updates.username,
-      type: updates.type,
-      status: updates.status,
-      expiresAt: updates.expiresAt,
-      notes: updates.notes
-    };
+    if (updates.username !== undefined) user.username = updates.username;
+    if (updates.type !== undefined) user.type = updates.type;
+    if (updates.status !== undefined) user.status = updates.status;
+    if (updates.expiresAt !== undefined) user.expiresAt = updates.expiresAt;
+    if (updates.notes !== undefined) user.notes = updates.notes;
     
-    // Update restrictions if provided
-    if (updates.maxDevices !== undefined) {
-      keysData.whitelist[userId].restrictions.maxDevices = updates.maxDevices;
-    }
-    if (updates.ipTracking !== undefined) {
-      keysData.whitelist[userId].restrictions.ipTracking = updates.ipTracking;
-    }
-    if (updates.webhookNotify !== undefined) {
-      keysData.whitelist[userId].restrictions.webhookNotify = updates.webhookNotify;
-    }
+    // Update restrictions
+    if (updates.maxDevices !== undefined) user.restrictions.maxDevices = updates.maxDevices;
+    if (updates.ipTracking !== undefined) user.restrictions.ipTracking = updates.ipTracking;
+    if (updates.webhookNotify !== undefined) user.restrictions.webhookNotify = updates.webhookNotify;
     
-    // Update permissions if provided
-    if (updates.bypassAll !== undefined) {
-      keysData.whitelist[userId].permissions.bypassAll = updates.bypassAll;
-    }
-    if (updates.unlimitedAccess !== undefined) {
-      keysData.whitelist[userId].permissions.unlimitedAccess = updates.unlimitedAccess;
-    }
-    if (updates.noLogging !== undefined) {
-      keysData.whitelist[userId].permissions.noLogging = updates.noLogging;
-    }
+    // Update permissions
+    if (updates.bypassAll !== undefined) user.permissions.bypassAll = updates.bypassAll;
+    if (updates.unlimitedAccess !== undefined) user.permissions.unlimitedAccess = updates.unlimitedAccess;
+    if (updates.noLogging !== undefined) user.permissions.noLogging = updates.noLogging;
     
-    // Apply allowed updates
-    Object.keys(allowedUpdates).forEach(key => {
-      if (allowedUpdates[key] !== undefined) {
-        keysData.whitelist[userId][key] = allowedUpdates[key];
-      }
-    });
+    user.updatedAt = new Date().toISOString();
     
-    keysData.whitelist[userId].updatedAt = new Date().toISOString();
+    // Save to Redis
+    await redis.hset(WHITELIST_KEY, userId, JSON.stringify(user));
     
-    saveKeysData(keysData);
+    // Clear cache
+    clearCache();
     
     return res.status(200).json({ 
       success: true,
       message: `User ${userId} has been updated`,
-      data: keysData.whitelist[userId]
+      data: user
     });
   }
   
@@ -218,17 +225,24 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'userId is required' });
     }
     
-    const keysData = getKeysData();
+    const whitelist = await getWhitelist(false);
     
-    if (!keysData.whitelist || !keysData.whitelist[userId]) {
+    if (!whitelist[userId]) {
       return res.status(404).json({ error: 'User not found in whitelist' });
     }
     
-    const username = keysData.whitelist[userId].username;
-    delete keysData.whitelist[userId];
-    keysData.metadata.totalWhitelisted--;
+    const username = whitelist[userId].username;
     
-    saveKeysData(keysData);
+    // Remove from Redis
+    await redis.hdel(WHITELIST_KEY, userId);
+    
+    // Update metadata
+    const metadata = await getMetadata();
+    metadata.totalWhitelisted--;
+    await saveMetadata(metadata);
+    
+    // Clear cache
+    clearCache();
     
     return res.status(200).json({ 
       success: true,
@@ -244,19 +258,19 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'userId parameter is required' });
     }
     
-    const keysData = getKeysData();
+    const whitelist = await getWhitelist();
     
-    if (!keysData.whitelist || !keysData.whitelist[userId]) {
+    if (!whitelist[userId]) {
       return res.status(404).json({ error: 'User not found in whitelist' });
     }
     
     return res.status(200).json({ 
       userId,
-      ...keysData.whitelist[userId]
+      ...whitelist[userId]
     });
   }
   
-  // SUSPEND user (set status to suspended without removing)
+  // SUSPEND user
   if (action === 'suspend' && req.method === 'POST') {
     const { userId } = req.body;
     
@@ -264,21 +278,23 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'userId is required' });
     }
     
-    const keysData = getKeysData();
+    const whitelist = await getWhitelist(false);
     
-    if (!keysData.whitelist || !keysData.whitelist[userId]) {
+    if (!whitelist[userId]) {
       return res.status(404).json({ error: 'User not found in whitelist' });
     }
     
-    keysData.whitelist[userId].status = 'suspended';
-    keysData.whitelist[userId].suspendedAt = new Date().toISOString();
+    const user = whitelist[userId];
+    user.status = 'suspended';
+    user.suspendedAt = new Date().toISOString();
     
-    saveKeysData(keysData);
+    await redis.hset(WHITELIST_KEY, userId, JSON.stringify(user));
+    clearCache();
     
     return res.status(200).json({ 
       success: true,
       message: `User ${userId} has been suspended`,
-      data: keysData.whitelist[userId]
+      data: user
     });
   }
   
@@ -290,22 +306,24 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'userId is required' });
     }
     
-    const keysData = getKeysData();
+    const whitelist = await getWhitelist(false);
     
-    if (!keysData.whitelist || !keysData.whitelist[userId]) {
+    if (!whitelist[userId]) {
       return res.status(404).json({ error: 'User not found in whitelist' });
     }
     
-    keysData.whitelist[userId].status = 'active';
-    keysData.whitelist[userId].reactivatedAt = new Date().toISOString();
-    delete keysData.whitelist[userId].suspendedAt;
+    const user = whitelist[userId];
+    user.status = 'active';
+    user.reactivatedAt = new Date().toISOString();
+    delete user.suspendedAt;
     
-    saveKeysData(keysData);
+    await redis.hset(WHITELIST_KEY, userId, JSON.stringify(user));
+    clearCache();
     
     return res.status(200).json({ 
       success: true,
       message: `User ${userId} has been reactivated`,
-      data: keysData.whitelist[userId]
+      data: user
     });
   }
   
