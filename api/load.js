@@ -34,6 +34,85 @@ async function getWhitelistFromRedis() {
   }
 }
 
+// Helper function to send Discord webhook notification
+async function sendDiscordLog(logData) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  
+  // Skip if webhook not configured
+  if (!webhookUrl) {
+    console.log('[Discord] Webhook not configured, skipping notification');
+    return;
+  }
+  
+  try {
+    // Determine embed color based on status
+    const colors = {
+      success: 0x00FF00,    // Green
+      blocked: 0xFF0000,    // Red
+      invalid: 0xFFA500,    // Orange
+      warning: 0xFFFF00     // Yellow
+    };
+    
+    const color = colors[logData.status] || 0x808080;
+    
+    // Create rich embed
+    const embed = {
+      title: `${logData.title || 'Access Log'}`,
+      color: color,
+      fields: [
+        {
+          name: '👤 User',
+          value: logData.owner || 'Unknown',
+          inline: true
+        },
+        {
+          name: '🔑 Auth Type',
+          value: `\`${logData.authType || 'Key'}\``,
+          inline: true
+        },
+        {
+          name: '🌐 IP Address',
+          value: `\`${logData.ip}\``,
+          inline: true
+        },
+        {
+          name: '⏰ Timestamp',
+          value: logData.timestamp,
+          inline: true
+        }
+      ],
+      timestamp: new Date().toISOString(),
+      footer: {
+        text: 'StarshipCore Auth Monitor'
+      }
+    };
+    
+    // Add additional info if present
+    if (logData.message) {
+      embed.description = logData.message;
+    }
+    
+    // Send to Discord
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        embeds: [embed]
+      })
+    });
+    
+    if (!response.ok) {
+      console.error('[Discord] Failed to send webhook:', response.status);
+    } else {
+      console.log('[Discord] ✅ Log sent successfully');
+    }
+  } catch (error) {
+    console.error('[Discord] Error sending webhook:', error.message);
+  }
+}
+
 // GitHub API Configuration
 const GITHUB_API = 'https://api.github.com';
 const KEYS_PATH = 'data/keys.json'; // Changed from whitelist.json
@@ -161,6 +240,130 @@ export default async function handler(req, res) {
         // VIP user - grant access
         const isOwner = user === "9268011358";
         console.log(`[${timestamp}] ${isOwner ? '👑 OWNER' : '💎 VIP'} ACCESS via Redis - UserID: ${user} (${vipUser.username})`);
+        
+        // Get client IP
+        const clientIP = req.headers['x-forwarded-for']?.split(',')[0] || 
+                         req.headers['x-real-ip'] || 
+                         req.connection?.remoteAddress || 
+                         'unknown';
+        
+        // Discord webhook with rate limiting (same logic as get-loader)
+        if (!isOwner) {
+          const COOLDOWN_MINUTES = 10;
+          const redisKey = `webhook_cooldown:${user}`;
+          const ipKey = `last_ip:${user}`;
+          
+          let shouldSendWebhook = false;
+          let webhookReason = 'Regular Access';
+          
+          console.log(`[${timestamp}] 📊 Webhook Rate Limiting Check for VIP user: ${vipUser.username}`);
+          
+          try {
+            const redisClient = await getRedis();
+            if (redisClient) {
+              // Get last notification time and IP
+              const lastNotification = await redisClient.get(redisKey);
+              const lastIP = await redisClient.get(ipKey);
+              const now = Date.now();
+              
+              console.log(`[${timestamp}] 📝 Last notification: ${lastNotification ? new Date(parseInt(lastNotification)).toLocaleString() : 'Never'}`);
+              console.log(`[${timestamp}] 📝 Last IP: ${lastIP || 'Unknown'} | Current IP: ${clientIP}`);
+              
+              // Check if this is first execution of the day
+              const today = new Date().toDateString();
+              const lastDate = lastNotification ? new Date(parseInt(lastNotification)).toDateString() : null;
+              const isFirstToday = !lastDate || lastDate !== today;
+              
+              // Check if IP changed (security alert)
+              const ipChanged = lastIP && lastIP !== clientIP;
+              
+              console.log(`[${timestamp}] 🔍 Checks - First Today: ${isFirstToday}, IP Changed: ${ipChanged}`);
+              
+              // Determine if we should send webhook
+              if (isFirstToday) {
+                shouldSendWebhook = true;
+                webhookReason = '🌅 First Execution Today';
+              } else if (ipChanged) {
+                shouldSendWebhook = true;
+                webhookReason = '🔒 IP Address Changed';
+              } else if (!lastNotification) {
+                shouldSendWebhook = true;
+                webhookReason = '🎉 First Time Access';
+              } else {
+                const timeSinceLastNotif = now - parseInt(lastNotification);
+                const cooldownMs = COOLDOWN_MINUTES * 60 * 1000;
+                const minutesSinceLastNotif = Math.floor(timeSinceLastNotif / 60000);
+                
+                console.log(`[${timestamp}] ⏰ Time since last notification: ${minutesSinceLastNotif} minutes (Cooldown: ${COOLDOWN_MINUTES} minutes)`);
+                
+                if (timeSinceLastNotif >= cooldownMs) {
+                  shouldSendWebhook = true;
+                  webhookReason = 'Cooldown Expired';
+                }
+              }
+              
+              console.log(`[${timestamp}] 🎯 Should send webhook: ${shouldSendWebhook} - Reason: ${webhookReason}`);
+              
+              // Send webhook if needed
+              if (shouldSendWebhook) {
+                console.log(`[${timestamp}] 📤 Sending Discord webhook...`);
+                
+                await sendDiscordLog({
+                  title: `💎 VIP Access Granted`,
+                  status: 'success',
+                  authType: `VIP (${vipUser.type})`,
+                  owner: vipUser.username,
+                  ip: ipChanged ? `${lastIP} → ${clientIP}` : clientIP,
+                  timestamp: timestamp,
+                  message: `✅ ${webhookReason}\n💎 VIP script delivered to ${vipUser.username}${ipChanged ? '\n⚠️ IP Address Changed!' : ''}`
+                });
+                
+                console.log(`[${timestamp}] ✅ Webhook sent successfully`);
+                
+                // Update last notification time and IP
+                await redisClient.set(redisKey, now.toString(), { EX: 86400 }); // 24 hours expiry
+                await redisClient.set(ipKey, clientIP, { EX: 86400 });
+                
+                console.log(`[${timestamp}] 💾 Updated Redis cooldown data`);
+              } else {
+                console.log(`[${timestamp}] 🔕 Webhook skipped for ${vipUser.username} - Cooldown active`);
+              }
+            } else {
+              // Redis not available, send webhook anyway (fallback)
+              console.log(`[${timestamp}] 🔄 Fallback: Sending webhook (Redis unavailable)`);
+              
+              await sendDiscordLog({
+                title: `💎 VIP Access Granted`,
+                status: 'success',
+                authType: `VIP (${vipUser.type})`,
+                owner: vipUser.username,
+                ip: clientIP,
+                timestamp: timestamp,
+                message: `✅ VIP script delivered to ${vipUser.username}\n⚠️ (Fallback mode - Rate limiting unavailable)`
+              });
+            }
+          } catch (error) {
+            console.error(`[${timestamp}] ❌ Webhook error:`, error);
+            // On error, still try to send webhook
+            try {
+              await sendDiscordLog({
+                title: `💎 VIP Access Granted`,
+                status: 'success',
+                authType: `VIP (${vipUser.type})`,
+                owner: vipUser.username,
+                ip: clientIP,
+                timestamp: timestamp,
+                message: `✅ VIP script delivered to ${vipUser.username}\n⚠️ (Error fallback)`
+              });
+            } catch (webhookError) {
+              console.error(`[${timestamp}] ❌ Failed to send fallback webhook:`, webhookError);
+            }
+          }
+        } else {
+          // Owner: Silent access, no webhook
+          console.log(`[${timestamp}] 🔕 Owner access - No webhook sent (UserID: ${user})`);
+        }
+        
         
         // Read and encrypt script
         const scriptPath = path.join(process.cwd(), 'data', 'StarshipCore.lua');
