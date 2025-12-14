@@ -475,6 +475,33 @@ local function main()
 
 	-- Auto-detect userId from current logged-in player
 	local userId = tostring(game:GetService("Players").LocalPlayer.UserId)
+
+	-- STEP 1: Call get-loader for authentication & webhook notification
+	local authUrl = SECURE_API_URL .. "/api/get-loader?userId=" .. userId
+	local authSuccess, authResponse = pcall(function()
+		return game:HttpGet(authUrl)
+	end)
+
+	if not authSuccess then
+		if loaderGui then
+			loaderGui:Destroy()
+		end
+		showError("Connection Failed: Server Unreachable")
+		return
+	end
+
+	-- Check if authentication was successful (should return loader.lua script or error)
+	if authResponse:find("error%(") or authResponse:find("ERROR:") then
+		if loaderGui then
+			loaderGui:Destroy()
+		end
+		-- Extract error message from Lua error string
+		local errorMsg = authResponse:match('error%("(.-)"%)')
+		showError(errorMsg or "Authentication Failed")
+		return
+	end
+
+	-- STEP 2: Now call /api/load to get the encrypted script
 	local targetUrl = SECURE_API_URL .. "/api/load?user=" .. userId
 
 	local success, response = pcall(function()
