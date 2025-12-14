@@ -267,11 +267,38 @@ export default async function handler(req, res) {
     }
   }
   
-  // === PRIORITY 2: Normal Key Authentication ===
-  // Check if key is provided
+  // === PRIORITY 2: No Parameters - Serve Universal Loader ===
+  // If no authentication parameters provided, serve the loader.lua
+  // The loader will auto-detect userId and authenticate on client-side
+  if (!key && !userId) {
+    console.log(`[${timestamp}] 📦 Universal loader requested | IP: ${clientIP}`);
+    
+    try {
+      const loaderPath = path.join(process.cwd(), 'protected', 'loader.lua');
+      
+      if (!fs.existsSync(loaderPath)) {
+        return res.status(500).send(`error("Loader not found")`);
+      }
+      
+      const loaderScript = fs.readFileSync(loaderPath, 'utf8');
+      
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('X-Access-Type', 'universal');
+      
+      return res.status(200).send(loaderScript);
+      
+    } catch (error) {
+      console.error('Error serving universal loader:', error);
+      return res.status(500).send(`error("Server error")`);
+    }
+  }
+  
+  // === PRIORITY 3: Normal Key Authentication ===
+  // Check if key is provided (userId was already checked above)
   if (!key) {
     return res.status(400).send(
-      `-- ERROR: No authentication provided\n` +
+      `-- ERROR: Invalid authentication\n` +
       `-- Usage: ?key=YOUR_KEY or ?userId=YOUR_ROBLOX_ID\n` +
       `error("Authentication required")`
     );  
