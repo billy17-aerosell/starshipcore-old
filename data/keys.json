@@ -1,0 +1,35 @@
+{
+  "keys": {
+    "demo-premium-2024": {
+      "owner": "Demo User",
+      "type": "premium",
+      "status": "active",
+      "createdAt": "2024-12-14T09:00:00Z",
+      "expiresAt": null,
+      "totalRequests": 0,
+      "lastUsed": null,
+      "lastIP": null,
+      "maxDevices": 3,
+      "ipTracking": {},
+      "notes": "Demo premium key for testing"
+    },
+    "trial-test-123": {
+      "owner": "Trial User",
+      "type": "trial",
+      "status": "active",
+      "createdAt": "2024-12-14T09:00:00Z",
+      "expiresAt": "2024-12-21T23:59:59Z",
+      "totalRequests": 0,
+      "lastUsed": null,
+      "lastIP": null,
+      "maxDevices": 2,
+      "ipTracking": {},
+      "notes": "7-day trial key"
+    }
+  },
+  "metadata": {
+    "totalKeys": 2,
+    "activeKeys": 2,
+    "lastUpdated": "2024-12-14T09:00:00Z"
+  }
+}
