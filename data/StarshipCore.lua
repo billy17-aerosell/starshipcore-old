@@ -151,7 +151,7 @@ local function LoadModule(name)
 			local prefix = p:sub(1, #p - #name - 4)
 			_G.StarshipModulePrefix = prefix
 
-			-- warn("[Starship] Loaded: " .. name .. " from " .. p)
+			warn("[Starship] Loaded: " .. name .. " from " .. p)
 			local content = readfile(p)
 			local func, err = loadstring(content)
 			if not func then
