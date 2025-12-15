@@ -1528,9 +1528,10 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						r.CFrame = CFrame.new(targetPos) * r.CFrame.Rotation
 					end
 					
-					-- Set velocity for animation trigger (use recorded velocity directly)
+					-- Set velocity for animation trigger (scale by playback speed for proper climbing animation speed)
 					if fA.vel then
 						local vel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
+						vel = vel * playbackSpeed -- Scale velocity by playback speed for proper animation speed
 						if isReversing then
 							vel = -vel
 						end
