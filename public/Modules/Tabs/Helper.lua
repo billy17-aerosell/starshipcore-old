@@ -1050,6 +1050,171 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 	BtnSlip.MouseButton1Click:Connect(function() ToggleAntiSlip() end)
 	UIHandlers.ToggleAntiSlip = ToggleAntiSlip
 
+	-- 3. ANTI-RAGDOLL
+	local CardRagdoll = CreateCard("ANTI-RAGDOLL", 135, 3)
+
+	local BtnRagdoll = Instance.new("TextButton", CardRagdoll)
+	BtnRagdoll.Text = "ANTI-RAGDOLL: OFF"
+	BtnRagdoll.Size = UDim2.new(0.94, 0, 0, 35)
+	BtnRagdoll.Position = UDim2.new(0.03, 0, 0, 35)
+	StyleBtn(BtnRagdoll, C_RED)
+
+	-- Max Velocity Slider
+	local LblMaxVel = Instance.new("TextLabel", CardRagdoll)
+	LblMaxVel.Text = "MAX VELOCITY: 100"
+	LblMaxVel.Size = UDim2.new(1, -20, 0, 20)
+	LblMaxVel.Position = UDim2.new(0, 15, 0, 80)
+	LblMaxVel.BackgroundTransparency = 1
+	LblMaxVel.TextColor3 = C_TEXT_DIM
+	LblMaxVel.Font = Enum.Font.GothamBold
+	LblMaxVel.TextSize = 10
+	LblMaxVel.TextXAlignment = Enum.TextXAlignment.Left
+
+	local SldVelBg = Instance.new("TextButton", CardRagdoll)
+	SldVelBg.Text = ""
+	SldVelBg.Size = UDim2.new(0.9, 0, 0, 6)
+	SldVelBg.Position = UDim2.new(0.05, 0, 0, 100)
+	SldVelBg.BackgroundColor3 = C_SIDE
+	SldVelBg.AutoButtonColor = false
+	Instance.new("UICorner", SldVelBg).CornerRadius = UDim.new(0, 3)
+
+	local SldVelFill = Instance.new("Frame", SldVelBg)
+	SldVelFill.Size = UDim2.new(0.5, 0, 1, 0) -- Default 50% = 100
+	SldVelFill.BackgroundColor3 = C_ACCENT
+	Instance.new("UICorner", SldVelFill).CornerRadius = UDim.new(0, 3)
+
+	local maxVelocity = 100 -- Default max velocity
+	local isRagdollOn = false
+	local ragdollLoop = nil
+	local stateConnection = nil
+
+	local function UpdateVelSlider(input)
+		local rx = input.Position.X - SldVelBg.AbsolutePosition.X
+		local sc = math.clamp(rx / SldVelBg.AbsoluteSize.X, 0, 1)
+		maxVelocity = math.floor(50 + (sc * 150)) -- Range 50-200
+		SldVelFill.Size = UDim2.new(sc, 0, 1, 0)
+		LblMaxVel.Text = "MAX VELOCITY: " .. maxVelocity
+	end
+
+	local draggingVel = false
+	SldVelBg.MouseButton1Down:Connect(function()
+		draggingVel = true
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+			draggingVel = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if draggingVel and i.UserInputType == Enum.UserInputType.MouseMovement then
+			UpdateVelSlider(i)
+		end
+	end)
+
+	local function ToggleAntiRagdoll(forceEnable)
+		if forceEnable ~= nil then
+			if forceEnable == isRagdollOn then return end
+		end
+
+		isRagdollOn = not isRagdollOn
+		BtnRagdoll.Text = "ANTI-RAGDOLL: " .. (isRagdollOn and "ON" or "OFF")
+		BtnRagdoll.TextColor3 = isRagdollOn and C_GREEN or C_RED
+		BtnRagdoll.UIStroke.Color = isRagdollOn and C_GREEN or C_RED
+
+		if isRagdollOn then
+			local c = LocalPlayer.Character
+			local h = c and c:FindFirstChildOfClass("Humanoid")
+
+			if h then
+				-- Disable ragdoll states
+				h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+				h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+
+				-- Listen for state changes to force recovery
+				stateConnection = h.StateChanged:Connect(function(oldState, newState)
+					if newState == Enum.HumanoidStateType.Ragdoll or newState == Enum.HumanoidStateType.FallingDown then
+						h:ChangeState(Enum.HumanoidStateType.GettingUp)
+						task.wait(0.1)
+						h:ChangeState(Enum.HumanoidStateType.Running)
+					end
+				end)
+				table.insert(Connections, stateConnection)
+			end
+
+			-- Velocity clamp loop
+			ragdollLoop = RunService.Heartbeat:Connect(function()
+				local c = LocalPlayer.Character
+				if not c then return end
+
+				local r = c:FindFirstChild("HumanoidRootPart")
+				local h = c:FindFirstChildOfClass("Humanoid")
+				if not r or not h then return end
+
+				-- Ensure states stay disabled
+				if h:GetStateEnabled(Enum.HumanoidStateType.Ragdoll) then
+					h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+				end
+				if h:GetStateEnabled(Enum.HumanoidStateType.FallingDown) then
+					h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+				end
+
+				-- Clamp velocity to prevent fling
+				local vel = r.AssemblyLinearVelocity
+				local horizontalVel = Vector3.new(vel.X, 0, vel.Z)
+				local horizontalSpeed = horizontalVel.Magnitude
+
+				if horizontalSpeed > maxVelocity then
+					local clampedHorizontal = horizontalVel.Unit * maxVelocity
+					r.AssemblyLinearVelocity = Vector3.new(clampedHorizontal.X, vel.Y, clampedHorizontal.Z)
+				end
+
+				-- Clamp vertical velocity (prevent super fling up)
+				if vel.Y > maxVelocity then
+					r.AssemblyLinearVelocity = Vector3.new(vel.X, maxVelocity, vel.Z)
+				end
+
+				-- Force recovery if somehow in ragdoll
+				local state = h:GetState()
+				if state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown then
+					h:ChangeState(Enum.HumanoidStateType.GettingUp)
+				end
+			end)
+			table.insert(Connections, ragdollLoop)
+
+			-- Handle respawn
+			LocalPlayer.CharacterAdded:Connect(function(newChar)
+				if not isRagdollOn then return end
+				task.wait(0.5)
+				local newHum = newChar:FindFirstChildOfClass("Humanoid")
+				if newHum then
+					newHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+					newHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+				end
+			end)
+		else
+			-- Disable
+			if ragdollLoop then
+				ragdollLoop:Disconnect()
+				ragdollLoop = nil
+			end
+			if stateConnection then
+				stateConnection:Disconnect()
+				stateConnection = nil
+			end
+
+			-- Re-enable states
+			local c = LocalPlayer.Character
+			local h = c and c:FindFirstChildOfClass("Humanoid")
+			if h then
+				h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+				h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+			end
+		end
+	end
+
+	BtnRagdoll.MouseButton1Click:Connect(function() ToggleAntiRagdoll() end)
+	UIHandlers.ToggleAntiRagdoll = ToggleAntiRagdoll
+
 	-- 5. REAL PATH ESP
 	local CardESP = CreateCard("REAL PATH ESP", 160, 5)
 

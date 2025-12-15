@@ -1,4 +1,4 @@
-﻿--[[ 
+--[[ 
     Starship Core v0.9 Beta
     
     Change:
@@ -2880,6 +2880,7 @@ CloseBtn.MouseButton1Click:Connect(function()
 			"ToggleFly",
 			"ToggleMomentum",
 			"ToggleAntiSlip",
+			"ToggleAntiRagdoll",
 			"ToggleAutoJump",
 			"ToggleLongJump",
 			"ToggleAirLock",
