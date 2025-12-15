@@ -1,4 +1,4 @@
-﻿--[[ 
+--[[ 
     Starship Core v0.9 Beta
     
     Change:
@@ -21,8 +21,6 @@ local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
-local ContextActionService = game:GetService("ContextActionService")
-local GuiService = game:GetService("GuiService")
 
 local LocalPlayer = Players.LocalPlayer
 local FOLDER_NAME = "StarshipCore"
@@ -40,83 +38,29 @@ if not isfolder(MERGER_FOLDER) then
 	makefolder(MERGER_FOLDER)
 end
 
--- --- VARIABLES (Colors consolidated into table to reduce local register usage) ---
--- CurrentColors stores the active theme colors and is updated when theme changes
-local CurrentColors = {
-	MAIN = Color3.fromRGB(10, 10, 14),
-	SIDE = Color3.fromRGB(15, 15, 20),
-	ACCENT = Color3.fromRGB(90, 110, 245),
-	TEXT = Color3.fromRGB(240, 240, 250),
-	TEXT_DIM = Color3.fromRGB(140, 140, 160),
-	ITEM = Color3.fromRGB(20, 20, 28),
-	RED = Color3.fromRGB(255, 80, 80),
-	YELLOW = Color3.fromRGB(255, 220, 60),
-	GREEN = Color3.fromRGB(60, 255, 160),
-}
--- Aliases for backward compatibility (initial values)
-local C_MAIN, C_SIDE, C_ACCENT, C_TEXT, C_TEXT_DIM, C_ITEM, C_RED, C_YELLOW, C_GREEN =
-	CurrentColors.MAIN,
-	CurrentColors.SIDE,
-	CurrentColors.ACCENT,
-	CurrentColors.TEXT,
-	CurrentColors.TEXT_DIM,
-	CurrentColors.ITEM,
-	CurrentColors.RED,
-	CurrentColors.YELLOW,
-	CurrentColors.GREEN
--- Make CurrentColors accessible globally for theme updates
-_G.StarshipColors = CurrentColors
+-- --- VARIABLES ---
+local C_MAIN = Color3.fromRGB(10, 10, 14) -- Deepest Midnight
+local C_SIDE = Color3.fromRGB(15, 15, 20) -- Subtle Contrast
+local C_ACCENT = Color3.fromRGB(90, 110, 245) -- Midnight Royal Blue (Vibrant)
+local C_TEXT = Color3.fromRGB(240, 240, 250) -- Crisp White
+local C_TEXT_DIM = Color3.fromRGB(140, 140, 160) -- Cool Silver
+local C_ITEM = Color3.fromRGB(20, 20, 28) -- Dark Blue-Grey Card
+local C_RED = Color3.fromRGB(255, 80, 80)
+local C_YELLOW = Color3.fromRGB(255, 220, 60)
+local C_GREEN = Color3.fromRGB(60, 255, 160)
 
 -- Mobile Detection & Responsive System (consolidated to reduce local count)
-
-local TAGS_API_URL = "https://starship-core.my.id/api/tags"
-_G.StarshipTags = {} -- Store tags here: { [UserId] = {role="VIP", tag="VIP"} }
-
-local function FetchServerTags()
-	task.spawn(function()
-		local players = Players:GetPlayers()
-		local ids = {}
-		for _, p in ipairs(players) do
-			table.insert(ids, p.UserId)
-		end
-
-		if #ids == 0 then
-			return
-		end
-
-		local success, response = pcall(function()
-			return request({
-				Url = TAGS_API_URL,
-				Method = "POST",
-				Headers = { ["Content-Type"] = "application/json" },
-				Body = HttpService:JSONEncode({ userIds = ids }),
-			})
-		end)
-
-		if success and response.Success then
-			local data = HttpService:JSONDecode(response.Body)
-			if data.status == "success" and data.tags then
-				for uid, info in pairs(data.tags) do
-					_G.StarshipTags[tonumber(uid)] = info
-				end
-				-- Trigger update event if you have one, or just let UI loop handle it
-			end
-		end
-	end)
-end
-
--- Auto-fetch tags when players join or every 60s
-Players.PlayerAdded:Connect(function()
-	task.wait(2)
-	FetchServerTags()
-end)
-task.spawn(function()
-	while true do
-		FetchServerTags()
-		task.wait(60)
-	end
-end)
-
+local Mobile = {}
+Mobile.Camera = workspace.CurrentCamera
+Mobile.ViewportSize = Mobile.Camera.ViewportSize
+Mobile.IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+Mobile.IsSmallScreen = Mobile.ViewportSize.X < 600 or Mobile.ViewportSize.Y < 500
+Mobile.IsCompact = Mobile.IsMobile or Mobile.IsSmallScreen
+Mobile.UI_SCALE = Mobile.IsCompact and 0.85 or 1
+Mobile.SIDEBAR_WIDTH = Mobile.IsCompact and 50 or 130
+Mobile.SIDEBAR_COLLAPSED = Mobile.IsCompact
+Mobile.MAIN_WIDTH = Mobile.IsCompact and math.min(Mobile.ViewportSize.X - 20, 400) or 550
+Mobile.TOUCH_MIN_SIZE = 44
 local function LoadModule(name)
 	-- 1. Try Cached Prefix
 	if _G.StarshipModulePrefix then
@@ -152,13 +96,7 @@ local function LoadModule(name)
 			_G.StarshipModulePrefix = prefix
 
 			warn("[Starship] Loaded: " .. name .. " from " .. p)
-			local content = readfile(p)
-			local func, err = loadstring(content)
-			if not func then
-				warn("[Starship] Syntax Error in " .. name .. ": " .. tostring(err))
-				return nil
-			end
-			return func()
+			return loadstring(readfile(p))()
 		end
 	end
 
@@ -225,13 +163,7 @@ local function LoadModule(name)
 
 			_G.StarshipModulePrefix = prefix
 			warn("[Starship] Set Prefix: " .. prefix)
-			local content = readfile(foundPath)
-			local func, err = loadstring(content)
-			if not func then
-				warn("[Starship] Syntax Error in " .. name .. " (Deep Search): " .. tostring(err))
-				return nil
-			end
-			return func()
+			return loadstring(readfile(foundPath))()
 		end
 	end
 
@@ -264,8 +196,7 @@ local Config = ConfigData.DefaultConfig
 
 -- Restore missing global variables (consolidated into tables to reduce local register usage)
 local WarpPoints = {}
--- State variables consolidated into single table to reduce local register count
-local S = {
+local RecState = {
 	isRecording = false,
 	isPaused = false,
 	isPlaying = false,
@@ -278,85 +209,35 @@ local S = {
 	isStrictRetarget = false,
 	isNativeAnim = false,
 	isWarpLoop = false,
-	isReversing = false,
-	isZoomPunch = false,
-	lastAirState = nil,
-	isRespawnOnEnd = false,
-	isLiveSmoothing = false,
-	liveSmoothingStrength = 3,
-	isBinding = false,
-	currentWorkspace = "Default",
-	currentMergerWorkspace = "Default",
-	GlobalKeyDuration = "N/A",
-	TargetMainHeight = 380,
-	startTime = 0,
 }
--- Alias frequently used state vars for backward compatibility
-local isRecording, isPaused, isPlaying, isPlayPaused = S.isRecording, S.isPaused, S.isPlaying, S.isPlayPaused
-local isLooping, isGodMode, playbackSpeed, isMoonwalk = S.isLooping, S.isGodMode, S.playbackSpeed, S.isMoonwalk
-local isReversing, isZoomPunch, lastAirState, isRespawnOnEnd =
-	S.isReversing, S.isZoomPunch, S.lastAirState, S.isRespawnOnEnd
-local isFlexibleRecording, isStrictRetarget, isNativeAnim, isWarpLoop =
-	S.isFlexibleRecording, S.isStrictRetarget, S.isNativeAnim, S.isWarpLoop
+local isRecording, isPaused, isPlaying, isPlayPaused = false, false, false, false
+local isLooping, isGodMode, playbackSpeed, isMoonwalk = false, false, 1.0, false
+local isReversing = false -- Reverse playback mode
+local isZoomPunch = false -- Zoom effect on jump/fall
+local lastAirState = nil -- Track air state to prevent constant state changes
+local isFlexibleRecording, isStrictRetarget, isNativeAnim, isWarpLoop = false, false, false, false
 local recordedData = { FPS = 60, Frames = {} }
-local startTime = S.startTime
-local RefreshPlayerList, ShowConfirm, MainTitle
-local TabBtns, ThemeObjects, UIHandlers = {}, {}, {}
--- Pages and UI consolidated
-local Pages = {} -- Will hold Dashboard, Record, Play, Merge, ListMap, Tools, Warp, Helper, Fun, Config
-local PageDashboard, PageRecord, PagePlay, PageMerge, PageListMap, PageTools, PageWarp, PageHelper, PageFun, PageConfig
-local ScreenGui, Main
-local TargetMainHeight = S.TargetMainHeight
--- Playback state consolidated
-local Playback = { file = nil, time = 0, totalDuration = 0, frameData = {}, lastTime = 0, lastFrameIdx = 1 }
-local currentPlaybackFile, currentPlaybackTime, currentTotalDuration, currentFrameData =
-	Playback.file, Playback.time, Playback.totalDuration, Playback.frameData
-local lastPlaybackTime = Playback.lastTime
-local lastFrameIndex = Playback.lastFrameIdx
+local startTime = 0
+local RefreshPlayerList, ShowConfirm, MainTitle = nil, nil, nil
+local TabBtns = {}
+local PageDashboard, PageRecord, PagePlay, PageMerge, PageListMap = nil, nil, nil, nil, nil
+local PageTools, PageWarp, PageHelper, PageFun, PageConfig = nil, nil, nil, nil, nil
+local ScreenGui, Main = nil, nil
+local TargetMainHeight = 380
+local currentPlaybackFile = nil
+local currentPlaybackTime = 0
+local currentTotalDuration = 0
+local currentFrameData = {}
+local currentWorkspace = "Default"
+local currentMergerWorkspace = "Default"
+local GlobalKeyDuration = "N/A"
+local isBinding = false
+local ThemeObjects = {}
+local UIHandlers = {}
 
--- Binary search for frame index (O(log n) instead of O(n))
-local function FindFrameIndex(frames, targetTime, hint)
-	local n = #frames
-	if n < 2 then
-		return 1
-	end
-
-	-- Use hint (cached index) for nearby search first
-	if hint and hint >= 1 and hint < n then
-		-- Check if hint is still valid or very close
-		for offset = 0, 5 do
-			local idx = hint + offset
-			if idx >= 1 and idx < n then
-				if frames[idx].t <= targetTime and frames[idx + 1].t >= targetTime then
-					return idx
-				end
-			end
-			idx = hint - offset
-			if idx >= 1 and idx < n then
-				if frames[idx].t <= targetTime and frames[idx + 1].t >= targetTime then
-					return idx
-				end
-			end
-		end
-	end
-
-	-- Binary search for large jumps
-	local lo, hi = 1, n - 1
-	while lo <= hi do
-		local mid = math.floor((lo + hi) / 2)
-		if frames[mid].t <= targetTime and frames[mid + 1].t >= targetTime then
-			return mid
-		elseif frames[mid].t > targetTime then
-			hi = mid - 1
-		else
-			lo = mid + 1
-		end
-	end
-	return math.clamp(lo, 1, n - 1)
-end
-local currentWorkspace, currentMergerWorkspace = S.currentWorkspace, S.currentMergerWorkspace
-local GlobalKeyDuration, isBinding = S.GlobalKeyDuration, S.isBinding
-local isLiveSmoothing, liveSmoothingStrength = S.isLiveSmoothing, S.liveSmoothingStrength
+-- VARIABLES FOR LIVE SMOOTHING
+local isLiveSmoothing = false
+local liveSmoothingStrength = 3
 
 -- --- HELPER: DEEP COPY & SMOOTH ---
 local function DeepCopy(orig)
@@ -494,82 +375,6 @@ local function CleanupConnections()
 	end
 end
 
--- INPUT SINK: Prevent Roblox keybinds (backpack 1-9, etc) when typing in TextBox
-local StarterGui = game:GetService("StarterGui")
-
--- Global variable to track TextBox focus and tool state
-local isAnyTextBoxFocused = false
-local savedToolBeforeFocus = nil
-local toolMonitorConnection = nil
-
--- Monitor and immediately unequip any new tools while typing
-local function StartToolMonitor()
-	if toolMonitorConnection then
-		return
-	end
-	toolMonitorConnection = RunService.Heartbeat:Connect(function()
-		if not isAnyTextBoxFocused then
-			return
-		end
-
-		local character = LocalPlayer.Character
-		if not character then
-			return
-		end
-
-		local currentTool = character:FindFirstChildOfClass("Tool")
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-
-		-- If a tool is equipped that wasn't there before, unequip it immediately
-		if currentTool and currentTool ~= savedToolBeforeFocus and humanoid then
-			humanoid:UnequipTools()
-			-- Re-equip original tool if there was one
-			if savedToolBeforeFocus and savedToolBeforeFocus.Parent then
-				task.defer(function()
-					if humanoid and savedToolBeforeFocus and savedToolBeforeFocus.Parent then
-						humanoid:EquipTool(savedToolBeforeFocus)
-					end
-				end)
-			end
-		end
-	end)
-end
-
-local function StopToolMonitor()
-	if toolMonitorConnection then
-		toolMonitorConnection:Disconnect()
-		toolMonitorConnection = nil
-	end
-end
-
-local function SetupTextBoxInputSink(textBox)
-	textBox.Focused:Connect(function()
-		-- Save current tool state
-		local character = LocalPlayer.Character
-		savedToolBeforeFocus = character and character:FindFirstChildOfClass("Tool")
-		isAnyTextBoxFocused = true
-
-		-- Start monitoring for accidental tool equips
-		StartToolMonitor()
-
-		-- Also try disabling backpack GUI
-		pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
-		end)
-	end)
-
-	textBox.FocusLost:Connect(function()
-		isAnyTextBoxFocused = false
-		savedToolBeforeFocus = nil
-		StopToolMonitor()
-
-		-- Re-enable backpack
-		pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
-		end)
-	end)
-end
-
 local function RegisterTheme(obj, prop, type)
 	table.insert(ThemeObjects, { Object = obj, Property = prop, Type = type })
 end
@@ -658,7 +463,956 @@ local function ShowLoadingModal(visible, text, progress)
 	end
 end
 
--- WHITELIST SYSTEM UI (Firebase - UserId based)
+-- CINEMATIC INTRO ANIMATION (Enhanced)
+local function StartLoader()
+	local success, err = pcall(function()
+		local skipped = false
+
+		-- 1. Setup GUI & Effects
+		local LoaderGui = Instance.new("ScreenGui")
+		LoaderGui.Name = "StarshipIntro"
+		LoaderGui.Parent = CoreGui
+		LoaderGui.IgnoreGuiInset = true
+		LoaderGui.DisplayOrder = 10000
+
+		local Blur = Instance.new("BlurEffect", game:GetService("Lighting"))
+		Blur.Size = 0
+
+		local MainFrame = Instance.new("Frame", LoaderGui)
+		MainFrame.Size = UDim2.new(1, 0, 1, 0)
+		MainFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+		MainFrame.BackgroundTransparency = 1
+
+		-- Floating Particles Container
+		local ParticleContainer = Instance.new("Frame", MainFrame)
+		ParticleContainer.Size = UDim2.new(1, 0, 1, 0)
+		ParticleContainer.BackgroundTransparency = 1
+		ParticleContainer.ClipsDescendants = true
+
+		-- Create Floating Stars/Particles
+		local particles = {}
+		task.spawn(function()
+			for i = 1, 30 do
+				if skipped then
+					break
+				end
+				local star = Instance.new("TextLabel", ParticleContainer)
+				star.Text = (math.random() > 0.5) and "✦" or "•"
+				star.Size = UDim2.new(0, 20, 0, 20)
+				star.Position = UDim2.new(math.random(), 0, math.random(), 0)
+				star.BackgroundTransparency = 1
+				star.TextColor3 = C_ACCENT
+				star.TextTransparency = math.random() * 0.5 + 0.3
+				star.Font = Enum.Font.GothamBold
+				star.TextSize = math.random(8, 16)
+				table.insert(particles, star)
+
+				-- Animate floating
+				task.spawn(function()
+					local speed = math.random(20, 50)
+					local startY = star.Position.Y.Scale
+					while star and star.Parent and not skipped do
+						local newY = startY - 0.002
+						if newY < -0.1 then
+							newY = 1.1
+							startY = 1.1
+						end
+						startY = newY
+						star.Position = UDim2.new(star.Position.X.Scale, 0, newY, 0)
+						-- Twinkle effect
+						star.TextTransparency = 0.3 + math.sin(os.clock() * 3 + i) * 0.3
+						task.wait(0.03)
+					end
+				end)
+				task.wait(0.05)
+			end
+		end)
+
+		-- Logo Icon (Animated "S")
+		local LogoContainer = Instance.new("Frame", MainFrame)
+		LogoContainer.Size = UDim2.new(0, 100, 0, 100)
+		LogoContainer.Position = UDim2.new(0.5, -50, 0.35, 0)
+		LogoContainer.BackgroundTransparency = 1
+
+		local Logo = Instance.new("TextLabel", LogoContainer)
+		Logo.Text = "S"
+		Logo.Size = UDim2.new(1, 0, 1, 0)
+		Logo.BackgroundTransparency = 1
+		Logo.TextColor3 = C_ACCENT
+		Logo.Font = Enum.Font.GothamBlack
+		Logo.TextSize = 72
+		Logo.TextTransparency = 1
+
+		local LogoGlow = Instance.new("UIStroke", Logo)
+		LogoGlow.Color = C_ACCENT
+		LogoGlow.Thickness = 0
+		LogoGlow.Transparency = 0.5
+
+		-- Title Text
+		local Title = Instance.new("TextLabel", MainFrame)
+		Title.Text = "STARSHIP"
+		Title.Size = UDim2.new(1, 0, 0, 50)
+		Title.Position = UDim2.new(0, 0, 0.48, 0)
+		Title.BackgroundTransparency = 1
+		Title.TextColor3 = C_ACCENT
+		Title.Font = Enum.Font.GothamBlack
+		Title.TextSize = 42
+		Title.TextTransparency = 1
+		Title.RichText = true
+
+		-- Subtitle / Status Text
+		local Sub = Instance.new("TextLabel", MainFrame)
+		Sub.Text = "INITIALIZING..."
+		Sub.Size = UDim2.new(1, 0, 0, 25)
+		Sub.Position = UDim2.new(0, 0, 0.55, 0)
+		Sub.BackgroundTransparency = 1
+		Sub.TextColor3 = Color3.fromRGB(180, 180, 180)
+		Sub.Font = Enum.Font.GothamMedium
+		Sub.TextSize = 14
+		Sub.TextTransparency = 1
+
+		-- Progress Bar Container
+		local ProgressContainer = Instance.new("Frame", MainFrame)
+		ProgressContainer.Size = UDim2.new(0.3, 0, 0, 4)
+		ProgressContainer.Position = UDim2.new(0.35, 0, 0.6, 0)
+		ProgressContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+		ProgressContainer.BackgroundTransparency = 1
+		Instance.new("UICorner", ProgressContainer).CornerRadius = UDim.new(1, 0)
+
+		local ProgressFill = Instance.new("Frame", ProgressContainer)
+		ProgressFill.Size = UDim2.new(0, 0, 1, 0)
+		ProgressFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", ProgressFill).CornerRadius = UDim.new(1, 0)
+
+		-- Progress Percentage
+		local ProgressText = Instance.new("TextLabel", MainFrame)
+		ProgressText.Text = "0%"
+		ProgressText.Size = UDim2.new(1, 0, 0, 20)
+		ProgressText.Position = UDim2.new(0, 0, 0.63, 0)
+		ProgressText.BackgroundTransparency = 1
+		ProgressText.TextColor3 = C_ACCENT
+		ProgressText.Font = Enum.Font.GothamBold
+		ProgressText.TextSize = 12
+		ProgressText.TextTransparency = 1
+
+		-- Welcome Message
+		local WelcomeMsg = Instance.new("TextLabel", MainFrame)
+		WelcomeMsg.Text = "Welcome back, " .. LocalPlayer.Name .. "!"
+		WelcomeMsg.Size = UDim2.new(1, 0, 0, 20)
+		WelcomeMsg.Position = UDim2.new(0, 0, 0.28, 0)
+		WelcomeMsg.BackgroundTransparency = 1
+		WelcomeMsg.TextColor3 = Color3.fromRGB(150, 150, 160)
+		WelcomeMsg.Font = Enum.Font.Gotham
+		WelcomeMsg.TextSize = 14
+		WelcomeMsg.TextTransparency = 1
+
+		-- Skip Hint
+		local SkipHint = Instance.new("TextLabel", MainFrame)
+		SkipHint.Text = "Click anywhere to skip"
+		SkipHint.Size = UDim2.new(1, 0, 0, 20)
+		SkipHint.Position = UDim2.new(0, 0, 0.92, 0)
+		SkipHint.BackgroundTransparency = 1
+		SkipHint.TextColor3 = Color3.fromRGB(80, 80, 90)
+		SkipHint.Font = Enum.Font.Gotham
+		SkipHint.TextSize = 11
+		SkipHint.TextTransparency = 1
+
+		-- Skip Button (invisible, covers whole screen)
+		local SkipBtn = Instance.new("TextButton", MainFrame)
+		SkipBtn.Size = UDim2.new(1, 0, 1, 0)
+		SkipBtn.BackgroundTransparency = 1
+		SkipBtn.Text = ""
+		SkipBtn.ZIndex = 100
+
+		-- Glitch Effect Helper
+		local function GlitchText(label, originalText, duration)
+			local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*<>/\\|"
+			local iterations = duration or 12
+			for i = 1, iterations do
+				if skipped then
+					break
+				end
+				local newText = ""
+				for j = 1, #originalText do
+					if math.random() > 0.4 then
+						newText = newText .. originalText:sub(j, j)
+					else
+						local r = math.random(1, #chars)
+						newText = newText .. chars:sub(r, r)
+					end
+				end
+				label.Text = newText
+				task.wait(0.025)
+			end
+			label.Text = originalText
+		end
+
+		-- Update Progress Helper
+		local function SetProgress(percent, statusText)
+			if skipped then
+				return
+			end
+			TweenService:Create(ProgressFill, TweenInfo.new(0.3), { Size = UDim2.new(percent / 100, 0, 1, 0) }):Play()
+			ProgressText.Text = percent .. "%"
+			if statusText then
+				GlitchText(Sub, statusText, 6)
+			end
+		end
+
+		-- Skip Function
+		local function DoSkip()
+			if skipped then
+				return
+			end
+			skipped = true
+
+			-- Quick fade out loader elements
+			TweenService:Create(Logo, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
+			TweenService:Create(Title, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
+			TweenService:Create(Sub, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
+			TweenService:Create(ProgressContainer, TweenInfo.new(0.15), { BackgroundTransparency = 1 }):Play()
+			TweenService:Create(ProgressText, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
+			TweenService:Create(WelcomeMsg, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
+			TweenService:Create(SkipHint, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
+
+			task.wait(0.2)
+
+			-- Destroy loader first
+			LoaderGui:Destroy()
+
+			-- Then show Main UI with unfold animation
+			if Main then
+				Main.Visible = true
+				Main.ClipsDescendants = true
+				Main.Size = UDim2.new(0, 550, 0, 0)
+
+				-- Fade blur while unfolding
+				TweenService:Create(Blur, TweenInfo.new(0.5), { Size = 0 }):Play()
+				TweenService:Create(MainFrame, TweenInfo.new(0.3), { BackgroundTransparency = 1 }):Play()
+
+				local targetSize = UDim2.new(0, 550, 0, TargetMainHeight)
+				local tw = TweenService:Create(
+					Main,
+					TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+					{ Size = targetSize }
+				)
+				tw:Play()
+				tw.Completed:Wait()
+
+				Main.ClipsDescendants = false
+			end
+
+			-- Cleanup blur
+			if Blur and Blur.Parent then
+				Blur:Destroy()
+			end
+
+			-- Enable Nametags setelah Main UI selesai load
+			if getgenv().ToggleNametags then
+				getgenv().ToggleNametags(true)
+			end
+		end
+
+		SkipBtn.MouseButton1Click:Connect(DoSkip)
+
+		-- === SEQUENCE START ===
+
+		-- 1. Blur In & Darken
+		TweenService:Create(Blur, TweenInfo.new(0.8), { Size = 20 }):Play()
+		TweenService:Create(MainFrame, TweenInfo.new(0.5), { BackgroundTransparency = 0.2 }):Play()
+		task.wait(0.3)
+		if skipped then
+			return
+		end
+
+		-- 2. Welcome Message Fade In
+		TweenService:Create(WelcomeMsg, TweenInfo.new(0.5), { TextTransparency = 0 }):Play()
+		TweenService:Create(SkipHint, TweenInfo.new(0.8), { TextTransparency = 0.5 }):Play()
+		task.wait(0.3)
+		if skipped then
+			return
+		end
+
+		-- 3. Logo Appear with Pulse
+		TweenService:Create(Logo, TweenInfo.new(0.5, Enum.EasingStyle.Back), { TextTransparency = 0 }):Play()
+		TweenService:Create(LogoGlow, TweenInfo.new(0.5), { Thickness = 3 }):Play()
+
+		-- Logo Rainbow Animation
+		task.spawn(function()
+			local t = 0
+			while Logo and Logo.Parent and not skipped do
+				t = t + 0.02
+				local c = Color3.fromHSV(t % 1, 0.9, 1)
+				Logo.TextColor3 = c
+				LogoGlow.Color = c
+				-- Pulse effect
+				local pulse = 1 + math.sin(t * 5) * 0.05
+				Logo.TextSize = 72 * pulse
+				task.wait(0.02)
+			end
+		end)
+		task.wait(0.5)
+		if skipped then
+			return
+		end
+
+		-- 4. Title Appear with Glitch
+		TweenService:Create(Title, TweenInfo.new(0.3), { TextTransparency = 0 }):Play()
+		GlitchText(Title, "STARSHIP", 10)
+		if skipped then
+			return
+		end
+
+		-- Title Rainbow Animation
+		task.spawn(function()
+			local t = 0
+			while Title and Title.Parent and not skipped do
+				t = t + 0.015
+				local c = Color3.fromHSV(t % 1, 0.8, 1)
+				local r, g, b = math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255)
+				Title.Text = string.format('<font color="rgb(%d,%d,%d)">STARSHIP</font>', r, g, b)
+				task.wait(0.03)
+			end
+		end)
+
+		-- 5. Show Progress Bar
+		TweenService:Create(Sub, TweenInfo.new(0.4), { TextTransparency = 0 }):Play()
+		TweenService:Create(ProgressContainer, TweenInfo.new(0.4), { BackgroundTransparency = 0 }):Play()
+		TweenService:Create(ProgressText, TweenInfo.new(0.4), { TextTransparency = 0 }):Play()
+		task.wait(0.2)
+		if skipped then
+			return
+		end
+
+		-- 6. Loading Steps
+		SetProgress(15, "Loading Modules...")
+		task.wait(0.4)
+		if skipped then
+			return
+		end
+
+		SetProgress(35, "Initializing UI...")
+		task.wait(0.3)
+		if skipped then
+			return
+		end
+
+		SetProgress(55, "Loading Configurations...")
+		task.wait(0.3)
+		if skipped then
+			return
+		end
+
+		SetProgress(75, "Verifying Session...")
+		task.wait(0.3)
+		if skipped then
+			return
+		end
+
+		SetProgress(90, "Preparing Workspace...")
+		task.wait(0.2)
+		if skipped then
+			return
+		end
+
+		SetProgress(100, "READY!")
+		Sub.TextColor3 = C_GREEN
+		ProgressFill.BackgroundColor3 = C_GREEN
+		ProgressText.TextColor3 = C_GREEN
+		task.wait(0.5)
+		if skipped then
+			return
+		end
+
+		-- 7. Exit Animation - Fade out semua elemen loader
+		TweenService:Create(WelcomeMsg, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+		TweenService:Create(Logo, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+		TweenService:Create(LogoGlow, TweenInfo.new(0.3), { Thickness = 0 }):Play()
+		TweenService:Create(Title, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+		TweenService:Create(Sub, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+		TweenService:Create(ProgressContainer, TweenInfo.new(0.3), { BackgroundTransparency = 1 }):Play()
+		TweenService:Create(ProgressText, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+		TweenService:Create(SkipHint, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+
+		-- Tunggu elemen fade out selesai
+		task.wait(0.4)
+
+		-- Destroy loader GUI dulu sebelum main UI muncul
+		LoaderGui:Destroy()
+
+		-- 8. Unfold Main UI (setelah loader sudah hilang)
+		if Main then
+			Main.Visible = true
+			Main.ClipsDescendants = true
+			local targetSize = UDim2.new(0, 550, 0, TargetMainHeight)
+			Main.Size = UDim2.new(0, 550, 0, 0)
+
+			-- Fade out blur bersamaan dengan unfold
+			TweenService:Create(Blur, TweenInfo.new(0.8), { Size = 0 }):Play()
+			TweenService:Create(MainFrame, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
+
+			-- Unfold animasi
+			local tw = TweenService:Create(
+				Main,
+				TweenInfo.new(0.8, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+				{ Size = targetSize }
+			)
+			tw:Play()
+			tw.Completed:Wait()
+
+			Main.ClipsDescendants = false
+		end
+
+		-- Cleanup blur
+		if Blur and Blur.Parent then
+			Blur:Destroy()
+		end
+
+		-- Enable Nametags setelah Main UI selesai load
+		if getgenv().ToggleNametags then
+			getgenv().ToggleNametags(true)
+		end
+	end)
+
+	if not success then
+		warn("Intro Failed: " .. tostring(err))
+		if game:GetService("Lighting"):FindFirstChild("BlurEffect") then
+			game:GetService("Lighting").BlurEffect:Destroy()
+		end
+		if Main then
+			Main.Visible = true
+		end
+		-- Enable Nametags even on error
+		if getgenv().ToggleNametags then
+			getgenv().ToggleNametags(true)
+		end
+	end
+end
+
+-- --- LICENSE SYSTEM ---
+local SessionFailCount = 0
+local MAX_FAIL_GRACE = 3 -- Allow 3 consecutive failures before kill
+
+local function CheckLicense(key, userId)
+	local PASTEBIN_URL = "https://pastebin.com/raw/WuU3abkW?t=" .. tostring(os.time())
+	local success, content = pcall(function()
+		return game:HttpGet(PASTEBIN_URL)
+	end)
+
+	if not success then
+		return false, "Connection Error", nil
+	end
+
+	for _, line in ipairs(string.split(content, "\n")) do
+		local parts = string.split(line, ":")
+		if #parts >= 3 then
+			local rawKey = string.gsub(parts[1], "%s+", "")
+			local rawId = string.gsub(parts[2], "%s+", "")
+			local rawDur = string.gsub(parts[3], "%s+", "")
+
+			if rawKey == key and rawId == userId then
+				return true, rawDur, rawKey
+			end
+		end
+	end
+	return false, "Invalid or Expired Key", nil
+end
+
+local function KillSession(reason)
+	CleanupConnections()
+	if getgenv().ToggleNametags then
+		getgenv().ToggleNametags(false)
+	end
+	if Main then
+		Main:Destroy()
+	end
+	if ScreenGui then
+		ScreenGui:Destroy()
+	end
+
+	local KillGui = Instance.new("ScreenGui", CoreGui)
+	KillGui.Name = "StarshipExpired"
+	KillGui.IgnoreGuiInset = true
+
+	local Frame = Instance.new("Frame", KillGui)
+	Frame.Size = UDim2.new(1, 0, 1, 0)
+	Frame.BackgroundColor3 = Color3.new(0, 0, 0)
+	Frame.BackgroundTransparency = 0.2
+
+	local Msg = Instance.new("TextLabel", Frame)
+	Msg.Size = UDim2.new(1, 0, 0, 50)
+	Msg.Position = UDim2.new(0, 0, 0.45, 0)
+	Msg.BackgroundTransparency = 1
+	Msg.TextColor3 = C_RED
+	Msg.Font = Enum.Font.GothamBlack
+	Msg.TextSize = 30
+	Msg.Text = "SESSION EXPIRED"
+
+	local Sub = Instance.new("TextLabel", Frame)
+	Sub.Size = UDim2.new(1, 0, 0, 30)
+	Sub.Position = UDim2.new(0, 0, 0.52, 0)
+	Sub.BackgroundTransparency = 1
+	Sub.TextColor3 = Color3.new(1, 1, 1)
+	Sub.Font = Enum.Font.Gotham
+	Sub.TextSize = 16
+	Sub.Text = reason or "Your license key is no longer valid."
+
+	task.wait(5)
+	KillGui:Destroy()
+end
+
+local function StartSessionValidation(key)
+	task.spawn(function()
+		while true do
+			task.wait(300) -- Check every 5 minutes
+			local isValid, msg = CheckLicense(key, tostring(LocalPlayer.UserId))
+			if not isValid then
+				if msg == "Connection Error" then
+					-- Grace period for connection issues
+					SessionFailCount = SessionFailCount + 1
+					if SessionFailCount >= MAX_FAIL_GRACE then
+						KillSession("Connection lost. Please check your internet.")
+						break
+					end
+					-- Show warning toast
+					if UIModule and UIModule.ShowToast then
+						UIModule.ShowToast(
+							"Connection Warning",
+							"Failed to verify license (" .. SessionFailCount .. "/" .. MAX_FAIL_GRACE .. ")",
+							"warning",
+							5
+						)
+					end
+				else
+					-- Invalid key - kill immediately
+					KillSession(msg)
+					break
+				end
+			else
+				-- Reset fail counter on success
+				SessionFailCount = 0
+			end
+		end
+	end)
+end
+
+-- KEY SYSTEM UI
+local function SetupKeySystem()
+	-- Check for Saved Key
+	local savedKey = ""
+	local KEY_FILE = "Starship_License.txt"
+	if isfile(KEY_FILE) then
+		savedKey = readfile(KEY_FILE)
+	end
+
+	local KeyGui = Instance.new("ScreenGui")
+	KeyGui.Name = "StarshipKeySystem"
+	KeyGui.Parent = CoreGui
+	KeyGui.IgnoreGuiInset = true
+
+	-- Blur Effect
+	local Blur = Instance.new("BlurEffect", game:GetService("Lighting"))
+	Blur.Size = 24
+
+	local keyFrameWidth = Mobile.IsCompact and math.min(Mobile.ViewportSize.X - 40, 350) or 450
+	local MainFrame = Instance.new("Frame", KeyGui)
+	MainFrame.Size = UDim2.new(0, keyFrameWidth, 0, 0)
+	MainFrame.Position = UDim2.new(0.5, -keyFrameWidth / 2, 0.5, -125)
+	MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+	MainFrame.BorderSizePixel = 0
+	MainFrame.BackgroundTransparency = 1
+	Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
+
+	local Shadow = Instance.new("ImageLabel", MainFrame)
+	Shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+	Shadow.Position = UDim2.new(0.5, 0, 0.5, 0)
+	Shadow.Size = UDim2.new(1, 120, 1, 120)
+	Shadow.BackgroundTransparency = 1
+	Shadow.Image = "rbxassetid://6014261993"
+	Shadow.ImageColor3 = Color3.new(0, 0, 0)
+	Shadow.ImageTransparency = 1
+	Shadow.ZIndex = 0
+
+	local Title = Instance.new("TextLabel", MainFrame)
+	Title.Size = UDim2.new(1, 0, 0, 30)
+	Title.Position = UDim2.new(0, 0, 0, 10)
+	Title.BackgroundTransparency = 1
+	Title.TextTransparency = 1
+	Title.TextColor3 = C_ACCENT
+	Title.Font = Enum.Font.GothamBlack
+	Title.TextSize = 20
+	Title.RichText = true
+
+	task.spawn(function()
+		local t = 0
+		while Title and Title.Parent do
+			t = t + 0.01
+			local c = Color3.fromHSV(t % 1, 0.8, 1)
+			local r, g, b = math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255)
+			Title.Text = string.format(
+				'<font color="rgb(%d,%d,%d)">STARSHIP ACCESS</font> <font color="rgb(255,255,255)" size="14">v0.9-BETA</font>',
+				r,
+				g,
+				b
+			)
+			task.wait(0.03)
+		end
+	end)
+
+	local Welcome = Instance.new("TextLabel", MainFrame)
+	Welcome.Text = "Welcome back, " .. LocalPlayer.Name
+	Welcome.Size = UDim2.new(1, 0, 0, 20)
+	Welcome.Position = UDim2.new(0, 0, 0, 35)
+	Welcome.BackgroundTransparency = 1
+	Welcome.TextTransparency = 1
+	Welcome.TextColor3 = Color3.fromRGB(200, 200, 200)
+	Welcome.Font = Enum.Font.GothamBold
+	Welcome.TextSize = 14
+
+	local Desc = Instance.new("TextLabel", MainFrame)
+	Desc.Text = "Please authenticate your device to continue."
+	Desc.Size = UDim2.new(1, 0, 0, 20)
+	Desc.Position = UDim2.new(0, 0, 0, 55)
+	Desc.BackgroundTransparency = 1
+	Desc.TextTransparency = 1
+	Desc.TextColor3 = Color3.fromRGB(100, 100, 100)
+	Desc.Font = Enum.Font.Gotham
+	Desc.TextSize = 11
+
+	local KeyInput = Instance.new("TextBox", MainFrame)
+	KeyInput.PlaceholderText = "Paste Your License Key..."
+	KeyInput.Text = savedKey -- Auto-fill if saved
+	KeyInput.Size = UDim2.new(0.8, 0, 0, 40)
+	KeyInput.Position = UDim2.new(0.1, 0, 0.35, 0)
+	KeyInput.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+	KeyInput.BackgroundTransparency = 1
+	KeyInput.TextTransparency = 1
+	KeyInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+	KeyInput.Font = Enum.Font.GothamBold
+	KeyInput.TextSize = 14
+	Instance.new("UICorner", KeyInput).CornerRadius = UDim.new(0, 6)
+	local UIStroke = Instance.new("UIStroke", KeyInput)
+	UIStroke.Color = Color3.fromRGB(60, 60, 65)
+	UIStroke.Thickness = 1
+	UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	UIStroke.Transparency = 1
+
+	local BtnSubmit = Instance.new("TextButton", MainFrame)
+	BtnSubmit.Text = "AUTHENTICATE"
+	BtnSubmit.Size = UDim2.new(0.38, 0, 0, 35)
+	BtnSubmit.Position = UDim2.new(0.52, 0, 0.65, 0)
+	BtnSubmit.BackgroundColor3 = C_ACCENT
+	BtnSubmit.BackgroundTransparency = 1
+	BtnSubmit.TextTransparency = 1
+	BtnSubmit.TextColor3 = Color3.fromRGB(255, 255, 255)
+	BtnSubmit.Font = Enum.Font.GothamBold
+	BtnSubmit.TextSize = 12
+	Instance.new("UICorner", BtnSubmit).CornerRadius = UDim.new(0, 6)
+
+	local BtnLink = Instance.new("TextButton", MainFrame)
+	BtnLink.Text = "BUY KEY"
+	BtnLink.Size = UDim2.new(0.38, 0, 0, 35)
+	BtnLink.Position = UDim2.new(0.1, 0, 0.65, 0)
+	BtnLink.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+	BtnLink.BackgroundTransparency = 1
+	BtnLink.TextTransparency = 1
+	BtnLink.TextColor3 = Color3.fromRGB(200, 200, 200)
+	BtnLink.Font = Enum.Font.GothamBold
+	BtnLink.TextSize = 12
+	Instance.new("UICorner", BtnLink).CornerRadius = UDim.new(0, 6)
+
+	local BtnClose = Instance.new("TextButton", MainFrame)
+	BtnClose.Text = "×"
+	BtnClose.Size = UDim2.new(0, 30, 0, 30)
+	BtnClose.Position = UDim2.new(1, -35, 0, 5)
+	BtnClose.BackgroundTransparency = 1
+	BtnClose.TextTransparency = 1
+	BtnClose.TextColor3 = Color3.fromRGB(150, 150, 150)
+	BtnClose.Font = Enum.Font.GothamBold
+	BtnClose.TextSize = 20
+	BtnClose.MouseButton1Click:Connect(function()
+		TweenService
+			:Create(
+				MainFrame,
+				TweenInfo.new(0.3),
+				{ BackgroundTransparency = 1, Size = UDim2.new(0, keyFrameWidth, 0, 0) }
+			)
+			:Play()
+		task.wait(0.3)
+		KeyGui:Destroy()
+		if Blur then
+			Blur:Destroy()
+		end
+	end)
+
+	-- Animation In
+	local UserHWID = game:GetService("RbxAnalyticsService"):GetClientId()
+	local UserID = tostring(LocalPlayer.UserId)
+
+	local InfoFrame = Instance.new("Frame", MainFrame)
+	InfoFrame.Size = UDim2.new(1, 0, 0, 30)
+	InfoFrame.Position = UDim2.new(0, 0, 0.9, 0)
+	InfoFrame.BackgroundTransparency = 1
+
+	local HWIDLabel = Instance.new("TextButton", InfoFrame)
+	HWIDLabel.Text = "HWID: " .. string.sub(UserHWID, 1, 8) .. "..."
+	HWIDLabel.Size = UDim2.new(0.33, 0, 1, 0)
+	HWIDLabel.Position = UDim2.new(0, 0, 0, 0)
+	HWIDLabel.BackgroundTransparency = 1
+	HWIDLabel.TextTransparency = 1
+	HWIDLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
+	HWIDLabel.Font = Enum.Font.Code
+	HWIDLabel.TextSize = 10
+	HWIDLabel.MouseButton1Click:Connect(function()
+		setclipboard(UserHWID)
+		HWIDLabel.Text = "COPIED!"
+		task.wait(1)
+		HWIDLabel.Text = "HWID: " .. string.sub(UserHWID, 1, 8) .. "..."
+	end)
+
+	local IDLabel = Instance.new("TextButton", InfoFrame)
+	IDLabel.Text = "ID: " .. UserID
+	IDLabel.Size = UDim2.new(0.33, 0, 1, 0)
+	IDLabel.Position = UDim2.new(0.33, 0, 0, 0)
+	IDLabel.BackgroundTransparency = 1
+	IDLabel.TextTransparency = 1
+	IDLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
+	IDLabel.Font = Enum.Font.Code
+	IDLabel.TextSize = 10
+	IDLabel.MouseButton1Click:Connect(function()
+		setclipboard(UserID)
+		IDLabel.Text = "COPIED!"
+		task.wait(1)
+		IDLabel.Text = "ID: " .. UserID
+	end)
+
+	local DurationLabel = Instance.new("TextLabel", InfoFrame)
+	DurationLabel.Text = "KEY: N/A"
+	DurationLabel.Size = UDim2.new(0.33, 0, 1, 0)
+	DurationLabel.Position = UDim2.new(0.66, 0, 0, 0)
+	DurationLabel.BackgroundTransparency = 1
+	DurationLabel.TextTransparency = 1
+	DurationLabel.TextColor3 = C_ACCENT
+	DurationLabel.Font = Enum.Font.Code
+	DurationLabel.TextSize = 10
+
+	local StatusMsg = Instance.new("TextLabel", MainFrame)
+	StatusMsg.Text = ""
+	StatusMsg.Size = UDim2.new(1, 0, 0, 20)
+	StatusMsg.Position = UDim2.new(0, 0, 0.85, 0)
+	StatusMsg.BackgroundTransparency = 1
+	StatusMsg.Font = Enum.Font.GothamBold
+	StatusMsg.TextSize = 12
+
+	-- Animation In
+	-- Animation In
+	TweenService:Create(
+		MainFrame,
+		TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{ Size = UDim2.new(0, keyFrameWidth, 0, 250), BackgroundTransparency = 0 }
+	):Play()
+	task.wait(0.3)
+	local fadeInfo = TweenInfo.new(0.4)
+	TweenService:Create(Shadow, fadeInfo, { ImageTransparency = 0.4 }):Play()
+	TweenService:Create(Title, fadeInfo, { TextTransparency = 0 }):Play()
+	TweenService:Create(Welcome, fadeInfo, { TextTransparency = 0 }):Play()
+	TweenService:Create(Desc, fadeInfo, { TextTransparency = 0 }):Play()
+	TweenService:Create(KeyInput, fadeInfo, { BackgroundTransparency = 0, TextTransparency = 0 }):Play()
+	TweenService:Create(UIStroke, fadeInfo, { Transparency = 0 }):Play()
+	TweenService:Create(BtnSubmit, fadeInfo, { BackgroundTransparency = 0, TextTransparency = 0 }):Play()
+	TweenService:Create(BtnLink, fadeInfo, { BackgroundTransparency = 0, TextTransparency = 0 }):Play()
+	TweenService:Create(BtnClose, fadeInfo, { TextTransparency = 0 }):Play()
+	TweenService:Create(HWIDLabel, fadeInfo, { TextTransparency = 0 }):Play()
+	TweenService:Create(IDLabel, fadeInfo, { TextTransparency = 0 }):Play()
+	local function VerifyKey()
+		local input = KeyInput.Text
+		StatusMsg.Text = "Checking License..."
+		StatusMsg.TextColor3 = C_YELLOW
+
+		-- DEV BYPASS (Keep for testing, remove in production if needed)
+		if input == "STARSHIP-DEV" then
+			StatusMsg.Text = "DEV ACCESS GRANTED"
+			StatusMsg.TextColor3 = Color3.fromRGB(46, 204, 113)
+			UIStroke.Color = Color3.fromRGB(46, 204, 113)
+			task.wait(1)
+			TweenService:Create(
+				MainFrame,
+				TweenInfo.new(0.5),
+				{ BackgroundTransparency = 1, Size = UDim2.new(0, keyFrameWidth, 0, 0) }
+			):Play()
+			TweenService:Create(Title, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+			TweenService:Create(Welcome, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+			TweenService:Create(Desc, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+			TweenService:Create(KeyInput, TweenInfo.new(0.3), { TextTransparency = 1, BackgroundTransparency = 1 })
+				:Play()
+			TweenService:Create(BtnSubmit, TweenInfo.new(0.3), { TextTransparency = 1, BackgroundTransparency = 1 })
+				:Play()
+			TweenService:Create(BtnLink, TweenInfo.new(0.3), { TextTransparency = 1, BackgroundTransparency = 1 })
+				:Play()
+			task.wait(0.5)
+			KeyGui:Destroy()
+			if Blur then
+				Blur:Destroy()
+			end
+			task.spawn(StartLoader)
+			return
+		end
+
+		-- TEST EXPIRATION (For Testing Purposes)
+		if input == "TEST-EXPIRE" then
+			StatusMsg.Text = "TEST MODE: EXPIRES IN 10S"
+			StatusMsg.TextColor3 = C_YELLOW
+			UIStroke.Color = C_YELLOW
+			task.wait(1)
+
+			TweenService:Create(
+				MainFrame,
+				TweenInfo.new(0.5),
+				{ BackgroundTransparency = 1, Size = UDim2.new(0, keyFrameWidth, 0, 0) }
+			):Play()
+			TweenService:Create(Title, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+			TweenService:Create(Welcome, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+			TweenService:Create(Desc, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+			TweenService:Create(KeyInput, TweenInfo.new(0.3), { TextTransparency = 1, BackgroundTransparency = 1 })
+				:Play()
+			TweenService:Create(BtnSubmit, TweenInfo.new(0.3), { TextTransparency = 1, BackgroundTransparency = 1 })
+				:Play()
+			TweenService:Create(BtnLink, TweenInfo.new(0.3), { TextTransparency = 1, BackgroundTransparency = 1 })
+				:Play()
+			task.wait(0.5)
+			KeyGui:Destroy()
+			if Blur then
+				Blur:Destroy()
+			end
+
+			task.spawn(StartLoader)
+
+			-- Nametags will be enabled by StartLoader after Main UI loads
+
+			-- Force Expiration after 10 seconds
+			task.spawn(function()
+				task.wait(10)
+				KillSession("Test Expiration: Duration Finished")
+			end)
+			return
+		end
+
+		-- PASTEBIN CHECK
+		-- Format: Key:UserID:Duration
+		-- Example: AMETHYST2025:9268011358:30DAYS
+		task.spawn(function()
+			local isValid, result = CheckLicense(input, tostring(LocalPlayer.UserId))
+			local keyDuration = isValid and result or ""
+
+			if not isValid and result == "Connection Error" then
+				StatusMsg.Text = "Connection Failed!"
+				StatusMsg.TextColor3 = C_RED
+				return
+			end
+
+			if isValid then
+				StartSessionValidation(input)
+				StatusMsg.Text = "ACCESS GRANTED"
+				StatusMsg.TextColor3 = Color3.fromRGB(46, 204, 113)
+				UIStroke.Color = Color3.fromRGB(46, 204, 113)
+
+				-- Normalize Duration Text
+				if string.upper(keyDuration) == "1MONTH" then
+					keyDuration = "30DAYS"
+				end
+
+				-- Show Duration
+				GlobalKeyDuration = string.upper(keyDuration)
+				DurationLabel.Text = "KEY: " .. GlobalKeyDuration
+				TweenService:Create(DurationLabel, TweenInfo.new(0.5), { TextTransparency = 0 }):Play()
+
+				writefile(KEY_FILE, input)
+				task.wait(1.5) -- Wait longer to see duration
+
+				-- Close UI Sequence
+				TweenService:Create(
+					MainFrame,
+					TweenInfo.new(0.5),
+					{ BackgroundTransparency = 1, Size = UDim2.new(0, keyFrameWidth, 0, 0) }
+				):Play()
+				local fadeInfo = TweenInfo.new(0.3)
+				TweenService:Create(Shadow, fadeInfo, { ImageTransparency = 1 }):Play()
+				TweenService:Create(Title, fadeInfo, { TextTransparency = 1 }):Play()
+				TweenService:Create(Welcome, fadeInfo, { TextTransparency = 1 }):Play()
+				TweenService:Create(Desc, fadeInfo, { TextTransparency = 1 }):Play()
+				TweenService:Create(KeyInput, fadeInfo, { TextTransparency = 1, BackgroundTransparency = 1 }):Play()
+				TweenService:Create(UIStroke, fadeInfo, { Transparency = 1 }):Play()
+				TweenService:Create(BtnSubmit, fadeInfo, { TextTransparency = 1, BackgroundTransparency = 1 }):Play()
+				TweenService:Create(BtnLink, fadeInfo, { TextTransparency = 1, BackgroundTransparency = 1 }):Play()
+				TweenService:Create(BtnClose, fadeInfo, { TextTransparency = 1 }):Play()
+				TweenService:Create(HWIDLabel, fadeInfo, { TextTransparency = 1 }):Play()
+				TweenService:Create(IDLabel, fadeInfo, { TextTransparency = 1 }):Play()
+				TweenService:Create(DurationLabel, fadeInfo, { TextTransparency = 1 }):Play()
+
+				task.wait(0.5)
+				KeyGui:Destroy()
+				if Blur then
+					Blur:Destroy()
+				end
+				task.spawn(StartLoader)
+			else
+				StatusMsg.Text = "INVALID KEY OR ID MISMATCH"
+				StatusMsg.TextColor3 = Color3.fromRGB(231, 76, 60)
+				UIStroke.Color = Color3.fromRGB(231, 76, 60)
+				local originalPos = MainFrame.Position
+				for i = 1, 5 do
+					MainFrame.Position = originalPos + UDim2.new(0, math.random(-5, 5), 0, 0)
+					task.wait(0.03)
+				end
+				MainFrame.Position = originalPos
+			end
+		end)
+	end
+
+	BtnSubmit.MouseButton1Click:Connect(VerifyKey)
+	BtnLink.MouseButton1Click:Connect(function()
+		setclipboard("https://discord.gg/starship")
+		BtnLink.Text = "COPIED!"
+		task.wait(1)
+		BtnLink.Text = "BUY KEY"
+	end)
+
+	-- Auto-Verify Saved Key
+	if savedKey ~= "" then
+		task.delay(0.8, function()
+			StatusMsg.Text = "Auto-verifying saved key..."
+			StatusMsg.TextColor3 = C_ACCENT
+			VerifyKey()
+		end)
+	end
+end
+
+-- Quick Auto-Login (Skip UI if saved key is valid)
+local function TryAutoLogin()
+	local KEY_FILE = "Starship_License.txt"
+	if not isfile(KEY_FILE) then
+		return false
+	end
+
+	local savedKey = readfile(KEY_FILE)
+	if savedKey == "" then
+		return false
+	end
+
+	local isValid, duration = CheckLicense(savedKey, tostring(LocalPlayer.UserId))
+	if isValid then
+		-- Normalize duration
+		if string.upper(duration) == "1MONTH" then
+			duration = "30DAYS"
+		end
+		GlobalKeyDuration = string.upper(duration)
+
+		-- Start session validation
+		StartSessionValidation(savedKey)
+		return true
+	end
+	return false
+end
 
 -- --- HELPER FUNCTIONS ---
 local function CFToTbl(cf)
@@ -866,6 +1620,7 @@ local function StartRecording()
 			fd.st = tostring(h:GetState())
 			fd.jmp = h.Jump
 			fd.hh = h.HipHeight
+			fd.ws = h.WalkSpeed -- Record WalkSpeed for accurate animation sync
 
 			-- SHIFTLOCK / CAMERA DIRECTION RECORDING
 			local cam = workspace.CurrentCamera
@@ -873,30 +1628,20 @@ local function StartRecording()
 				local camLook = cam.CFrame.LookVector
 				fd.camLook = { x = camLook.X, y = camLook.Y, z = camLook.Z }
 			end
+
 			-- Check if shiftlock is active (character faces camera direction)
 			local isShiftlock = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
 			fd.shiftlock = isShiftlock
 			-- Record character's actual facing direction (for accurate rotation)
 			local charLook = r.CFrame.LookVector
 			fd.charLook = { x = charLook.X, y = charLook.Y, z = charLook.Z }
-
-			-- TOOL RECORDING: Record equipped tool name
-			local equippedTool = c:FindFirstChildOfClass("Tool")
-			if equippedTool then
-				fd.tool = equippedTool.Name
-			end
 		else
 			-- STRICT MODE: Record Full Pose (Existing Logic)
 			fd.r = CFToTbl(r.CFrame)
+			fd.hh = h.HipHeight -- Record HipHeight for adaptive playback
 			fd.j = {}
 			for _, m in ipairs(joints) do
 				fd.j[m.Name] = CFToTbl(m.Transform)
-			end
-
-			-- TOOL RECORDING: Record equipped tool name (Strict Mode)
-			local equippedTool = c:FindFirstChildOfClass("Tool")
-			if equippedTool then
-				fd.tool = equippedTool.Name
 			end
 		end
 
@@ -910,6 +1655,7 @@ local function StartRecording()
 		end
 	end)
 end
+
 local function CutAndResume(cutTime)
 	if Connections.Preview then
 		Connections.Preview:Disconnect()
@@ -956,7 +1702,6 @@ local function CutAndResume(cutTime)
 			end
 
 			if lf.r then
-				-- Strict mode: restore CFrame and joints
 				r.CFrame = TblToCF(lf.r)
 				local j = GetJoints(c)
 				if lf.j then
@@ -967,11 +1712,8 @@ local function CutAndResume(cutTime)
 					end
 				end
 			elseif lf.pos then
-				-- Flexible mode: restore position and velocity
 				r.CFrame = CFrame.new(lf.pos.x, lf.pos.y, lf.pos.z) * CFrame.Angles(0, math.rad(lf.rot or 0), 0)
-				if lf.vel then
-					r.AssemblyLinearVelocity = Vector3.new(lf.vel.x, lf.vel.y, lf.vel.z)
-				end
+				r.AssemblyLinearVelocity = Vector3.new(lf.vel.x, lf.vel.y, lf.vel.z)
 			end
 		end
 		startTime = os.clock() - lf.t
@@ -1040,30 +1782,9 @@ local function StopPlayback()
 		Connections.Playback:Disconnect()
 	end
 	currentPlaybackTime = 0
-	lastPlaybackTime = 0
 	-- Do NOT clear currentPlaybackFile here, as it breaks replayability from the UI
 	ResetChar()
 	ClearPath()
-
-	-- Reset WalkSpeed to default when stopping
-	local c = LocalPlayer.Character
-	local hum = c and c:FindFirstChild("Humanoid")
-	if hum then
-		hum.WalkSpeed = 16
-	end
-
-	-- Reset playback speed to 1x
-	playbackSpeed = 1.0
-	if UIHandlers.BtnSpeed then
-		UIHandlers.BtnSpeed.Text = "1x"
-	end
-	if UIHandlers.SpeedDropdown then
-		for _, btn in pairs(UIHandlers.SpeedDropdown:GetChildren()) do
-			if btn:IsA("TextButton") then
-				btn.TextColor3 = (btn.Text == "1x") and C_ACCENT or C_TEXT
-			end
-		end
-	end
 
 	-- Update UI if Merger Source
 	if currentPlaybackSource == "Merger" and PBtnPlay then
@@ -1114,7 +1835,7 @@ local function PausePlayback()
 	end
 end
 
-local MAP_DISTANCE_THRESHOLD = 500 -- Jarak maksimal sebelum warning (dalam studs)
+local MAP_DISTANCE_THRESHOLD = 50 -- Jarak maksimal sebelum warning (dalam studs)
 
 -- Cek jarak ke titik TERDEKAT di path (bukan hanya titik awal)
 local function GetDistanceToNearestPathPoint(frames, playerPos)
@@ -1309,7 +2030,6 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 	isPlaying = true
 	isPlayPaused = false
-	lastPlaybackTime = currentPlaybackTime
 
 	-- 1. PATH VISUAL
 	if isPathEnabled then
@@ -1407,17 +2127,8 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 		h.AutoRotate = true -- Enable auto-rotate so character looks in movement direction naturally or can be controlled
 
-		-- PERFORMANCE: Cache instances ONCE before playback loop
-		local cachedAtt = r:FindFirstChild("PlaybackAtt") or Instance.new("Attachment", r)
-		cachedAtt.Name = "PlaybackAtt"
-		local cachedAO = nil -- Will be created when needed
-		local frameCounter = 0 -- For throttling expensive operations
-		local cachedLastState = nil -- Cache last humanoid state to avoid redundant changes
-		local cachedUserInputService = game:GetService("UserInputService")
-
 		-- Use Stepped for Physics Manipulation (smoother for velocity)
 		Connections.Playback = RunService.Stepped:Connect(function(_, dt)
-			frameCounter = frameCounter + 1
 			if not isPlaying or isPlayPaused then
 				return
 			end
@@ -1426,28 +2137,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 			if isReversing then
 				currentPlaybackTime = currentPlaybackTime - (dt * playbackSpeed)
 				if currentPlaybackTime <= 0 then
-					if isRespawnOnEnd then
-						local savedFile = currentPlaybackFile
-						local savedLoop = isLooping
-						StopPlayback()
-						ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
-						task.wait(5)
-						local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-						if h then
-							h.Health = 0
-						end
-						if savedLoop then
-							task.spawn(function()
-								LocalPlayer.CharacterAdded:Wait()
-								ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
-								task.wait(5)
-								if savedFile and UIHandlers.PlayMergerRecording then
-									UIHandlers.PlayMergerRecording(savedFile, true)
-								end
-							end)
-						end
-						return
-					elseif isLooping then
+					if isLooping then
 						currentPlaybackTime = currentTotalDuration
 					else
 						StopPlayback()
@@ -1457,28 +2147,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 			else
 				currentPlaybackTime = currentPlaybackTime + (dt * playbackSpeed)
 				if currentPlaybackTime >= currentTotalDuration then
-					if isRespawnOnEnd then
-						local savedFile = currentPlaybackFile
-						local savedLoop = isLooping
-						StopPlayback()
-						ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
-						task.wait(5)
-						local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-						if h then
-							h.Health = 0
-						end
-						if savedLoop then
-							task.spawn(function()
-								LocalPlayer.CharacterAdded:Wait()
-								ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
-								task.wait(5)
-								if savedFile and UIHandlers.PlayMergerRecording then
-									UIHandlers.PlayMergerRecording(savedFile, true)
-								end
-							end)
-						end
-						return
-					elseif isLooping then
+					if isLooping then
 						currentPlaybackTime = 0
 					else
 						StopPlayback()
@@ -1487,24 +2156,20 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				end
 			end
 
-			-- DETECT TIME JUMP (slider seeking) - skip blending if user jumped to different time
-			local expectedDelta = dt * playbackSpeed
-			local actualDelta = math.abs(currentPlaybackTime - lastPlaybackTime)
-			local isTimeJump = actualDelta > (expectedDelta * 3 + 0.1) -- Threshold: 3x expected + 0.1s buffer
-			lastPlaybackTime = currentPlaybackTime
-
-			-- Find Frames (optimized with binary search + caching)
-			local frameIdx = FindFrameIndex(currentFrameData, currentPlaybackTime, lastFrameIndex)
-			lastFrameIndex = frameIdx
-			local fA, fB = currentFrameData[frameIdx], currentFrameData[frameIdx + 1]
+			-- Find Frames
+			local fA, fB
+			for i = 1, #currentFrameData - 1 do
+				if
+					currentFrameData[i].t <= currentPlaybackTime
+					and currentFrameData[i + 1].t >= currentPlaybackTime
+				then
+					fA = currentFrameData[i]
+					fB = currentFrameData[i + 1]
+					break
+				end
+			end
 
 			if fA and fB then
-				local deltaT = fB.t - fA.t
-				local alpha = 0
-				if deltaT > 0.0001 then
-					alpha = (currentPlaybackTime - fA.t) / deltaT
-				end
-
 				-- 1. Apply Velocity / Position
 				-- Check current state
 				local isCurrentlyClimbing = false
@@ -1515,41 +2180,64 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					isCurrentlySwimming = (stName == "Swimming")
 				end
 
+				-- Sync WalkSpeed
+				if isCurrentlyClimbing then
+					-- CLIMBING FIX: Set WalkSpeed to match actual velocity magnitude.
+					-- This forces the animation speed ratio (Velocity / WalkSpeed) to be ~1.0,
+					-- preventing the "slow motion" leg effect caused by high WalkSpeeds.
+					local velMag = 0
+					if fA.vel then
+						velMag = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z).Magnitude
+					end
+					h.WalkSpeed = math.max(velMag, 5) -- Min 5 to avoid stuck animation
+
+					-- Ensure state is climbing
+					if h:GetState() ~= Enum.HumanoidStateType.Climbing then
+						h:ChangeState(Enum.HumanoidStateType.Climbing)
+					end
+				elseif fA.ws then
+					h.WalkSpeed = fA.ws
+				end
+
+				local deltaT = fB.t - fA.t
+				local alpha = 0
+				if deltaT > 0.0001 then
+					alpha = (currentPlaybackTime - fA.t) / deltaT
+				end
+
 				if isCurrentlyClimbing or isCurrentlySwimming then
-					-- Climbing/Swimming: Use position + velocity for animation
+					-- Climbing/Swimming: Use direct position (more accurate)
 					local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
 						:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
 					local targetYaw = fA.rot
-					
-					-- Set position to keep character on ladder
 					if type(targetYaw) == "number" then
 						r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(targetYaw), 0)
 					else
 						r.CFrame = CFrame.new(targetPos) * r.CFrame.Rotation
 					end
-					
-					-- Set velocity for animation trigger (use recorded velocity directly)
+
+					-- Also set velocity for animation trigger (invert if reversing)
 					if fA.vel then
 						local vel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
 						if isReversing then
 							vel = -vel
 						end
-						r.AssemblyLinearVelocity = vel
+						-- Smooth blending for climbing/swimming
+						local currentVel = r.AssemblyLinearVelocity
+						r.AssemblyLinearVelocity = currentVel:Lerp(vel, 0.5)
 					end
 				elseif fA.vel and fB.vel then
-					-- Normal: Interpolate velocity and scale by playback speed
+					-- Normal: Interpolate velocity
 					local vel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
 						:Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
-					vel = vel * playbackSpeed -- Scale velocity by playback speed
 					-- Invert velocity when reversing for smooth backward motion
 					if isReversing then
 						vel = -vel
 					end
 
-					-- Smooth velocity blending - increase blend factor at higher speeds
+					-- Smooth velocity blending to prevent jerky motion
 					local currentVel = r.AssemblyLinearVelocity
-					local baseBlend = isReversing and 0.4 or 0.6
-					local blendFactor = math.clamp(baseBlend * playbackSpeed, 0.3, 0.95) -- Scale with speed, cap at 0.95
+					local blendFactor = isReversing and 0.4 or 0.6
 
 					-- Check if in air state - use position-based for smooth jump like recording
 					local stName = fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
@@ -1558,60 +2246,42 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						-- Follow recorded position for smooth jump arc (like recording)
 						local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
 							:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
-						-- On time jump or high speed, snap directly to target position
-						if isTimeJump or playbackSpeed >= 2 then
-							r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
-							r.AssemblyLinearVelocity = vel
-						else
-							-- Smoothly move to target position
-							local currentPos = r.Position
-							local posBlend = math.clamp(0.5 * playbackSpeed, 0.3, 0.9)
-							local newPos = currentPos:Lerp(targetPos, posBlend)
-							r.CFrame = CFrame.new(newPos) * r.CFrame.Rotation
+						-- Smoothly move to target position
+						local currentPos = r.Position
+						local newPos = currentPos:Lerp(targetPos, 0.5)
+						r.CFrame = CFrame.new(newPos) * r.CFrame.Rotation
 
-							-- Use RECORDED velocity for animation (not calculated)
-							local recordedVelY = fA.vel and fA.vel.y or 0
-							local horizVel = (targetPos - currentPos) * 10 * playbackSpeed
-							r.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY * playbackSpeed, horizVel.Z)
-						end
+						-- Use RECORDED velocity for animation (not calculated)
+						-- This ensures correct jump/fall animation based on original recording
+						local recordedVelY = fA.vel and fA.vel.y or 0
+						local horizVel = (targetPos - currentPos) * 10
+						-- Keep recorded Y velocity for proper animation trigger
+						r.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY, horizVel.Z)
 					else
-						-- On ground: use velocity-based movement (snap on time jump or high speed)
-						if isTimeJump or playbackSpeed >= 2 then
-							r.AssemblyLinearVelocity = vel
-							-- Also snap position to prevent drift at high speeds
-							if fA.pos then
-								local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
-									:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
-								r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
-							end
-						else
-							r.AssemblyLinearVelocity = currentVel:Lerp(vel, blendFactor)
-						end
+						-- On ground: use velocity-based movement
+						r.AssemblyLinearVelocity = currentVel:Lerp(vel, blendFactor)
 					end
 				end
 
 				-- 2. Apply Rotation - DISABLED to allow user control
 				-- We remove the forced AlignOrientation so the user can look around or let AutoRotate handle it
-				-- PERFORMANCE: Use cached AO reference instead of FindFirstChild every frame
-				if cachedAO then
-					cachedAO.Enabled = false
+				local ao = r:FindFirstChild("PlaybackAO")
+				if ao then
+					ao:Destroy()
 				end
 
 				-- 3. Apply Move Direction (Smart Rotation)
-				-- PERFORMANCE: Use cached UserInputService and throttle key check
 				local isUserMoving = false
-				if frameCounter % 2 == 0 then -- Check keys every 2 frames instead of every frame
-					local keys = cachedUserInputService:GetKeysPressed()
-					for _, k in pairs(keys) do
-						if
-							k.KeyCode == Enum.KeyCode.W
-							or k.KeyCode == Enum.KeyCode.A
-							or k.KeyCode == Enum.KeyCode.S
-							or k.KeyCode == Enum.KeyCode.D
-						then
-							isUserMoving = true
-							break
-						end
+				local keys = game:GetService("UserInputService"):GetKeysPressed()
+				for _, k in pairs(keys) do
+					if
+						k.KeyCode == Enum.KeyCode.W
+						or k.KeyCode == Enum.KeyCode.A
+						or k.KeyCode == Enum.KeyCode.S
+						or k.KeyCode == Enum.KeyCode.D
+					then
+						isUserMoving = true
+						break
 					end
 				end
 
@@ -1624,35 +2294,35 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					end
 				end
 
-				-- PERFORMANCE: Use cached att instead of FindFirstChild every frame
+				local ao = r:FindFirstChild("PlaybackAO")
+				local att = r:FindFirstChild("PlaybackAtt") or Instance.new("Attachment", r)
+				att.Name = "PlaybackAtt"
 
 				if isUserMoving then
 					-- User Input: Free Control
-					if cachedAO then
-						cachedAO.Enabled = false
+					if ao then
+						ao:Destroy()
 					end
 					h.AutoRotate = true
 				elseif isClimbingOrSwimming then
 					-- Climbing/Swimming: Rotation already handled in position section
-					if cachedAO then
-						cachedAO.Enabled = false
+					if ao then
+						ao:Destroy()
 					end
 					h.AutoRotate = false
 				else
 					-- Idle/Playback: Use recorded rotation
 					h.AutoRotate = false -- Disable default to prevent fighting
 
-					-- PERFORMANCE: Reuse cached AO instead of creating new one
-					if not cachedAO or not cachedAO.Parent then
-						cachedAO = Instance.new("AlignOrientation", r)
-						cachedAO.Name = "PlaybackAO"
-						cachedAO.Mode = Enum.OrientationAlignmentMode.OneAttachment
-						cachedAO.Attachment0 = cachedAtt
-						cachedAO.RigidityEnabled = false
-						cachedAO.MaxTorque = 1000000
+					if not ao then
+						ao = Instance.new("AlignOrientation", r)
+						ao.Name = "PlaybackAO"
+						ao.Mode = Enum.OrientationAlignmentMode.OneAttachment
+						ao.Attachment0 = att
+						ao.RigidityEnabled = false
+						ao.MaxTorque = 1000000
+						ao.Responsiveness = isReversing and 50 or 80 -- Smoother for reverse
 					end
-					cachedAO.Enabled = true
-					cachedAO.Responsiveness = isReversing and 50 or 80 -- Smoother for reverse
 
 					-- Determine look direction based on shiftlock or recorded charLook
 					local lookDir = Vector3.new(0, 0, -1) -- Default
@@ -1692,16 +2362,11 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						lookDir = Vector3.new(0, 0, -1)
 					end
 
-					-- Handle look direction based on mode
-					-- Moonwalk inverts look, Reverse keeps original. If both, they cancel out.
-					if isMoonwalk and not isReversing then
-						lookDir = -lookDir -- Invert direction for Moonwalk only
-					elseif isReversing and not isMoonwalk then
-						-- Reverse only: Keep original look direction (walks backward)
-						-- lookDir stays as is
+					-- Keep original look direction for reverse (character faces same way, walks backward)
+					if isMoonwalk then
+						lookDir = -lookDir -- Invert direction for Moonwalk
 					end
-					-- If both moonwalk and reverse: they cancel out, keep original direction
-					cachedAO.CFrame = CFrame.lookAt(Vector3.zero, lookDir)
+					ao.CFrame = CFrame.lookAt(Vector3.zero, lookDir)
 
 					-- Trigger Animation based on velocity (inverted for reverse = backward walking)
 					local velDir = Vector3.new(0, 0, 0)
@@ -1745,37 +2410,29 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						-- REVERSE PLAYBACK: Swap animation states for rewind effect
 						-- Use simplified state handling to prevent jittery animations
 						if isReversing then
-							-- REVERSE PLAYBACK: Use velocity Y to determine correct air state (inverted)
-							-- When rewinding: recorded jump (velY > 0) = now falling, recorded fall (velY < 0) = now jumping
+							-- For reverse: just maintain air state based on whether we're in air or not
+							-- Don't constantly swap between Jump/Freefall to prevent jitter
 							local isInAir = (
 								stateEnum == Enum.HumanoidStateType.Jumping
 								or stateEnum == Enum.HumanoidStateType.Freefall
 							)
+							local isCurrentlyInAir = (
+								currentState == Enum.HumanoidStateType.Jumping
+								or currentState == Enum.HumanoidStateType.Freefall
+							)
 
 							if isInAir then
-								-- Use velocity Y to determine animation (INVERTED for reverse)
-								local velY = fA.vel and fA.vel.y or 0
-								-- Invert logic: positive velY in recording = freefall in reverse, negative = jump
-								local targetState = velY > 0 and "fall" or "jump"
-
-								-- For spam jumps: Force state change if velocity is significant (bypass lastAirState check)
-								local forceStateChange = math.abs(velY) > 8
-
-								-- Change state if different OR if velocity is significant (spam jump detection)
-								if targetState ~= lastAirState or forceStateChange then
-									lastAirState = targetState
-									if targetState == "jump" then
-										h:ChangeState(Enum.HumanoidStateType.Jumping)
-									else
-										h:ChangeState(Enum.HumanoidStateType.Freefall)
-									end
+								-- Keep in air state, don't switch between jump/freefall constantly
+								if not isCurrentlyInAir then
+									h:ChangeState(Enum.HumanoidStateType.Freefall)
 								end
+								-- Don't change state if already in air - prevents jitter
 							elseif stateEnum == Enum.HumanoidStateType.Landed then
-								-- Was landing, now taking off - trigger jump (ALWAYS trigger for spam jumps)
-								lastAirState = nil -- Reset to allow next jump
-								h:ChangeState(Enum.HumanoidStateType.Jumping)
+								-- Was landing, now taking off - one time jump trigger
+								if currentState ~= Enum.HumanoidStateType.Jumping then
+									h:ChangeState(Enum.HumanoidStateType.Jumping)
+								end
 							elseif stateEnum == Enum.HumanoidStateType.Running then
-								lastAirState = nil
 								if currentState ~= Enum.HumanoidStateType.Running then
 									h:ChangeState(Enum.HumanoidStateType.Running)
 								end
@@ -1784,9 +2441,10 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 									h:ChangeState(Enum.HumanoidStateType.Climbing)
 								end
 								if fA.vel then
-									-- Invert climbing velocity for reverse, scale by playbackSpeed
-									local climbVel = Vector3.new(-fA.vel.x, -fA.vel.y, -fA.vel.z) * playbackSpeed
-									r.AssemblyLinearVelocity = climbVel
+									-- Invert climbing velocity for reverse
+									local climbVel = Vector3.new(-fA.vel.x, -fA.vel.y, -fA.vel.z)
+									local currentVel = r.AssemblyLinearVelocity
+									r.AssemblyLinearVelocity = currentVel:Lerp(climbVel, 0.3)
 								end
 							elseif stateEnum == Enum.HumanoidStateType.Swimming then
 								if currentState ~= Enum.HumanoidStateType.Swimming then
@@ -1843,8 +2501,8 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 							then
 								-- Maintain climbing: Apply full recorded velocity (not dampened)
 								if fA.vel then
-									-- Use full velocity for climbing, scaled by playbackSpeed
-									local climbVel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z) * playbackSpeed
+									-- Use full velocity for climbing (no lerp dampening)
+									local climbVel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
 									r.AssemblyLinearVelocity = climbVel
 								end
 							elseif
@@ -1881,31 +2539,6 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						local dir = (targetPos - r.Position).Unit
 						local correction = dir * (dist * 2) -- Proportional correction
 						r.AssemblyLinearVelocity = r.AssemblyLinearVelocity + correction
-					end
-				end
-
-				-- 6. TOOL HANDLING: Equip/Unequip tools based on recorded data
-				if frameCounter % 3 == 0 then -- Throttle to every 3 frames for performance
-					local recordedTool = fA.tool
-					local currentTool = c:FindFirstChildOfClass("Tool")
-					local currentToolName = currentTool and currentTool.Name or nil
-
-					if recordedTool ~= currentToolName then
-						if recordedTool then
-							-- Need to equip a tool
-							local backpack = LocalPlayer:FindFirstChild("Backpack")
-							if backpack then
-								local toolToEquip = backpack:FindFirstChild(recordedTool)
-								if toolToEquip and toolToEquip:IsA("Tool") then
-									h:EquipTool(toolToEquip)
-								end
-							end
-						else
-							-- Need to unequip current tool
-							if currentTool then
-								h:UnequipTools()
-							end
-						end
 					end
 				end
 			end
@@ -1949,21 +2582,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		local groundSnapOffset = 0
 		local groundSnapCalculated = false
 
-		-- PERFORMANCE: Pre-cache variables for playback loop
-		local strictFrameCounter = 0
-		local cachedRayParams = RaycastParams.new()
-		cachedRayParams.FilterType = Enum.RaycastFilterType.Exclude
-		local filterList = { c }
-		if PathContainer then
-			table.insert(filterList, PathContainer)
-		end
-		cachedRayParams.FilterDescendantsInstances = filterList
-		cachedRayParams.IgnoreWater = true
-		local cachedGroundY = nil -- Cache ground Y position
-		local cachedLastStrictState = nil -- Cache humanoid state
-
 		Connections.Playback = RunService.Stepped:Connect(function(_, dt)
-			strictFrameCounter = strictFrameCounter + 1
 			if not isPlaying or isPlayPaused then
 				return
 			end
@@ -1972,28 +2591,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 			if isReversing then
 				currentPlaybackTime = currentPlaybackTime - (dt * playbackSpeed)
 				if currentPlaybackTime <= 0 then
-					if isRespawnOnEnd then
-						local savedFile = currentPlaybackFile
-						local savedLoop = isLooping
-						StopPlayback()
-						ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
-						task.wait(5)
-						local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-						if h then
-							h.Health = 0
-						end
-						if savedLoop then
-							task.spawn(function()
-								LocalPlayer.CharacterAdded:Wait()
-								ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
-								task.wait(5)
-								if savedFile and UIHandlers.PlayMergerRecording then
-									UIHandlers.PlayMergerRecording(savedFile, true)
-								end
-							end)
-						end
-						return
-					elseif isLooping then
+					if isLooping then
 						currentPlaybackTime = currentTotalDuration
 					else
 						StopPlayback()
@@ -2003,28 +2601,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 			else
 				currentPlaybackTime = currentPlaybackTime + (dt * playbackSpeed)
 				if currentPlaybackTime >= currentTotalDuration then
-					if isRespawnOnEnd then
-						local savedFile = currentPlaybackFile
-						local savedLoop = isLooping
-						StopPlayback()
-						ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
-						task.wait(5)
-						local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-						if h then
-							h.Health = 0
-						end
-						if savedLoop then
-							task.spawn(function()
-								LocalPlayer.CharacterAdded:Wait()
-								ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
-								task.wait(5)
-								if savedFile and UIHandlers.PlayMergerRecording then
-									UIHandlers.PlayMergerRecording(savedFile, true)
-								end
-							end)
-						end
-						return
-					elseif isLooping then
+					if isLooping then
 						currentPlaybackTime = 0
 					else
 						StopPlayback()
@@ -2033,16 +2610,17 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				end
 			end
 
-			-- DETECT TIME JUMP (slider seeking) - skip blending if user jumped to different time
-			local expectedDelta = dt * playbackSpeed
-			local actualDelta = math.abs(currentPlaybackTime - lastPlaybackTime)
-			local isTimeJump = actualDelta > (expectedDelta * 3 + 0.1)
-			lastPlaybackTime = currentPlaybackTime
-
-			-- Find Frames (optimized with binary search + caching)
-			local frameIdx = FindFrameIndex(currentFrameData, currentPlaybackTime, lastFrameIndex)
-			lastFrameIndex = frameIdx
-			local fA, fB = currentFrameData[frameIdx], currentFrameData[frameIdx + 1]
+			local fA, fB
+			for i = 1, #currentFrameData - 1 do
+				if
+					currentFrameData[i].t <= currentPlaybackTime
+					and currentFrameData[i + 1].t >= currentPlaybackTime
+				then
+					fA = currentFrameData[i]
+					fB = currentFrameData[i + 1]
+					break
+				end
+			end
 
 			if fA and fB then
 				local deltaT = fB.t - fA.t
@@ -2086,19 +2664,20 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						finalPosition =
 							Vector3.new(finalPosition.X, finalPosition.Y + groundSnapOffset, finalPosition.Z)
 					else
-						-- PERFORMANCE: Use cached RayParams and throttle raycast to every 5 frames
-						local groundY = cachedGroundY
-						if strictFrameCounter % 5 == 0 or not cachedGroundY then
-							local rayStart = r.Position + Vector3.new(0, 3, 0)
-							local footRay = workspace:Raycast(rayStart, Vector3.new(0, -20, 0), cachedRayParams)
-							if footRay then
-								cachedGroundY = footRay.Position.Y
-								groundY = cachedGroundY
-							end
+						local rayParams = RaycastParams.new()
+						rayParams.FilterType = Enum.RaycastFilterType.Exclude
+						local filterList = { c }
+						if PathContainer then
+							table.insert(filterList, PathContainer)
 						end
+						rayParams.FilterDescendantsInstances = filterList
+						rayParams.IgnoreWater = true
 
-						-- PERFORMANCE: Only process ground snap if we have valid groundY
-						if groundY then
+						local rayStart = r.Position + Vector3.new(0, 3, 0)
+						local footRay = workspace:Raycast(rayStart, Vector3.new(0, -20, 0), rayParams)
+
+						if footRay then
+							local groundY = footRay.Position.Y
 							local hipHeight = h.HipHeight
 							local rootSizeY = r.Size.Y / 2
 
@@ -2155,8 +2734,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 				-- Apply position and rotation (keep original rotation for reverse - walks backward)
 				ap.Position = finalPosition
-				-- Moonwalk inverts rotation, Reverse keeps original. If both, they cancel out.
-				if isMoonwalk and not isReversing then
+				if isMoonwalk then
 					ao.CFrame = targetCF * CFrame.Angles(0, math.pi, 0)
 				else
 					ao.CFrame = targetCF
@@ -2167,46 +2745,40 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					local nextPos = TblToCF(fB.r).Position
 					local prevPos = TblToCF(fA.r).Position
 					local velocity = (nextPos - prevPos) / deltaT
-					velocity = velocity * playbackSpeed -- Scale velocity by playback speed
 
 					-- Invert velocity for reverse playback
 					if isReversing then
 						velocity = -velocity
 					end
 
-					-- Smoother Velocity Application (skip blending on time jump or high speed)
-					if isTimeJump or playbackSpeed >= 2 then
-						-- Snap directly to target velocity on slider seek or high speed
-						r.AssemblyLinearVelocity = velocity
-					else
-						-- Blend current velocity with target velocity to prevent snapping
-						local currentVel = r.AssemblyLinearVelocity
-						local baseBlend = isReversing and 0.35 or 0.5
-						local blendFactor = math.clamp(baseBlend * playbackSpeed, 0.3, 0.95)
+					-- Smoother Velocity Application
+					-- Blend current velocity with target velocity to prevent snapping
+					local currentVel = r.AssemblyLinearVelocity
+					local blendFactor = isReversing and 0.35 or 0.5 -- Smoother blend for reverse
 
-						-- If jumping/falling (high vertical velocity), trust the recording more but keep it smooth
-						if math.abs(velocity.Y) > 5 then
-							blendFactor = math.clamp((isReversing and 0.5 or 0.7) * playbackSpeed, 0.4, 0.95)
-						end
-
-						r.AssemblyLinearVelocity = currentVel:Lerp(velocity, blendFactor)
+					-- If jumping/falling (high vertical velocity), trust the recording more but keep it smooth
+					if math.abs(velocity.Y) > 5 then
+						blendFactor = isReversing and 0.5 or 0.7
 					end
+
+					r.AssemblyLinearVelocity = currentVel:Lerp(velocity, blendFactor)
 
 					-- GROUND CHECK (Raycast)
 					-- Crucial for distinguishing Slopes vs Jumps
-					-- PERFORMANCE: Throttle ground check to every 3 frames, use cached result otherwise
+					local rayParams = RaycastParams.new()
+					rayParams.FilterType = Enum.RaycastFilterType.Exclude
+					rayParams.FilterDescendantsInstances = { c }
+					rayParams.IgnoreWater = true
+
+					-- Increased length to 12 studs to account for steep slopes/micro-floating
+					local rayResult = workspace:Raycast(r.Position, Vector3.new(0, -12, 0), rayParams)
 					local isNearGround = false
 
-					if strictFrameCounter % 3 == 0 then
-						-- Increased length to 12 studs to account for steep slopes/micro-floating
-						local rayResult = workspace:Raycast(r.Position, Vector3.new(0, -12, 0), cachedRayParams)
-
-						if rayResult then
-							local distToGround = (r.Position - rayResult.Position).Magnitude
-							-- Relaxed threshold: If ground is within 8 studs, consider it walkable/slope
-							if distToGround < 8.0 then
-								isNearGround = true
-							end
+					if rayResult then
+						local distToGround = (r.Position - rayResult.Position).Magnitude
+						-- Relaxed threshold: If ground is within 8 studs, consider it walkable/slope
+						if distToGround < 8.0 then
+							isNearGround = true
 						end
 					end
 
@@ -2237,7 +2809,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					-- For reverse: check absolute velocity since direction is inverted
 					local climbVelY = isReversing and -velocity.Y or velocity.Y
 					if climbVelY > 3.0 then
-						local hitResult = workspace:Raycast(r.Position, r.CFrame.LookVector * 2, cachedRayParams)
+						local hitResult = workspace:Raycast(r.Position, r.CFrame.LookVector * 2, rayParams)
 						if hitResult and hitResult.Instance.CanCollide then
 							-- Stricter climb detection: High angle or Truss
 							if hitResult.Instance:IsA("TrussPart") or (climbVelY > horizSpeed * 2.0) then
@@ -2254,12 +2826,10 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						-- Dynamic Threshold: Slopes generate vertical velocity, so we raise the bar.
 						local jumpThreshold = math.max(10, 8.0 + (horizSpeed * 0.5))
 
-						-- PERFORMANCE: Cache state once instead of calling GetState multiple times
-						local currentState = h:GetState()
-						local currentStateName = currentState.Name
-
 						-- ZOOM EFFECT for Strict mode
 						if isZoomPunch then
+							local currentState = h:GetState()
+							local currentStateName = currentState.Name
 							if currentStateName == "Jumping" then
 								SetZoomState("jump") -- Zoom OUT
 							elseif currentStateName == "Freefall" then
@@ -2270,33 +2840,20 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						end
 
 						if isReversing then
-							-- REVERSE: Use inverted velocity for proper animation
-							-- velocity.Y is already inverted, so positive = going up (jump), negative = going down (fall)
+							-- REVERSE: Simplified state handling to prevent jitter
+							-- Just maintain air state, don't constantly swap between Jump/Freefall
+							local currentState = h:GetState()
+							local isCurrentlyInAir = (
+								currentState == Enum.HumanoidStateType.Jumping
+								or currentState == Enum.HumanoidStateType.Freefall
+							)
+
 							if not isNearGround then
-								-- Lower threshold (3) for better spam jump detection
-								if velocity.Y > 3 then
-									-- Going up visually = Jumping (ALWAYS change state for spam jumps)
-									h:ChangeState(Enum.HumanoidStateType.Jumping)
-								elseif velocity.Y < -3 then
-									-- Going down visually = Freefall
+								-- In air - just maintain freefall state, don't switch constantly
+								if not isCurrentlyInAir then
 									h:ChangeState(Enum.HumanoidStateType.Freefall)
-								else
-									-- Near apex, maintain jump state
-									if
-										currentState ~= Enum.HumanoidStateType.Freefall
-										and currentState ~= Enum.HumanoidStateType.Jumping
-									then
-										h:ChangeState(Enum.HumanoidStateType.Jumping)
-									end
 								end
-							else
-								-- On ground during reverse - reset to running
-								if
-									currentState == Enum.HumanoidStateType.Jumping
-									or currentState == Enum.HumanoidStateType.Freefall
-								then
-									h:ChangeState(Enum.HumanoidStateType.Running)
-								end
+								-- Don't change between jump/freefall - prevents jitter
 							end
 						else
 							-- NORMAL: Original logic
@@ -2308,6 +2865,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 							-- 2. Jump Apex (The "Floaty" Part)
 							-- If we are in the air (confirmed by !isNearGround) and velocity is small
 							elseif not isNearGround and math.abs(velocity.Y) <= 5 then
+								local currentState = h:GetState()
 								if currentState == Enum.HumanoidStateType.Freefall then
 									-- Do nothing
 								else
@@ -2341,36 +2899,19 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 							local m = jm[n]
 							if m then
 								local target = TblToCF(dA):Lerp(TblToCF(dB), alpha)
-								if isStrictRetarget then
-									m.Transform = target.Rotation
+
+								-- ADAPTIVE SCALING (Universal Strict Mode)
+								-- Scales limb translation based on HipHeight ratio to fit different avatars
+								local recHH = fA.hh or h.HipHeight -- Default to current if missing (legacy support)
+								local curHH = h.HipHeight
+								local scale = (recHH > 0) and (curHH / recHH) or 1
+
+								if math.abs(scale - 1) > 0.01 then
+									-- Apply scaling to translation component only
+									m.Transform = CFrame.new(target.Position * scale) * target.Rotation
 								else
 									m.Transform = target
 								end
-							end
-						end
-					end
-				end
-
-				-- TOOL HANDLING: Equip/Unequip tools based on recorded data (Strict Mode)
-				if strictFrameCounter % 3 == 0 then -- Throttle to every 3 frames for performance
-					local recordedTool = fA.tool
-					local currentTool = c:FindFirstChildOfClass("Tool")
-					local currentToolName = currentTool and currentTool.Name or nil
-
-					if recordedTool ~= currentToolName then
-						if recordedTool then
-							-- Need to equip a tool
-							local backpack = LocalPlayer:FindFirstChild("Backpack")
-							if backpack then
-								local toolToEquip = backpack:FindFirstChild(recordedTool)
-								if toolToEquip and toolToEquip:IsA("Tool") then
-									h:EquipTool(toolToEquip)
-								end
-							end
-						else
-							-- Need to unequip current tool
-							if currentTool then
-								h:UnequipTools()
 							end
 						end
 					end
@@ -2562,22 +3103,9 @@ ScreenGui.Name = GUI_NAME
 ScreenGui.Parent = CoreGui
 ScreenGui.IgnoreGuiInset = true
 
--- AUTO INPUT SINK: Automatically setup input sink for ALL TextBoxes added to ScreenGui
-ScreenGui.DescendantAdded:Connect(function(descendant)
-	if descendant:IsA("TextBox") then
-		SetupTextBoxInputSink(descendant)
-	end
-end)
--- Also setup for existing TextBoxes (in case some were created before this)
-for _, descendant in pairs(ScreenGui:GetDescendants()) do
-	if descendant:IsA("TextBox") then
-		SetupTextBoxInputSink(descendant)
-	end
-end
-
 Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 550, 0, 380)
-Main.Position = UDim2.new(0.5, -275, 0.5, -190)
+Main.Size = UDim2.new(0, Mobile.MAIN_WIDTH, 0, 380)
+Main.Position = UDim2.new(0.5, -Mobile.MAIN_WIDTH / 2, 0.5, -190)
 Main.BackgroundTransparency = 1
 Main.Active = true
 Main.Visible = false
@@ -2663,7 +3191,7 @@ ResizeHandle.InputBegan:Connect(function(input)
 
 			local currentMouse = UserInputService:GetMouseLocation()
 			local delta = currentMouse - startMouse
-			local minWidth = 550
+			local minWidth = Mobile.IsCompact and 300 or 550
 			local newWidth = math.max(minWidth, startSize.X + delta.X)
 			local newHeight = math.max(380, startSize.Y + delta.Y)
 
@@ -2701,31 +3229,33 @@ MinIcon.Visible = false
 MinIcon.ZIndex = 100
 Instance.new("UICorner", MinIcon).CornerRadius = UDim.new(0, 12)
 
--- MinIcon styling - Wrapped to release locals
-do
-	local MinStroke = Instance.new("UIStroke", MinIcon)
-	MinStroke.Color = C_ACCENT
-	MinStroke.Thickness = 2
+local MinStroke = Instance.new("UIStroke", MinIcon)
+MinStroke.Color = C_ACCENT
+MinStroke.Thickness = 2
+MinStroke.Transparency = 0
 
-	local MinLogo = Instance.new("ImageLabel", MinIcon)
-	MinLogo.Name = "Logo"
-	MinLogo.Size = UDim2.new(1, -8, 1, -8)
-	MinLogo.Position = UDim2.new(0, 4, 0, 4)
-	MinLogo.BackgroundTransparency = 1
-	MinLogo.Image = "rbxassetid://127464700829848"
-	MinLogo.ScaleType = Enum.ScaleType.Fit
-	MinLogo.ZIndex = 101
+-- Logo Image (ganti asset ID setelah approved)
+local LOGO_ASSET_ID = "127464700829848" -- Ganti dengan asset ID yang valid
+local MinLogo = Instance.new("ImageLabel", MinIcon)
+MinLogo.Name = "Logo"
+MinLogo.Size = UDim2.new(1, -8, 1, -8)
+MinLogo.Position = UDim2.new(0, 4, 0, 4)
+MinLogo.BackgroundTransparency = 1
+MinLogo.Image = "rbxassetid://" .. LOGO_ASSET_ID
+MinLogo.ScaleType = Enum.ScaleType.Fit
+MinLogo.ZIndex = 101
+MinLogo.ImageTransparency = 0
 
-	local MinText = Instance.new("TextLabel", MinIcon)
-	MinText.Name = "FallbackText"
-	MinText.Size = UDim2.new(1, 0, 1, 0)
-	MinText.BackgroundTransparency = 1
-	MinText.Text = "S"
-	MinText.TextColor3 = C_ACCENT
-	MinText.Font = Enum.Font.GothamBlack
-	MinText.TextSize = 28
-	MinText.ZIndex = 100
-end
+-- Fallback text jika image tidak load
+local MinText = Instance.new("TextLabel", MinIcon)
+MinText.Name = "FallbackText"
+MinText.Size = UDim2.new(1, 0, 1, 0)
+MinText.BackgroundTransparency = 1
+MinText.Text = "S"
+MinText.TextColor3 = C_ACCENT
+MinText.Font = Enum.Font.GothamBlack
+MinText.TextSize = 28
+MinText.ZIndex = 100
 
 -- Draggable MinIcon
 UIHandlers.DragMin = { dragging = false, dragInput = nil, dragStart = nil, startPos = nil, hasDragged = false }
@@ -2811,7 +3341,7 @@ local function ToggleMin()
 end
 
 local ToggleMinConnection
-local topBtnSize = 40
+local topBtnSize = Mobile.IsCompact and Mobile.TOUCH_MIN_SIZE or 40
 local CloseBtn = Instance.new("TextButton", TopBar)
 CloseBtn.Text = "×"
 CloseBtn.Size = UDim2.new(0, topBtnSize, 1, 0)
@@ -2827,9 +3357,6 @@ CloseBtn.MouseButton1Click:Connect(function()
 		end
 		if ToggleMinConnection then
 			ToggleMinConnection:Disconnect()
-		end
-		if UIHandlers.CleanupSpeedDisplay then
-			UIHandlers.CleanupSpeedDisplay()
 		end
 		ScreenGui:Destroy()
 	end)
@@ -2850,7 +3377,7 @@ local StatsContainer = Instance.new("Frame", TopBar)
 StatsContainer.Size = UDim2.new(0, 300, 1, 0)
 StatsContainer.Position = UDim2.new(1, -380, 0, 0) -- Left of buttons
 StatsContainer.BackgroundTransparency = 1
-StatsContainer.Visible = true
+StatsContainer.Visible = not Mobile.IsCompact -- Hide on mobile
 
 local UIListStats = Instance.new("UIListLayout", StatsContainer)
 UIListStats.FillDirection = Enum.FillDirection.Horizontal
@@ -2873,7 +3400,9 @@ end
 UIHandlers.TopStats = {
 	FpsLbl = CreateTopStat("FPS", "⚡"),
 	PingLbl = CreateTopStat("Ping", "📶"),
+	SessLbl = CreateTopStat("Sess", "⏱️"),
 	KeyLbl = CreateTopStat("Key", "🔑"),
+	SessionStart = os.time(),
 	frameCount = 0,
 	lastFpsTime = os.clock(),
 }
@@ -2898,33 +3427,10 @@ task.spawn(function()
 		end)
 		TS.PingLbl.Text = string.format("📶 %dms", ping)
 		TS.PingLbl.TextColor3 = (ping > 200) and C_RED or C_GREEN
-
-		-- Update Key Duration from Global Session Data
-		local durationText = "N/A"
-		if getgenv().StarshipSession then
-			local sess = getgenv().StarshipSession
-			if sess.Expiry and type(sess.Expiry) == "number" then
-				local remaining = sess.Expiry - os.time()
-				if remaining > 0 then
-					local days = math.floor(remaining / 86400)
-					local hours = math.floor((remaining % 86400) / 3600)
-					local mins = math.floor((remaining % 3600) / 60)
-					local secs = remaining % 60
-
-					if days > 0 then
-						durationText = string.format("%dd %02dh %02dm", days, hours, mins)
-					else
-						durationText = string.format("%02dh %02dm %02ds", hours, mins, secs)
-					end
-				else
-					durationText = "EXPIRED"
-				end
-			else
-				durationText = sess.Duration or "LIFETIME"
-			end
-		end
-
-		TS.KeyLbl.Text = "🔑 " .. durationText
+		local diff = os.time() - TS.SessionStart
+		TS.SessLbl.Text =
+			string.format("⏱️ %02d:%02d:%02d", math.floor(diff / 3600), math.floor((diff % 3600) / 60), diff % 60)
+		TS.KeyLbl.Text = "🔑 " .. (GlobalKeyDuration or "N/A")
 		TS.KeyLbl.TextColor3 = C_ACCENT
 		task.wait(1)
 	end
@@ -2968,7 +3474,7 @@ end)
 
 -- SIDEBAR
 local Sidebar = Instance.new("Frame", Main)
-Sidebar.Size = UDim2.new(0, 130, 1, -40)
+Sidebar.Size = UDim2.new(0, Mobile.SIDEBAR_WIDTH, 1, -40)
 Sidebar.Position = UDim2.new(0, 0, 0, 40)
 Sidebar.BackgroundColor3 = C_SIDE
 Sidebar.BorderSizePixel = 0
@@ -2976,30 +3482,61 @@ local SidebarCorner = Instance.new("UICorner", Sidebar)
 SidebarCorner.CornerRadius = UDim.new(0, 0) -- Flat left side
 RegisterTheme(Sidebar, "BackgroundColor3", "Side")
 
--- Sidebar Toggle Button for Mobile - Wrapped to release locals
+-- Sidebar Toggle Button for Mobile
+local SidebarToggle = nil
+if Mobile.SIDEBAR_COLLAPSED then
+	SidebarToggle = Instance.new("TextButton", Main)
+	SidebarToggle.Name = "SidebarToggle"
+	SidebarToggle.Size = UDim2.new(0, 30, 0, 30)
+	SidebarToggle.Position = UDim2.new(0, Mobile.SIDEBAR_WIDTH + 5, 0, 45)
+	SidebarToggle.BackgroundColor3 = C_ITEM
+	SidebarToggle.Text = "☰"
+	SidebarToggle.TextColor3 = C_TEXT
+	SidebarToggle.TextSize = 16
+	SidebarToggle.Font = Enum.Font.GothamBold
+	SidebarToggle.ZIndex = 10
+	Instance.new("UICorner", SidebarToggle).CornerRadius = UDim.new(0, 6)
+	RegisterTheme(SidebarToggle, "BackgroundColor3", "Item")
+	RegisterTheme(SidebarToggle, "TextColor3", "Text")
 
--- Separator Line (Gradient Fade) - Wrapped
-do
-	local SidebarStroke = Instance.new("Frame", Sidebar)
-	SidebarStroke.Size = UDim2.new(0, 1, 1, 0)
-	SidebarStroke.Position = UDim2.new(1, 0, 0, 0)
-	SidebarStroke.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	SidebarStroke.BorderSizePixel = 0
-	SidebarStroke.ZIndex = 2
+	local sidebarExpanded = false
+	SidebarToggle.MouseButton1Click:Connect(function()
+		sidebarExpanded = not sidebarExpanded
+		local targetWidth = sidebarExpanded and 130 or 50
+		TweenService
+			:Create(Sidebar, TweenInfo.new(0.3, Enum.EasingStyle.Quad), { Size = UDim2.new(0, targetWidth, 1, -40) })
+			:Play()
+		SidebarToggle.Text = sidebarExpanded and "✕" or "☰"
 
-	local SidebarGradient = Instance.new("UIGradient", SidebarStroke)
-	SidebarGradient.Rotation = 90
-	SidebarGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, C_MAIN),
-		ColorSequenceKeypoint.new(0.5, C_ACCENT),
-		ColorSequenceKeypoint.new(1, C_MAIN),
-	})
-	SidebarGradient.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.5, 0.5),
-		NumberSequenceKeypoint.new(1, 1),
-	})
+		-- Update content area position
+		local contentOffset = targetWidth + 10
+		TweenService:Create(ContentArea, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
+			Position = UDim2.new(0, contentOffset, 0, 45),
+			Size = UDim2.new(1, -(contentOffset + 10), 1, -55),
+		}):Play()
+	end)
 end
+
+-- Separator Line (Gradient Fade)
+local SidebarStroke = Instance.new("Frame", Sidebar)
+SidebarStroke.Size = UDim2.new(0, 1, 1, 0)
+SidebarStroke.Position = UDim2.new(1, 0, 0, 0)
+SidebarStroke.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+SidebarStroke.BorderSizePixel = 0
+SidebarStroke.ZIndex = 2
+
+local SidebarGradient = Instance.new("UIGradient", SidebarStroke)
+SidebarGradient.Rotation = 90
+SidebarGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, C_MAIN),
+	ColorSequenceKeypoint.new(0.5, C_ACCENT),
+	ColorSequenceKeypoint.new(1, C_MAIN),
+})
+SidebarGradient.Transparency = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 1),
+	NumberSequenceKeypoint.new(0.5, 0.5),
+	NumberSequenceKeypoint.new(1, 1),
+})
 
 -- TABS (Vertical in Sidebar)
 local TabContainer = Instance.new("Frame", Sidebar)
@@ -3012,140 +3549,116 @@ UIListTabs.SortOrder = Enum.SortOrder.LayoutOrder
 UIListTabs.Padding = UDim.new(0, 8)
 UIListTabs.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
--- PROFILE SECTION (Restored & Polished) - Wrapped to release locals
-do
-	local ProfileFrame = Instance.new("Frame", Sidebar)
-	ProfileFrame.Size = UDim2.new(1, 0, 0, 55)
-	ProfileFrame.Position = UDim2.new(0, 0, 1, -55)
-	ProfileFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-	ProfileFrame.BorderSizePixel = 0
-	RegisterTheme(ProfileFrame, "BackgroundColor3", "Side")
+-- PROFILE SECTION (Restored & Polished)
+local ProfileFrame = Instance.new("Frame", Sidebar)
+ProfileFrame.Size = Mobile.SIDEBAR_COLLAPSED and UDim2.new(1, 0, 0, 50) or UDim2.new(1, 0, 0, 55)
+ProfileFrame.Position = Mobile.SIDEBAR_COLLAPSED and UDim2.new(0, 0, 1, -50) or UDim2.new(0, 0, 1, -55)
+ProfileFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20) -- Slightly darker footer
+ProfileFrame.BorderSizePixel = 0
+RegisterTheme(ProfileFrame, "BackgroundColor3", "Side")
 
-	local ProfileImg = Instance.new("ImageLabel", ProfileFrame)
-	ProfileImg.Size = UDim2.new(0, 32, 0, 32)
-	ProfileImg.Position = UDim2.new(0, 10, 0.5, -16)
-	ProfileImg.BackgroundColor3 = C_ITEM
-	Instance.new("UICorner", ProfileImg).CornerRadius = UDim.new(1, 0)
-	RegisterTheme(ProfileImg, "BackgroundColor3", "Item")
+local ProfileImg = Instance.new("ImageLabel", ProfileFrame)
+ProfileImg.Size = Mobile.SIDEBAR_COLLAPSED and UDim2.new(0, 30, 0, 30) or UDim2.new(0, 32, 0, 32)
+ProfileImg.Position = Mobile.SIDEBAR_COLLAPSED and UDim2.new(0.5, -15, 0.5, -15) or UDim2.new(0, 10, 0.5, -16)
+ProfileImg.BackgroundColor3 = C_ITEM
+Instance.new("UICorner", ProfileImg).CornerRadius = UDim.new(1, 0) -- Circle
+RegisterTheme(ProfileImg, "BackgroundColor3", "Item")
 
-	task.spawn(function()
-		local p = game:GetService("Players")
-		local u = LocalPlayer.UserId
-		local content = p:GetUserThumbnailAsync(u, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
-		if content then
-			ProfileImg.Image = content
-		else
-			local content2 = p:GetUserThumbnailAsync(u, Enum.ThumbnailType.AvatarBust, Enum.ThumbnailSize.Size420x420)
-			if content2 then
-				ProfileImg.Image = content2
-			end
+-- Fetch Avatar
+task.spawn(function()
+	local p = game:GetService("Players")
+	local u = LocalPlayer.UserId
+	-- Try HeadShot first (High Res)
+	local content, isReady = p:GetUserThumbnailAsync(u, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
+	if content then
+		ProfileImg.Image = content
+	else
+		-- Fallback to standard bust if headshot fails
+		local content2, isReady2 =
+			p:GetUserThumbnailAsync(u, Enum.ThumbnailType.AvatarBust, Enum.ThumbnailSize.Size420x420)
+		if content2 then
+			ProfileImg.Image = content2
 		end
-	end)
+	end
+end)
 
-	local ProfileName = Instance.new("TextLabel", ProfileFrame)
-	ProfileName.Text = string.upper(LocalPlayer.Name)
-	ProfileName.Size = UDim2.new(1, -55, 0, 16)
-	ProfileName.Position = UDim2.new(0, 50, 0.5, -10)
-	ProfileName.BackgroundTransparency = 1
-	ProfileName.TextColor3 = C_TEXT
-	ProfileName.Font = Enum.Font.GothamBold
-	ProfileName.TextSize = 11
-	ProfileName.TextXAlignment = Enum.TextXAlignment.Left
-	ProfileName.TextTruncate = Enum.TextTruncate.AtEnd
-	ProfileName.Visible = true
-	RegisterTheme(ProfileName, "TextColor3", "Text")
+local ProfileName = Instance.new("TextLabel", ProfileFrame)
+ProfileName.Text = string.upper(LocalPlayer.Name)
+ProfileName.Size = UDim2.new(1, -55, 0, 16)
+ProfileName.Position = UDim2.new(0, 50, 0.5, -10)
+ProfileName.BackgroundTransparency = 1
+ProfileName.TextColor3 = C_TEXT
+ProfileName.Font = Enum.Font.GothamBold
+ProfileName.TextSize = 11
+ProfileName.TextXAlignment = Enum.TextXAlignment.Left
+ProfileName.TextTruncate = Enum.TextTruncate.AtEnd
+ProfileName.Visible = not Mobile.SIDEBAR_COLLAPSED
+RegisterTheme(ProfileName, "TextColor3", "Text")
 
-	local ProfileRank = Instance.new("TextLabel", ProfileFrame)
-	ProfileRank.Size = UDim2.new(1, -55, 0, 14)
-	ProfileRank.Position = UDim2.new(0, 50, 0.5, 6)
-	ProfileRank.BackgroundTransparency = 1
-	ProfileRank.Font = Enum.Font.GothamMedium
-	ProfileRank.TextSize = 9
-	ProfileRank.TextXAlignment = Enum.TextXAlignment.Left
-	ProfileRank.Visible = true
+local ProfileRank = Instance.new("TextLabel", ProfileFrame)
+ProfileRank.Size = UDim2.new(1, -55, 0, 14)
+ProfileRank.Position = UDim2.new(0, 50, 0.5, 6)
+ProfileRank.BackgroundTransparency = 1
+ProfileRank.Font = Enum.Font.GothamMedium
+ProfileRank.TextSize = 9
+ProfileRank.TextXAlignment = Enum.TextXAlignment.Left
+ProfileRank.Visible = not Mobile.SIDEBAR_COLLAPSED
 
-	-- Fetch rank from Pastebin (same as nametag system)
-	ProfileRank.Text = "LOADING..."
-	ProfileRank.TextColor3 = C_TEXT_DIM
-
-	task.spawn(function()
-		local isOwner = false
-		local rankText = "VIP USER"
-
-		-- Check from Pastebin
-		pcall(function()
-			local response = game:HttpGet("https://pastebin.com/raw/yWZRVAt3")
-			local data = game:GetService("HttpService"):JSONDecode(response)
-			local userIdStr = tostring(LocalPlayer.UserId)
-
-			if data[userIdStr] then
-				local userType = data[userIdStr].Type or data[userIdStr].type
-				if userType and (userType:lower() == "owner" or userType:lower() == "developer") then
-					isOwner = true
-					rankText = data[userIdStr].Rank or data[userIdStr].rank or "OWNER"
-				else
-					rankText = data[userIdStr].Rank or data[userIdStr].rank or "VIP USER"
-				end
-			end
-		end)
-
-		-- Fallback: check local key or hardcoded owner ID
-		if not isOwner then
-			local savedKey = isfile("Starship_License.txt") and readfile("Starship_License.txt"):gsub("%s+", "") or ""
-			isOwner = savedKey == "STARSHIP-DEV" or LocalPlayer.UserId == 9268011358
-			if isOwner then
-				rankText = "OWNER"
-			end
-		end
-
-		ProfileRank.Text = rankText
-		if isOwner then
-			local t = 0
-			while ProfileRank and ProfileRank.Parent do
-				t = t + 0.01
-				ProfileRank.TextColor3 = Color3.fromHSV(t % 1, 0.6, 1)
-				task.wait(0.03)
-			end
-		else
-			ProfileRank.TextColor3 = C_YELLOW
-		end
-	end)
-
-	-- Nametag Toggle (Mini Button above profile)
-	local TagToggleMini = Instance.new("TextButton", Sidebar)
-	TagToggleMini.Size = UDim2.new(0.85, 0, 0, 20)
-	TagToggleMini.Position = UDim2.new(0.075, 0, 1, -85)
-	TagToggleMini.BackgroundColor3 = C_ITEM
-	TagToggleMini.Text = "TAGS: ON"
-	TagToggleMini.TextColor3 = C_GREEN
-	TagToggleMini.Font = Enum.Font.GothamBold
-	TagToggleMini.TextSize = 10
-	Instance.new("UICorner", TagToggleMini).CornerRadius = UDim.new(0, 4)
-
-	local miniTagsOn = true
-	TagToggleMini.MouseButton1Click:Connect(function()
-		miniTagsOn = not miniTagsOn
-		TagToggleMini.Text = "TAGS: " .. (miniTagsOn and "ON" or "OFF")
-		TagToggleMini.TextColor3 = miniTagsOn and C_GREEN or C_RED
-		if getgenv().ToggleNametags then
-			getgenv().ToggleNametags(miniTagsOn)
-		end
-	end)
+-- Determine Rank
+local savedKey = ""
+if isfile("Starship_License.txt") then
+	savedKey = readfile("Starship_License.txt")
 end
+
+if savedKey == "STARSHIP-DEV" then
+	ProfileRank.Text = "OWNER"
+	task.spawn(function()
+		local t = 0
+		while ProfileRank and ProfileRank.Parent do
+			t = t + 0.01
+			ProfileRank.TextColor3 = Color3.fromHSV(t % 1, 0.6, 1)
+			task.wait(0.03)
+		end
+	end)
+else
+	ProfileRank.Text = "VIP USER"
+	ProfileRank.TextColor3 = C_YELLOW
+end
+
+-- Nametag Toggle (Mini Button above profile)
+local TagToggleMini = Instance.new("TextButton", Sidebar)
+TagToggleMini.Size = UDim2.new(0.85, 0, 0, 20)
+TagToggleMini.Position = UDim2.new(0.075, 0, 1, -85)
+TagToggleMini.BackgroundColor3 = C_ITEM
+TagToggleMini.Text = "TAGS: ON"
+TagToggleMini.TextColor3 = C_GREEN
+TagToggleMini.Font = Enum.Font.GothamBold
+TagToggleMini.TextSize = 10
+Instance.new("UICorner", TagToggleMini).CornerRadius = UDim.new(0, 4)
+
+local miniTagsOn = true
+TagToggleMini.MouseButton1Click:Connect(function()
+	miniTagsOn = not miniTagsOn
+	TagToggleMini.Text = "TAGS: " .. (miniTagsOn and "ON" or "OFF")
+	TagToggleMini.TextColor3 = miniTagsOn and C_GREEN or C_RED
+	if getgenv().ToggleNametags then
+		getgenv().ToggleNametags(miniTagsOn)
+	end
+end)
 
 -- Adjust Tab Container Height (To account for Profile + Button)
 TabContainer.Size = UDim2.new(1, 0, 1, -95)
 
 -- CONTENT AREA (Adjusted for Padding/Gap)
 local ContentArea = Instance.new("Frame", Main)
-local contentOffset = 130 + 10
+local contentOffset = Mobile.SIDEBAR_WIDTH + 10
 ContentArea.Size = UDim2.new(1, -(contentOffset + 10), 1, -55) -- Sidebar + Gap
 ContentArea.Position = UDim2.new(0, contentOffset, 0, 45) -- Starts after sidebar with gap
 ContentArea.BackgroundTransparency = 1
 
 -- CONFIRMATION MODAL (Re-styled) - Wrapped to save registers
 do
-	local ConfirmOverlay = Instance.new("Frame", ScreenGui)
+	local ConfirmOverlay = Instance.new("Frame", Main)
 	ConfirmOverlay.Name = "ConfirmOverlay"
 	ConfirmOverlay.Size = UDim2.new(1, 0, 1, 0)
 	ConfirmOverlay.Position = UDim2.new(0, 0, 0, 0)
@@ -3366,11 +3879,7 @@ MinIcon.MouseButton1Click:Connect(function()
 	end
 end)
 ToggleMinConnection = UserInputService.InputBegan:Connect(function(input)
-	if
-		not isBinding
-		and not UserInputService:GetFocusedTextBox()
-		and input.KeyCode == Config.Keybinds.ToggleMinimize
-	then
+	if not isBinding and input.KeyCode == Config.Keybinds.ToggleMinimize then
 		ToggleMin()
 	end
 end)
@@ -3450,18 +3959,48 @@ local function SwitchTab(name)
 	end
 end
 
+-- Tab Icons for mobile mode
+local TAB_ICONS = {
+	Dashboard = "📊",
+	Recorder = "⏺",
+	Merger = "🔗",
+	["List Map"] = "📋",
+	Warp = "⚡",
+	Tools = "🔧",
+	Helper = "🛠",
+	Fun = "🎮",
+	Config = "⚙",
+}
+
 local function CreateTab(name, icon, page)
 	local btn = Instance.new("TextButton", TabContainer)
 	btn.Name = name
 	btn.Text = "" -- Using label for better control
 
-	local btnHeight = 35
-	btn.Size = UDim2.new(0.85, 0, 0, btnHeight)
+	-- Mobile: smaller square buttons, Desktop: wider buttons
+	local btnHeight = Mobile.SIDEBAR_COLLAPSED and Mobile.TOUCH_MIN_SIZE or 35
+	btn.Size = Mobile.SIDEBAR_COLLAPSED and UDim2.new(0, Mobile.TOUCH_MIN_SIZE, 0, btnHeight)
+		or UDim2.new(0.85, 0, 0, btnHeight)
 	btn.BackgroundColor3 = C_ACCENT
 	btn.BackgroundTransparency = 1
 	btn.AutoButtonColor = false
 	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 
+	-- Icon for mobile (emoji)
+	local iconLbl = nil
+	if Mobile.SIDEBAR_COLLAPSED then
+		iconLbl = Instance.new("TextLabel", btn)
+		iconLbl.Name = "Icon"
+		iconLbl.Text = TAB_ICONS[name] or "●"
+		iconLbl.Size = UDim2.new(1, 0, 1, 0)
+		iconLbl.BackgroundTransparency = 1
+		iconLbl.TextColor3 = C_TEXT_DIM
+		iconLbl.Font = Enum.Font.GothamBold
+		iconLbl.TextSize = 18
+		RegisterTheme(iconLbl, "TextColor3", "TextDim")
+	end
+
+	-- Label (hidden on mobile collapsed mode)
 	local lbl = Instance.new("TextLabel", btn)
 	lbl.Name = "Title"
 	lbl.Text = string.upper(name)
@@ -3472,7 +4011,7 @@ local function CreateTab(name, icon, page)
 	lbl.Font = Enum.Font.GothamMedium
 	lbl.TextSize = 11
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Visible = true
+	lbl.Visible = not Mobile.SIDEBAR_COLLAPSED
 
 	-- Gradient for Active State
 	local grad = Instance.new("UIGradient", btn)
@@ -3486,7 +4025,7 @@ local function CreateTab(name, icon, page)
 	local ind = Instance.new("Frame", btn)
 	ind.Name = "Indicator"
 	ind.Size = UDim2.new(0, 4, 0, 4)
-	ind.Position = UDim2.new(0, 5, 0.5, -2)
+	ind.Position = Mobile.SIDEBAR_COLLAPSED and UDim2.new(0.5, -2, 1, -6) or UDim2.new(0, 5, 0.5, -2)
 	ind.BackgroundColor3 = C_ACCENT
 	ind.BorderSizePixel = 0
 	ind.BackgroundTransparency = 1 -- Hidden by default
@@ -3511,7 +4050,9 @@ local function CreateTab(name, icon, page)
 			if lbl.Visible then
 				TweenService:Create(lbl, TweenInfo.new(0.2), { TextColor3 = C_TEXT }):Play()
 			end
-
+			if iconLbl then
+				TweenService:Create(iconLbl, TweenInfo.new(0.2), { TextColor3 = C_TEXT }):Play()
+			end
 			TweenService:Create(btn, TweenInfo.new(0.2), { BackgroundTransparency = 0.9 }):Play()
 		end
 	end)
@@ -3520,7 +4061,9 @@ local function CreateTab(name, icon, page)
 			if lbl.Visible then
 				TweenService:Create(lbl, TweenInfo.new(0.2), { TextColor3 = C_TEXT_DIM }):Play()
 			end
-
+			if iconLbl then
+				TweenService:Create(iconLbl, TweenInfo.new(0.2), { TextColor3 = C_TEXT_DIM }):Play()
+			end
 			TweenService:Create(btn, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
 		end
 	end)
@@ -3630,13 +4173,13 @@ end
 
 -- ========================
 
--- Calculate Dynamic UI Height based on Tab Count (wrapped to release locals)
-local TAB_HEIGHT = 45
+-- Calculate Dynamic UI Height based on Tab Count
+local TAB_HEIGHT = Mobile.SIDEBAR_COLLAPSED and (Mobile.TOUCH_MIN_SIZE + 4) or 45
 local TAB_MARGIN_TOP = 10
-local TAB_MARGIN_BOTTOM = 60
+local TAB_MARGIN_BOTTOM = Mobile.SIDEBAR_COLLAPSED and 55 or 60
 local TOPBAR_HEIGHT = 35
-local MIN_UI_HEIGHT = 500
-local MAX_UI_HEIGHT = 700
+local MIN_UI_HEIGHT = Mobile.IsCompact and math.min(Mobile.ViewportSize.Y - 40, 450) or 500
+local MAX_UI_HEIGHT = Mobile.IsCompact and math.min(Mobile.ViewportSize.Y - 20, 550) or 700
 
 local tabList = {
 	{ "Dashboard", "", PageDashboard },
@@ -3656,8 +4199,12 @@ requiredHeight = math.clamp(requiredHeight, MIN_UI_HEIGHT, MAX_UI_HEIGHT)
 TargetMainHeight = requiredHeight
 
 -- Update Main UI Size
-Main.Size = UDim2.new(0, 550, 0, requiredHeight)
-Main.Position = UDim2.new(0.5, -275, 0.5, -requiredHeight / 2)
+Main.Size = UDim2.new(0, Mobile.MAIN_WIDTH, 0, requiredHeight)
+Main.Position = UDim2.new(0.5, -Mobile.MAIN_WIDTH / 2, 0.5, -requiredHeight / 2)
+
+-- Recreate entrance animation with new size
+local tweenSize = UDim2.new(0, Mobile.MAIN_WIDTH, 0, requiredHeight)
+local tweenPos = UDim2.new(0.5, -Mobile.MAIN_WIDTH / 2, 0.5, -requiredHeight / 2)
 
 for _, tabData in ipairs(tabList) do
 	CreateTab(tabData[1], tabData[2], tabData[3])
@@ -3892,6 +4439,28 @@ do
 		BtnToggleMode.TextColor3 = isFlexibleRecording and C_ACCENT or C_TEXT
 	end)
 
+	-- New Native Anim Toggle
+	local BtnToggleNative = Instance.new("TextButton", SettingsPanel)
+	BtnToggleNative.Text = "ANIM: REC"
+	BtnToggleNative.Size = UDim2.new(0.5, -10, 0, 30)
+	BtnToggleNative.Position = UDim2.new(0, 5, 0, 40) -- Below Mode
+	BtnToggleNative.BackgroundColor3 = C_MAIN
+	BtnToggleNative.TextColor3 = C_TEXT
+	BtnToggleNative.Font = Enum.Font.GothamBold
+	BtnToggleNative.TextSize = 10
+	Instance.new("UICorner", BtnToggleNative).CornerRadius = UDim.new(0, 6)
+	RegisterTheme(BtnToggleNative, "BackgroundColor3", "Main")
+	RegisterTheme(BtnToggleNative, "TextColor3", "Text")
+
+	BtnToggleNative.MouseButton1Click:Connect(function()
+		isNativeAnim = not isNativeAnim
+		BtnToggleNative.Text = isNativeAnim and "ANIM: NATIVE" or "ANIM: REC"
+		BtnToggleNative.TextColor3 = isNativeAnim and C_GREEN or C_TEXT
+	end)
+
+	-- Adjust Panel Height to fit new button
+	SettingsPanel.Size = UDim2.new(1, 0, 0, 80)
+
 	BtnTogglePath.MouseButton1Click:Connect(function()
 		if UIHandlers.OnTogglePathClick then
 			UIHandlers.OnTogglePathClick()
@@ -3907,45 +4476,6 @@ RewindFrame.Visible = false
 RewindFrame.LayoutOrder = 4
 Instance.new("UICorner", RewindFrame).CornerRadius = UDim.new(0, 8)
 RegisterTheme(RewindFrame, "BackgroundColor3", "Item")
-
--- Rewind UI elements (outside do block for accessibility)
-local RewindTimeLbl = Instance.new("TextLabel", RewindFrame)
-RewindTimeLbl.Text = "0.0s"
-RewindTimeLbl.Size = UDim2.new(1, 0, 0, 20)
-RewindTimeLbl.Position = UDim2.new(0, -10, 0, 5)
-RewindTimeLbl.BackgroundTransparency = 1
-RewindTimeLbl.TextColor3 = C_ACCENT
-RewindTimeLbl.Font = Enum.Font.GothamBold
-RewindTimeLbl.TextSize = 12
-RewindTimeLbl.TextXAlignment = Enum.TextXAlignment.Right
-RegisterTheme(RewindTimeLbl, "TextColor3", "Accent")
-
-local RewindSliderBg = Instance.new("TextButton", RewindFrame)
-RewindSliderBg.Text = ""
-RewindSliderBg.Size = UDim2.new(0.9, 0, 0, 6)
-RewindSliderBg.Position = UDim2.new(0.05, 0, 0.45, 0)
-RewindSliderBg.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-RewindSliderBg.AutoButtonColor = false
-Instance.new("UICorner", RewindSliderBg)
-
-local RewindSliderFill = Instance.new("Frame", RewindSliderBg)
-RewindSliderFill.Size = UDim2.new(0.5, 0, 1, 0)
-RewindSliderFill.BackgroundColor3 = C_ACCENT
-Instance.new("UICorner", RewindSliderFill)
-RegisterTheme(RewindSliderFill, "BackgroundColor3", "Accent")
-
-local RewindSelectedTime = 0
-local function RewindUpdateSlider(input)
-	local rx = input.Position.X - RewindSliderBg.AbsolutePosition.X
-	local sc = math.clamp(rx / RewindSliderBg.AbsoluteSize.X, 0, 1)
-	if #recordedData.Frames > 0 then
-		local mt = recordedData.Frames[#recordedData.Frames].t
-		RewindSelectedTime = mt * sc
-		RewindSliderFill.Size = UDim2.new(sc, 0, 1, 0)
-		RewindTimeLbl.Text = string.format("%.2fs / %.2fs", RewindSelectedTime, mt)
-	end
-end
-
 do
 	local hdr = Instance.new("TextLabel", RewindFrame)
 	hdr.Text = "REWIND CONTROL"
@@ -3957,8 +4487,44 @@ do
 	hdr.Position = UDim2.new(0, 0, 0, 5)
 	RegisterTheme(hdr, "TextColor3", "TextDim")
 
+	local timeLbl = Instance.new("TextLabel", RewindFrame)
+	timeLbl.Text = "0.0s"
+	timeLbl.Size = UDim2.new(1, 0, 0, 20)
+	timeLbl.Position = UDim2.new(0, -10, 0, 5)
+	timeLbl.BackgroundTransparency = 1
+	timeLbl.TextColor3 = C_ACCENT
+	timeLbl.Font = Enum.Font.GothamBold
+	timeLbl.TextSize = 12
+	timeLbl.TextXAlignment = Enum.TextXAlignment.Right
+	RegisterTheme(timeLbl, "TextColor3", "Accent")
+
+	local sliderBg = Instance.new("TextButton", RewindFrame)
+	sliderBg.Text = ""
+	sliderBg.Size = UDim2.new(0.9, 0, 0, 6)
+	sliderBg.Position = UDim2.new(0.05, 0, 0.45, 0)
+	sliderBg.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+	sliderBg.AutoButtonColor = false
+	Instance.new("UICorner", sliderBg)
+
+	local sliderFill = Instance.new("Frame", sliderBg)
+	sliderFill.Size = UDim2.new(0.5, 0, 1, 0)
+	sliderFill.BackgroundColor3 = C_ACCENT
+	Instance.new("UICorner", sliderFill)
+	RegisterTheme(sliderFill, "BackgroundColor3", "Accent")
+
+	local selectedTime = 0
+	local function UpdateSlider(input)
+		local rx = input.Position.X - sliderBg.AbsolutePosition.X
+		local sc = math.clamp(rx / sliderBg.AbsoluteSize.X, 0, 1)
+		if #recordedData.Frames > 0 then
+			local mt = recordedData.Frames[#recordedData.Frames].t
+			selectedTime = mt * sc
+			sliderFill.Size = UDim2.new(sc, 0, 1, 0)
+			timeLbl.Text = string.format("%.2fs / %.2fs", selectedTime, mt)
+		end
+	end
 	local dragging = false
-	RewindSliderBg.MouseButton1Down:Connect(function()
+	sliderBg.MouseButton1Down:Connect(function()
 		dragging = true
 	end)
 	game:GetService("UserInputService").InputEnded:Connect(function(i)
@@ -3968,7 +4534,7 @@ do
 	end)
 	game:GetService("UserInputService").InputChanged:Connect(function(i)
 		if dragging and i.UserInputType == Enum.UserInputType.MouseMovement and (isRecording and isPaused) then
-			RewindUpdateSlider(i)
+			UpdateSlider(i)
 		end
 	end)
 
@@ -3981,7 +4547,7 @@ do
 	Instance.new("UICorner", btnResume)
 	btnResume.MouseButton1Click:Connect(function()
 		UIHandlers.StartCountdown(function()
-			CutAndResume(RewindSelectedTime)
+			CutAndResume(selectedTime)
 			RewindFrame.Visible = false
 		end)
 	end)
@@ -4136,23 +4702,22 @@ local ShowSaveRecordingModal -- Forward Declaration
 					Instance.new("UICorner", btnDel).CornerRadius = UDim.new(0, 4)
 					RegisterTheme(btnDel, "BackgroundColor3", "Item")
 
-					-- Update Play Button State & Selection (uses dynamic colors)
+					-- Update Play Button State & Selection
 					RunService.RenderStepped:Connect(function()
-						local colors = _G.StarshipColors or CurrentColors
 						local isSelected = (currentPlaybackFile == n)
 
-						-- Highlight Selection
-						item.BackgroundColor3 = isSelected and Color3.fromRGB(50, 50, 60) or colors.MAIN
+						-- Highlight Selection (Not themed to avoid flicker)
+						item.BackgroundColor3 = isSelected and Color3.fromRGB(50, 50, 60) or C_MAIN
 
 						if isSelected and isPlaying then
 							btnPlay.Text = "⏸"
-							btnPlay.TextColor3 = colors.YELLOW
+							btnPlay.TextColor3 = C_YELLOW
 						elseif isSelected and isPlayPaused then
 							btnPlay.Text = "▶"
-							btnPlay.TextColor3 = colors.GREEN
+							btnPlay.TextColor3 = C_GREEN
 						else
 							btnPlay.Text = "▶"
-							btnPlay.TextColor3 = colors.GREEN
+							btnPlay.TextColor3 = C_GREEN
 						end
 					end)
 
@@ -4209,7 +4774,6 @@ local ShowSaveRecordingModal -- Forward Declaration
 		NewWSInput.TextSize = 10
 		NewWSInput.ZIndex = 25
 		Instance.new("UICorner", NewWSInput).CornerRadius = UDim.new(0, 4)
-		RegisterTheme(NewWSInput, "BackgroundColor3", "Main")
 
 		NewWSInput.FocusLost:Connect(function(enter)
 			if enter and NewWSInput.Text ~= "" then
@@ -4240,8 +4804,6 @@ local ShowSaveRecordingModal -- Forward Declaration
 					btn.TextSize = 10
 					btn.ZIndex = 25
 					Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-					RegisterTheme(btn, "BackgroundColor3", "Main")
-					RegisterTheme(btn, "TextColor3", "Text")
 
 					btn.MouseButton1Click:Connect(function()
 						currentWorkspace = n
@@ -4299,25 +4861,6 @@ local ShowSaveRecordingModal -- Forward Declaration
 		InpName.TextColor3 = C_TEXT
 		InpName.Font = Enum.Font.Gotham
 		Instance.new("UICorner", InpName).CornerRadius = UDim.new(0, 6)
-
-		-- MANUAL INPUT SINK for this TextBox
-		InpName.Focused:Connect(function()
-			local character = LocalPlayer.Character
-			savedToolBeforeFocus = character and character:FindFirstChildOfClass("Tool")
-			isAnyTextBoxFocused = true
-			StartToolMonitor()
-			pcall(function()
-				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
-			end)
-		end)
-		InpName.FocusLost:Connect(function()
-			isAnyTextBoxFocused = false
-			savedToolBeforeFocus = nil
-			StopToolMonitor()
-			pcall(function()
-				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
-			end)
-		end)
 
 		-- Workspace Selection
 		local LblWS = Instance.new("TextLabel", Card)
@@ -4485,12 +5028,11 @@ UIHandlers.OnPauseClick = function()
 				a.Disabled = true
 			end
 		end
-		-- Initialize slider to end position
+		-- Initialize slider
 		if #recordedData.Frames > 0 then
 			local mt = recordedData.Frames[#recordedData.Frames].t
-			RewindSelectedTime = mt
-			RewindSliderFill.Size = UDim2.new(1, 0, 1, 0)
-			RewindTimeLbl.Text = string.format("%.2fs / %.2fs", mt, mt)
+			selectedTime = mt
+			UpdateSlider({ Position = { X = SliderBg.AbsolutePosition.X + SliderBg.AbsoluteSize.X, Y = 0 } }) -- Fake input to set max
 		end
 		if Connections.Preview then
 			Connections.Preview:Disconnect()
@@ -4501,35 +5043,17 @@ UIHandlers.OnPauseClick = function()
 			if not r then
 				return
 			end
-			if #recordedData.Frames == 0 then
-				return
-			end
-
-			-- Find frame pair for interpolation
 			local fA, fB
 			for i = 1, #recordedData.Frames - 1 do
-				if
-					recordedData.Frames[i].t <= RewindSelectedTime
-					and recordedData.Frames[i + 1].t >= RewindSelectedTime
-				then
+				if recordedData.Frames[i].t <= selectedTime and recordedData.Frames[i + 1].t >= selectedTime then
 					fA = recordedData.Frames[i]
 					fB = recordedData.Frames[i + 1]
 					break
 				end
 			end
 
-			-- Handle edge cases: if at the very start or end
-			if not fA then
-				if RewindSelectedTime <= recordedData.Frames[1].t then
-					fA = recordedData.Frames[1]
-				else
-					fA = recordedData.Frames[#recordedData.Frames]
-				end
-			end
-
 			if fA and fB then
-				local deltaT = fB.t - fA.t
-				local a = deltaT > 0 and ((RewindSelectedTime - fA.t) / deltaT) or 0
+				local a = (selectedTime - fA.t) / (fB.t - fA.t)
 
 				-- Support both Strict and Flexible modes
 				if fA.r and fB.r then
@@ -4549,19 +5073,19 @@ UIHandlers.OnPauseClick = function()
 					local rot = (fA.rot or 0) + ((fB.rot or 0) - (fA.rot or 0)) * a
 					r.CFrame = CFrame.new(pos) * CFrame.Angles(0, math.rad(rot), 0)
 				end
-			elseif fA then
-				-- Single frame (at start or end)
-				if fA.r then
-					r.CFrame = TblToCF(fA.r)
+			elseif #recordedData.Frames > 0 then
+				local f = recordedData.Frames[#recordedData.Frames]
+				if f.r then
+					r.CFrame = TblToCF(f.r)
 					local j = GetJoints(c)
 					for _, m in ipairs(j) do
-						if fA.j and fA.j[m.Name] then
-							local t = TblToCF(fA.j[m.Name])
+						if f.j and f.j[m.Name] then
+							local t = TblToCF(f.j[m.Name])
 							m.Transform = isStrictRetarget and t.Rotation or t
 						end
 					end
-				elseif fA.pos then
-					r.CFrame = CFrame.new(fA.pos.x, fA.pos.y, fA.pos.z) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
+				elseif f.pos then
+					r.CFrame = CFrame.new(f.pos.x, f.pos.y, f.pos.z) * CFrame.Angles(0, math.rad(f.rot or 0), 0)
 				end
 			end
 		end)
@@ -4719,7 +5243,6 @@ UIHandlers.RefreshMergerList = function()
 	end
 
 	local wsPath = RECORDER_FOLDER .. "/" .. MergerRefs.currentMergerWorkspace
-	local colors = _G.StarshipColors or CurrentColors
 
 	if isfolder(wsPath) then
 		local files = listfiles(wsPath) or {}
@@ -4746,191 +5269,60 @@ UIHandlers.RefreshMergerList = function()
 		end
 		MergerRefs.mergeList = validMergeList
 
-		-- Update counter label
-		if MergerRefs.CounterLabel then
-			MergerRefs.CounterLabel.Text = "Selected: " .. #MergerRefs.mergeList .. " / " .. #jsonFiles .. " files"
-		end
+		MergerRefs.MScroll.CanvasSize = UDim2.new(0, 0, 0, #jsonFiles * 35)
 
-		local displayIdx = 0
-		for idx, f in ipairs(jsonFiles) do
+		for _, f in ipairs(jsonFiles) do
 			local n = string.match(f, "[^/\\]+$") or f
-			local displayName = n:gsub("%.json$", "")
+			local isSelected = false
+			for _, m in ipairs(MergerRefs.mergeList) do
+				if m.n == n then
+					isSelected = true
+					break
+				end
+			end
 
-			-- Apply search filter
-			local searchFilter = MergerRefs.SearchFilter or ""
-			local shouldShow = searchFilter == "" or displayName:lower():find(searchFilter, 1, true)
+			local r = Instance.new("Frame", MergerRefs.MScroll)
+			r.Size = UDim2.new(1, -10, 0, 30)
+			r.BackgroundColor3 = isSelected and C_ACCENT or C_ITEM
+			Instance.new("UICorner", r).CornerRadius = UDim.new(0, 4)
 
-			if shouldShow then
-				displayIdx = displayIdx + 1
-				local isSelected = false
-				local selectionOrder = 0
+			local b = Instance.new("TextButton", r)
+			b.Text = "  " .. n
+			b.Size = UDim2.new(1, 0, 1, 0)
+			b.BackgroundTransparency = 1
+			b.TextColor3 = isSelected and Color3.new(0, 0, 0) or C_TEXT
+			b.TextXAlignment = Enum.TextXAlignment.Left
+			b.Font = Enum.Font.Gotham
+			b.TextSize = 11
+
+			b.MouseButton1Click:Connect(function()
+				local found = false
 				for i, m in ipairs(MergerRefs.mergeList) do
 					if m.n == n then
-						isSelected = true
-						selectionOrder = i
+						table.remove(MergerRefs.mergeList, i)
+						found = true
 						break
 					end
 				end
-
-				-- Main row container
-				local row = Instance.new("Frame", MergerRefs.MScroll)
-				row.Name = "Row_" .. idx
-				row.Size = UDim2.new(1, -10, 0, 30)
-				row.BackgroundColor3 = isSelected and colors.ACCENT or colors.ITEM
-				row.BorderSizePixel = 0
-				Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
-				if not isSelected then
-					RegisterTheme(row, "BackgroundColor3", "Item")
+				if not found then
+					table.insert(MergerRefs.mergeList, { n = n, p = f })
 				end
-
-				-- Checkbox
-				local checkbox = Instance.new("Frame", row)
-				checkbox.Size = UDim2.new(0, 20, 0, 20)
-				checkbox.Position = UDim2.new(0, 8, 0.5, -10)
-				checkbox.BackgroundColor3 = isSelected and colors.ACCENT or colors.MAIN
-				checkbox.BorderSizePixel = 0
-				Instance.new("UICorner", checkbox).CornerRadius = UDim.new(0, 4)
-				local checkStroke = Instance.new("UIStroke", checkbox)
-				checkStroke.Color = isSelected and Color3.new(1, 1, 1) or colors.ACCENT
-				checkStroke.Thickness = 1.5
-				if not isSelected then
-					RegisterTheme(checkbox, "BackgroundColor3", "Main")
-				end
-				if not isSelected then
-					RegisterTheme(checkStroke, "Color", "Accent")
-				end
-
-				-- Checkmark
-				local checkmark = Instance.new("TextLabel", checkbox)
-				checkmark.Text = isSelected and "✓" or ""
-				checkmark.Size = UDim2.new(1, 0, 1, 0)
-				checkmark.BackgroundTransparency = 1
-				checkmark.TextColor3 = isSelected and Color3.new(0, 0, 0) or colors.TEXT
-				checkmark.Font = Enum.Font.GothamBold
-				checkmark.TextSize = 14
-
-				-- Selection order badge (shows merge order)
-				if isSelected and selectionOrder > 0 then
-					local orderBadge = Instance.new("TextLabel", row)
-					orderBadge.Size = UDim2.new(0, 18, 0, 18)
-					orderBadge.Position = UDim2.new(0, 5, 0, 2)
-					orderBadge.BackgroundColor3 = Color3.new(0, 0, 0)
-					orderBadge.BackgroundTransparency = 0.5
-					orderBadge.Text = tostring(selectionOrder)
-					orderBadge.TextColor3 = Color3.new(1, 1, 1)
-					orderBadge.Font = Enum.Font.GothamBold
-					orderBadge.TextSize = 10
-					Instance.new("UICorner", orderBadge).CornerRadius = UDim.new(1, 0)
-				end
-
-				-- File name
-				local nameLabel = Instance.new("TextLabel", row)
-				nameLabel.Text = displayName
-				nameLabel.Size = UDim2.new(1, -45, 0, 18)
-				nameLabel.Position = UDim2.new(0, 35, 0.5, -9)
-				nameLabel.BackgroundTransparency = 1
-				nameLabel.TextColor3 = isSelected and Color3.new(0, 0, 0) or colors.TEXT
-				nameLabel.Font = Enum.Font.GothamBold
-				nameLabel.TextSize = 11
-				nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-				nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-				if not isSelected then
-					RegisterTheme(nameLabel, "TextColor3", "Text")
-				end
-
-				-- Click handler (invisible button overlay)
-				local clickBtn = Instance.new("TextButton", row)
-				clickBtn.Text = ""
-				clickBtn.Size = UDim2.new(1, 0, 1, 0)
-				clickBtn.BackgroundTransparency = 1
-				clickBtn.ZIndex = 2
-
-				clickBtn.MouseButton1Click:Connect(function()
-					local found = false
-					for i, m in ipairs(MergerRefs.mergeList) do
-						if m.n == n then
-							table.remove(MergerRefs.mergeList, i)
-							found = true
-							break
-						end
-					end
-					if not found then
-						table.insert(MergerRefs.mergeList, { n = n, p = f })
-					end
-					UIHandlers.RefreshMergerList()
-				end)
-			end -- end if shouldShow
+				UIHandlers.RefreshMergerList()
+			end)
 		end
-
-		-- Update canvas size based on displayed items
-		MergerRefs.MScroll.CanvasSize = UDim2.new(0, 0, 0, displayIdx * 35)
 	end
 end
 
 function UIHandlers.InitMergerUI()
 	MergerRefs.mergeList = {}
-	MergerRefs.SearchFilter = ""
 	-- MERGER UI (Control Center Layout)
 	local UIListMerge = Instance.new("UIListLayout", PageMerge)
 	UIListMerge.SortOrder = Enum.SortOrder.LayoutOrder
 	UIListMerge.Padding = UDim.new(0, 8)
 
-	-- 0. Search Bar Card
-	local SearchCard = Instance.new("Frame", PageMerge)
-	SearchCard.Size = UDim2.new(1, 0, 0, 35)
-	SearchCard.BackgroundColor3 = C_ITEM
-	SearchCard.LayoutOrder = 0
-	Instance.new("UICorner", SearchCard).CornerRadius = UDim.new(0, 8)
-	RegisterTheme(SearchCard, "BackgroundColor3", "Item")
-
-	local SearchIcon = Instance.new("TextLabel", SearchCard)
-	SearchIcon.Text = "🔍"
-	SearchIcon.Size = UDim2.new(0, 30, 1, 0)
-	SearchIcon.Position = UDim2.new(0, 5, 0, 0)
-	SearchIcon.BackgroundTransparency = 1
-	SearchIcon.TextColor3 = C_TEXT_DIM
-	SearchIcon.Font = Enum.Font.Gotham
-	SearchIcon.TextSize = 14
-
-	MergerRefs.SearchBox = Instance.new("TextBox", SearchCard)
-	MergerRefs.SearchBox.PlaceholderText = "Search files..."
-	MergerRefs.SearchBox.Text = ""
-	MergerRefs.SearchBox.Size = UDim2.new(0.5, -40, 0, 25)
-	MergerRefs.SearchBox.Position = UDim2.new(0, 35, 0.5, -12)
-	MergerRefs.SearchBox.BackgroundColor3 = C_MAIN
-	MergerRefs.SearchBox.TextColor3 = C_TEXT
-	MergerRefs.SearchBox.PlaceholderColor3 = C_TEXT_DIM
-	MergerRefs.SearchBox.Font = Enum.Font.Gotham
-	MergerRefs.SearchBox.TextSize = 11
-	MergerRefs.SearchBox.TextXAlignment = Enum.TextXAlignment.Left
-	MergerRefs.SearchBox.ClearTextOnFocus = false
-	Instance.new("UICorner", MergerRefs.SearchBox).CornerRadius = UDim.new(0, 6)
-	Instance.new("UIPadding", MergerRefs.SearchBox).PaddingLeft = UDim.new(0, 8)
-	RegisterTheme(MergerRefs.SearchBox, "BackgroundColor3", "Main")
-	RegisterTheme(MergerRefs.SearchBox, "TextColor3", "Text")
-	RegisterTheme(MergerRefs.SearchBox, "PlaceholderColor3", "TextDim")
-
-	-- Counter Label
-	MergerRefs.CounterLabel = Instance.new("TextLabel", SearchCard)
-	MergerRefs.CounterLabel.Text = "Selected: 0 / 0 files"
-	MergerRefs.CounterLabel.Size = UDim2.new(0.45, -10, 1, 0)
-	MergerRefs.CounterLabel.Position = UDim2.new(0.55, 0, 0, 0)
-	MergerRefs.CounterLabel.BackgroundTransparency = 1
-	MergerRefs.CounterLabel.TextColor3 = C_ACCENT
-	MergerRefs.CounterLabel.Font = Enum.Font.GothamBold
-	MergerRefs.CounterLabel.TextSize = 11
-	MergerRefs.CounterLabel.TextXAlignment = Enum.TextXAlignment.Right
-	RegisterTheme(MergerRefs.CounterLabel, "TextColor3", "Accent")
-
-	-- Search functionality
-	MergerRefs.SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-		MergerRefs.SearchFilter = MergerRefs.SearchBox.Text:lower()
-		UIHandlers.RefreshMergerList()
-	end)
-
 	-- 1. Selection Browser
 	local MergeCard = Instance.new("Frame", PageMerge)
-	MergeCard.Size = UDim2.new(1, 0, 0.48, 0)
+	MergeCard.Size = UDim2.new(1, 0, 0.55, 0)
 	MergeCard.BackgroundColor3 = C_ITEM
 	MergeCard.LayoutOrder = 1
 	Instance.new("UICorner", MergeCard).CornerRadius = UDim.new(0, 8)
@@ -4941,7 +5333,7 @@ function UIHandlers.InitMergerUI()
 	MergeHeader.BackgroundTransparency = 1
 	local MergeTitle = Instance.new("TextLabel", MergeHeader)
 	MergeTitle.Text = "  SELECT FILES TO MERGE"
-	MergeTitle.Size = UDim2.new(0.5, 0, 1, 0)
+	MergeTitle.Size = UDim2.new(0.7, 0, 1, 0)
 	MergeTitle.BackgroundTransparency = 1
 	MergeTitle.TextColor3 = C_TEXT_DIM
 	MergeTitle.Font = Enum.Font.GothamBold
@@ -4950,13 +5342,13 @@ function UIHandlers.InitMergerUI()
 	RegisterTheme(MergeTitle, "TextColor3", "TextDim")
 
 	local MRefresh = Instance.new("TextButton", MergeHeader)
-	MRefresh.Text = "↻"
-	MRefresh.Size = UDim2.new(0, 25, 0, 20)
-	MRefresh.Position = UDim2.new(1, -30, 0, 5)
+	MRefresh.Text = "REFRESH"
+	MRefresh.Size = UDim2.new(0, 60, 0, 20)
+	MRefresh.Position = UDim2.new(1, -65, 0, 5)
 	MRefresh.BackgroundColor3 = C_MAIN
 	MRefresh.TextColor3 = C_TEXT
 	MRefresh.Font = Enum.Font.GothamBold
-	MRefresh.TextSize = 14
+	MRefresh.TextSize = 9
 	Instance.new("UICorner", MRefresh).CornerRadius = UDim.new(0, 4)
 	RegisterTheme(MRefresh, "BackgroundColor3", "Main")
 	RegisterTheme(MRefresh, "TextColor3", "Text")
@@ -5280,6 +5672,93 @@ function UIHandlers.InitMergerUI()
 		end)
 	end)
 
+	local _ignored_RefreshMergerList = function()
+		if not MergerRefs.MScroll then
+			return
+		end
+		for _, c in pairs(MergerRefs.MScroll:GetChildren()) do
+			if c:IsA("Frame") then
+				c:Destroy()
+			end
+		end
+
+		local wsPath = RECORDER_FOLDER .. "/" .. MergerRefs.currentMergerWorkspace
+
+		if isfolder(wsPath) then
+			local files = listfiles(wsPath) or {}
+			local jsonFiles = {}
+			for _, f in ipairs(files) do
+				if f:sub(-5) == ".json" then
+					table.insert(jsonFiles, f)
+				end
+			end
+
+			-- Clean up mergeList
+			local validMergeList = {}
+			for _, m in ipairs(MergerRefs.mergeList) do
+				local exists = false
+				for _, f in ipairs(jsonFiles) do
+					if f == m.p then
+						exists = true
+						break
+					end
+				end
+				if exists then
+					table.insert(validMergeList, m)
+				end
+			end
+			MergerRefs.mergeList = validMergeList
+
+			MergerRefs.MScroll.CanvasSize = UDim2.new(0, 0, 0, #jsonFiles * 35)
+
+			for _, f in ipairs(jsonFiles) do
+				local n = string.match(f, "[^/\\]+$") or f
+				local isSelected = false
+				for _, m in ipairs(MergerRefs.mergeList) do
+					if m.n == n then
+						isSelected = true
+						break
+					end
+				end
+
+				local r = Instance.new("Frame", MergerRefs.MScroll)
+				r.Size = UDim2.new(1, -10, 0, 30)
+				r.BackgroundColor3 = isSelected and C_ACCENT or C_ITEM
+				Instance.new("UICorner", r).CornerRadius = UDim.new(0, 4)
+				RegisterTheme(r, "BackgroundColor3", isSelected and "Accent" or "Item")
+
+				local b = Instance.new("TextButton", r)
+				b.Text = "  " .. n
+				b.Size = UDim2.new(1, 0, 1, 0)
+				b.BackgroundTransparency = 1
+				b.TextColor3 = isSelected and Color3.new(0, 0, 0) or C_TEXT
+				b.TextXAlignment = Enum.TextXAlignment.Left
+				b.Font = Enum.Font.Gotham
+				b.TextSize = 11
+				if not isSelected then
+					RegisterTheme(b, "TextColor3", "Text")
+				end
+
+				b.MouseButton1Click:Connect(function()
+					local found = false
+					for i, m in ipairs(MergerRefs.mergeList) do
+						if m.n == n then
+							table.remove(MergerRefs.mergeList, i)
+							found = true
+							break
+						end
+					end
+					if not found then
+						table.insert(MergerRefs.mergeList, { n = n, p = f })
+					end
+					UIHandlers.RefreshMergerList()
+				end)
+			end
+		end
+	end
+	-- Hook Refresh Function
+	UIHandlers.RefreshMergerList = _ignored_RefreshMergerList
+
 	MRefresh.MouseButton1Click:Connect(function()
 		MergerRefs.mergeList = {}
 		UIHandlers.RefreshMergerList()
@@ -5406,8 +5885,8 @@ function UIHandlers.SetupListMapUI()
 	-- PLAYBACK POPUP WINDOW (Redesigned - Modern Compact Style)
 	local MapPlayerPopup = Instance.new("Frame", ScreenGui)
 	MapPlayerPopup.Name = "MapPlayerPopup"
-	MapPlayerPopup.Size = UDim2.new(0, 300, 0, 260)
-	MapPlayerPopup.Position = UDim2.new(0.5, -150, 0.5, -130)
+	MapPlayerPopup.Size = UDim2.new(0, 280, 0, 205)
+	MapPlayerPopup.Position = UDim2.new(0.5, -140, 0.5, -102)
 	MapPlayerPopup.BackgroundColor3 = C_MAIN
 	MapPlayerPopup.BackgroundTransparency = 0
 	MapPlayerPopup.Visible = false
@@ -5450,7 +5929,7 @@ function UIHandlers.SetupListMapUI()
 
 	-- Header Section (Title Bar)
 	local PopupHeader = Instance.new("Frame", MapPlayerPopup)
-	PopupHeader.Size = UDim2.new(1, 0, 0, 40)
+	PopupHeader.Size = UDim2.new(1, 0, 0, 36)
 	PopupHeader.BackgroundColor3 = C_SIDE
 	PopupHeader.BackgroundTransparency = 0
 	PopupHeader.ZIndex = 301
@@ -5470,7 +5949,6 @@ function UIHandlers.SetupListMapUI()
 
 	-- Speed Control (Left side of header)
 	local BtnSpeed = Instance.new("TextButton", PopupHeader)
-	UIHandlers.BtnSpeed = BtnSpeed -- Store reference for reset
 	BtnSpeed.Text = "1x"
 	BtnSpeed.Size = UDim2.new(0, 36, 0, 22)
 	BtnSpeed.Position = UDim2.new(0, 8, 0.5, -11)
@@ -5485,12 +5963,12 @@ function UIHandlers.SetupListMapUI()
 
 	local PFileLbl = Instance.new("TextLabel", PopupHeader)
 	PFileLbl.Text = "No File Selected"
-	PFileLbl.Size = UDim2.new(1, -110, 1, 0)
-	PFileLbl.Position = UDim2.new(0, 52, 0, 0)
+	PFileLbl.Size = UDim2.new(1, -100, 1, 0)
+	PFileLbl.Position = UDim2.new(0, 50, 0, 0)
 	PFileLbl.BackgroundTransparency = 1
 	PFileLbl.TextColor3 = C_TEXT
 	PFileLbl.Font = Enum.Font.GothamBold
-	PFileLbl.TextSize = 12
+	PFileLbl.TextSize = 11
 	PFileLbl.TextXAlignment = Enum.TextXAlignment.Center
 	PFileLbl.TextTruncate = Enum.TextTruncate.AtEnd
 	PFileLbl.ZIndex = 302
@@ -5498,14 +5976,14 @@ function UIHandlers.SetupListMapUI()
 
 	-- Close Button (Right side of header)
 	local PopupClose = Instance.new("TextButton", PopupHeader)
-	PopupClose.Text = "X"
+	PopupClose.Text = "✕"
 	PopupClose.Size = UDim2.new(0, 26, 0, 26)
 	PopupClose.Position = UDim2.new(1, -32, 0.5, -13)
 	PopupClose.BackgroundColor3 = C_RED
 	PopupClose.BackgroundTransparency = 0.85
 	PopupClose.TextColor3 = C_RED
 	PopupClose.Font = Enum.Font.GothamBold
-	PopupClose.TextSize = 14
+	PopupClose.TextSize = 12
 	PopupClose.ZIndex = 302
 	Instance.new("UICorner", PopupClose).CornerRadius = UDim.new(0, 6)
 
@@ -5530,18 +6008,17 @@ function UIHandlers.SetupListMapUI()
 	FileListLayout.Padding = UDim.new(0, 2)
 	FileListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
-	-- Helper to update selection visuals (uses dynamic colors from theme)
+	-- Helper to update selection visuals
 	local function UpdateSelectionVisuals(skipImageLoad)
-		local colors = _G.StarshipColors or CurrentColors
 		for _, child in pairs(FileListContainer:GetChildren()) do
 			if child:IsA("TextButton") then
 				local fName = child:GetAttribute("FileName")
 				if fName == currentPlaybackFile then
-					child.BackgroundColor3 = colors.ACCENT
+					child.BackgroundColor3 = C_ACCENT
 					child.TextColor3 = Color3.new(0, 0, 0)
 				else
-					child.BackgroundColor3 = colors.ITEM
-					child.TextColor3 = colors.TEXT
+					child.BackgroundColor3 = C_ITEM
+					child.TextColor3 = C_TEXT
 				end
 			end
 		end
@@ -5560,7 +6037,6 @@ function UIHandlers.SetupListMapUI()
 
 	-- Speed Dropdown
 	local SpeedDropdown = Instance.new("Frame", MapPlayerPopup)
-	UIHandlers.SpeedDropdown = SpeedDropdown -- Store reference for reset
 	SpeedDropdown.Name = "SpeedDropdown"
 	SpeedDropdown.Size = UDim2.new(0, 50, 0, 130)
 	SpeedDropdown.Position = UDim2.new(0, 8, 0, 40)
@@ -5604,19 +6080,6 @@ function UIHandlers.SetupListMapUI()
 					btn.TextColor3 = (btn.Text == s .. "x") and C_ACCENT or C_TEXT
 				end
 			end
-
-			-- Set WalkSpeed based on playback speed
-			local c = LocalPlayer.Character
-			local hum = c and c:FindFirstChild("Humanoid")
-			if hum then
-				if s == 1.5 then
-					hum.WalkSpeed = 66
-				elseif s == 2 then
-					hum.WalkSpeed = 91
-				else
-					hum.WalkSpeed = 16 -- Default speed for other options
-				end
-			end
 		end)
 	end
 
@@ -5626,27 +6089,27 @@ function UIHandlers.SetupListMapUI()
 
 	-- Progress Section (Slider + Time)
 	local ProgressSection = Instance.new("Frame", MapPlayerPopup)
-	ProgressSection.Size = UDim2.new(1, -24, 0, 32)
-	ProgressSection.Position = UDim2.new(0, 12, 0, 44)
+	ProgressSection.Size = UDim2.new(1, -24, 0, 28)
+	ProgressSection.Position = UDim2.new(0, 12, 0, 42)
 	ProgressSection.BackgroundTransparency = 1
 	ProgressSection.ZIndex = 301
 
 	local PTimeLbl = Instance.new("TextLabel", ProgressSection)
 	PTimeLbl.Text = "0.0s / 0.0s"
-	PTimeLbl.Size = UDim2.new(1, 0, 0, 16)
+	PTimeLbl.Size = UDim2.new(1, 0, 0, 14)
 	PTimeLbl.Position = UDim2.new(0, 0, 0, 0)
 	PTimeLbl.BackgroundTransparency = 1
 	PTimeLbl.TextColor3 = C_TEXT_DIM
 	PTimeLbl.Font = Enum.Font.Code
-	PTimeLbl.TextSize = 11
+	PTimeLbl.TextSize = 10
 	PTimeLbl.TextXAlignment = Enum.TextXAlignment.Center
 	PTimeLbl.ZIndex = 302
 	RegisterTheme(PTimeLbl, "TextColor3", "TextDim")
 
 	local PSliderBg = Instance.new("TextButton", ProgressSection)
 	PSliderBg.Text = ""
-	PSliderBg.Size = UDim2.new(1, 0, 0, 10)
-	PSliderBg.Position = UDim2.new(0, 0, 0, 20)
+	PSliderBg.Size = UDim2.new(1, 0, 0, 8)
+	PSliderBg.Position = UDim2.new(0, 0, 0, 18)
 	PSliderBg.BackgroundColor3 = C_ITEM
 	PSliderBg.AutoButtonColor = false
 	PSliderBg.ZIndex = 302
@@ -5662,8 +6125,8 @@ function UIHandlers.SetupListMapUI()
 
 	-- Slider Knob
 	local PSliderKnob = Instance.new("Frame", PSliderBg)
-	PSliderKnob.Size = UDim2.new(0, 16, 0, 16)
-	PSliderKnob.Position = UDim2.new(0, -8, 0.5, -8)
+	PSliderKnob.Size = UDim2.new(0, 14, 0, 14)
+	PSliderKnob.Position = UDim2.new(0, -7, 0.5, -7)
 	PSliderKnob.BackgroundColor3 = C_ACCENT
 	PSliderKnob.ZIndex = 304
 	Instance.new("UICorner", PSliderKnob).CornerRadius = UDim.new(1, 0)
@@ -5675,44 +6138,43 @@ function UIHandlers.SetupListMapUI()
 
 	-- Main Controls Row (Play/Stop - Large Buttons)
 	local ControlsRow = Instance.new("Frame", MapPlayerPopup)
-	ControlsRow.Size = UDim2.new(1, -24, 0, 44)
-	ControlsRow.Position = UDim2.new(0, 12, 0, 84)
+	ControlsRow.Size = UDim2.new(1, -24, 0, 42)
+	ControlsRow.Position = UDim2.new(0, 12, 0, 78)
 	ControlsRow.BackgroundTransparency = 1
 	ControlsRow.ZIndex = 301
 
 	-- Play Button (Large, Primary - Solid Green Background)
 	local PBtnPlay = Instance.new("TextButton", ControlsRow)
 	PBtnPlay.Text = "▶  PLAY"
-	PBtnPlay.Size = UDim2.new(0.56, 0, 1, 0)
+	PBtnPlay.Size = UDim2.new(0.58, 0, 1, 0)
 	PBtnPlay.Position = UDim2.new(0, 0, 0, 0)
 	PBtnPlay.BackgroundColor3 = C_GREEN
 	PBtnPlay.BackgroundTransparency = 0
 	PBtnPlay.TextColor3 = Color3.fromRGB(0, 0, 0)
 	PBtnPlay.Font = Enum.Font.GothamBlack
-	PBtnPlay.TextSize = 15
+	PBtnPlay.TextSize = 14
 	PBtnPlay.ZIndex = 302
-	Instance.new("UICorner", PBtnPlay).CornerRadius = UDim.new(0, 10)
+	Instance.new("UICorner", PBtnPlay).CornerRadius = UDim.new(0, 8)
 	local PlayStroke = Instance.new("UIStroke", PBtnPlay)
 	PlayStroke.Color = C_GREEN
-	PlayStroke.Transparency = 0.2
-	PlayStroke.Thickness = 2
+	PlayStroke.Transparency = 0.3
+	PlayStroke.Thickness = 1.5
 
 	-- Stop Button (Secondary - Outlined Style)
 	local PBtnStop = Instance.new("TextButton", ControlsRow)
 	PBtnStop.Text = "■  STOP"
-	PBtnStop.Size = UDim2.new(0.40, 0, 1, 0)
-	PBtnStop.Position = UDim2.new(0.60, 0, 0, 0)
+	PBtnStop.Size = UDim2.new(0.38, 0, 1, 0)
+	PBtnStop.Position = UDim2.new(0.62, 0, 0, 0)
 	PBtnStop.BackgroundColor3 = C_ITEM
 	PBtnStop.BackgroundTransparency = 0
 	PBtnStop.TextColor3 = C_RED
 	PBtnStop.Font = Enum.Font.GothamBold
-	PBtnStop.TextSize = 12
+	PBtnStop.TextSize = 11
 	PBtnStop.ZIndex = 302
-	Instance.new("UICorner", PBtnStop).CornerRadius = UDim.new(0, 10)
+	Instance.new("UICorner", PBtnStop).CornerRadius = UDim.new(0, 8)
 	local StopStroke = Instance.new("UIStroke", PBtnStop)
 	StopStroke.Color = C_RED
-	StopStroke.Transparency = 0.4
-	StopStroke.Thickness = 1.5
+	StopStroke.Transparency = 0.5
 	RegisterTheme(PBtnStop, "BackgroundColor3", "Item")
 
 	-- Store references for theme updates
@@ -5735,8 +6197,8 @@ function UIHandlers.SetupListMapUI()
 	do
 		-- Row 1: LOOP, REV, MOON
 		local Row1 = Instance.new("Frame", MapPlayerPopup)
-		Row1.Size = UDim2.new(1, -24, 0, 28)
-		Row1.Position = UDim2.new(0, 12, 0, 138)
+		Row1.Size = UDim2.new(1, -24, 0, 24)
+		Row1.Position = UDim2.new(0, 12, 0, 128)
 		Row1.BackgroundTransparency = 1
 		Row1.ZIndex = 301
 
@@ -5747,8 +6209,8 @@ function UIHandlers.SetupListMapUI()
 
 		-- Row 2: GOD, SPIN, ZOOM
 		local Row2 = Instance.new("Frame", MapPlayerPopup)
-		Row2.Size = UDim2.new(1, -24, 0, 28)
-		Row2.Position = UDim2.new(0, 12, 0, 172)
+		Row2.Size = UDim2.new(1, -24, 0, 24)
+		Row2.Position = UDim2.new(0, 12, 0, 156)
 		Row2.BackgroundTransparency = 1
 		Row2.ZIndex = 301
 
@@ -5761,16 +6223,15 @@ function UIHandlers.SetupListMapUI()
 			local b = Instance.new("TextButton", parent)
 			b.Text = icon .. " " .. text
 			b.BackgroundColor3 = C_ITEM
-			b.BackgroundTransparency = 0.2
+			b.BackgroundTransparency = 0.3
 			b.TextColor3 = C_TEXT_DIM
 			b.Font = Enum.Font.GothamBold
-			b.TextSize = 10
+			b.TextSize = 9
 			b.ZIndex = 302
-			Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+			Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
 			local s = Instance.new("UIStroke", b)
 			s.Color = C_TEXT_DIM
-			s.Transparency = 0.7
-			s.Thickness = 1
+			s.Transparency = 0.8
 			RegisterTheme(b, "BackgroundColor3", "Item")
 			ToggleButtons[id] = { btn = b, stroke = s, active = false }
 			return b
@@ -5794,35 +6255,12 @@ function UIHandlers.SetupListMapUI()
 				ShowToast("Zoom Punch", "FOV punch on jumps/landings", "info", 2)
 			end
 		end)
-
-		-- Row 3: RESPAWN (single toggle, centered)
-		local Row3 = Instance.new("Frame", MapPlayerPopup)
-		Row3.Size = UDim2.new(1, -24, 0, 28)
-		Row3.Position = UDim2.new(0, 12, 0, 206)
-		Row3.BackgroundTransparency = 1
-		Row3.ZIndex = 301
-
-		local Grid3 = Instance.new("UIGridLayout", Row3)
-		Grid3.CellSize = UDim2.new(0.5, 0, 1, 0)
-		Grid3.CellPadding = UDim2.new(0.02, 0, 0, 0)
-		Grid3.HorizontalAlignment = Enum.HorizontalAlignment.Center
-
-		BtnRespawn = CreateToggle(Row3, "RESPAWN", "💀", "respawn")
-
-		-- Respawn click handler
-		BtnRespawn.MouseButton1Click:Connect(function()
-			isRespawnOnEnd = not isRespawnOnEnd
-			UpdateToggleVisual("respawn", isRespawnOnEnd)
-			if isRespawnOnEnd then
-				ShowToast("Respawn On End", "Character will respawn when playback ends", "info", 2)
-			end
-		end)
 	end
 
 	-- Status Indicator Row
 	local StatusRow = Instance.new("Frame", MapPlayerPopup)
-	StatusRow.Size = UDim2.new(1, -24, 0, 18)
-	StatusRow.Position = UDim2.new(0, 12, 0, 238)
+	StatusRow.Size = UDim2.new(1, -24, 0, 16)
+	StatusRow.Position = UDim2.new(0, 12, 0, 184)
 	StatusRow.BackgroundTransparency = 1
 	StatusRow.ZIndex = 301
 
@@ -5832,7 +6270,7 @@ function UIHandlers.SetupListMapUI()
 	StatusLbl.BackgroundTransparency = 1
 	StatusLbl.TextColor3 = C_TEXT_DIM
 	StatusLbl.Font = Enum.Font.Gotham
-	StatusLbl.TextSize = 10
+	StatusLbl.TextSize = 9
 	StatusLbl.TextXAlignment = Enum.TextXAlignment.Center
 	StatusLbl.ZIndex = 302
 	RegisterTheme(StatusLbl, "TextColor3", "TextDim")
@@ -6897,12 +7335,6 @@ end
 
 -- GLOBAL KEYBIND LISTENER (Recording & Playback)
 Connections.MainKeybind = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	-- Block keybinds when typing in any TextBox
-	local focusedTextBox = UserInputService:GetFocusedTextBox()
-	if focusedTextBox then
-		return
-	end
-
 	if not gameProcessed and not isBinding then
 		if input.KeyCode == Enum.KeyCode.F2 then
 			if not UIHandlers.ToggleIndicator() then
@@ -6969,56 +7401,27 @@ end)
 SetTheme(C_ACCENT)
 
 -- Start Key System & Loader
-local function StartLoader()
-	-- Smooth Entrance Animation for Main UI
-	if Main then
-		-- Ensure MainBackground has correct transparency from start
-		local bg = Main:FindFirstChild("MainBackground")
-		if bg then
-			bg.BackgroundTransparency = 0.05
+local DEV_MODE = true -- Set to false for production
+
+if DEV_MODE then
+	-- DIRECT START (DEV MODE)
+	Main.Visible = true
+	ScreenGui.Enabled = true
+	GlobalKeyDuration = "DEV"
+	-- Enable Nametags setelah UI muncul
+	task.delay(0.5, function()
+		if getgenv().ToggleNametags then
+			getgenv().ToggleNametags(true)
 		end
-
-		-- Start with collapsed size for unfold animation
-		Main.Visible = true
-		Main.ClipsDescendants = true
-		Main.Size = UDim2.new(0, 550, 0, 0) -- Start as a horizontal line
-		Main.Position = UDim2.new(0.5, -275, 0.5, 0) -- Center position
-
-		-- Small delay to ensure intro is fully gone
-		task.wait(0.1)
-
-		-- === SMOOTH UNFOLD ANIMATION ===
-		local targetHeight = TargetMainHeight
-		local targetPosition = UDim2.new(0.5, -275, 0.5, -targetHeight / 2)
-
-		-- Expand Main UI with smooth Back easing (bouncy feel)
-		local expandTween =
-			TweenService:Create(Main, TweenInfo.new(0.8, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-				Size = UDim2.new(0, 550, 0, targetHeight),
-				Position = targetPosition,
-			})
-		expandTween:Play()
-
-		-- Wait for animation to complete
-		task.wait(0.9)
-		Main.ClipsDescendants = false
-	end
-
-	-- Cleanup any leftover blur from Loader.lua if it wasn't destroyed
-	if game:GetService("Lighting"):FindFirstChild("BlurEffect") then
-		game:GetService("Lighting").BlurEffect:Destroy()
-	end
-
-	-- Enable Nametags
-	if getgenv().ToggleNametags then
-		getgenv().ToggleNametags(true)
-	end
-
-	-- Show ready toast with slight delay for polish
-	task.delay(0.3, function()
-		ShowToast("Welcome", "Starship Core Ready", "success", 3)
 	end)
+else
+	-- PRODUCTION MODE
+	-- Try auto-login with saved key first
+	if TryAutoLogin() then
+		-- Key valid, skip key UI and go straight to loader
+		task.spawn(StartLoader)
+	else
+		-- No valid saved key, show key system UI
+		SetupKeySystem()
+	end
 end
-
--- Start Loader Directly (Auth handled by Vercel API)
-task.spawn(StartLoader)
