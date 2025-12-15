@@ -22,6 +22,9 @@ if not isfolder(PROFILE_FOLDER) then makefolder(PROFILE_FOLDER) end
 local FeatureStates = {}
 local AutoEnableList = {}
 
+-- Forward declaration for RunAutoEnable
+local RunAutoEnable
+
 local function SaveConfig(name, Config, UI)
     if writefile then
         local kbData = {}
@@ -90,12 +93,25 @@ local function LoadProfile(name, Config, Themes, UI, UIHandlers)
             end
             
             -- Load Auto-Enable List
-            if result.AutoEnable then
+            local hasAutoEnable = false
+            if result.AutoEnable and #result.AutoEnable > 0 then
                 AutoEnableList = result.AutoEnable
+                hasAutoEnable = true
+                
+                -- Immediately run auto-enable features
+                if RunAutoEnable and UIHandlers then
+                    task.spawn(function()
+                        task.wait(0.3) -- Small delay to ensure UI is ready
+                        RunAutoEnable(UIHandlers)
+                    end)
+                end
             end
             
             if UI and UI.ShowToast then
-                UI.ShowToast("Profile Loaded", "Loaded: " .. fileName .. "\nRestart script to apply Auto-Enable", "success", 3)
+                local msg = hasAutoEnable 
+                    and "Loaded: " .. fileName .. "\nAuto-enabling " .. #AutoEnableList .. " feature(s)..."
+                    or "Loaded: " .. fileName
+                UI.ShowToast("Profile Loaded", msg, "success", 3)
             end
             return true, result
         end
@@ -139,7 +155,7 @@ local function LoadConfig(name, Config, Themes)
     end
 end
 
-local function RunAutoEnable(UIHandlers)
+RunAutoEnable = function(UIHandlers)
     for _, id in ipairs(AutoEnableList) do
         local handlerName = "Toggle" .. id
         if UIHandlers and UIHandlers[handlerName] then
@@ -311,8 +327,6 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     CreateBindRow("ToggleFly", "Toggle Fly")
     CreateBindRow("ToggleMomentum", "Toggle Always Momentum")
     CreateBindRow("ToggleAntiSlip", "Toggle Anti-Slip")
-    CreateBindRow("ToggleFastClimb", "Toggle Fast Climb")
-    CreateBindRow("ToggleLadderAssist", "Toggle Ladder Assist")
     CreateBindRow("ToggleAutoJump", "Toggle Auto Jump")
     CreateBindRow("ToggleLongJump", "Toggle Long Jump")
     CreateBindRow("ToggleAirLock", "Toggle Air Lock")
@@ -566,8 +580,6 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
         {id = "Fly", name = "Fly"},
         {id = "Momentum", name = "Always Momentum"},
         {id = "AntiSlip", name = "Anti-Slip"},
-        {id = "FastClimb", name = "Fast Climb"},
-        {id = "LadderAssist", name = "Ladder Assist"},
         {id = "AutoJump", name = "Auto Jump"},
         {id = "LongJump", name = "Long Jump"},
         {id = "AirLock", name = "Air Lock"},
@@ -641,7 +653,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
         -- Save to a special auto-enable file
         writefile(CONFIG_FOLDER .. "/AutoEnable.json", HttpService:JSONEncode(AutoEnableList))
         if UI and UI.ShowToast then
-            UI.ShowToast("Auto-Enable Saved", "Settings will apply on next script load", "success", 2)
+            UI.ShowToast("Auto-Enable Saved", "Settings saved! Also included when you save a profile.", "success", 2)
         end
         BtnSaveAuto.Text = "SAVED!"
         task.wait(1)

@@ -2870,6 +2870,32 @@ CloseBtn.TextSize = 22
 CloseBtn.Font = Enum.Font.GothamMedium
 CloseBtn.MouseButton1Click:Connect(function()
 	ShowConfirm("EXIT STARSHIP", "Are you sure you want to close the script completely?", function()
+		-- Disable all active features before closing
+		local toggleFunctions = {
+			"ToggleAntiAFK",
+			"ToggleShiftLock", 
+			"ToggleSpeed",
+			"ToggleJump",
+			"ToggleInfJump",
+			"ToggleFly",
+			"ToggleMomentum",
+			"ToggleAntiSlip",
+			"ToggleAutoJump",
+			"ToggleLongJump",
+			"ToggleAirLock",
+			"ToggleRealESP",
+			"ToggleFullbright",
+			"ToggleBypassAdmin"
+		}
+		
+		for _, funcName in ipairs(toggleFunctions) do
+			if UIHandlers[funcName] then
+				pcall(function()
+					UIHandlers[funcName](false) -- Force disable
+				end)
+			end
+		end
+		
 		if getgenv().ToggleNametags then
 			getgenv().ToggleNametags(false)
 		end
@@ -2878,6 +2904,9 @@ CloseBtn.MouseButton1Click:Connect(function()
 		end
 		if UIHandlers.CleanupSpeedDisplay then
 			UIHandlers.CleanupSpeedDisplay()
+		end
+		if UIHandlers.CleanupTools then
+			UIHandlers.CleanupTools()
 		end
 		ScreenGui:Destroy()
 	end)

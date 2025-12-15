@@ -236,7 +236,39 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     local CardAuto=CreateCard("AUTOMATION",120,2)
     local BtnAfk=Instance.new("TextButton",CardAuto); BtnAfk.Text="Anti-AFK: OFF"; BtnAfk.Size=UDim2.new(0.45,0,0,35); BtnAfk.Position=UDim2.new(0.03,0,0,35); StyleBtn(BtnAfk, C_TEXT_DIM)
     
-    local afkCon=nil; BtnAfk.MouseButton1Click:Connect(function() if afkCon then afkCon:Disconnect(); afkCon=nil; BtnAfk.Text="Anti-AFK: OFF"; BtnAfk.TextColor3=C_TEXT_DIM; BtnAfk.UIStroke.Color=C_TEXT_DIM else BtnAfk.Text="Anti-AFK: ON"; BtnAfk.TextColor3=C_GREEN; BtnAfk.UIStroke.Color=C_GREEN; afkCon=LocalPlayer.Idled:Connect(function() game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame); wait(1); game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame) end); table.insert(Connections,afkCon) end end)
+    local afkCon = nil
+    local isAfkOn = false
+    
+    local function ToggleAntiAFK(forceEnable)
+        if forceEnable ~= nil then
+            if forceEnable == isAfkOn then return end
+        end
+        
+        isAfkOn = not isAfkOn
+        
+        if isAfkOn then
+            BtnAfk.Text = "Anti-AFK: ON"
+            BtnAfk.TextColor3 = C_GREEN
+            BtnAfk.UIStroke.Color = C_GREEN
+            afkCon = LocalPlayer.Idled:Connect(function()
+                game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                wait(1)
+                game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            end)
+            table.insert(Connections, afkCon)
+        else
+            if afkCon then
+                afkCon:Disconnect()
+                afkCon = nil
+            end
+            BtnAfk.Text = "Anti-AFK: OFF"
+            BtnAfk.TextColor3 = C_TEXT_DIM
+            BtnAfk.UIStroke.Color = C_TEXT_DIM
+        end
+    end
+    
+    BtnAfk.MouseButton1Click:Connect(function() ToggleAntiAFK() end)
+    UIHandlers.ToggleAntiAFK = ToggleAntiAFK
 
     local BtnEmotes = Instance.new("TextButton", CardAuto)
     BtnEmotes.Text = "EMOTES MENU"
@@ -258,7 +290,11 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     local isSL = false
     local slLoop = nil
     
-    local function ToggleSL()
+    local function ToggleSL(forceEnable)
+        if forceEnable ~= nil then
+            if forceEnable == isSL then return end
+        end
+        
         isSL = not isSL
         BtnSL.Text = isSL and "SHIFT LOCK: ON" or "SHIFT LOCK: OFF"
         BtnSL.TextColor3 = isSL and C_GREEN or C_RED
@@ -288,7 +324,8 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         end
     end
     
-    BtnSL.MouseButton1Click:Connect(ToggleSL)
+    BtnSL.MouseButton1Click:Connect(function() ToggleSL() end)
+    UIHandlers.ToggleShiftLock = ToggleSL
     
     local slKeyConnection = UserInputService.InputBegan:Connect(function(input, gp)
         if not gp and Config.Keybinds.ToggleShiftLock and input.KeyCode == Config.Keybinds.ToggleShiftLock then
@@ -346,7 +383,11 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         end
     end
     
-    BtnAntiAdmin.MouseButton1Click:Connect(function()
+    local function ToggleBypassAdmin(forceEnable)
+        if forceEnable ~= nil then
+            if forceEnable == isAntiAdmin then return end
+        end
+        
         isAntiAdmin = not isAntiAdmin
         BtnAntiAdmin.Text = "BYPASS ADMIN: " .. (isAntiAdmin and "ON" or "OFF")
         BtnAntiAdmin.TextColor3 = isAntiAdmin and C_GREEN or C_RED
@@ -359,7 +400,10 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         else
             if adminCon then adminCon:Disconnect(); adminCon = nil end
         end
-    end)
+    end
+    
+    BtnAntiAdmin.MouseButton1Click:Connect(function() ToggleBypassAdmin() end)
+    UIHandlers.ToggleBypassAdmin = ToggleBypassAdmin
 
     -- 3. ENVIRONMENT
     local CardEnv = CreateCard("ENVIRONMENT", 110, 4)
@@ -410,7 +454,12 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     StyleBtn(BtnFb, C_RED)
     
     local isFb = false
-    BtnFb.MouseButton1Click:Connect(function()
+    
+    local function ToggleFullbright(forceEnable)
+        if forceEnable ~= nil then
+            if forceEnable == isFb then return end
+        end
+        
         isFb = not isFb
         BtnFb.Text = isFb and "FULLBRIGHT: ON" or "FULLBRIGHT: OFF"
         BtnFb.TextColor3 = isFb and C_GREEN or C_RED
@@ -425,7 +474,10 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             game:GetService("Lighting").GlobalShadows = true
             game:GetService("Lighting").OutdoorAmbient = Color3.fromRGB(127, 127, 127)
         end
-    end)
+    end
+    
+    BtnFb.MouseButton1Click:Connect(function() ToggleFullbright() end)
+    UIHandlers.ToggleFullbright = ToggleFullbright
 
     -- 4. CUSTOM ANIMATIONS
     -- Note: Loading the AnimDB from Module here or passing it would be cleaner, 
