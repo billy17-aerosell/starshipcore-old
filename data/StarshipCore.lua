@@ -277,6 +277,7 @@ local S = {
 	isFlexibleRecording = false,
 	isStrictRetarget = false,
 	isNativeAnim = false,
+	isNativeRecording = false,
 	isWarpLoop = false,
 	isReversing = false,
 	isZoomPunch = false,
@@ -296,8 +297,8 @@ local isRecording, isPaused, isPlaying, isPlayPaused = S.isRecording, S.isPaused
 local isLooping, isGodMode, playbackSpeed, isMoonwalk = S.isLooping, S.isGodMode, S.playbackSpeed, S.isMoonwalk
 local isReversing, isZoomPunch, lastAirState, isRespawnOnEnd =
 	S.isReversing, S.isZoomPunch, S.lastAirState, S.isRespawnOnEnd
-local isFlexibleRecording, isStrictRetarget, isNativeAnim, isWarpLoop =
-	S.isFlexibleRecording, S.isStrictRetarget, S.isNativeAnim, S.isWarpLoop
+local isFlexibleRecording, isStrictRetarget, isNativeAnim, isWarpLoop, isNativeRecording =
+	S.isFlexibleRecording, S.isStrictRetarget, S.isNativeAnim, S.isWarpLoop, S.isNativeRecording
 local recordedData = { FPS = 60, Frames = {} }
 local startTime = S.startTime
 local RefreshPlayerList, ShowConfirm, MainTitle
@@ -885,6 +886,18 @@ local function StartRecording()
 			if equippedTool then
 				fd.tool = equippedTool.Name
 			end
+		elseif isNativeRecording then
+			-- NATIVE RECORDER MODE: Record CFrame + Velocity + State (No Joints)
+			fd.r = CFToTbl(r.CFrame)
+			fd.vel = { x = r.AssemblyLinearVelocity.X, y = r.AssemblyLinearVelocity.Y, z = r.AssemblyLinearVelocity.Z }
+			fd.st = tostring(h:GetState())
+			fd.jmp = h.Jump
+
+			-- TOOL RECORDING
+			local equippedTool = c:FindFirstChildOfClass("Tool")
+			if equippedTool then
+				fd.tool = equippedTool.Name
+			end
 		else
 			-- STRICT MODE: Record Full Pose (Existing Logic)
 			fd.r = CFToTbl(r.CFrame)
@@ -985,7 +998,7 @@ local function SaveRecording(fn)
 	if not recordedData.Frames or #recordedData.Frames == 0 then
 		return
 	end
-	recordedData.Mode = isFlexibleRecording and "Flexible" or "Strict"
+	recordedData.Mode = isFlexibleRecording and "Flexible" or (isNativeRecording and "Native" or "Strict")
 	writefile(GetWorkspacePath() .. "/" .. fn .. ".json", HttpService:JSONEncode(recordedData))
 	ClearPath()
 	ShowToast("Recording Saved", "Saved " .. #recordedData.Frames .. " frames to " .. fn, "success", 2)
@@ -1920,9 +1933,10 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		r.Anchored = false -- Must be unanchored for Touch
 
 		-- Ensure Animate script is running for Native Anim
+		local isNativeMode = isNativeAnim or (currentFrameData.Mode == "Native")
 		if a then
-			a.Disabled = not isNativeAnim
-			if isNativeAnim and a.Disabled then
+			a.Disabled = not isNativeMode
+			if isNativeMode and a.Disabled then
 				a.Disabled = false
 			end
 		end
@@ -2058,7 +2072,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				local targetCF = TblToCF(fA.r):Lerp(TblToCF(fB.r), alpha)
 
 				-- Drive Physics Constraints
-				if isNativeAnim then
+				if isNativeMode then
 					-- Use Non-Rigid for Native Anim to allow Velocity calculation
 					ap.RigidityEnabled = false
 					ap.MaxForce = math.huge
@@ -2084,7 +2098,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				-- Ensures feet touch the ground visually in Native Anim mode OR Strict Retarget mode
 				local finalPosition = targetCF.Position
 
-				if isNativeAnim or isStrictRetarget then
+				if isNativeMode or isStrictRetarget then
 					-- For Strict Retarget: Skip raycast if offset already calculated
 					if isStrictRetarget and groundSnapCalculated then
 						-- Just apply the cached offset
@@ -2142,7 +2156,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 								-- ALWAYS apply offset (including during jump/fall)
 								finalPosition =
 									Vector3.new(finalPosition.X, finalPosition.Y + groundSnapOffset, finalPosition.Z)
-							elseif isNativeAnim then
+							elseif isNativeMode then
 								-- For Native Anim: Check velocity before snapping
 								local prevY = TblToCF(fA.r).Y
 								local nextY = TblToCF(fB.r).Y
@@ -2168,7 +2182,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				end
 
 				-- Native Anim Movement Logic
-				if isNativeAnim then
+				if isNativeMode then
 					local nextPos = TblToCF(fB.r).Position
 					local prevPos = TblToCF(fA.r).Position
 					local velocity = (nextPos - prevPos) / deltaT
@@ -3388,6 +3402,9 @@ local function SwitchTab(name)
 	end
 	if PageRecord then
 		PageRecord.Visible = (name == "Recorder")
+		if name == "Recorder" and UIHandlers.UpdateRecorderSettings then
+			UIHandlers.UpdateRecorderSettings()
+		end
 	end
 	if PagePlay then
 		PagePlay.Visible = (name == "List Recorder")
@@ -3832,7 +3849,7 @@ end
 local BtnTogglePath
 do
 	local SettingsPanel = Instance.new("Frame", PageRecord)
-	SettingsPanel.Size = UDim2.new(1, 0, 0, 40) -- Reduced height, only Mode and Path
+	SettingsPanel.Size = UDim2.new(1, 0, 0, 80) -- Increased height for Native Anim button
 	SettingsPanel.BackgroundColor3 = C_ITEM
 	SettingsPanel.LayoutOrder = 3
 	Instance.new("UICorner", SettingsPanel).CornerRadius = UDim.new(0, 8)
@@ -3890,6 +3907,36 @@ do
 			UpdatePathColor(currentPathColor)
 		end
 	end)
+
+	local BtnNativeRecorder = Instance.new("TextButton", SettingsPanel)
+	BtnNativeRecorder.Text = "NATIVE RECORDER: " .. (isNativeRecording and "ON" or "OFF")
+	BtnNativeRecorder.Size = UDim2.new(1, -10, 0, 30)
+	BtnNativeRecorder.Position = UDim2.new(0, 5, 0, 40)
+	BtnNativeRecorder.BackgroundColor3 = C_MAIN
+	BtnNativeRecorder.TextColor3 = isNativeRecording and C_GREEN or C_TEXT_DIM
+	BtnNativeRecorder.Font = Enum.Font.GothamBold
+	BtnNativeRecorder.TextSize = 10
+	Instance.new("UICorner", BtnNativeRecorder).CornerRadius = UDim.new(0, 6)
+	RegisterTheme(BtnNativeRecorder, "BackgroundColor3", "Main")
+
+	BtnNativeRecorder.MouseButton1Click:Connect(function()
+		isNativeRecording = not isNativeRecording
+		BtnNativeRecorder.Text = "NATIVE RECORDER: " .. (isNativeRecording and "ON" or "OFF")
+		BtnNativeRecorder.TextColor3 = isNativeRecording and C_GREEN or C_TEXT_DIM
+
+		-- Auto-disable Flexible if Native is ON to avoid confusion
+		if isNativeRecording and isFlexibleRecording then
+			isFlexibleRecording = false
+			BtnToggleMode.Text = "MODE: STRICT"
+			BtnToggleMode.TextColor3 = C_TEXT
+		end
+	end)
+
+	-- Expose update function for SwitchTab
+	UIHandlers.UpdateRecorderSettings = function()
+		BtnNativeRecorder.Text = "NATIVE RECORDER: " .. (isNativeRecording and "ON" or "OFF")
+		BtnNativeRecorder.TextColor3 = isNativeRecording and C_GREEN or C_TEXT_DIM
+	end
 
 	BtnToggleMode.MouseButton1Click:Connect(function()
 		isFlexibleRecording = not isFlexibleRecording
