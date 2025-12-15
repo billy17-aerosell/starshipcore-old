@@ -464,6 +464,7 @@ if not isfolder(RECORDER_FOLDER) then
 	makefolder(RECORDER_FOLDER)
 end
 
+-- Helper Function: Natural Sort untuk files
 local function GetWorkspacePath()
 	local path = RECORDER_FOLDER .. "/" .. currentWorkspace
 	if not isfolder(path) then
@@ -4135,8 +4136,50 @@ local ShowSaveRecordingModal -- Forward Declaration
 		end
 		local path = RECORDER_FOLDER .. "/" .. currentWorkspace
 		if isfolder(path) then
+			-- Get files
 			local files = listfiles(path)
-			for _, f in ipairs(files) do
+			local jsonFiles = {}
+			for i = 1, #files do
+				local f = files[i]
+				if string.sub(f, -5) == ".json" then
+					table.insert(jsonFiles, f)
+				end
+			end
+			
+			-- ========== INLINE NATURAL SORT ==========
+			local function padZero(num)
+				local s = tostring(num)
+				while string.len(s) < 10 do s = "0" .. s end
+				return s
+			end
+			
+			local sortable = {}
+			for i = 1, #jsonFiles do
+				local fullPath = jsonFiles[i]
+				local fileName = string.match(fullPath, "[^/\\]+$") or fullPath
+				local baseName = string.gsub(fileName, "%.json$", "")
+				local numPart = string.match(baseName, "(%d+)$")
+				local sortKey
+				
+				if numPart and string.len(numPart) > 0 then
+					local prefixLen = string.len(baseName) - string.len(numPart)
+					local prefix = string.sub(baseName, 1, prefixLen)
+					sortKey = "1" .. string.lower(prefix) .. padZero(tonumber(numPart) or 0)
+				else
+					sortKey = "0" .. string.lower(baseName) .. padZero(0)
+				end
+				
+				table.insert(sortable, { path = fullPath, key = sortKey })
+			end
+			
+			table.sort(sortable, function(a, b) return a.key < b.key end)
+			
+			jsonFiles = {}
+			for i = 1, #sortable do jsonFiles[i] = sortable[i].path end
+			-- ========== END SORT ==========
+			
+			for i = 1, #jsonFiles do
+				local f = jsonFiles[i]
 				if string.match(f, "%.json$") then
 					local n = string.match(f, "[^/\\]+$")
 					local item = Instance.new("Frame", PScroll)
@@ -4771,11 +4814,63 @@ UIHandlers.RefreshMergerList = function()
 	if isfolder(wsPath) then
 		local files = listfiles(wsPath) or {}
 		local jsonFiles = {}
-		for _, f in ipairs(files) do
-			if f:sub(-5) == ".json" then
+		for i = 1, #files do
+			local f = files[i]
+			if string.sub(f, -5) == ".json" then
 				table.insert(jsonFiles, f)
 			end
 		end
+
+		-- ========== INLINE NATURAL SORT ==========
+		-- Helper: Pad number dengan zeros
+		local function padZero(num)
+			local s = tostring(num)
+			while string.len(s) < 10 do
+				s = "0" .. s
+			end
+			return s
+		end
+		
+		-- Buat array dengan sort info
+		local sortableFiles = {}
+		for i = 1, #jsonFiles do
+			local fullPath = jsonFiles[i]
+			local fileName = string.match(fullPath, "[^/\\]+$") or fullPath
+			local baseName = string.gsub(fileName, "%.json$", "")
+			
+			-- Extract angka di akhir
+			local numPart = string.match(baseName, "(%d+)$")
+			local sortKey
+			
+			if numPart and string.len(numPart) > 0 then
+				-- Ada angka di akhir
+				local prefixLen = string.len(baseName) - string.len(numPart)
+				local prefix = string.sub(baseName, 1, prefixLen)
+				local number = tonumber(numPart) or 0
+				-- Sort key: "1" (priority) + prefix lowercase + padded number
+				sortKey = "1" .. string.lower(prefix) .. padZero(number)
+			else
+				-- Tidak ada angka
+				sortKey = "0" .. string.lower(baseName) .. padZero(0)
+			end
+			
+			table.insert(sortableFiles, {
+				path = fullPath,
+				sortKey = sortKey
+			})
+		end
+		
+		-- Sort berdasarkan sortKey
+		table.sort(sortableFiles, function(a, b)
+			return a.sortKey < b.sortKey
+		end)
+		
+		-- Rebuild jsonFiles dari sorted array
+		jsonFiles = {}
+		for i = 1, #sortableFiles do
+			jsonFiles[i] = sortableFiles[i].path
+		end
+		-- ========== END INLINE SORT ==========
 
 		-- Clean up mergeList
 		local validMergeList = {}
@@ -4821,7 +4916,8 @@ UIHandlers.RefreshMergerList = function()
 
 				-- Main row container
 				local row = Instance.new("Frame", MergerRefs.MScroll)
-				row.Name = "Row_" .. idx
+				row.Name = "Row_" .. displayIdx
+				row.LayoutOrder = displayIdx -- PENTING: Untuk sorting UIListLayout
 				row.Size = UDim2.new(1, -10, 0, 30)
 				row.BackgroundColor3 = isSelected and colors.ACCENT or colors.ITEM
 				row.BorderSizePixel = 0
@@ -4984,63 +5080,76 @@ function UIHandlers.InitMergerUI()
 	RegisterTheme(MergeCard, "BackgroundColor3", "Item")
 
 	local MergeHeader = Instance.new("Frame", MergeCard)
-	MergeHeader.Size = UDim2.new(1, 0, 0, 30)
+	MergeHeader.Size = UDim2.new(1, 0, 0, 32) -- Diperbesar dari 30 ke 32
 	MergeHeader.BackgroundTransparency = 1
 	local MergeTitle = Instance.new("TextLabel", MergeHeader)
 	MergeTitle.Text = "  SELECT FILES TO MERGE"
-	MergeTitle.Size = UDim2.new(0.5, 0, 1, 0)
+	MergeTitle.Size = UDim2.new(0.4, 0, 1, 0) -- Dikurangi dari 0.5 ke 0.4
 	MergeTitle.BackgroundTransparency = 1
 	MergeTitle.TextColor3 = C_TEXT_DIM
 	MergeTitle.Font = Enum.Font.GothamBold
-	MergeTitle.TextSize = 10
+	MergeTitle.TextSize = 11 -- Diperbesar dari 10 ke 11
 	MergeTitle.TextXAlignment = Enum.TextXAlignment.Left
 	RegisterTheme(MergeTitle, "TextColor3", "TextDim")
 
 	local MRefresh = Instance.new("TextButton", MergeHeader)
 	MRefresh.Text = "↻"
-	MRefresh.Size = UDim2.new(0, 25, 0, 20)
-	MRefresh.Position = UDim2.new(1, -30, 0, 5)
+	MRefresh.Size = UDim2.new(0, 28, 0, 24) -- Diperbesar dari 25x20 ke 28x24
+	MRefresh.Position = UDim2.new(1, -33, 0, 3)
 	MRefresh.BackgroundColor3 = C_MAIN
 	MRefresh.TextColor3 = C_TEXT
 	MRefresh.Font = Enum.Font.GothamBold
-	MRefresh.TextSize = 14
-	Instance.new("UICorner", MRefresh).CornerRadius = UDim.new(0, 4)
+	MRefresh.TextSize = 16 -- Diperbesar dari 14 ke 16
+	Instance.new("UICorner", MRefresh).CornerRadius = UDim.new(0, 6)
 	RegisterTheme(MRefresh, "BackgroundColor3", "Main")
 	RegisterTheme(MRefresh, "TextColor3", "Text")
 
 	MergerRefs.MInpWorkspace = Instance.new("TextButton", MergeHeader) -- Global for sync
 	MergerRefs.MInpWorkspace.Text = MergerRefs.currentMergerWorkspace
-	MergerRefs.MInpWorkspace.Size = UDim2.new(0.3, 0, 0, 20)
-	MergerRefs.MInpWorkspace.Position = UDim2.new(0.45, 0, 0, 5)
+	MergerRefs.MInpWorkspace.Size = UDim2.new(0.35, 0, 0, 24)
+	MergerRefs.MInpWorkspace.Position = UDim2.new(0.42, 0, 0, 3)
 	MergerRefs.MInpWorkspace.BackgroundColor3 = C_MAIN
 	MergerRefs.MInpWorkspace.TextColor3 = C_ACCENT
-	MergerRefs.MInpWorkspace.Font = Enum.Font.Gotham
-	MergerRefs.MInpWorkspace.TextSize = 10
-	Instance.new("UICorner", MergerRefs.MInpWorkspace).CornerRadius = UDim.new(0, 4)
+	MergerRefs.MInpWorkspace.Font = Enum.Font.GothamBold
+	MergerRefs.MInpWorkspace.TextSize = 10 -- Sedikit lebih kecil agar muat
+	MergerRefs.MInpWorkspace.TextTruncate = Enum.TextTruncate.AtEnd -- Truncate text yang terlalu panjang
+	MergerRefs.MInpWorkspace.ClipsDescendants = true -- Pastikan tidak keluar
+	Instance.new("UICorner", MergerRefs.MInpWorkspace).CornerRadius = UDim.new(0, 6)
+	local MInpPadding = Instance.new("UIPadding", MergerRefs.MInpWorkspace)
+	MInpPadding.PaddingLeft = UDim.new(0, 8)
+	MInpPadding.PaddingRight = UDim.new(0, 8)
 	RegisterTheme(MergerRefs.MInpWorkspace, "BackgroundColor3", "Main")
 	RegisterTheme(MergerRefs.MInpWorkspace, "TextColor3", "Accent")
 
 	MergerRefs.MWSList = Instance.new("Frame", MergeCard) -- Global for sync
 	MergerRefs.MWSList.Name = "MWSList"
-	MergerRefs.MWSList.Size = UDim2.new(0.3, 0, 0, 100)
-	MergerRefs.MWSList.Position = UDim2.new(0.45, 0, 0, 35)
-	MergerRefs.MWSList.BackgroundColor3 = C_ITEM
+	MergerRefs.MWSList.Size = UDim2.new(0.35, 0, 0, 150) -- Diperbesar dari 0.3/100 ke 0.35/150
+	MergerRefs.MWSList.Position = UDim2.new(0.42, 0, 0, 30) -- Posisi tepat di bawah dropdown button
+	MergerRefs.MWSList.BackgroundColor3 = C_SIDE -- Diubah ke C_SIDE untuk kontras lebih baik
 	MergerRefs.MWSList.BorderSizePixel = 0
 	MergerRefs.MWSList.Visible = false
-	MergerRefs.MWSList.ZIndex = 20
-	Instance.new("UICorner", MergerRefs.MWSList).CornerRadius = UDim.new(0, 6)
-	RegisterTheme(MergerRefs.MWSList, "BackgroundColor3", "Item")
+	MergerRefs.MWSList.ZIndex = 50 -- Diperbesar dari 20 ke 50 agar selalu di atas
+	MergerRefs.MWSList.ClipsDescendants = true
+	Instance.new("UICorner", MergerRefs.MWSList).CornerRadius = UDim.new(0, 8)
+	local MWSStroke = Instance.new("UIStroke", MergerRefs.MWSList)
+	MWSStroke.Color = C_ACCENT
+	MWSStroke.Thickness = 1
+	MWSStroke.Transparency = 0.5
+	RegisterTheme(MergerRefs.MWSList, "BackgroundColor3", "Side")
+	RegisterTheme(MWSStroke, "Color", "Accent")
 
 	MergerRefs.MWSScroll = Instance.new("ScrollingFrame", MergerRefs.MWSList) -- Global for sync
-	MergerRefs.MWSScroll.Size = UDim2.new(1, 0, 1, 0)
+	MergerRefs.MWSScroll.Size = UDim2.new(1, -4, 1, -4) -- Padding dalam
+	MergerRefs.MWSScroll.Position = UDim2.new(0, 2, 0, 2)
 	MergerRefs.MWSScroll.BackgroundTransparency = 1
 	MergerRefs.MWSScroll.BorderSizePixel = 0
 	MergerRefs.MWSScroll.ScrollBarThickness = 4
 	MergerRefs.MWSScroll.ScrollBarImageColor3 = C_ACCENT
 	MergerRefs.MWSScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	MergerRefs.MWSScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-	MergerRefs.MWSScroll.ZIndex = 25
-	Instance.new("UIListLayout", MergerRefs.MWSScroll).Padding = UDim.new(0, 2)
+	MergerRefs.MWSScroll.ZIndex = 51
+	local MWSLayout = Instance.new("UIListLayout", MergerRefs.MWSScroll)
+	MWSLayout.Padding = UDim.new(0, 4) -- Diperbesar dari 2 ke 4
 	RegisterTheme(MergerRefs.MWSScroll, "ScrollBarImageColor3", "Accent")
 
 	local _ignored_UpdateMWSList = function()
@@ -5054,14 +5163,21 @@ function UIHandlers.InitMergerUI()
 		local NewWSInput = Instance.new("TextBox", MergerRefs.MWSScroll)
 		NewWSInput.PlaceholderText = "+ New..."
 		NewWSInput.Text = ""
-		NewWSInput.Size = UDim2.new(1, -8, 0, 25)
-		NewWSInput.BackgroundColor3 = C_MAIN
+		NewWSInput.Size = UDim2.new(1, -4, 0, 32)
+		NewWSInput.BackgroundColor3 = C_ITEM
 		NewWSInput.TextColor3 = C_GREEN
-		NewWSInput.Font = Enum.Font.Gotham
+		NewWSInput.PlaceholderColor3 = C_GREEN
+		NewWSInput.Font = Enum.Font.GothamBold
 		NewWSInput.TextSize = 10
-		NewWSInput.ZIndex = 25
-		Instance.new("UICorner", NewWSInput).CornerRadius = UDim.new(0, 4)
-		RegisterTheme(NewWSInput, "BackgroundColor3", "Main")
+		NewWSInput.TextTruncate = Enum.TextTruncate.AtEnd
+		NewWSInput.ClipsDescendants = true
+		NewWSInput.ClearTextOnFocus = false
+		NewWSInput.ZIndex = 52
+		Instance.new("UICorner", NewWSInput).CornerRadius = UDim.new(0, 5)
+		local newPad = Instance.new("UIPadding", NewWSInput)
+		newPad.PaddingLeft = UDim.new(0, 10)
+		newPad.PaddingRight = UDim.new(0, 6)
+		RegisterTheme(NewWSInput, "BackgroundColor3", "Item")
 
 		NewWSInput.FocusLost:Connect(function(enter)
 			if enter and NewWSInput.Text ~= "" then
@@ -5082,14 +5198,21 @@ function UIHandlers.InitMergerUI()
 					local n = string.match(f, "[^/\\]+$") or f
 					local btn = Instance.new("TextButton", MergerRefs.MWSScroll)
 					btn.Text = n
-					btn.Size = UDim2.new(1, -8, 0, 25)
-					btn.BackgroundColor3 = C_MAIN
+					btn.Size = UDim2.new(1, -4, 0, 32)
+					btn.BackgroundColor3 = C_ITEM
 					btn.TextColor3 = C_TEXT
 					btn.Font = Enum.Font.Gotham
 					btn.TextSize = 10
-					btn.ZIndex = 25
-					Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-					RegisterTheme(btn, "BackgroundColor3", "Main")
+					btn.TextXAlignment = Enum.TextXAlignment.Left
+					btn.TextTruncate = Enum.TextTruncate.AtEnd -- Truncate text panjang
+					btn.ClipsDescendants = true
+					btn.AutoButtonColor = true
+					btn.ZIndex = 52
+					Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+					local btnPad = Instance.new("UIPadding", btn)
+					btnPad.PaddingLeft = UDim.new(0, 10)
+					btnPad.PaddingRight = UDim.new(0, 6)
+					RegisterTheme(btn, "BackgroundColor3", "Item")
 					RegisterTheme(btn, "TextColor3", "Text")
 
 					btn.MouseButton1Click:Connect(function()
@@ -5117,13 +5240,13 @@ function UIHandlers.InitMergerUI()
 
 	local BtnPlusMerge = Instance.new("TextButton", MergeHeader)
 	BtnPlusMerge.Text = "+"
-	BtnPlusMerge.Size = UDim2.new(0, 20, 0, 20)
-	BtnPlusMerge.Position = UDim2.new(0.76, 0, 0, 5)
+	BtnPlusMerge.Size = UDim2.new(0, 24, 0, 24) -- Diperbesar dari 20 ke 24
+	BtnPlusMerge.Position = UDim2.new(0.78, 0, 0, 3) -- Digeser ke kanan
 	BtnPlusMerge.BackgroundColor3 = C_MAIN
 	BtnPlusMerge.TextColor3 = C_GREEN
 	BtnPlusMerge.Font = Enum.Font.GothamBold
-	BtnPlusMerge.TextSize = 14
-	Instance.new("UICorner", BtnPlusMerge).CornerRadius = UDim.new(0, 4)
+	BtnPlusMerge.TextSize = 16 -- Diperbesar dari 14 ke 16
+	Instance.new("UICorner", BtnPlusMerge).CornerRadius = UDim.new(0, 6)
 	RegisterTheme(BtnPlusMerge, "BackgroundColor3", "Main")
 
 	BtnPlusMerge.MouseButton1Click:Connect(function()
@@ -5146,12 +5269,14 @@ function UIHandlers.InitMergerUI()
 	end)
 
 	MergerRefs.MScroll = Instance.new("ScrollingFrame", MergeCard)
-	MergerRefs.MScroll.Size = UDim2.new(1, -10, 1, -35)
-	MergerRefs.MScroll.Position = UDim2.new(0, 5, 0, 30)
+	MergerRefs.MScroll.Size = UDim2.new(1, -10, 1, -38) -- Diubah dari -35 ke -38
+	MergerRefs.MScroll.Position = UDim2.new(0, 5, 0, 34) -- Diubah dari 30 ke 34
 	MergerRefs.MScroll.BackgroundTransparency = 1
 	MergerRefs.MScroll.BorderSizePixel = 0
 	MergerRefs.MScroll.ScrollBarThickness = 4
-	Instance.new("UIListLayout", MergerRefs.MScroll).Padding = UDim.new(0, 4)
+	local MScrollLayout = Instance.new("UIListLayout", MergerRefs.MScroll)
+	MScrollLayout.Padding = UDim.new(0, 4)
+	MScrollLayout.SortOrder = Enum.SortOrder.LayoutOrder -- PENTING: Gunakan LayoutOrder!
 	MergerRefs.MScroll.ScrollBarImageColor3 = C_ACCENT
 	RegisterTheme(MergerRefs.MScroll, "ScrollBarImageColor3", "Accent")
 
@@ -5341,14 +5466,21 @@ function UIHandlers.SetupListMapUI()
 	local MapContainer = Instance.new("Frame", PageListMap)
 	MapContainer.Size = UDim2.new(1, 0, 1, 0)
 	MapContainer.BackgroundTransparency = 1
+	MapContainer.ClipsDescendants = true -- PENTING: Mencegah konten keluar dari container
 
-	local MapLayout = Instance.new("UIListLayout", MapContainer)
+	-- Header Area (Fixed height container for header elements)
+	local HeaderArea = Instance.new("Frame", MapContainer)
+	HeaderArea.Size = UDim2.new(1, 0, 0, 125) -- Total: 40 + 30 + 35 + 20 (padding)
+	HeaderArea.Position = UDim2.new(0, 0, 0, 0)
+	HeaderArea.BackgroundTransparency = 1
+
+	local MapLayout = Instance.new("UIListLayout", HeaderArea)
 	MapLayout.Padding = UDim.new(0, 10)
 	MapLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	MapLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
 	-- Header Card
-	local HeaderCard = Instance.new("Frame", MapContainer)
+	local HeaderCard = Instance.new("Frame", HeaderArea)
 	HeaderCard.Size = UDim2.new(0.96, 0, 0, 40) -- Reduced Height
 	HeaderCard.BackgroundColor3 = C_ITEM
 	HeaderCard.LayoutOrder = 0
@@ -5380,7 +5512,7 @@ function UIHandlers.SetupListMapUI()
 	RegisterTheme(BtnRefresh, "TextColor3", "Text")
 
 	-- Search Bar
-	local SearchFrame = Instance.new("Frame", MapContainer)
+	local SearchFrame = Instance.new("Frame", HeaderArea)
 	SearchFrame.Size = UDim2.new(0.96, 0, 0, 30)
 	SearchFrame.BackgroundColor3 = C_ITEM
 	SearchFrame.LayoutOrder = 1
@@ -5388,7 +5520,7 @@ function UIHandlers.SetupListMapUI()
 	RegisterTheme(SearchFrame, "BackgroundColor3", "Item")
 
 	-- Settings Row (Native Anim & Strict Retarget)
-	local SettingsRow = Instance.new("Frame", MapContainer)
+	local SettingsRow = Instance.new("Frame", HeaderArea)
 	SettingsRow.Size = UDim2.new(0.96, 0, 0, 35)
 	SettingsRow.BackgroundTransparency = 1
 	SettingsRow.LayoutOrder = 2
@@ -5556,16 +5688,17 @@ function UIHandlers.SetupListMapUI()
 	PopupClose.ZIndex = 302
 	Instance.new("UICorner", PopupClose).CornerRadius = UDim.new(0, 6)
 
-	-- File List Scroll (Full Height now)
+	-- File List Scroll (Positioned below HeaderArea, fills remaining space)
 	local MapListScroll = Instance.new("ScrollingFrame", MapContainer)
-	MapListScroll.Size = UDim2.new(1, 0, 1, -90)
+	MapListScroll.Size = UDim2.new(1, 0, 1, -130) -- Full height minus HeaderArea (125px + 5px gap)
+	MapListScroll.Position = UDim2.new(0, 0, 0, 130) -- Position below HeaderArea
 	MapListScroll.BackgroundTransparency = 1
 	MapListScroll.BorderSizePixel = 0
 	MapListScroll.ScrollBarThickness = 4
 	MapListScroll.ScrollBarImageColor3 = C_ACCENT
 	MapListScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	MapListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-	MapListScroll.LayoutOrder = 3
+	MapListScroll.ClipsDescendants = true -- Pastikan konten tidak keluar
 	RegisterTheme(MapListScroll, "ScrollBarImageColor3", "Accent")
 
 	local FileListContainer = Instance.new("Frame", MapListScroll)
@@ -5574,7 +5707,7 @@ function UIHandlers.SetupListMapUI()
 	FileListContainer.BackgroundTransparency = 1
 
 	local FileListLayout = Instance.new("UIListLayout", FileListContainer)
-	FileListLayout.Padding = UDim.new(0, 2)
+	FileListLayout.Padding = UDim.new(0, 4) -- Sedikit lebih besar untuk visual yang lebih baik
 	FileListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
 	-- Helper to update selection visuals (uses dynamic colors from theme)
@@ -5583,18 +5716,23 @@ function UIHandlers.SetupListMapUI()
 		for _, child in pairs(FileListContainer:GetChildren()) do
 			if child:IsA("TextButton") then
 				local fName = child:GetAttribute("FileName")
+				local isEven = child:GetAttribute("IsEven")
+				
 				if fName == currentPlaybackFile then
+					-- Selected state
 					child.BackgroundColor3 = colors.ACCENT
 					child.TextColor3 = Color3.new(0, 0, 0)
 				else
-					child.BackgroundColor3 = colors.ITEM
+					-- Non-selected: alternating colors
+					local baseColor = isEven and colors.ITEM or colors.MAIN
+					child.BackgroundColor3 = baseColor
 					child.TextColor3 = colors.TEXT
 				end
 			end
 		end
 
 		if currentPlaybackFile then
-			PFileLbl.Text = currentPlaybackFile:gsub(".json", "")
+			PFileLbl.Text = string.gsub(currentPlaybackFile, ".json", "")
 		end
 	end
 
@@ -6014,34 +6152,60 @@ function UIHandlers.SetupListMapUI()
 	-- File List Scroll (Full Height now)
 
 	local function CreateFileCard(fileName, index)
+		local colors = _G.StarshipColors or CurrentColors
+		
+		-- Alternating row colors (ganjil/genap)
+		local isEven = (index % 2 == 0)
+		local baseColor = isEven and colors.ITEM or colors.MAIN
+		local hoverColor = colors.ACCENT
+		
 		local FileCard = Instance.new("TextButton", FileListContainer)
-		FileCard.Text = "  " .. fileName:gsub(".json", "")
-		FileCard.Size = UDim2.new(1, 0, 0, 25)
-		FileCard.BackgroundColor3 = C_ITEM
-		FileCard.TextColor3 = C_TEXT
-		FileCard.Font = Enum.Font.Gotham
+		FileCard.Text = "  📄 " .. string.gsub(fileName, ".json", "")
+		FileCard.Size = UDim2.new(1, 0, 0, 32) -- Sedikit lebih tinggi
+		FileCard.BackgroundColor3 = baseColor
+		FileCard.TextColor3 = colors.TEXT
+		FileCard.Font = Enum.Font.GothamMedium
 		FileCard.TextSize = 11
 		FileCard.TextXAlignment = Enum.TextXAlignment.Left
 		FileCard.LayoutOrder = index
-		FileCard.AutoButtonColor = true
+		FileCard.AutoButtonColor = false -- Disable default, kita handle sendiri
 		FileCard:SetAttribute("FileName", fileName)
-		Instance.new("UICorner", FileCard).CornerRadius = UDim.new(0, 4)
-		RegisterTheme(FileCard, "BackgroundColor3", "Item")
-		-- Only register text color if not selected, but here we just register base. Selection overrides.
+		FileCard:SetAttribute("IsEven", isEven)
+		Instance.new("UICorner", FileCard).CornerRadius = UDim.new(0, 6)
+		
+		-- Hover effect
+		FileCard.MouseEnter:Connect(function()
+			if currentPlaybackFile ~= fileName then
+				FileCard.BackgroundColor3 = Color3.new(
+					math.min(baseColor.R + 0.08, 1),
+					math.min(baseColor.G + 0.08, 1),
+					math.min(baseColor.B + 0.08, 1)
+				)
+			end
+		end)
+		
+		FileCard.MouseLeave:Connect(function()
+			if currentPlaybackFile ~= fileName then
+				FileCard.BackgroundColor3 = baseColor
+			end
+		end)
+		
+		-- Theme registration untuk non-selected state
 		if currentPlaybackFile ~= fileName then
 			RegisterTheme(FileCard, "TextColor3", "Text")
 		end
 
 		-- Rename Button
 		local BtnRename = Instance.new("TextButton", FileCard)
-		BtnRename.Text = "R"
-		BtnRename.Size = UDim2.new(0, 20, 0, 20)
-		BtnRename.Position = UDim2.new(1, -45, 0, 2.5)
-		BtnRename.BackgroundColor3 = C_MAIN
-		BtnRename.TextColor3 = C_YELLOW
+		BtnRename.Text = "✏️"
+		BtnRename.Size = UDim2.new(0, 24, 0, 24)
+		BtnRename.Position = UDim2.new(1, -52, 0.5, -12)
+		BtnRename.BackgroundColor3 = colors.MAIN
+		BtnRename.TextColor3 = colors.YELLOW or Color3.fromRGB(255, 200, 0)
 		BtnRename.Font = Enum.Font.GothamBold
-		BtnRename.TextSize = 10
-		Instance.new("UICorner", BtnRename).CornerRadius = UDim.new(0, 4)
+		BtnRename.TextSize = 12
+		BtnRename.AutoButtonColor = true
+		Instance.new("UICorner", BtnRename).CornerRadius = UDim.new(0, 6)
 		RegisterTheme(BtnRename, "BackgroundColor3", "Main")
 
 		BtnRename.MouseButton1Click:Connect(function()
@@ -6067,14 +6231,15 @@ function UIHandlers.SetupListMapUI()
 
 		-- Delete Button
 		local BtnDelete = Instance.new("TextButton", FileCard)
-		BtnDelete.Text = "X"
-		BtnDelete.Size = UDim2.new(0, 20, 0, 20)
-		BtnDelete.Position = UDim2.new(1, -22.5, 0, 2.5)
-		BtnDelete.BackgroundColor3 = C_MAIN
-		BtnDelete.TextColor3 = C_RED
+		BtnDelete.Text = "🗑️"
+		BtnDelete.Size = UDim2.new(0, 24, 0, 24)
+		BtnDelete.Position = UDim2.new(1, -26, 0.5, -12)
+		BtnDelete.BackgroundColor3 = colors.MAIN
+		BtnDelete.TextColor3 = colors.RED or Color3.fromRGB(255, 80, 80)
 		BtnDelete.Font = Enum.Font.GothamBold
-		BtnDelete.TextSize = 10
-		Instance.new("UICorner", BtnDelete).CornerRadius = UDim.new(0, 4)
+		BtnDelete.TextSize = 12
+		BtnDelete.AutoButtonColor = true
+		Instance.new("UICorner", BtnDelete).CornerRadius = UDim.new(0, 6)
 		RegisterTheme(BtnDelete, "BackgroundColor3", "Main")
 
 		BtnDelete.MouseButton1Click:Connect(function()
@@ -6225,41 +6390,113 @@ function UIHandlers.SetupListMapUI()
 			makefolder(MERGER_FOLDER)
 		end
 
-		local files = listfiles(MERGER_FOLDER)
+		-- Get files dan filter hanya .json
+		local allFiles = listfiles(MERGER_FOLDER)
+		local jsonFiles = {}
+		for i = 1, #allFiles do
+			local f = allFiles[i]
+			if string.sub(f, -5) == ".json" then
+				table.insert(jsonFiles, f)
+			end
+		end
+		
+		-- ========== INLINE NATURAL SORT ==========
+		local function padZero(num)
+			local s = tostring(num)
+			while string.len(s) < 10 do s = "0" .. s end
+			return s
+		end
+		
+		local sortable = {}
+		for i = 1, #jsonFiles do
+			local fullPath = jsonFiles[i]
+			local fileName = string.match(fullPath, "[^/\\]+$") or fullPath
+			local baseName = string.gsub(fileName, "%.json$", "")
+			local numPart = string.match(baseName, "(%d+)$")
+			local sortKey
+			
+			if numPart and string.len(numPart) > 0 then
+				local prefixLen = string.len(baseName) - string.len(numPart)
+				local prefix = string.sub(baseName, 1, prefixLen)
+				sortKey = "1" .. string.lower(prefix) .. padZero(tonumber(numPart) or 0)
+			else
+				sortKey = "0" .. string.lower(baseName) .. padZero(0)
+			end
+			
+			table.insert(sortable, { path = fullPath, key = sortKey })
+		end
+		
+		table.sort(sortable, function(a, b) return a.key < b.key end)
+		
+		local files = {}
+		for i = 1, #sortable do files[i] = sortable[i].path end
+		-- ========== END SORT ==========
+		
 		local mapCount = 0
-		local filter = SearchBar.Text:lower():gsub("^%s*(.-)%s*$", "%1") -- Trim whitespace
+		local filter = string.lower(SearchBar.Text)
+		filter = string.gsub(filter, "^%s*(.-)%s*$", "%1") -- Trim whitespace
 
 		if #files == 0 then
-			local NoFilesText = Instance.new("TextLabel", FileListContainer)
-			NoFilesText.Text = "No Files"
-			NoFilesText.Size = UDim2.new(1, 0, 0, 30)
-			NoFilesText.BackgroundTransparency = 1
-			NoFilesText.TextColor3 = C_TEXT_DIM
-			NoFilesText.Font = Enum.Font.Gotham
-			NoFilesText.TextSize = 10
+			-- Better Empty State
+			local EmptyContainer = Instance.new("Frame", FileListContainer)
+			EmptyContainer.Size = UDim2.new(1, 0, 0, 120)
+			EmptyContainer.BackgroundTransparency = 1
+			
+			local EmptyIcon = Instance.new("TextLabel", EmptyContainer)
+			EmptyIcon.Text = "📂"
+			EmptyIcon.Size = UDim2.new(1, 0, 0, 40)
+			EmptyIcon.Position = UDim2.new(0, 0, 0, 10)
+			EmptyIcon.BackgroundTransparency = 1
+			EmptyIcon.TextColor3 = C_TEXT_DIM
+			EmptyIcon.Font = Enum.Font.SourceSans
+			EmptyIcon.TextSize = 36
+			
+			local EmptyTitle = Instance.new("TextLabel", EmptyContainer)
+			EmptyTitle.Text = "No Maps Found"
+			EmptyTitle.Size = UDim2.new(1, 0, 0, 20)
+			EmptyTitle.Position = UDim2.new(0, 0, 0, 50)
+			EmptyTitle.BackgroundTransparency = 1
+			EmptyTitle.TextColor3 = C_TEXT
+			EmptyTitle.Font = Enum.Font.GothamBold
+			EmptyTitle.TextSize = 14
+			RegisterTheme(EmptyTitle, "TextColor3", "Text")
+			
+			local EmptyHint = Instance.new("TextLabel", EmptyContainer)
+			EmptyHint.Text = "Merge recordings in Merger tab\nor check your folder"
+			EmptyHint.Size = UDim2.new(1, 0, 0, 35)
+			EmptyHint.Position = UDim2.new(0, 0, 0, 72)
+			EmptyHint.BackgroundTransparency = 1
+			EmptyHint.TextColor3 = C_TEXT_DIM
+			EmptyHint.Font = Enum.Font.Gotham
+			EmptyHint.TextSize = 11
+			EmptyHint.TextWrapped = true
+			RegisterTheme(EmptyHint, "TextColor3", "TextDim")
+			
 			return
 		end
 
-		for index, filePath in ipairs(files) do
-			local fileName = string.match(filePath, "[^/\\\\]+$")
-			if not string.match(fileName, "%.json$") then
-				continue
+		for index = 1, #files do
+			local filePath = files[index]
+			local fileName = string.match(filePath, "[^/\\]+$")
+			
+			-- Validasi file
+			local isValid = true
+			if not fileName or not string.match(fileName, "%.json$") then
+				isValid = false
+			elseif not isfile(filePath) then
+				isValid = false
+			elseif filter ~= "" and not string.find(string.lower(fileName), filter, 1, true) then
+				isValid = false
 			end
-			if not isfile(filePath) then
-				continue
+			
+			if isValid then
+				mapCount = mapCount + 1
+				CreateFileCard(fileName, index)
+
+				if mapCount % 5 == 0 then
+					task.wait()
+				end -- Yield every 5 items to prevent lag
 			end
-
-			-- Filter Logic
-			if filter ~= "" and not string.find(fileName:lower(), filter, 1, true) then
-				continue
-			end
-
-			mapCount = mapCount + 1
-			CreateFileCard(fileName, index)
-
-			if mapCount % 5 == 0 then
-				task.wait()
-			end -- Yield every 5 items to prevent lag
 		end
 
 		HeaderTitle.Text = string.format("LIST MAP (%d)", mapCount)
