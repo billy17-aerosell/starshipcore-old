@@ -23,6 +23,7 @@ local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
+local ControllerService = game:GetService("ControllerService")
 
 local LocalPlayer = Players.LocalPlayer
 local FOLDER_NAME = "StarshipCore"
@@ -1050,20 +1051,11 @@ local function StopPlayback()
 	local hum = c and c:FindFirstChild("Humanoid")
 	if hum then
 		hum.WalkSpeed = 16
+		-- Stop any movement input
+		hum:Move(Vector3.new(0, 0, 0))
 	end
 
-	-- Reset playback speed to 1x
-	playbackSpeed = 1.0
-	if UIHandlers.BtnSpeed then
-		UIHandlers.BtnSpeed.Text = "1x"
-	end
-	if UIHandlers.SpeedDropdown then
-		for _, btn in pairs(UIHandlers.SpeedDropdown:GetChildren()) do
-			if btn:IsA("TextButton") then
-				btn.TextColor3 = (btn.Text == "1x") and C_ACCENT or C_TEXT
-			end
-		end
-	end
+	-- Keep playback speed setting (don't reset to 1x)
 
 	-- Update UI if Merger Source
 	if currentPlaybackSource == "Merger" and PBtnPlay then
@@ -1516,27 +1508,75 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				end
 
 				if isCurrentlyClimbing or isCurrentlySwimming then
-					-- Climbing/Swimming: Use position + velocity for animation
+					-- Climbing/Swimming: Use recorded velocity and simulate input for natural animation
+					local vel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
+						:Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
+					
+					-- Scale velocity by playback speed for proper animation timing
+					vel = vel * playbackSpeed
+					if isReversing then
+						vel = -vel
+					end
+					
+					-- CRITICAL FIX: Control climbing animation speed directly via AnimationTrack
+					if fA.md then
+						local moveDir = Vector3.new(fA.md.x, fA.md.y, fA.md.z)
+						if isReversing then
+							moveDir = -moveDir
+						end
+						
+						-- Apply movement input
+						h:Move(moveDir)
+						h:ChangeState(Enum.HumanoidStateType.Climbing)
+						
+						-- DIRECT ANIMATION SPEED CONTROL: Find and adjust climbing animation speed
+						local animator = h:FindFirstChildOfClass("Animator")
+						if animator then
+							local playingTracks = animator:GetPlayingAnimationTracks()
+							for _, track in ipairs(playingTracks) do
+								local animName = track.Animation and track.Animation.Name or ""
+								-- Check if this is a climbing animation
+								if string.lower(animName):find("climb") or track.IsPlaying then
+									-- Adjust animation speed based on recorded velocity
+									local targetSpeed = vel.Magnitude / 12 * playbackSpeed -- 12 is default climb speed
+									targetSpeed = math.max(0.5, targetSpeed) -- Minimum speed
+									track:AdjustSpeed(targetSpeed)
+								end
+							end
+						end
+					elseif vel.Magnitude > 0.1 then
+						-- Fallback: calculate movement direction from velocity if MoveDirection not recorded
+						local worldMoveDir = vel.Unit
+						local charCF = r.CFrame
+						local localMoveDir = charCF:VectorToObjectSpace(worldMoveDir)
+						local moveScale = vel.Magnitude / 16 * playbackSpeed * 25.0 -- Maximum extreme scaling
+						local moveVector = Vector3.new(localMoveDir.X, localMoveDir.Y, localMoveDir.Z) * moveScale
+						h:Move(moveVector)
+					else
+						h:Move(Vector3.new(0, 0, 0))
+					end
+					
+					-- Set actual velocity for physics movement
+					r.AssemblyLinearVelocity = vel
+					
+					-- Position correction with smooth blending
 					local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
 						:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
 					local targetYaw = fA.rot
 					
-					-- Set position to keep character on ladder
+					-- Light position correction to stay on path while allowing natural movement
+					local currentPos = r.Position
+					local positionBlend = 0.3 -- More natural movement, less strict positioning
+					local smoothPos = currentPos:Lerp(targetPos, positionBlend)
+					
 					if type(targetYaw) == "number" then
-						r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(targetYaw), 0)
+						r.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(targetYaw), 0)
 					else
-						r.CFrame = CFrame.new(targetPos) * r.CFrame.Rotation
+						r.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
 					end
 					
-					-- Set velocity for animation trigger (scale by playback speed for proper climbing animation speed)
-					if fA.vel then
-						local vel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
-						vel = vel * playbackSpeed -- Scale velocity by playback speed for proper animation speed
-						if isReversing then
-							vel = -vel
-						end
-						r.AssemblyLinearVelocity = vel
-					end
+					-- Ensure climbing state
+					h:ChangeState(Enum.HumanoidStateType.Climbing)
 				elseif fA.vel and fB.vel then
 					-- Normal: Interpolate velocity and scale by playback speed
 					local vel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
@@ -1785,8 +1825,11 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 									h:ChangeState(Enum.HumanoidStateType.Climbing)
 								end
 								if fA.vel then
-									-- Invert climbing velocity for reverse, scale by playbackSpeed
-									local climbVel = Vector3.new(-fA.vel.x, -fA.vel.y, -fA.vel.z) * playbackSpeed
+									-- Invert climbing velocity for reverse, only scale if playback speed changed
+									local climbVel = Vector3.new(-fA.vel.x, -fA.vel.y, -fA.vel.z)
+									if playbackSpeed ~= 1.0 then
+										climbVel = climbVel * playbackSpeed
+									end
 									r.AssemblyLinearVelocity = climbVel
 								end
 							elseif stateEnum == Enum.HumanoidStateType.Swimming then
@@ -1844,8 +1887,11 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 							then
 								-- Maintain climbing: Apply full recorded velocity (not dampened)
 								if fA.vel then
-									-- Use full velocity for climbing, scaled by playbackSpeed
-									local climbVel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z) * playbackSpeed
+									-- Use exact recorded velocity for accurate climbing, only scale if playback speed changed
+									local climbVel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
+									if playbackSpeed ~= 1.0 then
+										climbVel = climbVel * playbackSpeed
+									end
 									r.AssemblyLinearVelocity = climbVel
 								end
 							elseif
