@@ -274,10 +274,6 @@ local S = {
 	isGodMode = false,
 	playbackSpeed = 1.0,
 	isMoonwalk = false,
-	isFlexibleRecording = false,
-	isStrictRetarget = false,
-	isNativeAnim = false,
-	isNativeRecording = false,
 	isWarpLoop = false,
 	isReversing = false,
 	isZoomPunch = false,
@@ -297,8 +293,7 @@ local isRecording, isPaused, isPlaying, isPlayPaused = S.isRecording, S.isPaused
 local isLooping, isGodMode, playbackSpeed, isMoonwalk = S.isLooping, S.isGodMode, S.playbackSpeed, S.isMoonwalk
 local isReversing, isZoomPunch, lastAirState, isRespawnOnEnd =
 	S.isReversing, S.isZoomPunch, S.lastAirState, S.isRespawnOnEnd
-local isFlexibleRecording, isStrictRetarget, isNativeAnim, isWarpLoop, isNativeRecording =
-	S.isFlexibleRecording, S.isStrictRetarget, S.isNativeAnim, S.isWarpLoop, S.isNativeRecording
+local isWarpLoop = S.isWarpLoop
 local recordedData = { FPS = 60, Frames = {} }
 local startTime = S.startTime
 local RefreshPlayerList, ShowConfirm, MainTitle
@@ -375,7 +370,7 @@ local function DeepCopy(orig)
 	return copy
 end
 
-local function GetSmoothedFrames(frames, strength, isFlexible)
+local function GetSmoothedFrames(frames, strength)
 	local processedFrames = DeepCopy(frames) -- Work on a copy, never touch raw data
 	local iterations = math.clamp(strength or 1, 1, 10)
 
@@ -385,37 +380,15 @@ local function GetSmoothedFrames(frames, strength, isFlexible)
 			local curr = processedFrames[i]
 			local next = processedFrames[i + 1]
 
-			if isFlexible then
-				if prev.pos and curr.pos and next.pos then
-					local p1 = Vector3.new(prev.pos.x, prev.pos.y, prev.pos.z)
-					local p2 = Vector3.new(curr.pos.x, curr.pos.y, curr.pos.z)
-					local p3 = Vector3.new(next.pos.x, next.pos.y, next.pos.z)
-					local avg = (p1 + p2 + p3) / 3
-					local newPos = p2:Lerp(avg, 0.5)
-					curr.pos.x = newPos.X
-					curr.pos.y = newPos.Y
-					curr.pos.z = newPos.Z
-				end
-				if prev.vel and curr.vel and next.vel then
-					local v1 = Vector3.new(prev.vel.x, prev.vel.y, prev.vel.z)
-					local v2 = Vector3.new(curr.vel.x, curr.vel.y, curr.vel.z)
-					local v3 = Vector3.new(next.vel.x, next.vel.y, next.vel.z)
-					local newVel = (v1 + v2 + v3) / 3
-					curr.vel.x = newVel.X
-					curr.vel.y = newVel.Y
-					curr.vel.z = newVel.Z
-				end
-			else
-				if prev.r and curr.r and next.r then
-					local cf1 = TblToCF(prev.r)
-					local cf2 = TblToCF(curr.r)
-					local cf3 = TblToCF(next.r)
-					local posAvg = (cf1.Position + cf2.Position + cf3.Position) / 3
-					local newPos = cf2.Position:Lerp(posAvg, 0.5)
-					local rotAvg = cf1:Lerp(cf3, 0.5)
-					local newRot = cf2:Lerp(rotAvg, 0.5)
-					curr.r = CFToTbl(CFrame.new(newPos) * newRot.Rotation)
-				end
+			if prev.r and curr.r and next.r then
+				local cf1 = TblToCF(prev.r)
+				local cf2 = TblToCF(curr.r)
+				local cf3 = TblToCF(next.r)
+				local posAvg = (cf1.Position + cf2.Position + cf3.Position) / 3
+				local newPos = cf2.Position:Lerp(posAvg, 0.5)
+				local rotAvg = cf1:Lerp(cf3, 0.5)
+				local newRot = cf2:Lerp(rotAvg, 0.5)
+				curr.r = CFToTbl(CFrame.new(newPos) * newRot.Rotation)
 			end
 		end
 	end
@@ -438,8 +411,7 @@ function UIHandlers.SmoothRecording(strength)
 	end
 	ShowLoadingModal(true, "PERMANENT SMOOTHING...", 0)
 	task.wait()
-	local isFlexible = (recordedData.Mode == "Flexible") or (recordedData.Frames[1].md ~= nil)
-	recordedData.Frames = GetSmoothedFrames(recordedData.Frames, strength, isFlexible)
+	recordedData.Frames = GetSmoothedFrames(recordedData.Frames, strength)
 	ShowLoadingModal(false)
 	ShowToast("Success", "Path smoothed permanently (unsaved).", "success", 2)
 	if isPathEnabled then
@@ -853,70 +825,6 @@ local function StartRecording()
 		local r = c:FindFirstChild("HumanoidRootPart")
 		local h = c:FindFirstChild("Humanoid")
 		if not r or not h then
-			return
-		end
-
-		local fd = { t = os.clock() - startTime }
-
-		if isFlexibleRecording then
-			-- FLEXIBLE MODE: Record Physics & Inputs
-			fd.pos = { x = r.Position.X, y = r.Position.Y, z = r.Position.Z }
-			fd.rot = r.Orientation.Y -- Only Y rotation needed for movement
-			fd.vel = { x = r.AssemblyLinearVelocity.X, y = r.AssemblyLinearVelocity.Y, z = r.AssemblyLinearVelocity.Z }
-			fd.md = { x = h.MoveDirection.X, y = h.MoveDirection.Y, z = h.MoveDirection.Z }
-			fd.st = tostring(h:GetState())
-			fd.jmp = h.Jump
-			fd.hh = h.HipHeight
-
-			-- SHIFTLOCK / CAMERA DIRECTION RECORDING
-			local cam = workspace.CurrentCamera
-			if cam then
-				local camLook = cam.CFrame.LookVector
-				fd.camLook = { x = camLook.X, y = camLook.Y, z = camLook.Z }
-			end
-			-- Check if shiftlock is active (character faces camera direction)
-			local isShiftlock = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
-			fd.shiftlock = isShiftlock
-			-- Record character's actual facing direction (for accurate rotation)
-			local charLook = r.CFrame.LookVector
-			fd.charLook = { x = charLook.X, y = charLook.Y, z = charLook.Z }
-
-			-- TOOL RECORDING: Record equipped tool name
-			local equippedTool = c:FindFirstChildOfClass("Tool")
-			if equippedTool then
-				fd.tool = equippedTool.Name
-			end
-		elseif isNativeRecording then
-			-- NATIVE RECORDER MODE: Record CFrame + Velocity + State (No Joints)
-			fd.r = CFToTbl(r.CFrame)
-			fd.vel = { x = r.AssemblyLinearVelocity.X, y = r.AssemblyLinearVelocity.Y, z = r.AssemblyLinearVelocity.Z }
-			fd.st = tostring(h:GetState())
-			fd.jmp = h.Jump
-
-			-- TOOL RECORDING
-			local equippedTool = c:FindFirstChildOfClass("Tool")
-			if equippedTool then
-				fd.tool = equippedTool.Name
-			end
-		else
-			-- STRICT MODE: Record Full Pose (Existing Logic)
-			fd.r = CFToTbl(r.CFrame)
-			fd.j = {}
-			for _, m in ipairs(joints) do
-				fd.j[m.Name] = CFToTbl(m.Transform)
-			end
-
-			-- TOOL RECORDING: Record equipped tool name (Strict Mode)
-			local equippedTool = c:FindFirstChildOfClass("Tool")
-			if equippedTool then
-				fd.tool = equippedTool.Name
-			end
-		end
-
-		table.insert(recordedData.Frames, fd)
-		if isPathEnabled then
-			local cp = r.Position
-			if (cp - lastPathPoint).Magnitude > 0.5 then
 				DrawLine(lastPathPoint, cp, currentPathColor)
 				lastPathPoint = cp
 			end
@@ -998,7 +906,7 @@ local function SaveRecording(fn)
 	if not recordedData.Frames or #recordedData.Frames == 0 then
 		return
 	end
-	recordedData.Mode = isFlexibleRecording and "Flexible" or (isNativeRecording and "Native" or "Strict")
+	recordedData.Mode = "Strict"
 	writefile(GetWorkspacePath() .. "/" .. fn .. ".json", HttpService:JSONEncode(recordedData))
 	ClearPath()
 	ShowToast("Recording Saved", "Saved " .. #recordedData.Frames .. " frames to " .. fn, "success", 2)
@@ -1405,998 +1313,184 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 	end
 
 	-- 3. PLAYBACK PHASE
-	local isFlexible = (currentFrameData.Mode == "Flexible") or (currentFrameData[1].md ~= nil) -- Auto-detect
-
-	if isFlexible then
-		-- FLEXIBLE MODE: Physics & Input Replay
-		r.Anchored = false
-
-		-- Restart Animate script to ensure it picks up
-		if a then
-			a.Disabled = true
-			task.wait() -- Small yield to ensure reset
-			a.Disabled = false
-		end
-
-		h.AutoRotate = true -- Enable auto-rotate so character looks in movement direction naturally or can be controlled
-
-		-- PERFORMANCE: Cache instances ONCE before playback loop
-		local cachedAtt = r:FindFirstChild("PlaybackAtt") or Instance.new("Attachment", r)
-		cachedAtt.Name = "PlaybackAtt"
-		local cachedAO = nil -- Will be created when needed
-		local frameCounter = 0 -- For throttling expensive operations
-		local cachedLastState = nil -- Cache last humanoid state to avoid redundant changes
-		local cachedUserInputService = game:GetService("UserInputService")
-
-		-- Use Stepped for Physics Manipulation (smoother for velocity)
-		Connections.Playback = RunService.Stepped:Connect(function(_, dt)
-			frameCounter = frameCounter + 1
-			if not isPlaying or isPlayPaused then
-				return
-			end
-
-			-- REVERSE PLAYBACK SUPPORT
-			if isReversing then
-				currentPlaybackTime = currentPlaybackTime - (dt * playbackSpeed)
-				if currentPlaybackTime <= 0 then
-					if isRespawnOnEnd then
-						local savedFile = currentPlaybackFile
-						local savedLoop = isLooping
-						StopPlayback()
-						ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
-						task.wait(5)
-						local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-						if h then
-							h.Health = 0
-						end
-						if savedLoop then
-							task.spawn(function()
-								LocalPlayer.CharacterAdded:Wait()
-								ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
-								task.wait(5)
-								if savedFile and UIHandlers.PlayMergerRecording then
-									UIHandlers.PlayMergerRecording(savedFile, true)
-								end
-							end)
-						end
-						return
-					elseif isLooping then
-						currentPlaybackTime = currentTotalDuration
-					else
-						StopPlayback()
-						return
-					end
-				end
-			else
-				currentPlaybackTime = currentPlaybackTime + (dt * playbackSpeed)
-				if currentPlaybackTime >= currentTotalDuration then
-					if isRespawnOnEnd then
-						local savedFile = currentPlaybackFile
-						local savedLoop = isLooping
-						StopPlayback()
-						ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
-						task.wait(5)
-						local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-						if h then
-							h.Health = 0
-						end
-						if savedLoop then
-							task.spawn(function()
-								LocalPlayer.CharacterAdded:Wait()
-								ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
-								task.wait(5)
-								if savedFile and UIHandlers.PlayMergerRecording then
-									UIHandlers.PlayMergerRecording(savedFile, true)
-								end
-							end)
-						end
-						return
-					elseif isLooping then
-						currentPlaybackTime = 0
-					else
-						StopPlayback()
-						return
-					end
-				end
-			end
-
-			-- DETECT TIME JUMP (slider seeking) - skip blending if user jumped to different time
-			local expectedDelta = dt * playbackSpeed
-			local actualDelta = math.abs(currentPlaybackTime - lastPlaybackTime)
-			local isTimeJump = actualDelta > (expectedDelta * 3 + 0.1) -- Threshold: 3x expected + 0.1s buffer
-			lastPlaybackTime = currentPlaybackTime
-
-			-- Find Frames (optimized with binary search + caching)
-			local frameIdx = FindFrameIndex(currentFrameData, currentPlaybackTime, lastFrameIndex)
-			lastFrameIndex = frameIdx
-			local fA, fB = currentFrameData[frameIdx], currentFrameData[frameIdx + 1]
-
-			if fA and fB then
-				local deltaT = fB.t - fA.t
-				local alpha = 0
-				if deltaT > 0.0001 then
-					alpha = (currentPlaybackTime - fA.t) / deltaT
-				end
-
-				-- 1. Apply Velocity / Position
-				-- Check current state
-				local isCurrentlyClimbing = false
-				local isCurrentlySwimming = false
-				if fA.st then
-					local stName = string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
-					isCurrentlyClimbing = (stName == "Climbing")
-					isCurrentlySwimming = (stName == "Swimming")
-				end
-
-				if isCurrentlyClimbing or isCurrentlySwimming then
-					-- Climbing/Swimming: Use direct position (more accurate)
-					local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
-						:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
-					local targetYaw = fA.rot
-					if type(targetYaw) == "number" then
-						r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(targetYaw), 0)
-					else
-						r.CFrame = CFrame.new(targetPos) * r.CFrame.Rotation
-					end
-
-					-- Also set velocity for animation trigger (invert if reversing)
-					if fA.vel then
-						local vel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
-						if isReversing then
-							vel = -vel
-						end
-						-- Skip blending on time jump to prevent vibration
-						if isTimeJump then
-							r.AssemblyLinearVelocity = vel
-						else
-							local currentVel = r.AssemblyLinearVelocity
-							r.AssemblyLinearVelocity = currentVel:Lerp(vel, 0.5)
-						end
-					end
-				elseif fA.vel and fB.vel then
-					-- Normal: Interpolate velocity and scale by playback speed
-					local vel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
-						:Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
-					vel = vel * playbackSpeed -- Scale velocity by playback speed
-					-- Invert velocity when reversing for smooth backward motion
-					if isReversing then
-						vel = -vel
-					end
-
-					-- Smooth velocity blending - increase blend factor at higher speeds
-					local currentVel = r.AssemblyLinearVelocity
-					local baseBlend = isReversing and 0.4 or 0.6
-					local blendFactor = math.clamp(baseBlend * playbackSpeed, 0.3, 0.95) -- Scale with speed, cap at 0.95
-
-					-- Check if in air state - use position-based for smooth jump like recording
-					local stName = fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
-					local isInAir = (stName == "Jumping" or stName == "Freefall")
-					if isInAir and fA.pos and fB.pos then
-						-- Follow recorded position for smooth jump arc (like recording)
-						local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
-							:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
-						-- On time jump or high speed, snap directly to target position
-						if isTimeJump or playbackSpeed >= 2 then
-							r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
-							r.AssemblyLinearVelocity = vel
-						else
-							-- Smoothly move to target position
-							local currentPos = r.Position
-							local posBlend = math.clamp(0.5 * playbackSpeed, 0.3, 0.9)
-							local newPos = currentPos:Lerp(targetPos, posBlend)
-							r.CFrame = CFrame.new(newPos) * r.CFrame.Rotation
-
-							-- Use RECORDED velocity for animation (not calculated)
-							local recordedVelY = fA.vel and fA.vel.y or 0
-							local horizVel = (targetPos - currentPos) * 10 * playbackSpeed
-							r.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY * playbackSpeed, horizVel.Z)
-						end
-					else
-						-- On ground: use velocity-based movement (snap on time jump or high speed)
-						if isTimeJump or playbackSpeed >= 2 then
-							r.AssemblyLinearVelocity = vel
-							-- Also snap position to prevent drift at high speeds
-							if fA.pos then
-								local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
-									:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
-								r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
-							end
-						else
-							r.AssemblyLinearVelocity = currentVel:Lerp(vel, blendFactor)
-						end
-					end
-				end
-
-				-- 2. Apply Rotation - DISABLED to allow user control
-				-- We remove the forced AlignOrientation so the user can look around or let AutoRotate handle it
-				-- PERFORMANCE: Use cached AO reference instead of FindFirstChild every frame
-				if cachedAO then
-					cachedAO.Enabled = false
-				end
-
-				-- 3. Apply Move Direction (Smart Rotation)
-				-- PERFORMANCE: Use cached UserInputService and throttle key check
-				local isUserMoving = false
-				if frameCounter % 2 == 0 then -- Check keys every 2 frames instead of every frame
-					local keys = cachedUserInputService:GetKeysPressed()
-					for _, k in pairs(keys) do
-						if
-							k.KeyCode == Enum.KeyCode.W
-							or k.KeyCode == Enum.KeyCode.A
-							or k.KeyCode == Enum.KeyCode.S
-							or k.KeyCode == Enum.KeyCode.D
-						then
-							isUserMoving = true
-							break
-						end
-					end
-				end
-
-				-- Check if currently climbing/swimming from recorded state
-				local isClimbingOrSwimming = false
-				if fA.st then
-					local stateName = string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
-					if stateName == "Climbing" or stateName == "Swimming" then
-						isClimbingOrSwimming = true
-					end
-				end
-
-				-- PERFORMANCE: Use cached att instead of FindFirstChild every frame
-
-				if isUserMoving then
-					-- User Input: Free Control
-					if cachedAO then
-						cachedAO.Enabled = false
-					end
-					h.AutoRotate = true
-				elseif isClimbingOrSwimming then
-					-- Climbing/Swimming: Rotation already handled in position section
-					if cachedAO then
-						cachedAO.Enabled = false
-					end
-					h.AutoRotate = false
-				else
-					-- Idle/Playback: Use recorded rotation
-					h.AutoRotate = false -- Disable default to prevent fighting
-
-					-- PERFORMANCE: Reuse cached AO instead of creating new one
-					if not cachedAO or not cachedAO.Parent then
-						cachedAO = Instance.new("AlignOrientation", r)
-						cachedAO.Name = "PlaybackAO"
-						cachedAO.Mode = Enum.OrientationAlignmentMode.OneAttachment
-						cachedAO.Attachment0 = cachedAtt
-						cachedAO.RigidityEnabled = false
-						cachedAO.MaxTorque = 1000000
-					end
-					cachedAO.Enabled = true
-					cachedAO.Responsiveness = isReversing and 50 or 80 -- Smoother for reverse
-
-					-- Determine look direction based on shiftlock or recorded charLook
-					local lookDir = Vector3.new(0, 0, -1) -- Default
-
-					-- SHIFTLOCK / CHARACTER LOOK DIRECTION PLAYBACK
-					if fA.charLook and fB.charLook then
-						-- Use recorded character facing direction (interpolated)
-						local lookA = Vector3.new(fA.charLook.x, 0, fA.charLook.z)
-						local lookB = Vector3.new(fB.charLook.x, 0, fB.charLook.z)
-						if lookA.Magnitude > 0.01 and lookB.Magnitude > 0.01 then
-							lookDir = lookA.Unit:Lerp(lookB.Unit, alpha)
-						elseif lookA.Magnitude > 0.01 then
-							lookDir = lookA.Unit
-						end
-					elseif fA.charLook then
-						-- Single frame charLook
-						local look = Vector3.new(fA.charLook.x, 0, fA.charLook.z)
-						if look.Magnitude > 0.01 then
-							lookDir = look.Unit
-						end
-					else
-						-- Fallback: Calculate Look Direction from Velocity
-						if fA.vel and fB.vel then
-							local v = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
-								:Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
-							if v.Magnitude > 0.1 then
-								lookDir = Vector3.new(v.X, 0, v.Z)
-								if lookDir.Magnitude > 0.01 then
-									lookDir = lookDir.Unit
-								end
-							end
-						end
-					end
-
-					-- Ensure lookDir is valid
-					if lookDir.Magnitude < 0.001 then
-						lookDir = Vector3.new(0, 0, -1)
-					end
-
-					-- Handle look direction based on mode
-					-- Moonwalk inverts look, Reverse keeps original. If both, they cancel out.
-					if isMoonwalk and not isReversing then
-						lookDir = -lookDir -- Invert direction for Moonwalk only
-					elseif isReversing and not isMoonwalk then
-						-- Reverse only: Keep original look direction (walks backward)
-						-- lookDir stays as is
-					end
-					-- If both moonwalk and reverse: they cancel out, keep original direction
-					cachedAO.CFrame = CFrame.lookAt(Vector3.zero, lookDir)
-
-					-- Trigger Animation based on velocity (inverted for reverse = backward walking)
-					local velDir = Vector3.new(0, 0, 0)
-					if fA.vel then
-						velDir = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
-					end
-					if velDir.Magnitude > 0.1 then
-						-- For reverse: move direction opposite to look = backward walk animation
-						if isReversing then
-							h:Move(-velDir.Unit)
-						else
-							h:Move(velDir.Unit)
-						end
-					end
-				end
-
-				-- 4. Jump & State Replication
-				-- Don't trigger jump when reversing (handled by state swap above)
-				if fA.jmp and not isReversing then
-					h.Jump = true
-				end
-
-				if fA.st then
-					-- Extract state name from string "Enum.HumanoidStateType.Running" -> "Running"
-					local stateName = string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
-
-					-- ZOOM EFFECT: Zoom out saat loncat, zoom in saat jatuh
-					if isZoomPunch and stateName then
-						if stateName == "Jumping" then
-							SetZoomState("jump") -- Zoom OUT
-						elseif stateName == "Freefall" then
-							SetZoomState("fall") -- Zoom IN
-						elseif stateName == "Running" or stateName == "Landed" then
-							SetZoomState("normal") -- Reset
-						end
-					end
-					if stateName then
-						local stateEnum = Enum.HumanoidStateType[stateName]
-						local currentState = h:GetState()
-
-						-- REVERSE PLAYBACK: Swap animation states for rewind effect
-						-- Use simplified state handling to prevent jittery animations
-						if isReversing then
-							-- REVERSE PLAYBACK: Use velocity Y to determine correct air state (inverted)
-							-- When rewinding: recorded jump (velY > 0) = now falling, recorded fall (velY < 0) = now jumping
-							local isInAir = (
-								stateEnum == Enum.HumanoidStateType.Jumping
-								or stateEnum == Enum.HumanoidStateType.Freefall
-							)
-
-							if isInAir then
-								-- Use velocity Y to determine animation (INVERTED for reverse)
-								local velY = fA.vel and fA.vel.y or 0
-								-- Invert logic: positive velY in recording = freefall in reverse, negative = jump
-								local targetState = velY > 0 and "fall" or "jump"
-
-								-- For spam jumps: Force state change if velocity is significant (bypass lastAirState check)
-								local forceStateChange = math.abs(velY) > 8
-
-								-- Change state if different OR if velocity is significant (spam jump detection)
-								if targetState ~= lastAirState or forceStateChange then
-									lastAirState = targetState
-									if targetState == "jump" then
-										h:ChangeState(Enum.HumanoidStateType.Jumping)
-									else
-										h:ChangeState(Enum.HumanoidStateType.Freefall)
-									end
-								end
-							elseif stateEnum == Enum.HumanoidStateType.Landed then
-								-- Was landing, now taking off - trigger jump (ALWAYS trigger for spam jumps)
-								lastAirState = nil -- Reset to allow next jump
-								h:ChangeState(Enum.HumanoidStateType.Jumping)
-							elseif stateEnum == Enum.HumanoidStateType.Running then
-								lastAirState = nil
-								if currentState ~= Enum.HumanoidStateType.Running then
-									h:ChangeState(Enum.HumanoidStateType.Running)
-								end
-							elseif stateEnum == Enum.HumanoidStateType.Climbing then
-								if currentState ~= Enum.HumanoidStateType.Climbing then
-									h:ChangeState(Enum.HumanoidStateType.Climbing)
-								end
-								if fA.vel then
-									-- Invert climbing velocity for reverse
-									local climbVel = Vector3.new(-fA.vel.x, -fA.vel.y, -fA.vel.z)
-									local currentVel = r.AssemblyLinearVelocity
-									r.AssemblyLinearVelocity = currentVel:Lerp(climbVel, 0.3)
-								end
-							elseif stateEnum == Enum.HumanoidStateType.Swimming then
-								if currentState ~= Enum.HumanoidStateType.Swimming then
-									h:ChangeState(Enum.HumanoidStateType.Swimming)
-								end
-								if fA.hh then
-									h.HipHeight = fA.hh
-								end
-							end
-						else
-							-- NORMAL PLAYBACK: Use velocity Y to determine correct air state
-							local isAirState = (
-								stateEnum == Enum.HumanoidStateType.Jumping
-								or stateEnum == Enum.HumanoidStateType.Freefall
-							)
-
-							if isAirState then
-								-- Use velocity Y to determine animation
-								local velY = fA.vel and fA.vel.y or 0
-								local targetState = velY > 0 and "jump" or "fall"
-
-								-- Only change state if it's different from last air state (prevent stuttering)
-								if targetState ~= lastAirState then
-									lastAirState = targetState
-									if targetState == "jump" then
-										h:ChangeState(Enum.HumanoidStateType.Jumping)
-									else
-										h:ChangeState(Enum.HumanoidStateType.Freefall)
-									end
-								end
-							elseif stateEnum == Enum.HumanoidStateType.Landed then
-								lastAirState = nil
-								if currentState ~= Enum.HumanoidStateType.Landed then
-									h:ChangeState(Enum.HumanoidStateType.Landed)
-								end
-							elseif stateEnum == Enum.HumanoidStateType.Running then
-								lastAirState = nil
-								-- Running: Prevent unwanted freefall on small bumps
-								if currentState == Enum.HumanoidStateType.Freefall then
-									-- Check if we should be running instead
-									if fA.vel and math.abs(fA.vel.y) < 3 then
-										h:ChangeState(Enum.HumanoidStateType.Running)
-									end
-								end
-							elseif
-								stateEnum == Enum.HumanoidStateType.Climbing
-								and currentState ~= Enum.HumanoidStateType.Climbing
-							then
-								-- Climbing: Force state and ensure proper velocity for animation
-								h:ChangeState(Enum.HumanoidStateType.Climbing)
-							elseif
-								stateEnum == Enum.HumanoidStateType.Climbing
-								and currentState == Enum.HumanoidStateType.Climbing
-							then
-								-- Maintain climbing: Apply full recorded velocity (not dampened)
-								if fA.vel then
-									-- Use full velocity for climbing (no lerp dampening)
-									local climbVel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
-									r.AssemblyLinearVelocity = climbVel
-								end
-							elseif
-								stateEnum == Enum.HumanoidStateType.Swimming
-								and currentState ~= Enum.HumanoidStateType.Swimming
-							then
-								-- Swimming: Force state and update hip height
-								h:ChangeState(Enum.HumanoidStateType.Swimming)
-								if fA.hh then
-									h.HipHeight = fA.hh
-								end
-							end
-						end
-					end
-				end
-
-				-- 5. Drift Correction (Subtle) - Skip during climbing/swimming
-				local skipDriftCorrection = false
-				if fA.st then
-					local stName = string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
-					skipDriftCorrection = (stName == "Climbing" or stName == "Swimming")
-				end
-
-				if not skipDriftCorrection and fA.pos and fB.pos then
-					local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
-						:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
-					local dist = (r.Position - targetPos).Magnitude
-
-					if dist > 6 then
-						-- Snap if way off
-						r.CFrame = CFrame.new(targetPos) * r.CFrame.Rotation
-					elseif dist > 1 then
-						-- Nudge velocity to correct
-						local dir = (targetPos - r.Position).Unit
-						local correction = dir * (dist * 2) -- Proportional correction
-						r.AssemblyLinearVelocity = r.AssemblyLinearVelocity + correction
-					end
-				end
-
-				-- 6. TOOL HANDLING: Equip/Unequip tools based on recorded data
-				if frameCounter % 3 == 0 then -- Throttle to every 3 frames for performance
-					local recordedTool = fA.tool
-					local currentTool = c:FindFirstChildOfClass("Tool")
-					local currentToolName = currentTool and currentTool.Name or nil
-
-					if recordedTool ~= currentToolName then
-						if recordedTool then
-							-- Need to equip a tool
-							local backpack = LocalPlayer:FindFirstChild("Backpack")
-							if backpack then
-								local toolToEquip = backpack:FindFirstChild(recordedTool)
-								if toolToEquip and toolToEquip:IsA("Tool") then
-									h:EquipTool(toolToEquip)
-								end
-							end
-						else
-							-- Need to unequip current tool
-							if currentTool then
-								h:UnequipTools()
-							end
-						end
-					end
-				end
-			end
-		end)
-	else
-		-- STRICT MODE: Rigid Physics Constraints (Supports Touch)
-		r.Anchored = false -- Must be unanchored for Touch
-
-		-- Ensure Animate script is running for Native Anim
-		local isNativeMode = isNativeAnim or (currentFrameData.Mode == "Native")
-		if a then
-			a.Disabled = not isNativeMode
-			if isNativeMode and a.Disabled then
-				a.Disabled = false
-			end
-		end
-
-		-- Setup Constraints
-		local att = r:FindFirstChild("PlaybackAtt") or Instance.new("Attachment", r)
-		att.Name = "PlaybackAtt"
-
-		local ap = r:FindFirstChild("PlaybackAP") or Instance.new("AlignPosition", r)
-		ap.Name = "PlaybackAP"
-		ap.Mode = Enum.PositionAlignmentMode.OneAttachment
-		ap.Attachment0 = att
-		ap.RigidityEnabled = true -- Infinite force to match Strict behavior
-
-		local ao = r:FindFirstChild("PlaybackAO") or Instance.new("AlignOrientation", r)
-		ao.Name = "PlaybackAO"
-		ao.Mode = Enum.OrientationAlignmentMode.OneAttachment
-		ao.Attachment0 = att
-		ao.RigidityEnabled = true -- Infinite torque
-
-		local jm = {}
-		for _, d in pairs(c:GetDescendants()) do
-			if d:IsA("Motor6D") then
-				jm[d.Name] = d
-			end
-		end
-
-		-- Ground snap offset - calculated once at start
-		local groundSnapOffset = 0
-		local groundSnapCalculated = false
-
-		-- PERFORMANCE: Pre-cache variables for playback loop
-		local strictFrameCounter = 0
-		local cachedRayParams = RaycastParams.new()
-		cachedRayParams.FilterType = Enum.RaycastFilterType.Exclude
-		local filterList = { c }
-		if PathContainer then
-			table.insert(filterList, PathContainer)
-		end
-		cachedRayParams.FilterDescendantsInstances = filterList
-		cachedRayParams.IgnoreWater = true
-		local cachedGroundY = nil -- Cache ground Y position
-		local cachedLastStrictState = nil -- Cache humanoid state
-
-		Connections.Playback = RunService.Stepped:Connect(function(_, dt)
-			strictFrameCounter = strictFrameCounter + 1
-			if not isPlaying or isPlayPaused then
-				return
-			end
-
-			-- REVERSE PLAYBACK SUPPORT
-			if isReversing then
-				currentPlaybackTime = currentPlaybackTime - (dt * playbackSpeed)
-				if currentPlaybackTime <= 0 then
-					if isRespawnOnEnd then
-						local savedFile = currentPlaybackFile
-						local savedLoop = isLooping
-						StopPlayback()
-						ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
-						task.wait(5)
-						local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-						if h then
-							h.Health = 0
-						end
-						if savedLoop then
-							task.spawn(function()
-								LocalPlayer.CharacterAdded:Wait()
-								ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
-								task.wait(5)
-								if savedFile and UIHandlers.PlayMergerRecording then
-									UIHandlers.PlayMergerRecording(savedFile, true)
-								end
-							end)
-						end
-						return
-					elseif isLooping then
-						currentPlaybackTime = currentTotalDuration
-					else
-						StopPlayback()
-						return
-					end
-				end
-			else
-				currentPlaybackTime = currentPlaybackTime + (dt * playbackSpeed)
-				if currentPlaybackTime >= currentTotalDuration then
-					if isRespawnOnEnd then
-						local savedFile = currentPlaybackFile
-						local savedLoop = isLooping
-						StopPlayback()
-						ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
-						task.wait(5)
-						local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-						if h then
-							h.Health = 0
-						end
-						if savedLoop then
-							task.spawn(function()
-								LocalPlayer.CharacterAdded:Wait()
-								ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
-								task.wait(5)
-								if savedFile and UIHandlers.PlayMergerRecording then
-									UIHandlers.PlayMergerRecording(savedFile, true)
-								end
-							end)
-						end
-						return
-					elseif isLooping then
-						currentPlaybackTime = 0
-					else
-						StopPlayback()
-						return
-					end
-				end
-			end
-
-			-- DETECT TIME JUMP (slider seeking) - skip blending if user jumped to different time
-			local expectedDelta = dt * playbackSpeed
-			local actualDelta = math.abs(currentPlaybackTime - lastPlaybackTime)
-			local isTimeJump = actualDelta > (expectedDelta * 3 + 0.1)
-			lastPlaybackTime = currentPlaybackTime
-
-			-- Find Frames (optimized with binary search + caching)
-			local frameIdx = FindFrameIndex(currentFrameData, currentPlaybackTime, lastFrameIndex)
-			lastFrameIndex = frameIdx
-			local fA, fB = currentFrameData[frameIdx], currentFrameData[frameIdx + 1]
-
-			if fA and fB then
-				local deltaT = fB.t - fA.t
-				local alpha = 0
-				if deltaT > 0.0001 then
-					alpha = (currentPlaybackTime - fA.t) / deltaT
-				end
-				local targetCF = TblToCF(fA.r):Lerp(TblToCF(fB.r), alpha)
-
-				-- Drive Physics Constraints
-				if isNativeMode then
-					-- Use Non-Rigid for Native Anim to allow Velocity calculation
-					ap.RigidityEnabled = false
-					ap.MaxForce = math.huge
-
-					-- Adaptive Responsiveness
-					-- Lower responsiveness allows smoother interpolation, reducing the "floating/stuttering" look
-					local isMovingVertically = math.abs(TblToCF(fB.r).Y - TblToCF(fA.r).Y) > 0.1
-					if isMovingVertically then
-						ap.Responsiveness = 40 -- Very smooth for jumps/slopes
-					else
-						ap.Responsiveness = 80 -- Snappier for flat ground
-					end
-
-					ao.RigidityEnabled = false
-					ao.MaxTorque = math.huge
-					ao.Responsiveness = isReversing and 50 or 80 -- Smoother for reverse
-				else
-					ap.RigidityEnabled = true
-					ao.RigidityEnabled = true
-				end
-
-				-- AUTO-HEIGHT CORRECTION (Ground Snap)
-				-- Ensures feet touch the ground visually in Native Anim mode OR Strict Retarget mode
-				local finalPosition = targetCF.Position
-
-				if isNativeMode or isStrictRetarget then
-					-- For Strict Retarget: Skip raycast if offset already calculated
-					if isStrictRetarget and groundSnapCalculated then
-						-- Just apply the cached offset
-						finalPosition =
-							Vector3.new(finalPosition.X, finalPosition.Y + groundSnapOffset, finalPosition.Z)
-					else
-						-- PERFORMANCE: Use cached RayParams and throttle raycast to every 5 frames
-						local groundY = cachedGroundY
-						if strictFrameCounter % 5 == 0 or not cachedGroundY then
-							local rayStart = r.Position + Vector3.new(0, 3, 0)
-							local footRay = workspace:Raycast(rayStart, Vector3.new(0, -20, 0), cachedRayParams)
-							if footRay then
-								cachedGroundY = footRay.Position.Y
-								groundY = cachedGroundY
-							end
-						end
-
-						-- PERFORMANCE: Only process ground snap if we have valid groundY
-						if groundY then
-							local hipHeight = h.HipHeight
-							local rootSizeY = r.Size.Y / 2
-
-							-- Detect R6 vs R15
-							local isR6 = (c:FindFirstChild("Torso") ~= nil)
-							local expectedY
-
-							if isR6 then
-								-- R6: HipHeight is usually 0, calculate from leg length
-								local leftLeg = c:FindFirstChild("Left Leg")
-								local rightLeg = c:FindFirstChild("Right Leg")
-								local legLength = 2 -- Default R6 leg length
-
-								if leftLeg then
-									legLength = leftLeg.Size.Y
-								elseif rightLeg then
-									legLength = rightLeg.Size.Y
-								end
-
-								-- R6 root is at torso center, so add half torso + leg length
-								local torso = c:FindFirstChild("Torso")
-								local torsoHalfHeight = torso and (torso.Size.Y / 2) or 1
-								expectedY = groundY + legLength + torsoHalfHeight
-							else
-								-- R15: Use HipHeight
-								expectedY = groundY + hipHeight + rootSizeY
-							end
-
-							-- For Strict Retarget: Calculate offset ONCE, apply ALWAYS
-							if isStrictRetarget then
-								if not groundSnapCalculated then
-									-- Calculate offset once at start
-									groundSnapOffset = expectedY - finalPosition.Y
-									groundSnapCalculated = true
-								end
-								-- ALWAYS apply offset (including during jump/fall)
-								finalPosition =
-									Vector3.new(finalPosition.X, finalPosition.Y + groundSnapOffset, finalPosition.Z)
-							elseif isNativeMode then
-								-- For Native Anim: Check velocity before snapping
-								local prevY = TblToCF(fA.r).Y
-								local nextY = TblToCF(fB.r).Y
-								local fVelocityY = (nextY - prevY) / deltaT
-
-								if math.abs(fVelocityY) < 10.0 then
-									local snapAlpha = 0.3
-									local snappedY = finalPosition.Y + (expectedY - finalPosition.Y) * snapAlpha
-									finalPosition = Vector3.new(finalPosition.X, snappedY, finalPosition.Z)
-								end
-							end
-						end
-					end
-				end
-
-				-- Apply position and rotation (keep original rotation for reverse - walks backward)
-				ap.Position = finalPosition
-				-- Moonwalk inverts rotation, Reverse keeps original. If both, they cancel out.
-				if isMoonwalk and not isReversing then
-					ao.CFrame = targetCF * CFrame.Angles(0, math.pi, 0)
-				else
-					ao.CFrame = targetCF
-				end
-
-				-- Native Anim Movement Logic
-				if isNativeMode then
-					local nextPos = TblToCF(fB.r).Position
-					local prevPos = TblToCF(fA.r).Position
-					local velocity = (nextPos - prevPos) / deltaT
-					velocity = velocity * playbackSpeed -- Scale velocity by playback speed
-
-					-- Invert velocity for reverse playback
-					if isReversing then
-						velocity = -velocity
-					end
-
-					-- Smoother Velocity Application (skip blending on time jump or high speed)
-					if isTimeJump or playbackSpeed >= 2 then
-						-- Snap directly to target velocity on slider seek or high speed
-						r.AssemblyLinearVelocity = velocity
-					else
-						-- Blend current velocity with target velocity to prevent snapping
-						local currentVel = r.AssemblyLinearVelocity
-						local baseBlend = isReversing and 0.35 or 0.5
-						local blendFactor = math.clamp(baseBlend * playbackSpeed, 0.3, 0.95)
-
-						-- If jumping/falling (high vertical velocity), trust the recording more but keep it smooth
-						if math.abs(velocity.Y) > 5 then
-							blendFactor = math.clamp((isReversing and 0.5 or 0.7) * playbackSpeed, 0.4, 0.95)
-						end
-
-						r.AssemblyLinearVelocity = currentVel:Lerp(velocity, blendFactor)
-					end
-
-					-- GROUND CHECK (Raycast)
-					-- Crucial for distinguishing Slopes vs Jumps
-					-- PERFORMANCE: Throttle ground check to every 3 frames, use cached result otherwise
-					local isNearGround = false
-
-					if strictFrameCounter % 3 == 0 then
-						-- Increased length to 12 studs to account for steep slopes/micro-floating
-						local rayResult = workspace:Raycast(r.Position, Vector3.new(0, -12, 0), cachedRayParams)
-
-						if rayResult then
-							local distToGround = (r.Position - rayResult.Position).Magnitude
-							-- Relaxed threshold: If ground is within 8 studs, consider it walkable/slope
-							if distToGround < 8.0 then
-								isNearGround = true
-							end
-						end
-					end
-
-					local flatVel = velocity * Vector3.new(1, 0, 1)
-					local horizSpeed = flatVel.Magnitude
-
-					if horizSpeed > 0.5 then
-						-- For reverse: invert move direction = backward walk animation
-						if isReversing then
-							h:Move(-flatVel.Unit)
-						else
-							h:Move(flatVel.Unit)
-						end
-
-						-- Force Running state if on ground/slope
-						-- This OVERRIDES any Jump detection if we are close to the floor
-						if isNearGround then
-							h:ChangeState(Enum.HumanoidStateType.Running)
-							h.Jump = false
-						end
-					else
-						h:Move(Vector3.zero)
-					end
-
-					local isClimbing = false
-					-- Climb Detection (Vertical movement near parts)
-					-- Check climbing first to prevent false jumps
-					-- For reverse: check absolute velocity since direction is inverted
-					local climbVelY = isReversing and -velocity.Y or velocity.Y
-					if climbVelY > 3.0 then
-						local hitResult = workspace:Raycast(r.Position, r.CFrame.LookVector * 2, cachedRayParams)
-						if hitResult and hitResult.Instance.CanCollide then
-							-- Stricter climb detection: High angle or Truss
-							if hitResult.Instance:IsA("TrussPart") or (climbVelY > horizSpeed * 2.0) then
-								h:ChangeState(Enum.HumanoidStateType.Climbing)
-								isClimbing = true
-							end
-						end
-					end
-
-					if not isClimbing then
-						-- ADVANCED JUMP & FREEFALL DETECTION
-						-- For reverse playback: swap jump/freefall states
-
-						-- Dynamic Threshold: Slopes generate vertical velocity, so we raise the bar.
-						local jumpThreshold = math.max(10, 8.0 + (horizSpeed * 0.5))
-
-						-- PERFORMANCE: Cache state once instead of calling GetState multiple times
-						local currentState = h:GetState()
-						local currentStateName = currentState.Name
-
-						-- ZOOM EFFECT for Strict mode
-						if isZoomPunch then
-							if currentStateName == "Jumping" then
-								SetZoomState("jump") -- Zoom OUT
-							elseif currentStateName == "Freefall" then
-								SetZoomState("fall") -- Zoom IN
-							elseif currentStateName == "Running" or currentStateName == "Landed" then
-								SetZoomState("normal") -- Reset
-							end
-						end
-
-						if isReversing then
-							-- REVERSE: Use inverted velocity for proper animation
-							-- velocity.Y is already inverted, so positive = going up (jump), negative = going down (fall)
-							if not isNearGround then
-								-- Lower threshold (3) for better spam jump detection
-								if velocity.Y > 3 then
-									-- Going up visually = Jumping (ALWAYS change state for spam jumps)
-									h:ChangeState(Enum.HumanoidStateType.Jumping)
-								elseif velocity.Y < -3 then
-									-- Going down visually = Freefall
-									h:ChangeState(Enum.HumanoidStateType.Freefall)
-								else
-									-- Near apex, maintain jump state
-									if
-										currentState ~= Enum.HumanoidStateType.Freefall
-										and currentState ~= Enum.HumanoidStateType.Jumping
-									then
-										h:ChangeState(Enum.HumanoidStateType.Jumping)
-									end
-								end
-							else
-								-- On ground during reverse - reset to running
-								if
-									currentState == Enum.HumanoidStateType.Jumping
-									or currentState == Enum.HumanoidStateType.Freefall
-								then
-									h:ChangeState(Enum.HumanoidStateType.Running)
-								end
-							end
-						else
-							-- NORMAL: Original logic
-							-- 1. Jump Start
-							-- ONLY trigger jump if we are NOT near the ground
-							if not isNearGround and velocity.Y > jumpThreshold then
-								h:ChangeState(Enum.HumanoidStateType.Jumping)
-
-							-- 2. Jump Apex (The "Floaty" Part)
-							-- If we are in the air (confirmed by !isNearGround) and velocity is small
-							elseif not isNearGround and math.abs(velocity.Y) <= 5 then
-								if currentState == Enum.HumanoidStateType.Freefall then
-									-- Do nothing
-								else
-									h:ChangeState(Enum.HumanoidStateType.Jumping)
-								end
-
-							-- 3. Freefall (Falling Down)
-							elseif not isNearGround and velocity.Y < -18 then
-								h:ChangeState(Enum.HumanoidStateType.Freefall)
-							end
-						end
-					end
-
-					-- Swim Detection (Check water)
-					local min, max = r.Position - (0.5 * r.Size), r.Position + (0.5 * r.Size)
-					local region = Region3.new(min, max)
-					region = region:ExpandToGrid(4)
-					if region then
-						local material = workspace.Terrain:ReadVoxels(region, 4)[1][1][1]
-						if material == Enum.Material.Water then
-							h:ChangeState(Enum.HumanoidStateType.Swimming)
-						end
-					end
-				end
-
-				-- Replicate Joints (Visuals)
-				if not isNativeAnim and fA.j and fB.j then
-					for n, dA in pairs(fA.j) do
-						local dB = fB.j[n]
-						if dB then
-							local m = jm[n]
-							if m then
-								local target = TblToCF(dA):Lerp(TblToCF(dB), alpha)
-								if isStrictRetarget then
-									m.Transform = target.Rotation
-								else
-									m.Transform = target
-								end
-							end
-						end
-					end
-				end
-
-				-- TOOL HANDLING: Equip/Unequip tools based on recorded data (Strict Mode)
-				if strictFrameCounter % 3 == 0 then -- Throttle to every 3 frames for performance
-					local recordedTool = fA.tool
-					local currentTool = c:FindFirstChildOfClass("Tool")
-					local currentToolName = currentTool and currentTool.Name or nil
-
-					if recordedTool ~= currentToolName then
-						if recordedTool then
-							-- Need to equip a tool
-							local backpack = LocalPlayer:FindFirstChild("Backpack")
-							if backpack then
-								local toolToEquip = backpack:FindFirstChild(recordedTool)
-								if toolToEquip and toolToEquip:IsA("Tool") then
-									h:EquipTool(toolToEquip)
-								end
-							end
-						else
-							-- Need to unequip current tool
-							if currentTool then
-								h:UnequipTools()
-							end
-						end
-					end
-				end
-			end
-		end)
+	-- 3. PLAYBACK PHASE
+	-- STRICT MODE: Rigid Physics Constraints (Supports Touch)
+	r.Anchored = false -- Must be unanchored for Touch
+
+	-- Ensure Animate script is disabled for Strict Mode
+	if a then
+		a.Disabled = true
 	end
+
+	-- Setup Constraints
+	local att = r:FindFirstChild("PlaybackAtt") or Instance.new("Attachment", r)
+	att.Name = "PlaybackAtt"
+
+	local ap = r:FindFirstChild("PlaybackAP") or Instance.new("AlignPosition", r)
+	ap.Name = "PlaybackAP"
+	ap.Mode = Enum.PositionAlignmentMode.OneAttachment
+	ap.Attachment0 = att
+	ap.RigidityEnabled = true -- Infinite force to match Strict behavior
+
+	local ao = r:FindFirstChild("PlaybackAO") or Instance.new("AlignOrientation", r)
+	ao.Name = "PlaybackAO"
+	ao.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	ao.Attachment0 = att
+	ao.RigidityEnabled = true -- Infinite torque
+
+	local jm = {}
+	for _, d in pairs(c:GetDescendants()) do
+		if d:IsA("Motor6D") then
+			jm[d.Name] = d
+		end
+	end
+
+	-- PERFORMANCE: Pre-cache variables for playback loop
+	local strictFrameCounter = 0
+
+	Connections.Playback = RunService.Stepped:Connect(function(_, dt)
+		strictFrameCounter = strictFrameCounter + 1
+		if not isPlaying or isPlayPaused then
+			return
+		end
+
+		-- REVERSE PLAYBACK SUPPORT
+		if isReversing then
+			currentPlaybackTime = currentPlaybackTime - (dt * playbackSpeed)
+			if currentPlaybackTime <= 0 then
+				if isRespawnOnEnd then
+					local savedFile = currentPlaybackFile
+					local savedLoop = isLooping
+					StopPlayback()
+					ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
+					task.wait(5)
+					local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+					if h then
+						h.Health = 0
+					end
+					if savedLoop then
+						task.spawn(function()
+							LocalPlayer.CharacterAdded:Wait()
+							ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
+							task.wait(5)
+							if savedFile and UIHandlers.PlayMergerRecording then
+								UIHandlers.PlayMergerRecording(savedFile, true)
+							end
+						end)
+					end
+					return
+				elseif isLooping then
+					currentPlaybackTime = currentTotalDuration
+				else
+					StopPlayback()
+					return
+				end
+			end
+		else
+			currentPlaybackTime = currentPlaybackTime + (dt * playbackSpeed)
+			if currentPlaybackTime >= currentTotalDuration then
+				if isRespawnOnEnd then
+					local savedFile = currentPlaybackFile
+					local savedLoop = isLooping
+					StopPlayback()
+					ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
+					task.wait(5)
+					local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+					if h then
+						h.Health = 0
+					end
+					if savedLoop then
+						task.spawn(function()
+							LocalPlayer.CharacterAdded:Wait()
+							ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
+							task.wait(5)
+							if savedFile and UIHandlers.PlayMergerRecording then
+								UIHandlers.PlayMergerRecording(savedFile, true)
+							end
+						end)
+					end
+					return
+				elseif isLooping then
+					currentPlaybackTime = 0
+				else
+					StopPlayback()
+					return
+				end
+			end
+		end
+
+		-- DETECT TIME JUMP (slider seeking) - skip blending if user jumped to different time
+		local expectedDelta = dt * playbackSpeed
+		local actualDelta = math.abs(currentPlaybackTime - lastPlaybackTime)
+		local isTimeJump = actualDelta > (expectedDelta * 3 + 0.1)
+		lastPlaybackTime = currentPlaybackTime
+
+		-- Find Frames (optimized with binary search + caching)
+		local frameIdx = FindFrameIndex(currentFrameData, currentPlaybackTime, lastFrameIndex)
+		lastFrameIndex = frameIdx
+		local fA, fB = currentFrameData[frameIdx], currentFrameData[frameIdx + 1]
+
+		if fA and fB then
+			local deltaT = fB.t - fA.t
+			local alpha = 0
+			if deltaT > 0.0001 then
+				alpha = (currentPlaybackTime - fA.t) / deltaT
+			end
+			local targetCF = TblToCF(fA.r):Lerp(TblToCF(fB.r), alpha)
+
+			-- Drive Physics Constraints (Rigid)
+			ap.RigidityEnabled = true
+			ao.RigidityEnabled = true
+
+			-- Apply position and rotation (keep original rotation for reverse - walks backward)
+			ap.Position = targetCF.Position
+			-- Moonwalk inverts rotation, Reverse keeps original. If both, they cancel out.
+			if isMoonwalk and not isReversing then
+				ao.CFrame = targetCF * CFrame.Angles(0, math.pi, 0)
+			else
+				ao.CFrame = targetCF
+			end
+
+			-- Replicate Joints (Visuals)
+			if fA.j and fB.j then
+				for n, dA in pairs(fA.j) do
+					local dB = fB.j[n]
+					if dB then
+						local m = jm[n]
+						if m then
+							local target = TblToCF(dA):Lerp(TblToCF(dB), alpha)
+							m.Transform = target
+						end
+					end
+				end
+			end
+
+			-- TOOL HANDLING: Equip/Unequip tools based on recorded data (Strict Mode)
+			if strictFrameCounter % 3 == 0 then -- Throttle to every 3 frames for performance
+				local recordedTool = fA.tool
+				local currentTool = c:FindFirstChildOfClass("Tool")
+				local currentToolName = currentTool and currentTool.Name or nil
+
+				if recordedTool ~= currentToolName then
+					if recordedTool then
+						-- Need to equip a tool
+						local backpack = LocalPlayer:FindFirstChild("Backpack")
+						if backpack then
+							local toolToEquip = backpack:FindFirstChild(recordedTool)
+							if toolToEquip and toolToEquip:IsA("Tool") then
+								h:EquipTool(toolToEquip)
+							end
+						end
+					else
+						-- Need to unequip current tool
+						if currentTool then
+							h:UnequipTools()
+						end
+					end
+				end
+			end
+		end
+	end)
 end
 
 UIHandlers.PlayMergerRecording = PlayRecording
@@ -3402,9 +2496,6 @@ local function SwitchTab(name)
 	end
 	if PageRecord then
 		PageRecord.Visible = (name == "Recorder")
-		if name == "Recorder" and UIHandlers.UpdateRecorderSettings then
-			UIHandlers.UpdateRecorderSettings()
-		end
 	end
 	if PagePlay then
 		PagePlay.Visible = (name == "List Recorder")
@@ -3849,23 +2940,11 @@ end
 local BtnTogglePath
 do
 	local SettingsPanel = Instance.new("Frame", PageRecord)
-	SettingsPanel.Size = UDim2.new(1, 0, 0, 80) -- Increased height for Native Anim button
+	SettingsPanel.Size = UDim2.new(1, 0, 0, 40) -- Reduced height, only Path
 	SettingsPanel.BackgroundColor3 = C_ITEM
 	SettingsPanel.LayoutOrder = 3
 	Instance.new("UICorner", SettingsPanel).CornerRadius = UDim.new(0, 8)
 	RegisterTheme(SettingsPanel, "BackgroundColor3", "Item")
-
-	local BtnToggleMode = Instance.new("TextButton", SettingsPanel)
-	BtnToggleMode.Text = "MODE: STRICT"
-	BtnToggleMode.Size = UDim2.new(0.5, -10, 0, 30)
-	BtnToggleMode.Position = UDim2.new(0, 5, 0, 5)
-	BtnToggleMode.BackgroundColor3 = C_MAIN
-	BtnToggleMode.TextColor3 = C_TEXT
-	BtnToggleMode.Font = Enum.Font.GothamBold
-	BtnToggleMode.TextSize = 10
-	Instance.new("UICorner", BtnToggleMode).CornerRadius = UDim.new(0, 6)
-	RegisterTheme(BtnToggleMode, "BackgroundColor3", "Main")
-	RegisterTheme(BtnToggleMode, "TextColor3", "Text")
 
 	BtnTogglePath = Instance.new("TextButton", SettingsPanel)
 	BtnTogglePath.Text = "PATH: ON"
@@ -3903,50 +2982,6 @@ do
 		BtnPathColor.BackgroundColor3 = currentPathColor
 
 		-- Live Update
-		if isPathEnabled then
-			UpdatePathColor(currentPathColor)
-		end
-	end)
-
-	local BtnNativeRecorder = Instance.new("TextButton", SettingsPanel)
-	BtnNativeRecorder.Text = "NATIVE RECORDER: " .. (isNativeRecording and "ON" or "OFF")
-	BtnNativeRecorder.Size = UDim2.new(1, -10, 0, 30)
-	BtnNativeRecorder.Position = UDim2.new(0, 5, 0, 40)
-	BtnNativeRecorder.BackgroundColor3 = C_MAIN
-	BtnNativeRecorder.TextColor3 = isNativeRecording and C_GREEN or C_TEXT_DIM
-	BtnNativeRecorder.Font = Enum.Font.GothamBold
-	BtnNativeRecorder.TextSize = 10
-	Instance.new("UICorner", BtnNativeRecorder).CornerRadius = UDim.new(0, 6)
-	RegisterTheme(BtnNativeRecorder, "BackgroundColor3", "Main")
-
-	BtnNativeRecorder.MouseButton1Click:Connect(function()
-		isNativeRecording = not isNativeRecording
-		BtnNativeRecorder.Text = "NATIVE RECORDER: " .. (isNativeRecording and "ON" or "OFF")
-		BtnNativeRecorder.TextColor3 = isNativeRecording and C_GREEN or C_TEXT_DIM
-
-		-- Auto-disable Flexible if Native is ON to avoid confusion
-		if isNativeRecording and isFlexibleRecording then
-			isFlexibleRecording = false
-			BtnToggleMode.Text = "MODE: STRICT"
-			BtnToggleMode.TextColor3 = C_TEXT
-		end
-	end)
-
-	-- Expose update function for SwitchTab
-	UIHandlers.UpdateRecorderSettings = function()
-		BtnNativeRecorder.Text = "NATIVE RECORDER: " .. (isNativeRecording and "ON" or "OFF")
-		BtnNativeRecorder.TextColor3 = isNativeRecording and C_GREEN or C_TEXT_DIM
-	end
-
-	BtnToggleMode.MouseButton1Click:Connect(function()
-		isFlexibleRecording = not isFlexibleRecording
-		BtnToggleMode.Text = isFlexibleRecording and "MODE: FLEXIBLE" or "MODE: STRICT"
-		BtnToggleMode.TextColor3 = isFlexibleRecording and C_ACCENT or C_TEXT
-	end)
-
-	BtnTogglePath.MouseButton1Click:Connect(function()
-		if UIHandlers.OnTogglePathClick then
-			UIHandlers.OnTogglePathClick()
 		end
 	end)
 end
@@ -5392,46 +4427,7 @@ function UIHandlers.SetupListMapUI()
 	Instance.new("UICorner", SearchFrame).CornerRadius = UDim.new(0, 6)
 	RegisterTheme(SearchFrame, "BackgroundColor3", "Item")
 
-	-- Settings Row (Native Anim & Strict Retarget)
-	local SettingsRow = Instance.new("Frame", MapContainer)
-	SettingsRow.Size = UDim2.new(0.96, 0, 0, 35)
-	SettingsRow.BackgroundTransparency = 1
-	SettingsRow.LayoutOrder = 2
 
-	local BtnStrictRetarget = Instance.new("TextButton", SettingsRow)
-	BtnStrictRetarget.Text = "STRICT RETARGET: OFF"
-	BtnStrictRetarget.Size = UDim2.new(0.48, -5, 1, 0)
-	BtnStrictRetarget.Position = UDim2.new(0, 0, 0, 0)
-	BtnStrictRetarget.BackgroundColor3 = C_ITEM
-	BtnStrictRetarget.TextColor3 = C_TEXT_DIM
-	BtnStrictRetarget.Font = Enum.Font.GothamBold
-	BtnStrictRetarget.TextSize = 9
-	Instance.new("UICorner", BtnStrictRetarget).CornerRadius = UDim.new(0, 6)
-	RegisterTheme(BtnStrictRetarget, "BackgroundColor3", "Item")
-
-	local BtnNativeAnim = Instance.new("TextButton", SettingsRow)
-	BtnNativeAnim.Text = "NATIVE ANIM: OFF"
-	BtnNativeAnim.Size = UDim2.new(0.48, -5, 1, 0)
-	BtnNativeAnim.Position = UDim2.new(0.52, 0, 0, 0)
-	BtnNativeAnim.BackgroundColor3 = C_ITEM
-	BtnNativeAnim.TextColor3 = C_TEXT_DIM
-	BtnNativeAnim.Font = Enum.Font.GothamBold
-	BtnNativeAnim.TextSize = 9
-	Instance.new("UICorner", BtnNativeAnim).CornerRadius = UDim.new(0, 6)
-	RegisterTheme(BtnNativeAnim, "BackgroundColor3", "Item")
-
-	-- Logic for Buttons
-	BtnStrictRetarget.MouseButton1Click:Connect(function()
-		isStrictRetarget = not isStrictRetarget
-		BtnStrictRetarget.Text = "STRICT RETARGET: " .. (isStrictRetarget and "ON" or "OFF")
-		BtnStrictRetarget.TextColor3 = isStrictRetarget and C_GREEN or C_TEXT_DIM
-	end)
-
-	BtnNativeAnim.MouseButton1Click:Connect(function()
-		isNativeAnim = not isNativeAnim
-		BtnNativeAnim.Text = "NATIVE ANIM: " .. (isNativeAnim and "ON" or "OFF")
-		BtnNativeAnim.TextColor3 = isNativeAnim and C_GREEN or C_TEXT_DIM
-	end)
 
 	local SearchIcon = Instance.new("ImageLabel", SearchFrame)
 	SearchIcon.Size = UDim2.new(0, 16, 0, 16)
