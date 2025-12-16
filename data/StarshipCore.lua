@@ -5448,6 +5448,8 @@ function UIHandlers.InitMergerUI()
 										camLook = f.camLook,
 										shiftlock = f.shiftlock,
 										charLook = f.charLook,
+										-- Tool state (equipped tool name)
+										tool = f.tool,
 									}
 									table.insert(finalFrames, newFrame)
 									fileDuration = newFrame.t
