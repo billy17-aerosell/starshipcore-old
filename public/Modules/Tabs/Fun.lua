@@ -220,343 +220,6 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
         end
     end)
     
-    --[[ COPY AVATAR - Disabled temporarily (ApplyDescription blocked by most games)
-    -- 2. COPY AVATAR
-    local CardCopy = CreateCard("COPY AVATAR", 150, 2)
-    
-    local BtnPlayerDropdown = Instance.new("TextButton", CardCopy)
-    BtnPlayerDropdown.Text = "Select Player ▼"
-    BtnPlayerDropdown.Size = UDim2.new(0.94, 0, 0, 35)
-    BtnPlayerDropdown.Position = UDim2.new(0.03, 0, 0, 35)
-    StyleBtn(BtnPlayerDropdown, C_TEXT)
-    
-    -- Dropdown list
-    local DropdownList = Instance.new("Frame", CardCopy)
-    DropdownList.Size = UDim2.new(0.94, 0, 0, 0)
-    DropdownList.Position = UDim2.new(0.03, 0, 0, 75)
-    DropdownList.BackgroundColor3 = C_SIDE
-    DropdownList.Visible = false
-    DropdownList.ZIndex = 10
-    DropdownList.ClipsDescendants = false
-    Instance.new("UICorner", DropdownList).CornerRadius = UDim.new(0, 6)
-    local dls = Instance.new("UIStroke", DropdownList); dls.Color = C_ACCENT; dls.Transparency = 0.6
-    
-    local DropdownScroll = Instance.new("ScrollingFrame", DropdownList)
-    DropdownScroll.Size = UDim2.new(1, 0, 1, 0)
-    DropdownScroll.BackgroundTransparency = 1
-    DropdownScroll.BorderSizePixel = 0
-    DropdownScroll.ScrollBarThickness = 4
-    DropdownScroll.ScrollBarImageColor3 = C_ACCENT
-    DropdownScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    DropdownScroll.ClipsDescendants = true
-    
-    local DropdownLayout = Instance.new("UIListLayout", DropdownScroll)
-    DropdownLayout.Padding = UDim.new(0, 2)
-    
-    local selectedPlayer = nil
-    local isDropdownOpen = false
-    
-    local function UpdatePlayerList()
-        DropdownScroll:ClearAllChildren()
-        DropdownLayout = Instance.new("UIListLayout", DropdownScroll)
-        DropdownLayout.Padding = UDim.new(0, 2)
-        
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                local btn = Instance.new("TextButton", DropdownScroll)
-                btn.Text = player.Name
-                btn.Size = UDim2.new(1, -8, 0, 25)
-                btn.BackgroundColor3 = C_ITEM
-                btn.TextColor3 = C_TEXT_DIM
-                btn.Font = Enum.Font.Gotham
-                btn.TextSize = 10
-                btn.TextXAlignment = Enum.TextXAlignment.Left
-                btn.TextTruncate = Enum.TextTruncate.AtEnd
-                btn.BorderSizePixel = 0
-                btn.ZIndex = 11
-                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-                
-                local padding = Instance.new("UIPadding", btn)
-                padding.PaddingLeft = UDim.new(0, 5)
-                
-                btn.MouseButton1Click:Connect(function()
-                    selectedPlayer = player
-                    BtnPlayerDropdown.Text = player.Name
-                    DropdownList.Visible = false
-                    isDropdownOpen = false
-                end)
-                
-                btn.MouseEnter:Connect(function()
-                    btn.BackgroundColor3 = C_ACCENT
-                    btn.TextColor3 = C_TEXT
-                end)
-                
-                btn.MouseLeave:Connect(function()
-                    btn.BackgroundColor3 = C_ITEM
-                    btn.TextColor3 = C_TEXT_DIM
-                end)
-            end
-        end
-        
-        -- Update scroll canvas size
-        local count = #Players:GetPlayers() - 1 -- exclude self
-        DropdownScroll.CanvasSize = UDim2.new(0, 0, 0, count * 27)
-    end
-    
-    BtnPlayerDropdown.MouseButton1Click:Connect(function()
-        isDropdownOpen = not isDropdownOpen
-        if isDropdownOpen then
-            UpdatePlayerList()
-            local playerCount = #Players:GetPlayers() - 1
-            local maxHeight = math.min(playerCount * 27, 100)
-            DropdownList.Size = UDim2.new(0.94, 0, 0, maxHeight)
-            DropdownList.Visible = true
-        else
-            DropdownList.Visible = false
-        end
-    end)
-    
-    local BtnCopy = Instance.new("TextButton", CardCopy)
-    BtnCopy.Text = "COPY"
-    BtnCopy.Size = UDim2.new(0.94, 0, 0, 30)
-    BtnCopy.Position = UDim2.new(0.03, 0, 0, 80)
-    StyleBtn(BtnCopy, C_ACCENT)
-    
-    local CopyStatus = Instance.new("TextLabel", CardCopy)
-    CopyStatus.Text = "Select player and click COPY"
-    CopyStatus.Size = UDim2.new(1, 0, 0, 20)
-    CopyStatus.Position = UDim2.new(0, 0, 0, 115)
-    CopyStatus.BackgroundTransparency = 1
-    CopyStatus.TextColor3 = C_TEXT_DIM
-    CopyStatus.Font = Enum.Font.Code
-    CopyStatus.TextSize = 9
-    
-    BtnCopy.MouseButton1Click:Connect(function()
-        if not selectedPlayer then
-            CopyStatus.Text = "Please select a player first!"
-            CopyStatus.TextColor3 = C_RED
-            return
-        end
-        
-        local myChar = LocalPlayer.Character
-        local myHum = myChar and myChar:FindFirstChild("Humanoid")
-        if not myChar or not myHum then return end
-        
-        CopyStatus.Text = "Copying " .. selectedPlayer.Name .. "..."
-        CopyStatus.TextColor3 = C_YELLOW
-        
-        -- Get target character first
-        local targetChar = selectedPlayer.Character
-        local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
-        
-        print("[CopyAvatar] Target Character:", targetChar and "EXISTS" or "NIL")
-        print("[CopyAvatar] Target Humanoid:", targetHum and "EXISTS" or "NIL")
-        
-        -- Try to get HumanoidDescription from target character first (what they're wearing in-game)
-        local avatarDesc = nil
-        if targetHum then
-            pcall(function()
-                avatarDesc = targetHum:GetAppliedDescription()
-            end)
-            print("[CopyAvatar] Got description from character:", avatarDesc and "YES" or "NO")
-        end
-        
-        -- Fallback to UserId if character description failed
-        if not avatarDesc then
-            local targetUserId = selectedPlayer.UserId
-            print("[CopyAvatar] Trying UserId:", targetUserId)
-            pcall(function()
-                avatarDesc = Players:GetHumanoidDescriptionFromUserId(targetUserId)
-            end)
-            print("[CopyAvatar] Got description from UserId:", avatarDesc and "YES" or "NO")
-        end
-        
-        if not avatarDesc then
-            CopyStatus.Text = "Failed to get avatar!"
-            CopyStatus.TextColor3 = C_RED
-            return
-        end
-        
-        -- Check rig types
-        local targetRigType = targetHum and targetHum.RigType or Enum.HumanoidRigType.R15
-        print("[CopyAvatar] Target RigType:", tostring(targetRigType))
-        print("[CopyAvatar] My RigType:", tostring(myHum.RigType))
-        
-        -- If target is R6, reset body scales
-        if targetRigType == Enum.HumanoidRigType.R6 then
-            avatarDesc.HeadScale = 1
-            avatarDesc.BodyDepthScale = 1
-            avatarDesc.BodyHeightScale = 1
-            avatarDesc.BodyWidthScale = 1
-            avatarDesc.BodyProportionScale = 0
-            avatarDesc.BodyTypeScale = 0
-            print("[CopyAvatar] Reset body scales for R6")
-        end
-        
-        -- Apply HumanoidDescription (this should handle body, face, clothes, accessories)
-        local applySuccess = false
-        pcall(function()
-            myHum:ApplyDescription(avatarDesc)
-            applySuccess = true
-        end)
-        print("[CopyAvatar] ApplyDescription:", applySuccess and "SUCCESS" or "FAILED")
-        task.wait(0.3)
-        
-        -- Manual clothes copy (works even if ApplyDescription fails)
-        if targetChar then
-            -- Get target's clothes
-            local targetShirt = targetChar:FindFirstChildOfClass("Shirt")
-            local targetPants = targetChar:FindFirstChildOfClass("Pants")
-            local targetTShirt = targetChar:FindFirstChildOfClass("ShirtGraphic")
-            
-            -- Remove my existing clothes
-            for _, item in pairs(myChar:GetChildren()) do
-                if item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") then
-                    item:Destroy()
-                end
-            end
-            task.wait(0.1)
-            
-            -- Copy Shirt
-            if targetShirt and targetShirt.ShirtTemplate ~= "" then
-                local shirt = Instance.new("Shirt")
-                shirt.ShirtTemplate = targetShirt.ShirtTemplate
-                shirt.Parent = myChar
-                print("[CopyAvatar] Manual Shirt:", targetShirt.ShirtTemplate)
-            end
-            
-            -- Copy Pants
-            if targetPants and targetPants.PantsTemplate ~= "" then
-                local pants = Instance.new("Pants")
-                pants.PantsTemplate = targetPants.PantsTemplate
-                pants.Parent = myChar
-                print("[CopyAvatar] Manual Pants:", targetPants.PantsTemplate)
-            end
-            
-            -- Copy T-Shirt
-            if targetTShirt then
-                local tshirt = Instance.new("ShirtGraphic")
-                tshirt.Graphic = targetTShirt.Graphic
-                tshirt.Parent = myChar
-                print("[CopyAvatar] Manual T-Shirt copied")
-            end
-        end
-        
-        task.wait(0.3)
-        
-        -- Clone accessories from target character (if exists)
-        local targetChar = selectedPlayer.Character
-        print("[CopyAvatar] Target Character exists:", targetChar and "YES" or "NO")
-        
-        if targetChar then
-            -- Remove my accessories first
-            local myAccessoryCount = 0
-            for _, item in pairs(myChar:GetChildren()) do
-                if item:IsA("Accessory") then
-                    item:Destroy()
-                    myAccessoryCount = myAccessoryCount + 1
-                end
-            end
-            print("[CopyAvatar] Removed my accessories:", myAccessoryCount)
-            task.wait(0.1)
-            
-            -- Clone target's accessories
-            local clonedCount = 0
-            for _, item in pairs(targetChar:GetChildren()) do
-                if item:IsA("Accessory") then
-                    pcall(function()
-                        item.Archivable = true
-                        local clone = item:Clone()
-                        myHum:AddAccessory(clone)
-                        clonedCount = clonedCount + 1
-                    end)
-                end
-            end
-            print("[CopyAvatar] Cloned accessories:", clonedCount)
-            
-            -- Copy body colors
-            if targetChar:FindFirstChild("Body Colors") then
-                pcall(function()
-                    local bc = targetChar["Body Colors"]:Clone()
-                    if myChar:FindFirstChild("Body Colors") then
-                        myChar["Body Colors"]:Destroy()
-                    end
-                    bc.Parent = myChar
-                    print("[CopyAvatar] Body colors copied")
-                end)
-            end
-            
-            -- Copy face
-            local targetHead = targetChar:FindFirstChild("Head")
-            local myHead = myChar:FindFirstChild("Head")
-            if targetHead and myHead then
-                -- Remove my face
-                for _, child in pairs(myHead:GetChildren()) do
-                    if child:IsA("Decal") then
-                        child:Destroy()
-                    end
-                end
-                -- Clone target's face
-                for _, decal in pairs(targetHead:GetChildren()) do
-                    if decal:IsA("Decal") then
-                        pcall(function()
-                            decal.Archivable = true
-                            local clone = decal:Clone()
-                            clone.Parent = myHead
-                            print("[CopyAvatar] Face copied:", decal.Texture)
-                        end)
-                    end
-                end
-            end
-            -- Copy animations from Animate script
-            local targetAnimate = targetChar:FindFirstChild("Animate")
-            local myAnimate = myChar:FindFirstChild("Animate")
-            if targetAnimate and myAnimate then
-                pcall(function()
-                    for _, child in pairs(targetAnimate:GetChildren()) do
-                        if child:IsA("StringValue") then
-                            local myAnim = myAnimate:FindFirstChild(child.Name)
-                            if myAnim then
-                                for _, animId in pairs(child:GetChildren()) do
-                                    if animId:IsA("Animation") then
-                                        local myAnimId = myAnim:FindFirstChild(animId.Name)
-                                        if myAnimId and myAnimId:IsA("Animation") then
-                                            myAnimId.AnimationId = animId.AnimationId
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    myAnimate.Disabled = true
-                    task.wait(0.1)
-                    myAnimate.Disabled = false
-                    print("[CopyAvatar] Animations copied")
-                end)
-            end
-            -- Copy body part colors (R15)
-            pcall(function()
-                local bodyParts = {"Head", "UpperTorso", "LowerTorso", "LeftUpperArm", "LeftLowerArm", "LeftHand", 
-                                  "RightUpperArm", "RightLowerArm", "RightHand", "LeftUpperLeg", "LeftLowerLeg", 
-                                  "LeftFoot", "RightUpperLeg", "RightLowerLeg", "RightFoot"}
-                for _, partName in pairs(bodyParts) do
-                    local targetPart = targetChar:FindFirstChild(partName)
-                    local myPart = myChar:FindFirstChild(partName)
-                    if targetPart and myPart and targetPart:IsA("BasePart") and myPart:IsA("BasePart") then
-                        myPart.Color = targetPart.Color
-                    end
-                end
-                print("[CopyAvatar] Body part colors copied")
-            end)
-        else
-            print("[CopyAvatar] WARNING: Target character not found, skipping accessories/face/colors/animations")
-        end
-        
-        CopyStatus.Text = "Avatar copied!"
-        CopyStatus.TextColor3 = C_GREEN
-    end)
-    ]] -- End of COPY AVATAR (disabled)
-    
     -- 3. INVISIBLE (FE Bypass)
     local CardInvis = CreateCard("INVISIBLE", 85, 3)
     
@@ -953,6 +616,9 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     SpectateStatus.Font = Enum.Font.Code
     SpectateStatus.TextSize = 9
     
+    -- Store last known position for far players
+    local lastKnownPosition = nil
+    
     BtnSpectate.MouseButton1Click:Connect(function()
         if not isSpectating then
             -- Start spectating
@@ -976,6 +642,19 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
             SpectateStatus.Text = "Spectating " .. selectedPlayer3.Name
             SpectateStatus.TextColor3 = C_GREEN
             
+            -- Try to request streaming around target player (for Streaming Enabled games)
+            task.spawn(function()
+                local targetChar = selectedPlayer3.Character
+                if targetChar then
+                    local hrp = targetChar:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        pcall(function()
+                            LocalPlayer:RequestStreamAroundAsync(hrp.Position, 5)
+                        end)
+                    end
+                end
+            end)
+            
             spectateLoop = RunService.RenderStepped:Connect(function()
                 if not selectedPlayer3 or not selectedPlayer3.Parent then
                     -- Player left, stop spectating
@@ -989,10 +668,44 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
                 end
                 
                 local targetChar = selectedPlayer3.Character
+                local camera = workspace.CurrentCamera
+                
                 if targetChar then
+                    local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
                     local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
+                    
+                    if targetHRP then
+                        -- Save last known position
+                        lastKnownPosition = targetHRP.Position
+                        
+                        -- Request streaming around target (continuous for far players)
+                        pcall(function()
+                            LocalPlayer:RequestStreamAroundAsync(targetHRP.Position, 5)
+                        end)
+                    end
+                    
                     if targetHum then
-                        workspace.CurrentCamera.CameraSubject = targetHum
+                        -- Normal spectate - set camera subject
+                        camera.CameraSubject = targetHum
+                    elseif targetHRP then
+                        -- Fallback - set camera subject to HumanoidRootPart
+                        camera.CameraSubject = targetHRP
+                    elseif lastKnownPosition then
+                        -- Character not fully loaded - move camera to last known position
+                        camera.CameraType = Enum.CameraType.Custom
+                        camera.CFrame = CFrame.new(lastKnownPosition + Vector3.new(0, 10, 15), lastKnownPosition)
+                    end
+                else
+                    -- Character not loaded at all (very far with Streaming Enabled)
+                    -- Try to get position from ReplicatedStorage or other means
+                    if lastKnownPosition then
+                        camera.CameraType = Enum.CameraType.Custom
+                        camera.CFrame = CFrame.new(lastKnownPosition + Vector3.new(0, 10, 15), lastKnownPosition)
+                        SpectateStatus.Text = "⚠ Far player - limited view"
+                        SpectateStatus.TextColor3 = C_YELLOW
+                    else
+                        SpectateStatus.Text = "⚠ Waiting for player to load..."
+                        SpectateStatus.TextColor3 = C_YELLOW
                     end
                 end
             end)
@@ -1004,6 +717,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
             BtnSpectate.BackgroundColor3 = C_ACCENT
             SpectateStatus.Text = "Spectate stopped"
             SpectateStatus.TextColor3 = C_TEXT_DIM
+            lastKnownPosition = nil
             
             if spectateLoop then
                 spectateLoop:Disconnect()
@@ -1015,16 +729,321 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
             if myChar then
                 local myHum = myChar:FindFirstChildOfClass("Humanoid")
                 if myHum then
+                    workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
                     workspace.CurrentCamera.CameraSubject = myHum
                 end
             end
             
             task.delay(2, function()
-                SpectateStatus.Text = "Select player and click START"
+                if not isSpectating then
+                    SpectateStatus.Text = "Select player and click START"
+                end
             end)
         end
     end)
 
+    -- 6. FRIENDS IN SERVER (Click player to see their friends)
+    local CardFriends = CreateCard("👥 FRIENDS IN SERVER", 85, 6)
+    
+    local BtnOpenFriends = Instance.new("TextButton", CardFriends)
+    BtnOpenFriends.Text = "👥 VIEW PLAYERS & FRIENDS"
+    BtnOpenFriends.Size = UDim2.new(0.94, 0, 0, 35)
+    BtnOpenFriends.Position = UDim2.new(0.03, 0, 0, 35)
+    StyleBtn(BtnOpenFriends, C_ACCENT)
+    
+    local FriendsStatus = Instance.new("TextLabel", CardFriends)
+    FriendsStatus.Text = "Click to see who's friends with who"
+    FriendsStatus.Size = UDim2.new(1, 0, 0, 15)
+    FriendsStatus.Position = UDim2.new(0, 0, 0, 72)
+    FriendsStatus.BackgroundTransparency = 1
+    FriendsStatus.TextColor3 = C_TEXT_DIM
+    FriendsStatus.Font = Enum.Font.Code
+    FriendsStatus.TextSize = 9
+    
+    -- Friends Window
+    local FriendsWindow = nil
+    
+    BtnOpenFriends.MouseButton1Click:Connect(function()
+        -- Destroy existing window
+        if FriendsWindow then FriendsWindow:Destroy() end
+        
+        local Main = PageFun.Parent.Parent
+        FriendsWindow = Instance.new("Frame", Main)
+        FriendsWindow.Name = "FriendsWindow"
+        FriendsWindow.Size = UDim2.new(0, 400, 0, 450)
+        FriendsWindow.Position = UDim2.new(0.5, -200, 0.5, -225)
+        FriendsWindow.BackgroundColor3 = C_MAIN
+        FriendsWindow.BorderSizePixel = 0
+        FriendsWindow.Visible = true
+        FriendsWindow.ZIndex = 200
+        Instance.new("UICorner", FriendsWindow).CornerRadius = UDim.new(0, 12)
+        local fws = Instance.new("UIStroke", FriendsWindow); fws.Color = C_ACCENT; fws.Thickness = 1
+        
+        -- Title bar
+        local TitleBar = Instance.new("Frame", FriendsWindow)
+        TitleBar.Size = UDim2.new(1, 0, 0, 40)
+        TitleBar.BackgroundColor3 = C_SIDE
+        TitleBar.BorderSizePixel = 0
+        TitleBar.ZIndex = 201
+        Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 12)
+        
+        local Title = Instance.new("TextLabel", TitleBar)
+        Title.Text = "👥 Players in Server (Click to see friends)"
+        Title.Size = UDim2.new(1, -50, 1, 0)
+        Title.Position = UDim2.new(0, 15, 0, 0)
+        Title.BackgroundTransparency = 1
+        Title.TextColor3 = C_TEXT
+        Title.Font = Enum.Font.GothamBold
+        Title.TextSize = 12
+        Title.TextXAlignment = Enum.TextXAlignment.Left
+        Title.ZIndex = 202
+        
+        local CloseBtn = Instance.new("TextButton", TitleBar)
+        CloseBtn.Text = "✕"
+        CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+        CloseBtn.Position = UDim2.new(1, -35, 0, 5)
+        CloseBtn.BackgroundColor3 = C_RED
+        CloseBtn.TextColor3 = C_TEXT
+        CloseBtn.Font = Enum.Font.GothamBold
+        CloseBtn.TextSize = 14
+        CloseBtn.ZIndex = 202
+        Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+        CloseBtn.MouseButton1Click:Connect(function()
+            FriendsWindow:Destroy()
+            FriendsWindow = nil
+        end)
+        
+        -- Left panel (Player list)
+        local LeftPanel = Instance.new("Frame", FriendsWindow)
+        LeftPanel.Size = UDim2.new(0.45, -5, 1, -50)
+        LeftPanel.Position = UDim2.new(0, 5, 0, 45)
+        LeftPanel.BackgroundColor3 = C_SIDE
+        LeftPanel.BorderSizePixel = 0
+        LeftPanel.ZIndex = 201
+        Instance.new("UICorner", LeftPanel).CornerRadius = UDim.new(0, 8)
+        
+        local LeftTitle = Instance.new("TextLabel", LeftPanel)
+        LeftTitle.Text = "📋 All Players"
+        LeftTitle.Size = UDim2.new(1, 0, 0, 25)
+        LeftTitle.BackgroundTransparency = 1
+        LeftTitle.TextColor3 = C_TEXT_DIM
+        LeftTitle.Font = Enum.Font.GothamBold
+        LeftTitle.TextSize = 10
+        LeftTitle.ZIndex = 202
+        
+        local PlayerScroll = Instance.new("ScrollingFrame", LeftPanel)
+        PlayerScroll.Size = UDim2.new(1, -10, 1, -30)
+        PlayerScroll.Position = UDim2.new(0, 5, 0, 27)
+        PlayerScroll.BackgroundTransparency = 1
+        PlayerScroll.BorderSizePixel = 0
+        PlayerScroll.ScrollBarThickness = 3
+        PlayerScroll.ScrollBarImageColor3 = C_ACCENT
+        PlayerScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        PlayerScroll.ZIndex = 202
+        
+        local PlayerLayout = Instance.new("UIListLayout", PlayerScroll)
+        PlayerLayout.Padding = UDim.new(0, 4)
+        
+        -- Right panel (Friends list)
+        local RightPanel = Instance.new("Frame", FriendsWindow)
+        RightPanel.Size = UDim2.new(0.55, -10, 1, -50)
+        RightPanel.Position = UDim2.new(0.45, 5, 0, 45)
+        RightPanel.BackgroundColor3 = C_SIDE
+        RightPanel.BorderSizePixel = 0
+        RightPanel.ZIndex = 201
+        Instance.new("UICorner", RightPanel).CornerRadius = UDim.new(0, 8)
+        
+        local RightTitle = Instance.new("TextLabel", RightPanel)
+        RightTitle.Text = "💚 Friends in Server"
+        RightTitle.Size = UDim2.new(1, 0, 0, 25)
+        RightTitle.BackgroundTransparency = 1
+        RightTitle.TextColor3 = C_TEXT_DIM
+        RightTitle.Font = Enum.Font.GothamBold
+        RightTitle.TextSize = 10
+        RightTitle.ZIndex = 202
+        
+        local FriendScroll = Instance.new("ScrollingFrame", RightPanel)
+        FriendScroll.Size = UDim2.new(1, -10, 1, -30)
+        FriendScroll.Position = UDim2.new(0, 5, 0, 27)
+        FriendScroll.BackgroundTransparency = 1
+        FriendScroll.BorderSizePixel = 0
+        FriendScroll.ScrollBarThickness = 3
+        FriendScroll.ScrollBarImageColor3 = C_ACCENT
+        FriendScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        FriendScroll.ZIndex = 202
+        
+        local FriendLayout = Instance.new("UIListLayout", FriendScroll)
+        FriendLayout.Padding = UDim.new(0, 4)
+        
+        -- Placeholder text for right panel
+        local PlaceholderText = Instance.new("TextLabel", FriendScroll)
+        PlaceholderText.Name = "Placeholder"
+        PlaceholderText.Text = "👈 Click a player to see\ntheir friends in this server"
+        PlaceholderText.Size = UDim2.new(1, 0, 0, 60)
+        PlaceholderText.BackgroundTransparency = 1
+        PlaceholderText.TextColor3 = C_TEXT_DIM
+        PlaceholderText.Font = Enum.Font.Gotham
+        PlaceholderText.TextSize = 11
+        PlaceholderText.ZIndex = 203
+        
+        -- Selected player indicator
+        local selectedBtn = nil
+        
+        -- Function to show friends of a player
+        local function ShowFriendsOf(player, btn)
+            -- Update selection visual
+            if selectedBtn then
+                selectedBtn.BackgroundColor3 = C_ITEM
+            end
+            btn.BackgroundColor3 = C_ACCENT
+            selectedBtn = btn
+            
+            -- Clear friend list
+            for _, child in pairs(FriendScroll:GetChildren()) do
+                if not child:IsA("UIListLayout") then
+                    child:Destroy()
+                end
+            end
+            
+            -- Show loading
+            local loadingText = Instance.new("TextLabel", FriendScroll)
+            loadingText.Name = "Loading"
+            loadingText.Text = "⏳ Checking friends..."
+            loadingText.Size = UDim2.new(1, 0, 0, 30)
+            loadingText.BackgroundTransparency = 1
+            loadingText.TextColor3 = C_YELLOW
+            loadingText.Font = Enum.Font.GothamBold
+            loadingText.TextSize = 11
+            loadingText.ZIndex = 203
+            
+            RightTitle.Text = "💚 " .. player.Name .. "'s Friends"
+            
+            task.spawn(function()
+                local friends = {}
+                local allPlayers = Players:GetPlayers()
+                
+                for _, otherPlayer in pairs(allPlayers) do
+                    if otherPlayer ~= player then
+                        local isFriend = false
+                        pcall(function()
+                            isFriend = player:IsFriendsWith(otherPlayer.UserId)
+                        end)
+                        
+                        if isFriend then
+                            table.insert(friends, otherPlayer.Name)
+                        end
+                        task.wait(0.05) -- Small delay to avoid rate limit
+                    end
+                end
+                
+                -- Clear loading
+                if loadingText and loadingText.Parent then
+                    loadingText:Destroy()
+                end
+                
+                -- Show results
+                if #friends > 0 then
+                    for i, friendName in ipairs(friends) do
+                        local friendCard = Instance.new("Frame", FriendScroll)
+                        friendCard.Size = UDim2.new(1, -5, 0, 30)
+                        friendCard.BackgroundColor3 = C_ITEM
+                        friendCard.BorderSizePixel = 0
+                        friendCard.LayoutOrder = i
+                        friendCard.ZIndex = 203
+                        Instance.new("UICorner", friendCard).CornerRadius = UDim.new(0, 6)
+                        
+                        local friendLabel = Instance.new("TextLabel", friendCard)
+                        friendLabel.Text = "  💚 " .. friendName
+                        friendLabel.Size = UDim2.new(1, 0, 1, 0)
+                        friendLabel.BackgroundTransparency = 1
+                        friendLabel.TextColor3 = C_GREEN
+                        friendLabel.Font = Enum.Font.GothamBold
+                        friendLabel.TextSize = 11
+                        friendLabel.TextXAlignment = Enum.TextXAlignment.Left
+                        friendLabel.ZIndex = 204
+                    end
+                else
+                    local noFriends = Instance.new("TextLabel", FriendScroll)
+                    noFriends.Text = "😢 No friends in this server"
+                    noFriends.Size = UDim2.new(1, 0, 0, 40)
+                    noFriends.BackgroundTransparency = 1
+                    noFriends.TextColor3 = C_TEXT_DIM
+                    noFriends.Font = Enum.Font.Gotham
+                    noFriends.TextSize = 11
+                    noFriends.ZIndex = 203
+                end
+            end)
+        end
+        
+        -- Populate player list
+        local allPlayers = Players:GetPlayers()
+        for i, player in ipairs(allPlayers) do
+            local playerBtn = Instance.new("TextButton", PlayerScroll)
+            playerBtn.Size = UDim2.new(1, -5, 0, 32)
+            playerBtn.BackgroundColor3 = C_ITEM
+            playerBtn.BorderSizePixel = 0
+            playerBtn.LayoutOrder = i
+            playerBtn.ZIndex = 203
+            playerBtn.Text = ""
+            playerBtn.AutoButtonColor = false
+            Instance.new("UICorner", playerBtn).CornerRadius = UDim.new(0, 6)
+            
+            -- Highlight if it's LocalPlayer
+            local isMe = player == LocalPlayer
+            
+            local playerLabel = Instance.new("TextLabel", playerBtn)
+            playerLabel.Text = (isMe and "⭐ " or "👤 ") .. player.Name .. (isMe and " (You)" or "")
+            playerLabel.Size = UDim2.new(1, -10, 1, 0)
+            playerLabel.Position = UDim2.new(0, 5, 0, 0)
+            playerLabel.BackgroundTransparency = 1
+            playerLabel.TextColor3 = isMe and C_ACCENT or C_TEXT
+            playerLabel.Font = Enum.Font.GothamBold
+            playerLabel.TextSize = 10
+            playerLabel.TextXAlignment = Enum.TextXAlignment.Left
+            playerLabel.TextTruncate = Enum.TextTruncate.AtEnd
+            playerLabel.ZIndex = 204
+            
+            playerBtn.MouseEnter:Connect(function()
+                if playerBtn ~= selectedBtn then
+                    playerBtn.BackgroundColor3 = C_SIDE
+                end
+            end)
+            
+            playerBtn.MouseLeave:Connect(function()
+                if playerBtn ~= selectedBtn then
+                    playerBtn.BackgroundColor3 = C_ITEM
+                end
+            end)
+            
+            playerBtn.MouseButton1Click:Connect(function()
+                ShowFriendsOf(player, playerBtn)
+            end)
+        end
+        
+        -- Dragging
+        local dragging, dragStart, startPos = false, nil, nil
+        TitleBar.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = FriendsWindow.Position
+            end
+        end)
+        TitleBar.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - dragStart
+                FriendsWindow.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+        
+        FriendsStatus.Text = "Window opened!"
+        FriendsStatus.TextColor3 = C_GREEN
+    end)
     
     -- Auto-Refresh when Tab becomes visible
     
