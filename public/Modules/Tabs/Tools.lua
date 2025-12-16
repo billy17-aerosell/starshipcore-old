@@ -1279,6 +1279,276 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     
     BtnHidePlayers.MouseButton1Click:Connect(ToggleHidePlayers)
 
+    -- HD SHADER / GRAPHICS ENHANCER
+    local CardShader = CreateCard("✨ HD SHADER", 180, 99)
+    
+    local shaderEnabled = false
+    local shaderEffects = {}
+    local currentPreset = "OFF"
+    
+    -- Shader presets
+    local ShaderPresets = {
+        ["OFF"] = {
+            ColorCorrection = nil,
+            Bloom = nil,
+            DepthOfField = nil,
+            SunRays = nil
+        },
+        ["HD Natural"] = {
+            ColorCorrection = {Brightness = 0.05, Contrast = 0.1, Saturation = 0.15, TintColor = Color3.new(1, 1, 1)},
+            Bloom = {Intensity = 0.5, Size = 24, Threshold = 0.9},
+            DepthOfField = nil,
+            SunRays = {Intensity = 0.1, Spread = 0.5}
+        },
+        ["Cinematic"] = {
+            ColorCorrection = {Brightness = -0.05, Contrast = 0.2, Saturation = -0.1, TintColor = Color3.fromRGB(255, 250, 240)},
+            Bloom = {Intensity = 0.8, Size = 40, Threshold = 0.8},
+            DepthOfField = {FarIntensity = 0.2, FocusDistance = 50, InFocusRadius = 30, NearIntensity = 0},
+            SunRays = {Intensity = 0.15, Spread = 0.6}
+        },
+        ["Vibrant"] = {
+            ColorCorrection = {Brightness = 0.1, Contrast = 0.15, Saturation = 0.4, TintColor = Color3.new(1, 1, 1)},
+            Bloom = {Intensity = 0.6, Size = 30, Threshold = 0.85},
+            DepthOfField = nil,
+            SunRays = {Intensity = 0.2, Spread = 0.7}
+        },
+        ["Warm"] = {
+            ColorCorrection = {Brightness = 0.05, Contrast = 0.1, Saturation = 0.2, TintColor = Color3.fromRGB(255, 245, 230)},
+            Bloom = {Intensity = 0.7, Size = 35, Threshold = 0.85},
+            DepthOfField = nil,
+            SunRays = {Intensity = 0.25, Spread = 0.8}
+        },
+        ["Cool"] = {
+            ColorCorrection = {Brightness = 0, Contrast = 0.15, Saturation = 0.1, TintColor = Color3.fromRGB(240, 248, 255)},
+            Bloom = {Intensity = 0.5, Size = 25, Threshold = 0.9},
+            DepthOfField = nil,
+            SunRays = {Intensity = 0.1, Spread = 0.4}
+        },
+        ["Night Vision"] = {
+            ColorCorrection = {Brightness = 0.3, Contrast = 0.3, Saturation = -0.8, TintColor = Color3.fromRGB(150, 255, 150)},
+            Bloom = {Intensity = 1, Size = 50, Threshold = 0.7},
+            DepthOfField = nil,
+            SunRays = nil
+        },
+        ["Retro"] = {
+            ColorCorrection = {Brightness = 0.05, Contrast = 0.25, Saturation = 0.3, TintColor = Color3.fromRGB(255, 250, 220)},
+            Bloom = {Intensity = 0.4, Size = 20, Threshold = 0.95},
+            DepthOfField = {FarIntensity = 0.1, FocusDistance = 100, InFocusRadius = 50, NearIntensity = 0},
+            SunRays = nil
+        }
+    }
+    
+    local presetOrder = {"OFF", "HD Natural", "Cinematic", "Vibrant", "Warm", "Cool", "Night Vision", "Retro"}
+    
+    local function ClearShaderEffects()
+        local lighting = game:GetService("Lighting")
+        for name, effect in pairs(shaderEffects) do
+            if effect and effect.Parent then
+                effect:Destroy()
+            end
+        end
+        shaderEffects = {}
+    end
+    
+    local function ApplyShaderPreset(presetName)
+        ClearShaderEffects()
+        
+        local lighting = game:GetService("Lighting")
+        local preset = ShaderPresets[presetName]
+        
+        if not preset or presetName == "OFF" then
+            currentPreset = "OFF"
+            shaderEnabled = false
+            return
+        end
+        
+        currentPreset = presetName
+        shaderEnabled = true
+        
+        -- Apply ColorCorrection
+        if preset.ColorCorrection then
+            local cc = Instance.new("ColorCorrectionEffect")
+            cc.Name = "StarshipShader_CC"
+            cc.Brightness = preset.ColorCorrection.Brightness
+            cc.Contrast = preset.ColorCorrection.Contrast
+            cc.Saturation = preset.ColorCorrection.Saturation
+            cc.TintColor = preset.ColorCorrection.TintColor
+            cc.Parent = lighting
+            shaderEffects.ColorCorrection = cc
+        end
+        
+        -- Apply Bloom
+        if preset.Bloom then
+            local bloom = Instance.new("BloomEffect")
+            bloom.Name = "StarshipShader_Bloom"
+            bloom.Intensity = preset.Bloom.Intensity
+            bloom.Size = preset.Bloom.Size
+            bloom.Threshold = preset.Bloom.Threshold
+            bloom.Parent = lighting
+            shaderEffects.Bloom = bloom
+        end
+        
+        -- Apply DepthOfField
+        if preset.DepthOfField then
+            local dof = Instance.new("DepthOfFieldEffect")
+            dof.Name = "StarshipShader_DOF"
+            dof.FarIntensity = preset.DepthOfField.FarIntensity
+            dof.FocusDistance = preset.DepthOfField.FocusDistance
+            dof.InFocusRadius = preset.DepthOfField.InFocusRadius
+            dof.NearIntensity = preset.DepthOfField.NearIntensity
+            dof.Parent = lighting
+            shaderEffects.DepthOfField = dof
+        end
+        
+        -- Apply SunRays
+        if preset.SunRays then
+            local rays = Instance.new("SunRaysEffect")
+            rays.Name = "StarshipShader_Rays"
+            rays.Intensity = preset.SunRays.Intensity
+            rays.Spread = preset.SunRays.Spread
+            rays.Parent = lighting
+            shaderEffects.SunRays = rays
+        end
+    end
+    
+    -- Preset dropdown
+    local BtnPresetDropdown = Instance.new("TextButton", CardShader)
+    BtnPresetDropdown.Text = "🎨 Preset: OFF ▼"
+    BtnPresetDropdown.Size = UDim2.new(0.94, 0, 0, 35)
+    BtnPresetDropdown.Position = UDim2.new(0.03, 0, 0, 35)
+    StyleBtn(BtnPresetDropdown, C_TEXT)
+    
+    local PresetDropdown = Instance.new("Frame", CardShader)
+    PresetDropdown.Size = UDim2.new(0.94, 0, 0, 0)
+    PresetDropdown.Position = UDim2.new(0.03, 0, 0, 72)
+    PresetDropdown.BackgroundColor3 = C_SIDE
+    PresetDropdown.Visible = false
+    PresetDropdown.ZIndex = 15
+    PresetDropdown.ClipsDescendants = true
+    Instance.new("UICorner", PresetDropdown).CornerRadius = UDim.new(0, 6)
+    local pds = Instance.new("UIStroke", PresetDropdown); pds.Color = C_ACCENT; pds.Transparency = 0.6
+    
+    local PresetScroll = Instance.new("ScrollingFrame", PresetDropdown)
+    PresetScroll.Size = UDim2.new(1, 0, 1, 0)
+    PresetScroll.BackgroundTransparency = 1
+    PresetScroll.BorderSizePixel = 0
+    PresetScroll.ScrollBarThickness = 3
+    PresetScroll.ScrollBarImageColor3 = C_ACCENT
+    PresetScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    PresetScroll.ZIndex = 16
+    
+    local PresetLayout = Instance.new("UIListLayout", PresetScroll)
+    PresetLayout.Padding = UDim.new(0, 2)
+    
+    local presetDropdownOpen = false
+    
+    -- Status label (defined before PopulatePresetDropdown)
+    local ShaderStatus = Instance.new("TextLabel", CardShader)
+    ShaderStatus.Text = "Select a preset to enhance graphics"
+    ShaderStatus.Size = UDim2.new(1, 0, 0, 15)
+    ShaderStatus.Position = UDim2.new(0, 0, 0, 145)
+    ShaderStatus.BackgroundTransparency = 1
+    ShaderStatus.TextColor3 = C_TEXT_DIM
+    ShaderStatus.Font = Enum.Font.Code
+    ShaderStatus.TextSize = 9
+    
+    local function PopulatePresetDropdown()
+        for _, child in pairs(PresetScroll:GetChildren()) do
+            if child:IsA("TextButton") then child:Destroy() end
+        end
+        
+        for i, presetName in ipairs(presetOrder) do
+            local btn = Instance.new("TextButton", PresetScroll)
+            btn.Text = (presetName == "OFF" and "❌ " or "✨ ") .. presetName
+            btn.Size = UDim2.new(1, -4, 0, 28)
+            btn.BackgroundColor3 = currentPreset == presetName and C_ACCENT or C_ITEM
+            btn.TextColor3 = currentPreset == presetName and C_TEXT or C_TEXT_DIM
+            btn.Font = Enum.Font.GothamBold
+            btn.TextSize = 10
+            btn.ZIndex = 17
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+            
+            btn.MouseEnter:Connect(function()
+                if currentPreset ~= presetName then
+                    btn.BackgroundColor3 = C_SIDE
+                end
+            end)
+            
+            btn.MouseLeave:Connect(function()
+                if currentPreset ~= presetName then
+                    btn.BackgroundColor3 = C_ITEM
+                end
+            end)
+            
+            btn.MouseButton1Click:Connect(function()
+                ApplyShaderPreset(presetName)
+                BtnPresetDropdown.Text = "🎨 Preset: " .. presetName .. " ▼"
+                PresetDropdown.Visible = false
+                presetDropdownOpen = false
+                PopulatePresetDropdown()
+                
+                if presetName == "OFF" then
+                    ShaderStatus.Text = "Shader disabled"
+                    ShaderStatus.TextColor3 = C_TEXT_DIM
+                else
+                    ShaderStatus.Text = "✓ " .. presetName .. " shader active!"
+                    ShaderStatus.TextColor3 = C_GREEN
+                end
+            end)
+        end
+    end
+    
+    BtnPresetDropdown.MouseButton1Click:Connect(function()
+        presetDropdownOpen = not presetDropdownOpen
+        if presetDropdownOpen then
+            PopulatePresetDropdown()
+            PresetDropdown.Size = UDim2.new(0.94, 0, 0, math.min(#presetOrder * 30, 150))
+            PresetDropdown.Visible = true
+        else
+            PresetDropdown.Visible = false
+        end
+    end)
+    
+    -- Quick toggle buttons
+    local BtnQuickHD = Instance.new("TextButton", CardShader)
+    BtnQuickHD.Text = "🎬 HD Natural"
+    BtnQuickHD.Size = UDim2.new(0.46, 0, 0, 30)
+    BtnQuickHD.Position = UDim2.new(0.03, 0, 0, 75)
+    StyleBtn(BtnQuickHD, C_GREEN)
+    
+    local BtnQuickCine = Instance.new("TextButton", CardShader)
+    BtnQuickCine.Text = "🎥 Cinematic"
+    BtnQuickCine.Size = UDim2.new(0.46, 0, 0, 30)
+    BtnQuickCine.Position = UDim2.new(0.51, 0, 0, 75)
+    StyleBtn(BtnQuickCine, C_ACCENT)
+    
+    local BtnToggleOff = Instance.new("TextButton", CardShader)
+    BtnToggleOff.Text = "❌ TURN OFF"
+    BtnToggleOff.Size = UDim2.new(0.94, 0, 0, 30)
+    BtnToggleOff.Position = UDim2.new(0.03, 0, 0, 110)
+    StyleBtn(BtnToggleOff, C_RED)
+    
+    BtnQuickHD.MouseButton1Click:Connect(function()
+        ApplyShaderPreset("HD Natural")
+        BtnPresetDropdown.Text = "🎨 Preset: HD Natural ▼"
+        ShaderStatus.Text = "✓ HD Natural shader active!"
+        ShaderStatus.TextColor3 = C_GREEN
+    end)
+    
+    BtnQuickCine.MouseButton1Click:Connect(function()
+        ApplyShaderPreset("Cinematic")
+        BtnPresetDropdown.Text = "🎨 Preset: Cinematic ▼"
+        ShaderStatus.Text = "✓ Cinematic shader active!"
+        ShaderStatus.TextColor3 = C_GREEN
+    end)
+    
+    BtnToggleOff.MouseButton1Click:Connect(function()
+        ApplyShaderPreset("OFF")
+        BtnPresetDropdown.Text = "🎨 Preset: OFF ▼"
+        ShaderStatus.Text = "Shader disabled"
+        ShaderStatus.TextColor3 = C_TEXT_DIM
+    end)
+
 end
 
 return SetupToolsUI
