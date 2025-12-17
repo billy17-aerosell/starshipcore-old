@@ -447,6 +447,54 @@ function UIHandlers.SmoothRecording(strength)
 	end
 end
 
+-- Callback for spoof name system - updates all UI elements with spoofed name
+function UIHandlers.UpdateSpoofedName(fakeName, fakeDisplay)
+	-- Update nametag above player's head (if exists)
+	local char = LocalPlayer.Character
+	if char and char:FindFirstChild("Head") then
+		local tag = char.Head:FindFirstChild("StarshipTag")
+		if tag then
+			-- Find BillboardGui container
+			local container = tag:FindFirstChildWhichIsA("BillboardGui")
+			if container then
+				-- Find and update the name label in nametag
+				for _, child in pairs(container:GetDescendants()) do
+					if child:IsA("TextLabel") and child.Name == "Name" then
+						child.Text = fakeDisplay or fakeName
+						break
+					end
+				end
+			end
+		end
+	end
+
+	-- Update Dashboard UI labels
+	-- 1. Greeting section name ("Good Evening, DisplayName")
+	if UIHandlers.DashboardNameLabel and UIHandlers.DashboardNameLabel.Parent then
+		UIHandlers.DashboardNameLabel.Text = fakeDisplay or fakeName
+	end
+
+	-- 2. Account info section - Username
+	if UIHandlers.DashboardUsernameLabel and UIHandlers.DashboardUsernameLabel.Parent then
+		UIHandlers.DashboardUsernameLabel.Text = fakeName
+	end
+
+	-- 3. Account info section - Display Name
+	if UIHandlers.DashboardDisplayNameLabel and UIHandlers.DashboardDisplayNameLabel.Parent then
+		UIHandlers.DashboardDisplayNameLabel.Text = fakeDisplay or fakeName
+	end
+
+	-- 4. Sidebar profile name (bottom-left corner) - uses uppercase
+	if UIHandlers.SidebarProfileName and UIHandlers.SidebarProfileName.Parent then
+		UIHandlers.SidebarProfileName.Text = string.upper(fakeName)
+	end
+
+	-- Update any other UI elements that show player name (legacy support)
+	if UIHandlers.LocalPlayerNameLabel and UIHandlers.LocalPlayerNameLabel.Parent then
+		UIHandlers.LocalPlayerNameLabel.Text = fakeDisplay or fakeName
+	end
+end
+
 -- --- NOTIFICATION SYSTEM (TOASTS) ---
 local function ShowToast(title, message, type, duration)
 	if UIModule and UIModule.ShowToast then
@@ -3144,6 +3192,9 @@ do
 	ProfileName.TextTruncate = Enum.TextTruncate.AtEnd
 	ProfileName.Visible = true
 	RegisterTheme(ProfileName, "TextColor3", "Text")
+
+	-- Store reference for spoof name updates
+	UIHandlers.SidebarProfileName = ProfileName
 
 	local ProfileRank = Instance.new("TextLabel", ProfileFrame)
 	ProfileRank.Size = UDim2.new(1, -55, 0, 14)
@@ -6883,6 +6934,11 @@ function UIHandlers.SetupNametags()
 		name.TextSize = 9
 		name.TextXAlignment = Enum.TextXAlignment.Left
 		name.ZIndex = 2
+
+		-- Store reference for spoof name update (only for local player)
+		if player == LocalPlayer then
+			UIHandlers.LocalPlayerNameLabel = name
+		end
 
 		-- Animation Loop
 		task.spawn(function()

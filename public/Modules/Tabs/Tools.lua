@@ -1337,6 +1337,11 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 		local realName = LocalPlayer.Name
 		local realDisplay = LocalPlayer.DisplayName
 
+		-- Update StarshipCore Main UI Dashboard and Profile
+		if UIHandlers.UpdateSpoofedName then
+			UIHandlers.UpdateSpoofedName(fakeName, fakeDisplay)
+		end
+
 		-- Spoof PlayerGui elements
 		local function SpoofGui(gui)
 			if not gui then
@@ -1422,6 +1427,11 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 			end
 		end
 		originalTexts = {}
+
+		-- Restore StarshipCore Main UI to real name
+		if UIHandlers.UpdateSpoofedName then
+			UIHandlers.UpdateSpoofedName(LocalPlayer.Name, LocalPlayer.DisplayName)
+		end
 	end
 
 	local function ToggleSpoof()
@@ -1471,6 +1481,17 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 	end
 
 	BtnSpoof.MouseButton1Click:Connect(ToggleSpoof)
+
+	-- Expose spoof state and data to UIHandlers
+	UIHandlers.GetSpoofedName = function()
+		if isSpoofing then
+			local fakeName = InpSpoofName.Text ~= "" and InpSpoofName.Text or "Player"
+			local fakeDisplay = InpSpoofDisplay.Text ~= "" and InpSpoofDisplay.Text or fakeName
+			return fakeName, fakeDisplay, true
+		else
+			return LocalPlayer.Name, LocalPlayer.DisplayName, false
+		end
+	end
 
 	-- Quick presets
 	local BtnRandom = Instance.new("TextButton", CardPrivacy)
