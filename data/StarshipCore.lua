@@ -721,7 +721,7 @@ end
 -- --- PATH VARIABLES ---
 local PathContainer = nil
 local lastPathPoint = nil
-local isPathEnabled = true
+local isPathEnabled = false -- DEFAULT OFF untuk prevent FPS drop pada merged files
 
 local function GetJoints(char)
 	local j = {}
@@ -831,6 +831,12 @@ local function GeneratePlaybackPath(frames)
 		return
 	end
 	task.spawn(function()
+		local totalFrames = #frames
+		local MAX_PATH_POINTS = 500 -- Limit untuk prevent lag
+
+		-- Calculate adaptive step size based on file size
+		local step = math.max(1, math.floor(totalFrames / MAX_PATH_POINTS))
+
 		local startFrame = frames[1]
 		local prevPos = (startFrame.pos and Vector3.new(startFrame.pos.x, startFrame.pos.y, startFrame.pos.z))
 			or (startFrame.r and TblToCF(startFrame.r).Position)
@@ -838,20 +844,34 @@ local function GeneratePlaybackPath(frames)
 			return
 		end
 
-		for i = 2, #frames do
+		local pointsCreated = 0
+		local MIN_DISTANCE = step > 5 and 3.0 or 1.0 -- Larger min distance for big files
+
+		for i = step, totalFrames, step do
 			if not isPlaying and not isPlayPaused then
 				break
 			end
 			local f = frames[i]
 			local pos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
 
-			if pos and (pos - prevPos).Magnitude > 1.0 then
+			if pos and (pos - prevPos).Magnitude > MIN_DISTANCE then
 				DrawLine(prevPos, pos, currentPathColor)
 				prevPos = pos
+				pointsCreated = pointsCreated + 1
+
+				-- Yield every 50 points to prevent freeze
+				if pointsCreated % 50 == 0 then
+					RunService.Heartbeat:Wait()
+				end
 			end
-			if i % 100 == 0 then
-				RunService.Heartbeat:Wait()
-			end
+		end
+
+		-- Always include last frame for accuracy
+		local lastFrame = frames[totalFrames]
+		local lastPos = (lastFrame.pos and Vector3.new(lastFrame.pos.x, lastFrame.pos.y, lastFrame.pos.z))
+			or (lastFrame.r and TblToCF(lastFrame.r).Position)
+		if lastPos and prevPos and (lastPos - prevPos).Magnitude > MIN_DISTANCE then
+			DrawLine(prevPos, lastPos, currentPathColor)
 		end
 	end)
 end
@@ -1191,6 +1211,52 @@ local function GetDistanceToNearestPathPoint(frames, playerPos)
 	return minDist
 end
 
+-- PERFORMANCE OPTIMIZATION: Pre-calculate expensive operations
+local function PreprocessFrames(frames)
+	if not frames or #frames == 0 then
+		return frames
+	end
+
+	for i, frame in ipairs(frames) do
+		-- Pre-calculate Vector3 for positions
+		if frame.pos then
+			frame.posVector = Vector3.new(frame.pos.x, frame.pos.y, frame.pos.z)
+		end
+
+		-- Pre-calculate Vector3 for velocities
+		if frame.vel then
+			frame.velVector = Vector3.new(frame.vel.x, frame.vel.y, frame.vel.z)
+		end
+
+		-- Pre-calculate Vector3 for move direction
+		if frame.md then
+			frame.mdVector = Vector3.new(frame.md.x, frame.md.y, frame.md.z)
+		end
+
+		-- Pre-parse state enum (expensive string.match)
+		if frame.st then
+			frame.stEnum = string.match(frame.st, "Enum%.HumanoidStateType%.(%w+)")
+		end
+
+		-- Pre-calculate camera look vector
+		if frame.camLook then
+			frame.camLookVector = Vector3.new(frame.camLook.x, frame.camLook.y, frame.camLook.z)
+		end
+
+		-- Pre-calculate character look vector
+		if frame.charLook then
+			frame.charLookVector = Vector3.new(frame.charLook.x, frame.charLook.y, frame.charLook.z)
+		end
+
+		-- Yield every 1000 frames to prevent freeze on large files
+		if i % 1000 == 0 then
+			task.wait()
+		end
+	end
+
+	return frames
+end
+
 local function PlayRecording(fn, force, skipDistanceCheck)
 	ShowToast("Loading Playback", "Preparing " .. fn .. "...", "info", 1.5)
 	task.wait(0.1) -- Allow UI to render
@@ -1222,11 +1288,18 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 		-- LIVE SMOOTHING INJECTION
 		local framesToPlay = d.Frames or d
+
+		-- PERFORMANCE: Pre-process frames BEFORE smoothing
+		ShowLoadingModal(true, "OPTIMIZING FRAMES...", 0.3)
+		framesToPlay = PreprocessFrames(framesToPlay)
+
 		if isLiveSmoothing and #framesToPlay > 3 then
 			local isFlex = (d.Mode == "Flexible") or (framesToPlay[1].md ~= nil)
 			ShowLoadingModal(true, "AUTO SMOOTHING...", 0.5)
 			task.wait() -- Allow UI update
 			framesToPlay = GetSmoothedFrames(framesToPlay, liveSmoothingStrength, isFlex)
+			-- Re-process after smoothing (smoothing may change values)
+			framesToPlay = PreprocessFrames(framesToPlay)
 			ShowToast("Live Smoothing", "Applied smoothing (Strength: " .. liveSmoothingStrength .. ")", "info", 2)
 		end
 
@@ -1455,6 +1528,11 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		local frameCounter = 0 -- For throttling expensive operations
 		local cachedLastState = nil -- Cache last humanoid state to avoid redundant changes
 		local cachedUserInputService = game:GetService("UserInputService")
+
+		-- PERFORMANCE: Cached key state for throttled checking
+		local cachedKeys = {}
+		local lastKeyCheck = 0
+		local KEY_CHECK_INTERVAL = 0.1 -- Check keys every 0.1s instead of every 2 frames
 
 		-- Use Stepped for Physics Manipulation (smoother for velocity)
 		Connections.Playback = RunService.Stepped:Connect(function(_, dt)
@@ -1688,20 +1766,23 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				end
 
 				-- 3. Apply Move Direction (Smart Rotation)
-				-- PERFORMANCE: Use cached UserInputService and throttle key check
+				-- PERFORMANCE: Throttled key check (tick-based instead of frame-based)
 				local isUserMoving = false
-				if frameCounter % 2 == 0 then -- Check keys every 2 frames instead of every frame
-					local keys = cachedUserInputService:GetKeysPressed()
-					for _, k in pairs(keys) do
-						if
-							k.KeyCode == Enum.KeyCode.W
-							or k.KeyCode == Enum.KeyCode.A
-							or k.KeyCode == Enum.KeyCode.S
-							or k.KeyCode == Enum.KeyCode.D
-						then
-							isUserMoving = true
-							break
-						end
+				local now = tick()
+				if now - lastKeyCheck > KEY_CHECK_INTERVAL then
+					cachedKeys = cachedUserInputService:GetKeysPressed()
+					lastKeyCheck = now
+				end
+
+				for _, k in pairs(cachedKeys) do
+					if
+						k.KeyCode == Enum.KeyCode.W
+						or k.KeyCode == Enum.KeyCode.A
+						or k.KeyCode == Enum.KeyCode.S
+						or k.KeyCode == Enum.KeyCode.D
+					then
+						isUserMoving = true
+						break
 					end
 				end
 
@@ -1981,7 +2062,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				end
 
 				-- 6. TOOL HANDLING: Equip/Unequip tools based on recorded data
-				if frameCounter % 3 == 0 then -- Throttle to every 3 frames for performance
+				if frameCounter % 10 == 0 then -- PERFORMANCE: Throttle to every 10 frames (was 3)
 					local recordedTool = fA.tool
 					local currentTool = c:FindFirstChildOfClass("Tool")
 					local currentToolName = currentTool and currentTool.Name or nil
@@ -6069,8 +6150,23 @@ function UIHandlers.SetupListMapUI()
 
 		-- Row 2 buttons
 		BtnGod = CreateToggle(Row2, "GOD", "⚡", "god")
-		BtnSpinbot = CreateToggle(Row2, "SPIN", "💫", "spin")
+		local BtnPath = CreateToggle(Row2, "PATH", "📍", "path") -- Path visualization toggle
 		local BtnZoom = CreateToggle(Row2, "ZOOM", "🎯", "zoom")
+
+		-- Path toggle click handler
+		BtnPath.MouseButton1Click:Connect(function()
+			isPathEnabled = not isPathEnabled
+			UpdateToggleVisual("path", isPathEnabled, false)
+			if isPathEnabled then
+				if isPlaying and currentFrameData then
+					GeneratePlaybackPath(currentFrameData)
+				end
+				ShowToast("Path Visualization", "Path enabled", "success", 2)
+			else
+				ClearPath()
+				ShowToast("Path Visualization", "Path disabled", "info", 2)
+			end
+		end)
 
 		-- Zoom Punch click handler
 		BtnZoom.MouseButton1Click:Connect(function()
@@ -6089,10 +6185,11 @@ function UIHandlers.SetupListMapUI()
 		Row3.ZIndex = 301
 
 		local Grid3 = Instance.new("UIGridLayout", Row3)
-		Grid3.CellSize = UDim2.new(0.5, 0, 1, 0)
+		Grid3.CellSize = UDim2.new(0.32, 0, 1, 0) -- 3 buttons per row
 		Grid3.CellPadding = UDim2.new(0.02, 0, 0, 0)
 		Grid3.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
+		BtnSpinbot = CreateToggle(Row3, "SPIN", "💫", "spin") -- SPIN restored
 		BtnRespawn = CreateToggle(Row3, "RESPAWN", "💀", "respawn")
 
 		-- Respawn click handler
@@ -6169,7 +6266,7 @@ function UIHandlers.SetupListMapUI()
 		end
 	end)
 
-	-- Freestyle Logic (Smart Spin)
+	-- Freestyle Logic (Smart Spin) - RESTORED
 	local isFreestyle = false
 	local freestyleLoop = nil
 
