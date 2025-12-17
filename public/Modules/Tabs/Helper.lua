@@ -154,9 +154,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 	end
 	local function ToggleSpeed(forceEnable)
 		if forceEnable ~= nil then
-			if forceEnable == isWSEnabled then return end
+			if forceEnable == isWSEnabled then
+				return
+			end
 		end
-		
+
 		local c = LocalPlayer.Character
 		local h = c and c:FindFirstChild("Humanoid")
 		if not isWSEnabled then
@@ -192,7 +194,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			UpdateWSVisual(tgtWS)
 		end
 	end
-	BtnTogWS.MouseButton1Click:Connect(function() ToggleSpeed() end)
+	BtnTogWS.MouseButton1Click:Connect(function()
+		ToggleSpeed()
+	end)
 	UIHandlers.ToggleSpeed = ToggleSpeed
 	local dragWS = false
 	SldWS.MouseButton1Down:Connect(function()
@@ -277,9 +281,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 	end
 	local function ToggleJump(forceEnable)
 		if forceEnable ~= nil then
-			if forceEnable == isJPEnabled then return end
+			if forceEnable == isJPEnabled then
+				return
+			end
 		end
-		
+
 		local c = LocalPlayer.Character
 		local h = c and c:FindFirstChild("Humanoid")
 		if not isJPEnabled then
@@ -317,7 +323,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			UpdateJPVisual(tgtJP)
 		end
 	end
-	BtnTogJP.MouseButton1Click:Connect(function() ToggleJump() end)
+	BtnTogJP.MouseButton1Click:Connect(function()
+		ToggleJump()
+	end)
 	UIHandlers.ToggleJump = ToggleJump
 	local dragJP = false
 	SldJP.MouseButton1Down:Connect(function()
@@ -363,9 +371,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 	local isInfJump, infJumpCon = false, nil
 	local function ToggleInfJump(forceEnable)
 		if forceEnable ~= nil then
-			if forceEnable == isInfJump then return end
+			if forceEnable == isInfJump then
+				return
+			end
 		end
-		
+
 		isInfJump = not isInfJump
 		BtnInfJump.Text = "INFINITE JUMP: " .. (isInfJump and "ON" or "OFF")
 		BtnInfJump.TextColor3 = isInfJump and C_GREEN or C_TEXT_DIM
@@ -388,7 +398,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			end
 		end
 	end
-	BtnInfJump.MouseButton1Click:Connect(function() ToggleInfJump() end)
+	BtnInfJump.MouseButton1Click:Connect(function()
+		ToggleInfJump()
+	end)
 	UIHandlers.ToggleInfJump = ToggleInfJump
 
 	-- Fly
@@ -499,16 +511,20 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 	local function ToggleFly(forceEnable)
 		if forceEnable ~= nil then
-			if forceEnable == isFlying then return end
+			if forceEnable == isFlying then
+				return
+			end
 		end
-		
+
 		if isFlying then
 			StopFly()
 		else
 			StartFly()
 		end
 	end
-	BtnFly.MouseButton1Click:Connect(function() ToggleFly() end)
+	BtnFly.MouseButton1Click:Connect(function()
+		ToggleFly()
+	end)
 	UIHandlers.ToggleFly = ToggleFly
 
 	-- 4. JUMP ASSIST
@@ -527,9 +543,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		local function ToggleAutoJump(forceEnable)
 			-- Support forceEnable parameter for auto-enable
 			if forceEnable ~= nil then
-				if forceEnable == isAutoJump then return end
+				if forceEnable == isAutoJump then
+					return
+				end
 			end
-			
+
 			isAutoJump = not isAutoJump
 			BtnAutoJump.Text = "AUTO JUMP: " .. (isAutoJump and "ON" or "OFF")
 			BtnAutoJump.TextColor3 = isAutoJump and C_GREEN or C_TEXT_DIM
@@ -552,7 +570,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			end
 		end
 
-		BtnAutoJump.MouseButton1Click:Connect(function() ToggleAutoJump() end)
+		BtnAutoJump.MouseButton1Click:Connect(function()
+			ToggleAutoJump()
+		end)
 		UIHandlers.ToggleAutoJump = ToggleAutoJump
 
 		-- Long Jump
@@ -612,9 +632,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		local isLongJump, longJumpLoop = false, nil
 		local function ToggleLongJump(forceEnable)
 			if forceEnable ~= nil then
-				if forceEnable == isLongJump then return end
+				if forceEnable == isLongJump then
+					return
+				end
 			end
-			
+
 			isLongJump = not isLongJump
 			BtnLongJump.Text = "LONG JUMP: " .. (isLongJump and "ON" or "OFF")
 			BtnLongJump.TextColor3 = isLongJump and C_GREEN or C_TEXT_DIM
@@ -652,7 +674,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			end
 		end
 
-		BtnLongJump.MouseButton1Click:Connect(function() ToggleLongJump() end)
+		BtnLongJump.MouseButton1Click:Connect(function()
+			ToggleLongJump()
+		end)
 		UIHandlers.ToggleLongJump = ToggleLongJump
 
 		-- Air Lock Rotation
@@ -665,9 +689,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		local isAirLock, airLockLoop = false, nil
 		local function ToggleAirLock(forceEnable)
 			if forceEnable ~= nil then
-				if forceEnable == isAirLock then return end
+				if forceEnable == isAirLock then
+					return
+				end
 			end
-			
+
 			isAirLock = not isAirLock
 			BtnAirLock.Text = "AIR LOCK: " .. (isAirLock and "ON" or "OFF")
 			BtnAirLock.TextColor3 = isAirLock and C_GREEN or C_TEXT_DIM
@@ -705,7 +731,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 				end
 			end
 		end
-		BtnAirLock.MouseButton1Click:Connect(function() ToggleAirLock() end)
+		BtnAirLock.MouseButton1Click:Connect(function()
+			ToggleAirLock()
+		end)
 		UIHandlers.ToggleAirLock = ToggleAirLock
 	end
 
@@ -810,9 +838,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 	local function ToggleMomentum(forceEnable)
 		if forceEnable ~= nil then
-			if forceEnable == isMomentum then return end
+			if forceEnable == isMomentum then
+				return
+			end
 		end
-		
+
 		isMomentum = not isMomentum
 		BtnMomentum.Text = "ALWAYS MOMENTUM: " .. (isMomentum and "ON" or "OFF")
 		BtnMomentum.TextColor3 = isMomentum and C_GREEN or C_TEXT_DIM
@@ -858,7 +888,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		end
 	end
 
-	BtnMomentum.MouseButton1Click:Connect(function() ToggleMomentum() end)
+	BtnMomentum.MouseButton1Click:Connect(function()
+		ToggleMomentum()
+	end)
 	UIHandlers.ToggleMomentum = ToggleMomentum
 
 	-- 2. ANTI-SLIP
@@ -930,9 +962,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 	local function ToggleAntiSlip(forceEnable)
 		if forceEnable ~= nil then
-			if forceEnable == isSlipOn then return end
+			if forceEnable == isSlipOn then
+				return
+			end
 		end
-		
+
 		isSlipOn = not isSlipOn
 		BtnSlip.Text = "ANTI-SLIP: " .. (isSlipOn and "ON" or "OFF")
 		BtnSlip.TextColor3 = isSlipOn and C_GREEN or C_RED
@@ -1047,7 +1081,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			modifiedParts = {}
 		end
 	end
-	BtnSlip.MouseButton1Click:Connect(function() ToggleAntiSlip() end)
+	BtnSlip.MouseButton1Click:Connect(function()
+		ToggleAntiSlip()
+	end)
 	UIHandlers.ToggleAntiSlip = ToggleAntiSlip
 
 	-- 3. ANTI-RAGDOLL
@@ -1113,7 +1149,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 	local function ToggleAntiRagdoll(forceEnable)
 		if forceEnable ~= nil then
-			if forceEnable == isRagdollOn then return end
+			if forceEnable == isRagdollOn then
+				return
+			end
 		end
 
 		isRagdollOn = not isRagdollOn
@@ -1144,11 +1182,15 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			-- Velocity clamp loop
 			ragdollLoop = RunService.Heartbeat:Connect(function()
 				local c = LocalPlayer.Character
-				if not c then return end
+				if not c then
+					return
+				end
 
 				local r = c:FindFirstChild("HumanoidRootPart")
 				local h = c:FindFirstChildOfClass("Humanoid")
-				if not r or not h then return end
+				if not r or not h then
+					return
+				end
 
 				-- Ensure states stay disabled
 				if h:GetStateEnabled(Enum.HumanoidStateType.Ragdoll) then
@@ -1183,7 +1225,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 			-- Handle respawn
 			LocalPlayer.CharacterAdded:Connect(function(newChar)
-				if not isRagdollOn then return end
+				if not isRagdollOn then
+					return
+				end
 				task.wait(0.5)
 				local newHum = newChar:FindFirstChildOfClass("Humanoid")
 				if newHum then
@@ -1212,7 +1256,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		end
 	end
 
-	BtnRagdoll.MouseButton1Click:Connect(function() ToggleAntiRagdoll() end)
+	BtnRagdoll.MouseButton1Click:Connect(function()
+		ToggleAntiRagdoll()
+	end)
 	UIHandlers.ToggleAntiRagdoll = ToggleAntiRagdoll
 
 	-- 5. REAL PATH ESP
@@ -1320,9 +1366,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 	local function ToggleRealESP(forceEnable)
 		if forceEnable ~= nil then
-			if forceEnable == isRealESP then return end
+			if forceEnable == isRealESP then
+				return
+			end
 		end
-		
+
 		isRealESP = not isRealESP
 		BtnRealESP.Text = "REAL PATH ESP: " .. (isRealESP and "ON" or "OFF")
 		BtnRealESP.TextColor3 = isRealESP and C_GREEN or C_RED
@@ -1432,7 +1480,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			highlightedParts = {} -- Reset tracking table
 		end
 	end
-	BtnRealESP.MouseButton1Click:Connect(function() ToggleRealESP() end)
+	BtnRealESP.MouseButton1Click:Connect(function()
+		ToggleRealESP()
+	end)
 	UIHandlers.ToggleRealESP = ToggleRealESP
 
 	-- 6. GHOST REPLAY
@@ -1510,13 +1560,13 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 				c:Destroy()
 			end
 		end
-		
+
 		-- Path yang benar: StarshipCore/StarshipGhosts
 		local ghostRoot = "StarshipCore/StarshipGhosts"
 		if not isfolder(ghostRoot) then
 			makefolder(ghostRoot)
 		end
-		
+
 		-- Input untuk workspace baru
 		local NewWSInput = Instance.new("TextBox", GWSScroll)
 		NewWSInput.PlaceholderText = "+ New..."
@@ -1529,7 +1579,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		NewWSInput.TextSize = 10
 		NewWSInput.ZIndex = 55
 		Instance.new("UICorner", NewWSInput).CornerRadius = UDim.new(0, 4)
-		
+
 		NewWSInput.FocusLost:Connect(function(enterPressed)
 			if enterPressed and NewWSInput.Text ~= "" then
 				local newName = NewWSInput.Text
@@ -1543,7 +1593,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 				RefreshGhostList()
 			end
 		end)
-		
+
 		if isfolder(ghostRoot) then
 			local folders = listfiles(ghostRoot)
 			GWSScroll.CanvasSize = UDim2.new(0, 0, 0, (#folders + 1) * 27)

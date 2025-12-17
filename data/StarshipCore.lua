@@ -1512,24 +1512,24 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					-- Climbing/Swimming: Use recorded velocity and simulate input for natural animation
 					local vel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
 						:Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
-					
+
 					-- Scale velocity by playback speed for proper animation timing
 					vel = vel * playbackSpeed
 					if isReversing then
 						vel = -vel
 					end
-					
+
 					-- CRITICAL FIX: Control climbing animation speed directly via AnimationTrack
 					if fA.md then
 						local moveDir = Vector3.new(fA.md.x, fA.md.y, fA.md.z)
 						if isReversing then
 							moveDir = -moveDir
 						end
-						
+
 						-- Apply movement input
 						h:Move(moveDir)
 						h:ChangeState(Enum.HumanoidStateType.Climbing)
-						
+
 						-- DIRECT ANIMATION SPEED CONTROL: Find and adjust climbing animation speed
 						local animator = h:FindFirstChildOfClass("Animator")
 						if animator then
@@ -1556,26 +1556,26 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					else
 						h:Move(Vector3.new(0, 0, 0))
 					end
-					
+
 					-- Set actual velocity for physics movement
 					r.AssemblyLinearVelocity = vel
-					
+
 					-- Position correction with smooth blending
 					local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
 						:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
 					local targetYaw = fA.rot
-					
+
 					-- Light position correction to stay on path while allowing natural movement
 					local currentPos = r.Position
 					local positionBlend = 0.3 -- More natural movement, less strict positioning
 					local smoothPos = currentPos:Lerp(targetPos, positionBlend)
-					
+
 					if type(targetYaw) == "number" then
 						r.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(targetYaw), 0)
 					else
 						r.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
 					end
-					
+
 					-- Ensure climbing state
 					h:ChangeState(Enum.HumanoidStateType.Climbing)
 				elseif fA.vel and fB.vel then
@@ -2624,8 +2624,8 @@ for _, descendant in pairs(ScreenGui:GetDescendants()) do
 end
 
 Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 550, 0, 380)
-Main.Position = UDim2.new(0.5, -275, 0.5, -190)
+Main.Size = UDim2.new(0, 550, 0, 520)
+Main.Position = UDim2.new(0.5, -275, 0.5, -260)
 Main.BackgroundTransparency = 1
 Main.Active = true
 Main.Visible = false
@@ -2711,9 +2711,21 @@ ResizeHandle.InputBegan:Connect(function(input)
 
 			local currentMouse = UserInputService:GetMouseLocation()
 			local delta = currentMouse - startMouse
-			local minWidth = 550
-			local newWidth = math.max(minWidth, startSize.X + delta.X)
-			local newHeight = math.max(380, startSize.Y + delta.Y)
+
+			-- Minimum sizes (to ensure all sidebar tabs including CONFIG remain visible)
+			local minWidth = 500
+			local minHeight = 520
+			-- Maximum sizes (to prevent UI from going off-screen)
+			local maxWidth = 900
+			local maxHeight = 700
+
+			-- Calculate raw new size from startSize + delta
+			local rawWidth = startSize.X + delta.X
+			local rawHeight = startSize.Y + delta.Y
+
+			-- Clamp to min/max - this enforces the limits
+			local newWidth = math.max(minWidth, math.min(rawWidth, maxWidth))
+			local newHeight = math.max(minHeight, math.min(rawHeight, maxHeight))
 
 			Main.Size = UDim2.new(0, newWidth, 0, newHeight)
 		end)
@@ -2873,7 +2885,7 @@ CloseBtn.MouseButton1Click:Connect(function()
 		-- Disable all active features before closing
 		local toggleFunctions = {
 			"ToggleAntiAFK",
-			"ToggleShiftLock", 
+			"ToggleShiftLock",
 			"ToggleSpeed",
 			"ToggleJump",
 			"ToggleInfJump",
@@ -2886,9 +2898,9 @@ CloseBtn.MouseButton1Click:Connect(function()
 			"ToggleAirLock",
 			"ToggleRealESP",
 			"ToggleFullbright",
-			"ToggleBypassAdmin"
+			"ToggleBypassAdmin",
 		}
-		
+
 		for _, funcName in ipairs(toggleFunctions) do
 			if UIHandlers[funcName] then
 				pcall(function()
@@ -2896,7 +2908,7 @@ CloseBtn.MouseButton1Click:Connect(function()
 				end)
 			end
 		end
-		
+
 		if getgenv().ToggleNametags then
 			getgenv().ToggleNametags(false)
 		end
@@ -4175,14 +4187,16 @@ local ShowSaveRecordingModal -- Forward Declaration
 					table.insert(jsonFiles, f)
 				end
 			end
-			
+
 			-- ========== INLINE NATURAL SORT ==========
 			local function padZero(num)
 				local s = tostring(num)
-				while string.len(s) < 10 do s = "0" .. s end
+				while string.len(s) < 10 do
+					s = "0" .. s
+				end
 				return s
 			end
-			
+
 			local sortable = {}
 			for i = 1, #jsonFiles do
 				local fullPath = jsonFiles[i]
@@ -4190,7 +4204,7 @@ local ShowSaveRecordingModal -- Forward Declaration
 				local baseName = string.gsub(fileName, "%.json$", "")
 				local numPart = string.match(baseName, "(%d+)$")
 				local sortKey
-				
+
 				if numPart and string.len(numPart) > 0 then
 					local prefixLen = string.len(baseName) - string.len(numPart)
 					local prefix = string.sub(baseName, 1, prefixLen)
@@ -4198,16 +4212,20 @@ local ShowSaveRecordingModal -- Forward Declaration
 				else
 					sortKey = "0" .. string.lower(baseName) .. padZero(0)
 				end
-				
+
 				table.insert(sortable, { path = fullPath, key = sortKey })
 			end
-			
-			table.sort(sortable, function(a, b) return a.key < b.key end)
-			
+
+			table.sort(sortable, function(a, b)
+				return a.key < b.key
+			end)
+
 			jsonFiles = {}
-			for i = 1, #sortable do jsonFiles[i] = sortable[i].path end
+			for i = 1, #sortable do
+				jsonFiles[i] = sortable[i].path
+			end
 			-- ========== END SORT ==========
-			
+
 			for i = 1, #jsonFiles do
 				local f = jsonFiles[i]
 				if string.match(f, "%.json$") then
@@ -4860,18 +4878,18 @@ UIHandlers.RefreshMergerList = function()
 			end
 			return s
 		end
-		
+
 		-- Buat array dengan sort info
 		local sortableFiles = {}
 		for i = 1, #jsonFiles do
 			local fullPath = jsonFiles[i]
 			local fileName = string.match(fullPath, "[^/\\]+$") or fullPath
 			local baseName = string.gsub(fileName, "%.json$", "")
-			
+
 			-- Extract angka di akhir
 			local numPart = string.match(baseName, "(%d+)$")
 			local sortKey
-			
+
 			if numPart and string.len(numPart) > 0 then
 				-- Ada angka di akhir
 				local prefixLen = string.len(baseName) - string.len(numPart)
@@ -4883,18 +4901,18 @@ UIHandlers.RefreshMergerList = function()
 				-- Tidak ada angka
 				sortKey = "0" .. string.lower(baseName) .. padZero(0)
 			end
-			
+
 			table.insert(sortableFiles, {
 				path = fullPath,
-				sortKey = sortKey
+				sortKey = sortKey,
 			})
 		end
-		
+
 		-- Sort berdasarkan sortKey
 		table.sort(sortableFiles, function(a, b)
 			return a.sortKey < b.sortKey
 		end)
-		
+
 		-- Rebuild jsonFiles dari sorted array
 		jsonFiles = {}
 		for i = 1, #sortableFiles do
@@ -5749,7 +5767,7 @@ function UIHandlers.SetupListMapUI()
 			if child:IsA("TextButton") then
 				local fName = child:GetAttribute("FileName")
 				local isEven = child:GetAttribute("IsEven")
-				
+
 				if fName == currentPlaybackFile then
 					-- Selected state
 					child.BackgroundColor3 = colors.ACCENT
@@ -6185,12 +6203,12 @@ function UIHandlers.SetupListMapUI()
 
 	local function CreateFileCard(fileName, index)
 		local colors = _G.StarshipColors or CurrentColors
-		
+
 		-- Alternating row colors (ganjil/genap)
 		local isEven = (index % 2 == 0)
 		local baseColor = isEven and colors.ITEM or colors.MAIN
 		local hoverColor = colors.ACCENT
-		
+
 		local FileCard = Instance.new("TextButton", FileListContainer)
 		FileCard.Text = "  📄 " .. string.gsub(fileName, ".json", "")
 		FileCard.Size = UDim2.new(1, 0, 0, 32) -- Sedikit lebih tinggi
@@ -6204,7 +6222,7 @@ function UIHandlers.SetupListMapUI()
 		FileCard:SetAttribute("FileName", fileName)
 		FileCard:SetAttribute("IsEven", isEven)
 		Instance.new("UICorner", FileCard).CornerRadius = UDim.new(0, 6)
-		
+
 		-- Hover effect
 		FileCard.MouseEnter:Connect(function()
 			if currentPlaybackFile ~= fileName then
@@ -6215,13 +6233,13 @@ function UIHandlers.SetupListMapUI()
 				)
 			end
 		end)
-		
+
 		FileCard.MouseLeave:Connect(function()
 			if currentPlaybackFile ~= fileName then
 				FileCard.BackgroundColor3 = baseColor
 			end
 		end)
-		
+
 		-- Theme registration untuk non-selected state
 		if currentPlaybackFile ~= fileName then
 			RegisterTheme(FileCard, "TextColor3", "Text")
@@ -6431,14 +6449,16 @@ function UIHandlers.SetupListMapUI()
 				table.insert(jsonFiles, f)
 			end
 		end
-		
+
 		-- ========== INLINE NATURAL SORT ==========
 		local function padZero(num)
 			local s = tostring(num)
-			while string.len(s) < 10 do s = "0" .. s end
+			while string.len(s) < 10 do
+				s = "0" .. s
+			end
 			return s
 		end
-		
+
 		local sortable = {}
 		for i = 1, #jsonFiles do
 			local fullPath = jsonFiles[i]
@@ -6446,7 +6466,7 @@ function UIHandlers.SetupListMapUI()
 			local baseName = string.gsub(fileName, "%.json$", "")
 			local numPart = string.match(baseName, "(%d+)$")
 			local sortKey
-			
+
 			if numPart and string.len(numPart) > 0 then
 				local prefixLen = string.len(baseName) - string.len(numPart)
 				local prefix = string.sub(baseName, 1, prefixLen)
@@ -6454,16 +6474,20 @@ function UIHandlers.SetupListMapUI()
 			else
 				sortKey = "0" .. string.lower(baseName) .. padZero(0)
 			end
-			
+
 			table.insert(sortable, { path = fullPath, key = sortKey })
 		end
-		
-		table.sort(sortable, function(a, b) return a.key < b.key end)
-		
+
+		table.sort(sortable, function(a, b)
+			return a.key < b.key
+		end)
+
 		local files = {}
-		for i = 1, #sortable do files[i] = sortable[i].path end
+		for i = 1, #sortable do
+			files[i] = sortable[i].path
+		end
 		-- ========== END SORT ==========
-		
+
 		local mapCount = 0
 		local filter = string.lower(SearchBar.Text)
 		filter = string.gsub(filter, "^%s*(.-)%s*$", "%1") -- Trim whitespace
@@ -6473,7 +6497,7 @@ function UIHandlers.SetupListMapUI()
 			local EmptyContainer = Instance.new("Frame", FileListContainer)
 			EmptyContainer.Size = UDim2.new(1, 0, 0, 120)
 			EmptyContainer.BackgroundTransparency = 1
-			
+
 			local EmptyIcon = Instance.new("TextLabel", EmptyContainer)
 			EmptyIcon.Text = "📂"
 			EmptyIcon.Size = UDim2.new(1, 0, 0, 40)
@@ -6482,7 +6506,7 @@ function UIHandlers.SetupListMapUI()
 			EmptyIcon.TextColor3 = C_TEXT_DIM
 			EmptyIcon.Font = Enum.Font.SourceSans
 			EmptyIcon.TextSize = 36
-			
+
 			local EmptyTitle = Instance.new("TextLabel", EmptyContainer)
 			EmptyTitle.Text = "No Maps Found"
 			EmptyTitle.Size = UDim2.new(1, 0, 0, 20)
@@ -6492,7 +6516,7 @@ function UIHandlers.SetupListMapUI()
 			EmptyTitle.Font = Enum.Font.GothamBold
 			EmptyTitle.TextSize = 14
 			RegisterTheme(EmptyTitle, "TextColor3", "Text")
-			
+
 			local EmptyHint = Instance.new("TextLabel", EmptyContainer)
 			EmptyHint.Text = "Merge recordings in Merger tab\nor check your folder"
 			EmptyHint.Size = UDim2.new(1, 0, 0, 35)
@@ -6503,14 +6527,14 @@ function UIHandlers.SetupListMapUI()
 			EmptyHint.TextSize = 11
 			EmptyHint.TextWrapped = true
 			RegisterTheme(EmptyHint, "TextColor3", "TextDim")
-			
+
 			return
 		end
 
 		for index = 1, #files do
 			local filePath = files[index]
 			local fileName = string.match(filePath, "[^/\\]+$")
-			
+
 			-- Validasi file
 			local isValid = true
 			if not fileName or not string.match(fileName, "%.json$") then
@@ -6520,7 +6544,7 @@ function UIHandlers.SetupListMapUI()
 			elseif filter ~= "" and not string.find(string.lower(fileName), filter, 1, true) then
 				isValid = false
 			end
-			
+
 			if isValid then
 				mapCount = mapCount + 1
 				CreateFileCard(fileName, index)

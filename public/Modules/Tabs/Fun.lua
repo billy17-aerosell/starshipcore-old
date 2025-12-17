@@ -1409,6 +1409,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 
 	local isAuraActive = false
 	local auraLoop = nil
+	local controlledParts = {}
 
 	BtnAura.MouseButton1Click:Connect(function()
 		if isAuraActive then
@@ -1423,6 +1424,19 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 				auraLoop:Disconnect()
 				auraLoop = nil
 			end
+
+			-- Reset parts to normal
+			for _, part in pairs(controlledParts) do
+				if part and part.Parent then
+					pcall(function()
+						part.CanCollide = true
+						part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+						part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+						part:SetNetworkOwner(nil) -- Return ownership to server
+					end)
+				end
+			end
+			controlledParts = {}
 			return
 		end
 
@@ -1448,7 +1462,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		AuraStatus.TextColor3 = C_GREEN
 
 		-- Collect parts
-		local controlledParts = {}
+		controlledParts = {} -- Clear previous list just in case
 		local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 
 		if myRoot then
