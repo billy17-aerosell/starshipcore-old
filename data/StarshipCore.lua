@@ -5253,7 +5253,7 @@ function UIHandlers.InitMergerUI()
 
     -- 1. Selection Browser
     local MergeCard = Instance.new("Frame", PageMerge)
-    MergeCard.Size = UDim2.new(1, 0, 0.48, 0)
+    MergeCard.Size = UDim2.new(1, 0, 1, -115)
     MergeCard.BackgroundColor3 = C_ITEM
     MergeCard.LayoutOrder = 1
     Instance.new("UICorner", MergeCard).CornerRadius = UDim.new(0, 8)

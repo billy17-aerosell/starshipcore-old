@@ -99,7 +99,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
         w.Name = wName
         w.Size = UDim2.new(0, 320, 0, height)
         w.Position = UDim2.new(0.5, -160, 0.5, -height / 2)
-        w.BackgroundColor3 = C_SIDE
+        w.BackgroundColor3 = C_SIDE; w.BackgroundTransparency = 0
         w.BorderSizePixel = 0
         w.Visible = false
         w.ZIndex = 200
@@ -108,7 +108,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
         local s = Instance.new("UIStroke", w)
         s.Color = C_ACCENT
         s.Thickness = 1
-        s.Transparency = 0.5
+        s.Transparency = 0
         RegisterTheme(s, "Color")
 
         local h = Instance.new("Frame", w)
@@ -1285,7 +1285,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     end)
 
     -- 7. OBJECT AURA (Trash Thrower)
-    local CardAura = CreateCard("OBJECT AURA (TRASH THROWER)", 310, 7)
+    local CardAura = CreateCard("OBJECT AURA (TRASH THROWER)", 310, 7); if CardAura:FindFirstChild("UIStroke") then CardAura.UIStroke.Transparency = 0 end
 
     local BtnPlayerDropdown4 = Instance.new("TextButton", CardAura)
     BtnPlayerDropdown4.Text = "Select Target ▼"
@@ -1296,14 +1296,14 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     local DropdownList4 = Instance.new("Frame", CardAura)
     DropdownList4.Size = UDim2.new(0.94, 0, 0, 0)
     DropdownList4.Position = UDim2.new(0.03, 0, 0, 75)
-    DropdownList4.BackgroundColor3 = C_SIDE
+    DropdownList4.BackgroundColor3 = C_SIDE; DropdownList4.BackgroundTransparency = 0
     DropdownList4.Visible = false
-    DropdownList4.ZIndex = 10
+    DropdownList4.ZIndex = 50
     DropdownList4.ClipsDescendants = false
     Instance.new("UICorner", DropdownList4).CornerRadius = UDim.new(0, 6)
     local dls4 = Instance.new("UIStroke", DropdownList4)
     dls4.Color = C_ACCENT
-    dls4.Transparency = 0.6
+    dls4.Transparency = 0
 
     local DropdownScroll4 = Instance.new("ScrollingFrame", DropdownList4)
     DropdownScroll4.Size = UDim2.new(1, 0, 1, 0)
