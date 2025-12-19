@@ -63,16 +63,26 @@ end
 -- Download module via secure API (encrypted in production)
 local function downloadModule(moduleName, savePath, userId)
     local url = VERCEL_URL .. "/api/get-module?name=" .. moduleName .. "&user=" .. userId
+
+    -- Debug: Log URL being called
+    -- warn("[Starship] Downloading: " .. url)
+
     local success, response = pcall(function()
         return game:HttpGet(url)
     end)
 
     if not success or not response or response == "" then
         warn("[Starship] Failed to download module: " .. moduleName)
+        if response then
+            warn("[Starship] Response: " .. tostring(response):sub(1, 200))
+        end
         return false
     end
 
-    -- Check if response is JSON (encrypted) or plain text error
+    -- Debug: Log response preview
+    -- warn("[Starship] Response preview: " .. response:sub(1, 100))
+
+    -- Check if response is JSON error
     if response:find('"error"') then
         warn("[Starship] Module error: " .. moduleName .. " - " .. response)
         return false
@@ -80,9 +90,24 @@ local function downloadModule(moduleName, savePath, userId)
 
     -- Try to parse as JSON (encrypted module)
     local data = nil
-    pcall(function()
+    local parseSuccess, parseError = pcall(function()
         data = HttpService:JSONDecode(response)
     end)
+
+    if not parseSuccess then
+        warn("[Starship] JSON parse failed for " .. moduleName .. ": " .. tostring(parseError))
+        warn("[Starship] Raw response: " .. response:sub(1, 300))
+
+        -- Check if it's actually a Lua script (starts with comment or local/return)
+        local trimmed = response:match("^%s*(.-)%s*$") or response
+        if trimmed:match("^%-%-") or trimmed:match("^local%s") or trimmed:match("^return%s") then
+            warn("[Starship] Response looks like Lua, saving directly: " .. moduleName)
+            writefile(savePath, response)
+            return true
+        end
+
+        return false
+    end
 
     if data and data.status == "success" and data.key and data.blob then
         -- Decrypt the module
@@ -94,17 +119,25 @@ local function downloadModule(moduleName, savePath, userId)
             decryptedContent = string.sub(decryptedContent, 4)
         end
 
+        -- Validate decrypted content looks like Lua
+        local trimmed = decryptedContent:match("^%s*(.-)%s*$") or decryptedContent
+        if not (trimmed:match("^%-%-") or trimmed:match("^local%s") or trimmed:match("^return%s") or trimmed:match("^function%s")) then
+            warn("[Starship] Decrypted content doesn't look like Lua for " .. moduleName)
+            warn("[Starship] First 200 chars: " .. decryptedContent:sub(1, 200))
+            return false
+        end
+
         writefile(savePath, decryptedContent)
         return true
     elseif data and data.status == "denied" then
         warn("[Starship] Access denied for module: " .. moduleName)
         return false
+    elseif data and data.error then
+        warn("[Starship] API error for " .. moduleName .. ": " .. tostring(data.error))
+        return false
     else
-        -- Fallback: maybe plain text response (shouldn't happen in production)
-        if not response:find("<!DOCTYPE") and not response:find('"error"') then
-            writefile(savePath, response)
-            return true
-        end
+        warn("[Starship] Unknown response format for " .. moduleName)
+        warn("[Starship] Data: " .. tostring(data and HttpService:JSONEncode(data) or "nil"))
         return false
     end
 end
