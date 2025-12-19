@@ -679,63 +679,179 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		end)
 		UIHandlers.ToggleLongJump = ToggleLongJump
 
-		-- Air Lock Rotation
-		local BtnAirLock = Instance.new("TextButton", CardJump)
-		BtnAirLock.Text = "AIR LOCK: OFF"
-		BtnAirLock.Size = UDim2.new(0.94, 0, 0, 35)
-		BtnAirLock.Position = UDim2.new(0.03, 0, 0, 120)
-		StyleBtn(BtnAirLock, C_TEXT_DIM)
+		-- Air Lock (Edge Assist + Velocity Boost for Obby)
+			local BtnAirLock = Instance.new("TextButton", CardJump)
+			BtnAirLock.Text = "AIR LOCK: OFF"
+			BtnAirLock.Size = UDim2.new(0.94, 0, 0, 35)
+			BtnAirLock.Position = UDim2.new(0.03, 0, 0, 120)
+			StyleBtn(BtnAirLock, C_TEXT_DIM)
 
-		local isAirLock, airLockLoop = false, nil
-		local function ToggleAirLock(forceEnable)
-			if forceEnable ~= nil then
-				if forceEnable == isAirLock then
-					return
-				end
-			end
+			local isAirLock, airLockLoop = false, nil
+			local edgeBoostCooldown = false
+			local detectedEdgePosition = nil
 
-			isAirLock = not isAirLock
-			BtnAirLock.Text = "AIR LOCK: " .. (isAirLock and "ON" or "OFF")
-			BtnAirLock.TextColor3 = isAirLock and C_GREEN or C_TEXT_DIM
-			BtnAirLock.UIStroke.Color = isAirLock and C_GREEN or C_TEXT_DIM
+			-- Edge Detection Settings
+			local EDGE_DETECT_DISTANCE = 7 -- Raycast distance to detect ledge
+			local EDGE_HEIGHT_TOLERANCE = 5 -- How much "almost there" we allow
+			local BOOST_POWER_UP = 12 -- Upward boost strength (subtle but noticeable)
+			local BOOST_POWER_FORWARD = 7 -- Forward boost strength (subtle but noticeable)
+			local BOOST_COOLDOWN = 0.9 -- Cooldown between boosts (seconds)
+			local UPWARD_DETECT_DISTANCE = 5 -- Raycast distance upward for ladders above head
 
-			if isAirLock then
-				airLockLoop = RunService.RenderStepped:Connect(function()
-					local c = LocalPlayer.Character
-					local h = c and c:FindFirstChild("Humanoid")
-					local r = c and c:FindFirstChild("HumanoidRootPart")
+			-- Detect edge in front of player (forward direction)
+			local function DetectEdgeForward(character, rootPart)
+				local rayParams = RaycastParams.new()
+				rayParams.FilterDescendantsInstances = {character}
+				rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
-					if h and r then
-						local state = h:GetState()
-						if state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall then
-							h.AutoRotate = false
-							local camCF = workspace.CurrentCamera.CFrame
-							local look = camCF.LookVector
-							local targetCF = CFrame.lookAt(r.Position, r.Position + Vector3.new(look.X, 0, look.Z))
-							r.CFrame = r.CFrame:Lerp(targetCF, 0.5)
-						else
-							h.AutoRotate = true
-						end
+				local playerPos = rootPart.Position
+				local playerTop = playerPos.Y + 2
+				local lookDir = rootPart.CFrame.LookVector
+				local horizontalLook = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
+
+				-- Raycast forward
+				local rayDirection = horizontalLook * EDGE_DETECT_DISTANCE
+				local hitResult = workspace:Raycast(playerPos, rayDirection, rayParams)
+
+				if hitResult then
+					local hitPart = hitResult.Instance
+					local hitPosition = hitResult.Position
+					local ledgeTop = hitPart.Position.Y + (hitPart.Size.Y / 2)
+					local heightDiff = ledgeTop - playerTop
+
+					-- Check if edge is grabbable (slightly above us)
+					if heightDiff > 0 and heightDiff <= EDGE_HEIGHT_TOLERANCE then
+						return hitPosition
 					end
-				end)
-				table.insert(Connections, airLockLoop)
-			else
-				if airLockLoop then
-					airLockLoop:Disconnect()
-					airLockLoop = nil
 				end
-				local c = LocalPlayer.Character
-				local h = c and c:FindFirstChild("Humanoid")
-				if h then
-					h.AutoRotate = true
+
+				-- Also try upward-diagonal raycast
+				local upDiagDir = (horizontalLook + Vector3.new(0, 0.5, 0)).Unit * EDGE_DETECT_DISTANCE
+				local upHitResult = workspace:Raycast(playerPos, upDiagDir, rayParams)
+
+				if upHitResult then
+					local hitPart = upHitResult.Instance
+					local hitPosition = upHitResult.Position
+					local ledgeTop = hitPart.Position.Y + (hitPart.Size.Y / 2)
+					local heightDiff = ledgeTop - playerTop
+
+					if heightDiff > 0 and heightDiff <= EDGE_HEIGHT_TOLERANCE then
+						return hitPosition
+					end
+				end
+
+				-- Raycast UPWARD to detect ladders/edges directly above head
+				local upDir = Vector3.new(0, 1, 0) * UPWARD_DETECT_DISTANCE
+				local upwardHitResult = workspace:Raycast(playerPos, upDir, rayParams)
+
+				if upwardHitResult then
+					local hitPart = upwardHitResult.Instance
+					local hitPosition = upwardHitResult.Position
+					-- For objects above, we want to boost up toward them
+					local distanceAbove = hitPosition.Y - playerPos.Y
+
+					if distanceAbove > 0 and distanceAbove <= UPWARD_DETECT_DISTANCE then
+						return hitPosition
+					end
+				end
+
+				-- Raycast upward-forward (steeper angle for ladders above)
+				local steepUpDir = (horizontalLook + Vector3.new(0, 1.5, 0)).Unit * EDGE_DETECT_DISTANCE
+				local steepHitResult = workspace:Raycast(playerPos, steepUpDir, rayParams)
+
+				if steepHitResult then
+					local hitPart = steepHitResult.Instance
+					local hitPosition = steepHitResult.Position
+					local ledgeTop = hitPart.Position.Y + (hitPart.Size.Y / 2)
+					local heightDiff = ledgeTop - playerTop
+
+					if heightDiff > 0 and heightDiff <= EDGE_HEIGHT_TOLERANCE then
+						return hitPosition
+					end
+				end
+
+				return nil
+			end
+
+
+
+			-- Boost toward the edge
+			local function BoostTowardEdge(rootPart, edgePosition)
+				if edgeBoostCooldown then return false end
+
+				local directionToEdge = (edgePosition - rootPart.Position)
+				local horizontalDir = Vector3.new(directionToEdge.X, 0, directionToEdge.Z).Unit
+
+				-- Apply velocity boost toward the edge
+				local boostVelocity = Vector3.new(
+					horizontalDir.X * BOOST_POWER_FORWARD,
+					BOOST_POWER_UP,
+					horizontalDir.Z * BOOST_POWER_FORWARD
+				)
+
+				rootPart.AssemblyLinearVelocity = rootPart.AssemblyLinearVelocity + boostVelocity
+
+				-- Set cooldown
+				edgeBoostCooldown = true
+				task.delay(BOOST_COOLDOWN, function()
+					edgeBoostCooldown = false
+				end)
+
+				return true
+			end
+
+			local function ToggleAirLock(forceEnable)
+				if forceEnable ~= nil then
+					if forceEnable == isAirLock then
+						return
+					end
+				end
+
+				isAirLock = not isAirLock
+				BtnAirLock.Text = "AIR LOCK: " .. (isAirLock and "ON" or "OFF")
+				BtnAirLock.TextColor3 = isAirLock and C_GREEN or C_TEXT_DIM
+				BtnAirLock.UIStroke.Color = isAirLock and C_GREEN or C_TEXT_DIM
+
+				if isAirLock then
+					airLockLoop = RunService.RenderStepped:Connect(function()
+						local c = LocalPlayer.Character
+						local h = c and c:FindFirstChild("Humanoid")
+						local r = c and c:FindFirstChild("HumanoidRootPart")
+
+						if h and r then
+							local state = h:GetState()
+							local velocity = r.AssemblyLinearVelocity
+
+							-- When in air (jumping or falling)
+							if state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall then
+								-- Detect edge continuously while in air (both jumping and falling)
+								if not detectedEdgePosition then
+									detectedEdgePosition = DetectEdgeForward(c, r)
+								end
+
+								-- If edge found, boost toward it immediately
+								if detectedEdgePosition and not edgeBoostCooldown then
+									BoostTowardEdge(r, detectedEdgePosition)
+								end
+							else
+								-- On ground - reset
+								detectedEdgePosition = nil
+							end
+						end
+					end)
+					table.insert(Connections, airLockLoop)
+				else
+					if airLockLoop then
+						airLockLoop:Disconnect()
+						airLockLoop = nil
+					end
 				end
 			end
+			BtnAirLock.MouseButton1Click:Connect(function()
+				ToggleAirLock()
+			end)
+			UIHandlers.ToggleAirLock = ToggleAirLock
 		end
-		BtnAirLock.MouseButton1Click:Connect(function()
-			ToggleAirLock()
-		end)
-		UIHandlers.ToggleAirLock = ToggleAirLock
-	end
 
 	-- 1. ALWAYS MOMENTUM
 	local CardMomentum = CreateCard("ALWAYS MOMENTUM", 80, 1)
