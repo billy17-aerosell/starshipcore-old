@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
 
 // Get Redis client for whitelist check
 let redis = null;
@@ -8,10 +8,10 @@ let redisInitAttempted = false;
 async function getRedis() {
   if (!redisInitAttempted) {
     try {
-      const redisModule = await import('../lib/redis.js');
+      const redisModule = await import("../lib/redis.js");
       redis = redisModule.default;
     } catch (error) {
-      console.error('⚠️ Redis module load failed:', error.message);
+      console.error("⚠️ Redis module load failed:", error.message);
       redis = null;
     }
     redisInitAttempted = true;
@@ -25,10 +25,10 @@ async function getWhitelistFromRedis() {
     const redisClient = await getRedis();
     if (!redisClient) return null;
 
-    const data = await redisClient.get('starship:whitelist');
+    const data = await redisClient.get("starship:whitelist");
     return data ? JSON.parse(data) : null;
   } catch (error) {
-    console.error('Redis whitelist read error:', error.message);
+    console.error("Redis whitelist read error:", error.message);
     return null;
   }
 }
@@ -36,8 +36,8 @@ async function getWhitelistFromRedis() {
 // Check file-based whitelist as fallback
 function getWhitelistFromFile() {
   try {
-    const keysPath = path.join(process.cwd(), 'data', 'keys.json');
-    const data = fs.readFileSync(keysPath, 'utf8');
+    const keysPath = path.join(process.cwd(), "data", "keys.json");
+    const data = fs.readFileSync(keysPath, "utf8");
     const parsed = JSON.parse(data);
     return parsed.whitelist || {};
   } catch (error) {
@@ -47,8 +47,9 @@ function getWhitelistFromFile() {
 
 // Generate random encryption key
 function generateKey(length) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+';
-  let result = '';
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+";
+  let result = "";
   for (let i = 0; i < length; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -67,23 +68,26 @@ function xorEncrypt(buffer, key) {
 
 // Valid module paths (whitelist of allowed modules)
 const ALLOWED_MODULES = [
-  'Config.lua',
-  'UI.lua',
-  'Intro.lua',
-  'Animations.lua',
-  'Tabs/Dashboard.lua',
-  'Tabs/Tools.lua',
-  'Tabs/Warp.lua',
-  'Tabs/Helper.lua',
-  'Tabs/Fun.lua',
-  'Tabs/Emotes.lua',
-  'Tabs/ConfigTab.lua',
+  "Config.lua",
+  "UI.lua",
+  "Intro.lua",
+  "Animations.lua",
+  "Tabs/Dashboard.lua",
+  "Tabs/Tools.lua",
+  "Tabs/Warp.lua",
+  "Tabs/Helper.lua",
+  "Tabs/Fun.lua",
+  "Tabs/Emotes.lua",
+  "Tabs/ConfigTab.lua",
 ];
+
+// Owner ID - always has access without whitelist check
+const OWNER_ID = "9268011358";
 
 export default async function handler(req, res) {
   // Only allow GET requests
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method Not Allowed" });
   }
 
   const { name, user, dev } = req.query;
@@ -91,20 +95,22 @@ export default async function handler(req, res) {
 
   // Validate module name
   if (!name) {
-    return res.status(400).json({ error: 'Module name required' });
+    return res.status(400).json({ error: "Module name required" });
   }
 
   // Security: Check if module is in allowed list (prevent path traversal)
-  const normalizedName = name.replace(/\\/g, '/');
+  const normalizedName = name.replace(/\\/g, "/");
   if (!ALLOWED_MODULES.includes(normalizedName)) {
     console.log(`[${timestamp}] ❌ Invalid module requested: ${name}`);
-    return res.status(403).json({ error: 'Module not found or not allowed' });
+    return res.status(403).json({ error: "Module not found or not allowed" });
   }
 
   // === DEV MODE ===
   // Check if dev mode is enabled (localhost or dev=true with secret)
-  const isLocalhost = req.headers.host?.includes('localhost') || req.headers.host?.includes('127.0.0.1');
-  const devSecret = process.env.DEV_SECRET || 'starship-dev-2025';
+  const isLocalhost =
+    req.headers.host?.includes("localhost") ||
+    req.headers.host?.includes("127.0.0.1");
+  const devSecret = process.env.DEV_SECRET || "starship-dev-2025";
   const isDevMode = isLocalhost || dev === devSecret;
 
   if (isDevMode) {
@@ -112,34 +118,86 @@ export default async function handler(req, res) {
     console.log(`[${timestamp}] 🔧 [DEV] Module requested: ${name}`);
 
     try {
-      const modulePath = path.join(process.cwd(), 'data', 'Modules', normalizedName);
+      const modulePath = path.join(
+        process.cwd(),
+        "data",
+        "Modules",
+        normalizedName,
+      );
 
       if (!fs.existsSync(modulePath)) {
-        return res.status(404).json({ error: 'Module file not found' });
+        return res.status(404).json({ error: "Module file not found" });
       }
 
-      const content = fs.readFileSync(modulePath, 'utf8');
+      const content = fs.readFileSync(modulePath, "utf8");
 
       // Return plain text for dev mode
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      res.setHeader('X-Mode', 'development');
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("X-Mode", "development");
       return res.status(200).send(content);
-
     } catch (error) {
-      console.error(`[${timestamp}] ❌ [DEV] Error reading module:`, error.message);
-      return res.status(500).json({ error: 'Failed to read module' });
+      console.error(
+        `[${timestamp}] ❌ [DEV] Error reading module:`,
+        error.message,
+      );
+      return res.status(500).json({ error: "Failed to read module" });
     }
   }
 
   // === PRODUCTION MODE ===
   // Require user ID for production
   if (!user) {
-    return res.status(400).json({ error: 'User ID required' });
+    return res.status(400).json({ error: "User ID required" });
   }
 
   const now = Math.floor(Date.now() / 1000);
 
   try {
+    // OWNER BYPASS - Owner always has access
+    if (user === OWNER_ID) {
+      console.log(`[${timestamp}] 👑 [OWNER] Module requested: ${name}`);
+
+      const modulePath = path.join(
+        process.cwd(),
+        "data",
+        "Modules",
+        normalizedName,
+      );
+
+      if (!fs.existsSync(modulePath)) {
+        return res.status(404).json({ error: "Module file not found" });
+      }
+
+      let moduleBuffer = fs.readFileSync(modulePath);
+
+      // Remove BOM if present
+      if (
+        moduleBuffer.length >= 3 &&
+        moduleBuffer[0] === 0xef &&
+        moduleBuffer[1] === 0xbb &&
+        moduleBuffer[2] === 0xbf
+      ) {
+        moduleBuffer = moduleBuffer.subarray(3);
+      }
+
+      // Generate dynamic encryption key
+      const dynamicKey = generateKey(32);
+
+      // Encrypt module content
+      const encryptedBuffer = xorEncrypt(moduleBuffer, dynamicKey);
+      const base64Blob = encryptedBuffer.toString("base64");
+
+      console.log(`[${timestamp}] 👑 [OWNER] Module delivered: ${name}`);
+
+      // Return encrypted module
+      return res.status(200).json({
+        status: "success",
+        module: normalizedName,
+        key: dynamicKey,
+        blob: base64Blob,
+      });
+    }
+
     // Check Redis whitelist first
     let isWhitelisted = false;
     let userData = null;
@@ -149,7 +207,7 @@ export default async function handler(req, res) {
     if (redisWhitelist && redisWhitelist[user]) {
       userData = redisWhitelist[user];
 
-      if (userData.status === 'active') {
+      if (userData.status === "active") {
         // Check expiry
         if (userData.expiresAt) {
           const expiryDate = new Date(userData.expiresAt);
@@ -185,24 +243,36 @@ export default async function handler(req, res) {
 
     // Deny if not whitelisted
     if (!isWhitelisted) {
-      console.log(`[${timestamp}] ❌ Module access denied - User: ${user}, Module: ${name}`);
+      console.log(
+        `[${timestamp}] ❌ Module access denied - User: ${user}, Module: ${name}`,
+      );
       return res.status(403).json({
-        status: 'denied',
-        error: 'Not authorized to access modules'
+        status: "denied",
+        error: "Not authorized to access modules",
       });
     }
 
     // Read module file
-    const modulePath = path.join(process.cwd(), 'data', 'Modules', normalizedName);
+    const modulePath = path.join(
+      process.cwd(),
+      "data",
+      "Modules",
+      normalizedName,
+    );
 
     if (!fs.existsSync(modulePath)) {
-      return res.status(404).json({ error: 'Module file not found' });
+      return res.status(404).json({ error: "Module file not found" });
     }
 
     let moduleBuffer = fs.readFileSync(modulePath);
 
     // Remove BOM if present
-    if (moduleBuffer.length >= 3 && moduleBuffer[0] === 0xEF && moduleBuffer[1] === 0xBB && moduleBuffer[2] === 0xBF) {
+    if (
+      moduleBuffer.length >= 3 &&
+      moduleBuffer[0] === 0xef &&
+      moduleBuffer[1] === 0xbb &&
+      moduleBuffer[2] === 0xbf
+    ) {
       moduleBuffer = moduleBuffer.subarray(3);
     }
 
@@ -211,20 +281,21 @@ export default async function handler(req, res) {
 
     // Encrypt module content
     const encryptedBuffer = xorEncrypt(moduleBuffer, dynamicKey);
-    const base64Blob = encryptedBuffer.toString('base64');
+    const base64Blob = encryptedBuffer.toString("base64");
 
-    console.log(`[${timestamp}] ✅ Module delivered - User: ${user}, Module: ${name}`);
+    console.log(
+      `[${timestamp}] ✅ Module delivered - User: ${user}, Module: ${name}`,
+    );
 
     // Return encrypted module
     return res.status(200).json({
-      status: 'success',
+      status: "success",
       module: normalizedName,
       key: dynamicKey,
-      blob: base64Blob
+      blob: base64Blob,
     });
-
   } catch (error) {
     console.error(`[${timestamp}] ❌ Error:`, error.message);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 }
