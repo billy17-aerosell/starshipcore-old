@@ -3165,7 +3165,7 @@ do
     MinLogo.Size = UDim2.new(1, -8, 1, -8)
     MinLogo.Position = UDim2.new(0, 4, 0, 4)
     MinLogo.BackgroundTransparency = 1
-    MinLogo.Image = "rbxassetid://127464700829848"
+    MinLogo.Image = "https://www.roblox.com/asset/?id=91946746369709"
     MinLogo.ScaleType = Enum.ScaleType.Fit
     MinLogo.ZIndex = 101
 
@@ -7321,14 +7321,14 @@ function UIHandlers.SetupNametags()
         iconFrame.ZIndex = 2
         Instance.new("UICorner", iconFrame).CornerRadius = UDim.new(0, 6)
 
-        local iconText = Instance.new("TextLabel", iconFrame)
-        iconText.Size = UDim2.new(1, 0, 1, 0)
-        iconText.BackgroundTransparency = 1
-        iconText.Text = "S"
-        iconText.TextColor3 = C_ACCENT
-        iconText.Font = Enum.Font.FredokaOne
-        iconText.TextSize = 16
-        iconText.ZIndex = 2
+        local iconImage = Instance.new("ImageLabel", iconFrame)
+        iconImage.Name = "Icon"
+        iconImage.Size = UDim2.new(1, -4, 1, -4)
+        iconImage.Position = UDim2.new(0, 2, 0, 2)
+        iconImage.BackgroundTransparency = 1
+        iconImage.Image = "https://www.roblox.com/asset/?id=91946746369709"
+        iconImage.ScaleType = Enum.ScaleType.Fit
+        iconImage.ZIndex = 3
 
         local iconStroke = Instance.new("UIStroke", iconFrame)
         iconStroke.Thickness = 1

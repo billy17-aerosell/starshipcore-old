@@ -1671,6 +1671,270 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     BtnHidePlayers.MouseButton1Click:Connect(ToggleHidePlayers)
 
+    -- 9. SKYBOX CHANGER
+    local CardSkybox = CreateCard("🌌 SKYBOX CHANGER", 140, 9)
+
+    local originalSky = nil
+    local originalAtmosphere = nil
+    local currentSkybox = "Default"
+    local skyboxConnection = nil -- For bypass protection loop
+
+    -- Skybox Presets (VERIFIED WORKING)
+    local SkyboxPresets = {
+        ["Default"] = nil, -- Will restore original
+
+        ["Galaxy Night"] = {
+            -- Verified working
+            SkyboxBk = "rbxassetid://159454286",
+            SkyboxDn = "rbxassetid://159454296",
+            SkyboxFt = "rbxassetid://159454299",
+            SkyboxLf = "rbxassetid://159454286",
+            SkyboxRt = "rbxassetid://159454291",
+            SkyboxUp = "rbxassetid://159454293",
+            StarCount = 5000,
+        },
+        ["Blood Red"] = {
+            -- Verified working
+            SkyboxBk = "rbxassetid://1012890",
+            SkyboxDn = "rbxassetid://1012891",
+            SkyboxFt = "rbxassetid://1012887",
+            SkyboxLf = "rbxassetid://1012889",
+            SkyboxRt = "rbxassetid://1012888",
+            SkyboxUp = "rbxassetid://1014449",
+            StarCount = 500,
+            Ambient = Color3.fromRGB(80, 20, 20),
+        },
+        ["Scary Red"] = {
+            -- Verified working
+            SkyboxBk = "rbxassetid://108929045660200",
+            SkyboxDn = "rbxassetid://78646480540009",
+            SkyboxFt = "rbxassetid://90546017435179",
+            SkyboxLf = "rbxassetid://109838453114563",
+            SkyboxRt = "rbxassetid://94190734796082",
+            SkyboxUp = "rbxassetid://126944775797063",
+        },
+        ["Skybox HD"] = {
+            -- Verified working - HD quality skybox
+            SkyboxBk = "rbxassetid://16553658937",
+            SkyboxDn = "rbxassetid://16553660713",
+            SkyboxFt = "rbxassetid://16553662144",
+            SkyboxLf = "rbxassetid://16553664042",
+            SkyboxRt = "rbxassetid://16553665766",
+            SkyboxUp = "rbxassetid://16553667750",
+            StarCount = 3000,
+        },
+        ["Night City"] = {
+            -- Verified working - City night skybox
+            SkyboxBk = "rbxassetid://163897885",
+            SkyboxDn = "rbxassetid://163898013",
+            SkyboxFt = "rbxassetid://163899342",
+            SkyboxLf = "rbxassetid://163897886",
+            SkyboxRt = "rbxassetid://163897887",
+            SkyboxUp = "rbxassetid://163898013",
+            StarCount = 5000,
+        },
+    }
+
+    local presetOrder = { "Default", "Galaxy Night", "Blood Red", "Scary Red", "Skybox HD", "Night City" }
+
+    -- Capture original sky on first load
+    local function CaptureOriginalSky()
+        if originalSky then return end
+        local lighting = game:GetService("Lighting")
+        local existingSky = lighting:FindFirstChildOfClass("Sky")
+        if existingSky then
+            originalSky = {
+                SkyboxBk = existingSky.SkyboxBk,
+                SkyboxDn = existingSky.SkyboxDn,
+                SkyboxFt = existingSky.SkyboxFt,
+                SkyboxLf = existingSky.SkyboxLf,
+                SkyboxRt = existingSky.SkyboxRt,
+                SkyboxUp = existingSky.SkyboxUp,
+                StarCount = existingSky.StarCount,
+                SunAngularSize = existingSky.SunAngularSize,
+                MoonAngularSize = existingSky.MoonAngularSize,
+            }
+        end
+        originalAtmosphere = lighting.Ambient
+    end
+
+    -- Stop any existing skybox bypass loop
+    local function StopSkyboxBypass()
+        if skyboxConnection then
+            skyboxConnection:Disconnect()
+            skyboxConnection = nil
+        end
+    end
+
+    -- Apply skybox with bypass protection (Heartbeat loop)
+    local function ApplySkyboxWithBypass(preset)
+        local lighting = game:GetService("Lighting")
+
+        skyboxConnection = RunService.Heartbeat:Connect(function()
+            for _, child in pairs(lighting:GetChildren()) do
+                if child:IsA("Sky") then
+                    child.SkyboxBk = preset.SkyboxBk
+                    child.SkyboxDn = preset.SkyboxDn
+                    child.SkyboxFt = preset.SkyboxFt
+                    child.SkyboxLf = preset.SkyboxLf
+                    child.SkyboxRt = preset.SkyboxRt
+                    child.SkyboxUp = preset.SkyboxUp
+                    child.StarCount = preset.StarCount or 0
+                end
+            end
+            if preset.Ambient then
+                lighting.Ambient = preset.Ambient
+            end
+        end)
+    end
+
+    local function ApplySkybox(presetName)
+        local lighting = game:GetService("Lighting")
+        CaptureOriginalSky()
+        StopSkyboxBypass() -- Stop previous bypass loop
+
+        local preset = SkyboxPresets[presetName]
+
+        if presetName == "Default" then
+            -- Restore original
+            local sky = lighting:FindFirstChildOfClass("Sky")
+            if sky and originalSky then
+                sky.SkyboxBk = originalSky.SkyboxBk
+                sky.SkyboxDn = originalSky.SkyboxDn
+                sky.SkyboxFt = originalSky.SkyboxFt
+                sky.SkyboxLf = originalSky.SkyboxLf
+                sky.SkyboxRt = originalSky.SkyboxRt
+                sky.SkyboxUp = originalSky.SkyboxUp
+                sky.StarCount = originalSky.StarCount
+            end
+            if originalAtmosphere then
+                lighting.Ambient = originalAtmosphere
+            end
+            currentSkybox = "Default"
+            return
+        end
+
+        if not preset then return end
+
+        -- Find or create Sky object
+        local sky = lighting:FindFirstChildOfClass("Sky")
+        if not sky then
+            sky = Instance.new("Sky", lighting)
+        end
+
+        -- Apply preset once first
+        sky.SkyboxBk = preset.SkyboxBk
+        sky.SkyboxDn = preset.SkyboxDn
+        sky.SkyboxFt = preset.SkyboxFt
+        sky.SkyboxLf = preset.SkyboxLf
+        sky.SkyboxRt = preset.SkyboxRt
+        sky.SkyboxUp = preset.SkyboxUp
+        sky.StarCount = preset.StarCount or 0
+
+        if preset.Ambient then
+            lighting.Ambient = preset.Ambient
+        end
+
+        -- Start bypass protection loop
+        ApplySkyboxWithBypass(preset)
+
+        currentSkybox = presetName
+    end
+
+    -- Status Label
+    local SkyboxStatus = Instance.new("TextLabel", CardSkybox)
+    SkyboxStatus.Text = "Current: Default"
+    SkyboxStatus.Size = UDim2.new(0.94, 0, 0, 20)
+    SkyboxStatus.Position = UDim2.new(0.03, 0, 0, 30)
+    SkyboxStatus.BackgroundTransparency = 1
+    SkyboxStatus.TextColor3 = C_TEXT_DIM
+    SkyboxStatus.Font = Enum.Font.Gotham
+    SkyboxStatus.TextSize = 11
+    SkyboxStatus.TextXAlignment = Enum.TextXAlignment.Left
+    RegisterTheme(SkyboxStatus, "TextColor3", "TextDim")
+
+    -- Dropdown Button
+    local BtnSkyboxDropdown = Instance.new("TextButton", CardSkybox)
+    BtnSkyboxDropdown.Text = "🌌 Select Skybox ▼"
+    BtnSkyboxDropdown.Size = UDim2.new(0.94, 0, 0, 35)
+    BtnSkyboxDropdown.Position = UDim2.new(0.03, 0, 0, 55)
+    StyleBtn(BtnSkyboxDropdown, C_ACCENT)
+
+    -- Dropdown List (using Frame, not ScrollingFrame)
+    local SkyboxDropdown = Instance.new("Frame", CardSkybox)
+    SkyboxDropdown.Size = UDim2.new(0.94, 0, 0, 0)
+    SkyboxDropdown.Position = UDim2.new(0.03, 0, 0, 92)
+    SkyboxDropdown.BackgroundColor3 = C_SIDE
+    SkyboxDropdown.BorderSizePixel = 0
+    SkyboxDropdown.Visible = false
+    SkyboxDropdown.ZIndex = 10
+    SkyboxDropdown.AutomaticSize = Enum.AutomaticSize.Y
+    SkyboxDropdown.ClipsDescendants = true
+    Instance.new("UICorner", SkyboxDropdown).CornerRadius = UDim.new(0, 6)
+    RegisterTheme(SkyboxDropdown, "BackgroundColor3", "Side")
+
+    local SkyboxDropLayout = Instance.new("UIListLayout", SkyboxDropdown)
+    SkyboxDropLayout.Padding = UDim.new(0, 2)
+
+    local skyboxDropdownOpen = false
+
+    local function PopulateSkyboxDropdown()
+        for _, child in pairs(SkyboxDropdown:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
+
+        for _, name in ipairs(presetOrder) do
+            local opt = Instance.new("TextButton", SkyboxDropdown)
+            opt.Text = (name == currentSkybox and "✓ " or "  ") .. name
+            opt.Size = UDim2.new(1, 0, 0, 28)
+            opt.BackgroundColor3 = C_ITEM
+            opt.TextColor3 = (name == currentSkybox) and C_GREEN or C_TEXT
+            opt.Font = Enum.Font.Gotham
+            opt.TextSize = 11
+            opt.ZIndex = 11
+            Instance.new("UICorner", opt).CornerRadius = UDim.new(0, 4)
+            RegisterTheme(opt, "BackgroundColor3", "Item")
+
+            opt.MouseButton1Click:Connect(function()
+                ApplySkybox(name)
+                BtnSkyboxDropdown.Text = "🌌 " .. name .. " ▼"
+                SkyboxStatus.Text = "Current: " .. name
+                SkyboxStatus.TextColor3 = (name == "Default") and C_TEXT_DIM or C_GREEN
+                SkyboxDropdown.Visible = false
+                skyboxDropdownOpen = false
+            end)
+        end
+    end
+
+    BtnSkyboxDropdown.MouseButton1Click:Connect(function()
+        skyboxDropdownOpen = not skyboxDropdownOpen
+        if skyboxDropdownOpen then
+            PopulateSkyboxDropdown()
+            -- AutomaticSize.Y will handle height automatically
+            SkyboxDropdown.Visible = true
+        else
+            SkyboxDropdown.Visible = false
+        end
+    end)
+
+    -- Reset Button
+    local BtnSkyboxReset = Instance.new("TextButton", CardSkybox)
+    BtnSkyboxReset.Text = "🔄 RESET TO ORIGINAL"
+    BtnSkyboxReset.Size = UDim2.new(0.94, 0, 0, 30)
+    BtnSkyboxReset.Position = UDim2.new(0.03, 0, 0, 100)
+    StyleBtn(BtnSkyboxReset, C_RED)
+
+    BtnSkyboxReset.MouseButton1Click:Connect(function()
+        ApplySkybox("Default")
+        BtnSkyboxDropdown.Text = "🌌 Select Skybox ▼"
+        SkyboxStatus.Text = "Current: Default"
+        SkyboxStatus.TextColor3 = C_TEXT_DIM
+        SkyboxDropdown.Visible = false
+        skyboxDropdownOpen = false
+    end)
+
     -- HD SHADER / GRAPHICS ENHANCER
     local CardShader = CreateCard("✨ HD SHADER", 180, 99)
 
