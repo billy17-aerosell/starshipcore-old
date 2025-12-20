@@ -1,0 +1,10 @@
+-- Clean StarshipCore cache
+if isfolder("StarshipCore") then
+    for _, file in ipairs(listfiles("StarshipCore/Modules/Tabs")) do
+        delfile(file)
+    end
+    for _, file in ipairs(listfiles("StarshipCore/Modules")) do
+        if isfile(file) then delfile(file) end
+    end
+    print("[Starship] Cache cleaned!")
+en

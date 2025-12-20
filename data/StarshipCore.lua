@@ -285,6 +285,7 @@ local S = {
     isRespawnOnEnd = false,
     isLiveSmoothing = false,
     liveSmoothingStrength = 4,
+    isPositionBasedPlayback = true, -- New: smoother position-following mode (default ON)
     isBinding = false,
     currentWorkspace = "Default",
     currentMergerWorkspace = "Default",
@@ -358,6 +359,7 @@ end
 local currentWorkspace, currentMergerWorkspace = S.currentWorkspace, S.currentMergerWorkspace
 local GlobalKeyDuration, isBinding = S.GlobalKeyDuration, S.isBinding
 local isLiveSmoothing, liveSmoothingStrength = S.isLiveSmoothing, S.liveSmoothingStrength
+local isPositionBasedPlayback = S.isPositionBasedPlayback
 
 -- --- HELPER: DEEP COPY & SMOOTH ---
 local function DeepCopy(orig)
@@ -375,46 +377,206 @@ local function DeepCopy(orig)
     return copy
 end
 
+-- Catmull-Rom Spline Interpolation for ultra-smooth curves
+local function CatmullRomSpline(p0, p1, p2, p3, t)
+    local t2 = t * t
+    local t3 = t2 * t
+    return 0.5 * (
+        (2 * p1) +
+        (-p0 + p2) * t +
+        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+        (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+    )
+end
+
+-- Catmull-Rom for Vector3
+local function CatmullRomVector3(v0, v1, v2, v3, t)
+    return Vector3.new(
+        CatmullRomSpline(v0.X, v1.X, v2.X, v3.X, t),
+        CatmullRomSpline(v0.Y, v1.Y, v2.Y, v3.Y, t),
+        CatmullRomSpline(v0.Z, v1.Z, v2.Z, v3.Z, t)
+    )
+end
+
+-- Smooth interpolation between two frames using Catmull-Rom (requires 4 frames context)
+local function SmoothInterpolateFrames(frames, frameIdx, alpha)
+    local n = #frames
+    if n < 2 then return nil, nil end
+
+    -- Get 4 frames for Catmull-Rom (clamp at boundaries)
+    local i0 = math.max(1, frameIdx - 1)
+    local i1 = frameIdx
+    local i2 = math.min(n, frameIdx + 1)
+    local i3 = math.min(n, frameIdx + 2)
+
+    local f0, f1, f2, f3 = frames[i0], frames[i1], frames[i2], frames[i3]
+
+    -- Interpolate position with Catmull-Rom
+    local smoothPos = nil
+    if f0.pos and f1.pos and f2.pos and f3.pos then
+        local p0 = Vector3.new(f0.pos.x, f0.pos.y, f0.pos.z)
+        local p1 = Vector3.new(f1.pos.x, f1.pos.y, f1.pos.z)
+        local p2 = Vector3.new(f2.pos.x, f2.pos.y, f2.pos.z)
+        local p3 = Vector3.new(f3.pos.x, f3.pos.y, f3.pos.z)
+        smoothPos = CatmullRomVector3(p0, p1, p2, p3, alpha)
+    elseif f1.pos and f2.pos then
+        -- Fallback to linear lerp
+        local p1 = Vector3.new(f1.pos.x, f1.pos.y, f1.pos.z)
+        local p2 = Vector3.new(f2.pos.x, f2.pos.y, f2.pos.z)
+        smoothPos = p1:Lerp(p2, alpha)
+    end
+
+    -- Interpolate velocity with Catmull-Rom (smoother acceleration)
+    local smoothVel = nil
+    if f0.vel and f1.vel and f2.vel and f3.vel then
+        local v0 = Vector3.new(f0.vel.x, f0.vel.y, f0.vel.z)
+        local v1 = Vector3.new(f1.vel.x, f1.vel.y, f1.vel.z)
+        local v2 = Vector3.new(f2.vel.x, f2.vel.y, f2.vel.z)
+        local v3 = Vector3.new(f3.vel.x, f3.vel.y, f3.vel.z)
+        smoothVel = CatmullRomVector3(v0, v1, v2, v3, alpha)
+    elseif f1.vel and f2.vel then
+        -- Fallback to linear lerp
+        local v1 = Vector3.new(f1.vel.x, f1.vel.y, f1.vel.z)
+        local v2 = Vector3.new(f2.vel.x, f2.vel.y, f2.vel.z)
+        smoothVel = v1:Lerp(v2, alpha)
+    end
+
+    return smoothPos, smoothVel
+end
+
+-- Gaussian weight calculation for smooth falloff
+local function GaussianWeight(distance, sigma)
+    return math.exp(-(distance * distance) / (2 * sigma * sigma))
+end
+
 local function GetSmoothedFrames(frames, strength, isFlexible)
     local processedFrames = DeepCopy(frames) -- Work on a copy, never touch raw data
     local iterations = math.clamp(strength or 1, 1, 10)
 
+    -- Gaussian kernel radius scales with strength (1-5 neighbors on each side)
+    local kernelRadius = math.clamp(math.ceil(strength / 2), 1, 5)
+    local sigma = kernelRadius / 2 -- Standard deviation for Gaussian
+
     for iter = 1, iterations do
+        -- Create temporary copy for this iteration to avoid reading modified values
+        local tempFrames = DeepCopy(processedFrames)
+
         for i = 2, #processedFrames - 1 do
-            local prev = processedFrames[i - 1]
             local curr = processedFrames[i]
-            local next = processedFrames[i + 1]
 
             if isFlexible then
-                if prev.pos and curr.pos and next.pos then
-                    local p1 = Vector3.new(prev.pos.x, prev.pos.y, prev.pos.z)
-                    local p2 = Vector3.new(curr.pos.x, curr.pos.y, curr.pos.z)
-                    local p3 = Vector3.new(next.pos.x, next.pos.y, next.pos.z)
-                    local avg = (p1 + p2 + p3) / 3
-                    local newPos = p2:Lerp(avg, 0.5)
-                    curr.pos.x = newPos.X
-                    curr.pos.y = newPos.Y
-                    curr.pos.z = newPos.Z
+                -- Gaussian-weighted position smoothing
+                if curr.pos then
+                    local weightSum = 0
+                    local posSum = Vector3.new(0, 0, 0)
+
+                    for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
+                        local neighbor = tempFrames[j]
+                        if neighbor.pos then
+                            local dist = math.abs(j - i)
+                            local weight = GaussianWeight(dist, sigma)
+                            local neighborPos = Vector3.new(neighbor.pos.x, neighbor.pos.y, neighbor.pos.z)
+                            posSum = posSum + neighborPos * weight
+                            weightSum = weightSum + weight
+                        end
+                    end
+
+                    if weightSum > 0 then
+                        local smoothedPos = posSum / weightSum
+                        -- Blend between original and smoothed (preserves sharp corners when needed)
+                        local currPos = Vector3.new(curr.pos.x, curr.pos.y, curr.pos.z)
+                        local finalPos = currPos:Lerp(smoothedPos, 0.7) -- 70% smooth, 30% original
+                        curr.pos.x = finalPos.X
+                        curr.pos.y = finalPos.Y
+                        curr.pos.z = finalPos.Z
+                    end
                 end
-                if prev.vel and curr.vel and next.vel then
-                    local v1 = Vector3.new(prev.vel.x, prev.vel.y, prev.vel.z)
-                    local v2 = Vector3.new(curr.vel.x, curr.vel.y, curr.vel.z)
-                    local v3 = Vector3.new(next.vel.x, next.vel.y, next.vel.z)
-                    local newVel = (v1 + v2 + v3) / 3
-                    curr.vel.x = newVel.X
-                    curr.vel.y = newVel.Y
-                    curr.vel.z = newVel.Z
+
+                -- Gaussian-weighted velocity smoothing
+                if curr.vel then
+                    local weightSum = 0
+                    local velSum = Vector3.new(0, 0, 0)
+
+                    for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
+                        local neighbor = tempFrames[j]
+                        if neighbor.vel then
+                            local dist = math.abs(j - i)
+                            local weight = GaussianWeight(dist, sigma)
+                            local neighborVel = Vector3.new(neighbor.vel.x, neighbor.vel.y, neighbor.vel.z)
+                            velSum = velSum + neighborVel * weight
+                            weightSum = weightSum + weight
+                        end
+                    end
+
+                    if weightSum > 0 then
+                        local smoothedVel = velSum / weightSum
+                        -- More aggressive velocity smoothing (reduces jitter)
+                        local currVel = Vector3.new(curr.vel.x, curr.vel.y, curr.vel.z)
+                        local finalVel = currVel:Lerp(smoothedVel, 0.8) -- 80% smooth
+                        curr.vel.x = finalVel.X
+                        curr.vel.y = finalVel.Y
+                        curr.vel.z = finalVel.Z
+                    end
+                end
+
+                -- Also smooth rotation for more natural turning
+                if curr.rot and type(curr.rot) == "number" then
+                    local weightSum = 0
+                    local rotSum = 0
+                    local baseRot = curr.rot
+
+                    for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
+                        local neighbor = tempFrames[j]
+                        if neighbor.rot and type(neighbor.rot) == "number" then
+                            local dist = math.abs(j - i)
+                            local weight = GaussianWeight(dist, sigma)
+                            -- Handle angle wrapping (-180 to 180)
+                            local angleDiff = neighbor.rot - baseRot
+                            if angleDiff > 180 then angleDiff = angleDiff - 360 end
+                            if angleDiff < -180 then angleDiff = angleDiff + 360 end
+                            rotSum = rotSum + (baseRot + angleDiff) * weight
+                            weightSum = weightSum + weight
+                        end
+                    end
+
+                    if weightSum > 0 then
+                        local smoothedRot = rotSum / weightSum
+                        -- Normalize to -180 to 180
+                        while smoothedRot > 180 do smoothedRot = smoothedRot - 360 end
+                        while smoothedRot < -180 do smoothedRot = smoothedRot + 360 end
+                        curr.rot = curr.rot + (smoothedRot - curr.rot) * 0.6 -- 60% blend
+                    end
                 end
             else
-                if prev.r and curr.r and next.r then
-                    local cf1 = TblToCF(prev.r)
-                    local cf2 = TblToCF(curr.r)
-                    local cf3 = TblToCF(next.r)
-                    local posAvg = (cf1.Position + cf2.Position + cf3.Position) / 3
-                    local newPos = cf2.Position:Lerp(posAvg, 0.5)
-                    local rotAvg = cf1:Lerp(cf3, 0.5)
-                    local newRot = cf2:Lerp(rotAvg, 0.5)
-                    curr.r = CFToTbl(CFrame.new(newPos) * newRot.Rotation)
+                -- Strict mode: Gaussian-weighted CFrame smoothing
+                if curr.r then
+                    local weightSum = 0
+                    local posSum = Vector3.new(0, 0, 0)
+                    local baseCF = TblToCF(curr.r)
+
+                    for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
+                        local neighbor = tempFrames[j]
+                        if neighbor.r then
+                            local dist = math.abs(j - i)
+                            local weight = GaussianWeight(dist, sigma)
+                            local neighborCF = TblToCF(neighbor.r)
+                            posSum = posSum + neighborCF.Position * weight
+                            weightSum = weightSum + weight
+                        end
+                    end
+
+                    if weightSum > 0 then
+                        local smoothedPos = posSum / weightSum
+                        local finalPos = baseCF.Position:Lerp(smoothedPos, 0.7)
+                        -- For rotation, use neighbors for lerp target
+                        local prevIdx = math.max(1, i - 1)
+                        local nextIdx = math.min(#tempFrames, i + 1)
+                        local prevCF = TblToCF(tempFrames[prevIdx].r)
+                        local nextCF = TblToCF(tempFrames[nextIdx].r)
+                        local rotAvg = prevCF:Lerp(nextCF, 0.5)
+                        local newRot = baseCF:Lerp(rotAvg, 0.5)
+                        curr.r = CFToTbl(CFrame.new(finalPos) * newRot.Rotation)
+                    end
                 end
             end
         end
@@ -428,6 +590,14 @@ function UIHandlers.SetLiveSmoothing(enabled, strength)
     if strength then
         liveSmoothingStrength = strength
     end
+end
+
+function UIHandlers.SetPositionBasedPlayback(enabled)
+    isPositionBasedPlayback = enabled
+end
+
+function UIHandlers.GetPositionBasedPlayback()
+    return isPositionBasedPlayback
 end
 
 function UIHandlers.SmoothRecording(strength)
@@ -1714,18 +1884,21 @@ local function PlayRecording(fn, force, skipDistanceCheck)
                         vel = -vel
                     end
 
-                    -- Smooth velocity blending - increase blend factor at higher speeds
+                    -- IMPROVED: Higher velocity blending for smoother transitions
                     local currentVel = r.AssemblyLinearVelocity
-                    local baseBlend = isReversing and 0.4 or 0.6
-                    local blendFactor = math.clamp(baseBlend * playbackSpeed, 0.3, 0.95) -- Scale with speed, cap at 0.95
+                    local baseBlend = isReversing and 0.7 or 0.85                        -- Increased from 0.4/0.6
+                    local blendFactor = math.clamp(baseBlend * playbackSpeed, 0.5, 0.98) -- Higher minimum and cap
 
                     -- Check if in air state - use position-based for smooth jump like recording
                     local stName = fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
                     local isInAir = (stName == "Jumping" or stName == "Freefall")
-                    if isInAir and fA.pos and fB.pos then
+
+                    -- IMPROVED: Use Catmull-Rom spline for ALL states (not just air)
+                    local smoothPos, smoothVel = SmoothInterpolateFrames(currentFrameData, frameIdx, alpha)
+
+                    if isInAir and smoothPos then
                         -- Follow recorded position for smooth jump arc (like recording)
-                        local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
-                            :Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
+                        local targetPos = smoothPos -- Use Catmull-Rom interpolated position
                         -- On time jump or high speed, snap directly to target position
                         if isTimeJump or playbackSpeed >= 2 then
                             r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
@@ -1743,17 +1916,93 @@ local function PlayRecording(fn, force, skipDistanceCheck)
                             r.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY * playbackSpeed, horizVel.Z)
                         end
                     else
-                        -- On ground: use velocity-based movement (snap on time jump or high speed)
+                        -- IMPROVED: Position-based playback option for ground too (smoother)
                         if isTimeJump or playbackSpeed >= 2 then
-                            r.AssemblyLinearVelocity = vel
+                            -- Use smooth velocity from Catmull-Rom if available
+                            r.AssemblyLinearVelocity = smoothVel or vel
                             -- Also snap position to prevent drift at high speeds
-                            if fA.pos then
+                            if smoothPos then
+                                r.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
+                            elseif fA.pos then
                                 local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
                                     :Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
                                 r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
                             end
                         else
-                            r.AssemblyLinearVelocity = currentVel:Lerp(vel, blendFactor)
+                            -- IMPROVED: Position-Based Playback mode (smoother ground movement)
+                            if isPositionBasedPlayback and smoothPos then
+                                -- Position-based: Use VELOCITY for animation, but with STRONG position correction
+                                -- This keeps animations working while following path accurately
+                                local currentPos = r.Position
+                                local posDiff = smoothPos - currentPos
+                                local distance = posDiff.Magnitude
+
+                                -- Calculate target velocity that will move us toward the path
+                                -- Use stronger multiplier for tighter path following
+                                local correctionStrength = math.clamp(distance * 8, 0, 50) -- Stronger correction
+                                local correctionVel = distance > 0.01 and (posDiff.Unit * correctionStrength) or
+                                Vector3.new(0, 0, 0)
+
+                                -- Blend with recorded velocity for smooth acceleration
+                                local targetVel = smoothVel or vel
+                                local finalVel = targetVel + correctionVel
+
+                                -- Apply velocity (this allows physics and animations to work properly)
+                                r.AssemblyLinearVelocity = currentVel:Lerp(finalVel, 0.85)
+
+                                -- Only snap position if WAY off (fallback safety)
+                                if distance > 8 then
+                                    local snapPos = currentPos:Lerp(smoothPos, 0.5)
+                                    r.CFrame = CFrame.new(snapPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
+                                end
+
+                                -- CRITICAL: Trigger walk/run animation using h:Move()
+                                -- Use recorded MoveDirection for accurate animation
+                                if fA.md then
+                                    local moveDir = Vector3.new(fA.md.x, fA.md.y, fA.md.z)
+                                    if moveDir.Magnitude > 0.01 then
+                                        h:Move(moveDir, false) -- false = relative to world, not camera
+                                    else
+                                        h:Move(Vector3.new(0, 0, 0))
+                                    end
+                                elseif finalVel.Magnitude > 0.5 then
+                                    -- Calculate move direction from velocity
+                                    local flatVel = Vector3.new(finalVel.X, 0, finalVel.Z)
+                                    if flatVel.Magnitude > 0.1 then
+                                        h:Move(flatVel.Unit, false)
+                                    end
+                                else
+                                    h:Move(Vector3.new(0, 0, 0))
+                                end
+                            else
+                                -- Velocity-based fallback (original hybrid approach)
+                                local targetVel = smoothVel or vel
+                                r.AssemblyLinearVelocity = currentVel:Lerp(targetVel, blendFactor)
+
+                                -- Subtle position correction to prevent drift
+                                if smoothPos then
+                                    local posDiff = (smoothPos - r.Position)
+                                    local posCorrection = posDiff * 0.2 -- Increased from 0.15 for better tracking
+                                    r.AssemblyLinearVelocity = r.AssemblyLinearVelocity + posCorrection
+                                end
+
+                                -- CRITICAL FIX: Trigger walk/run animation using h:Move()
+                                if fA.md then
+                                    local moveDir = Vector3.new(fA.md.x, fA.md.y, fA.md.z)
+                                    if moveDir.Magnitude > 0.01 then
+                                        h:Move(moveDir, false)
+                                    else
+                                        h:Move(Vector3.new(0, 0, 0))
+                                    end
+                                elseif targetVel.Magnitude > 0.5 then
+                                    local flatVel = Vector3.new(targetVel.X, 0, targetVel.Z)
+                                    if flatVel.Magnitude > 0.1 then
+                                        h:Move(flatVel.Unit, false)
+                                    end
+                                else
+                                    h:Move(Vector3.new(0, 0, 0))
+                                end
+                            end
                         end
                     end
                 end
@@ -2038,26 +2287,41 @@ local function PlayRecording(fn, force, skipDistanceCheck)
                     end
                 end
 
-                -- 5. Drift Correction (Subtle) - Skip during climbing/swimming
+                -- 5. IMPROVED Drift Correction (Smooth) - Skip during climbing/swimming
                 local skipDriftCorrection = false
                 if fA.st then
                     local stName = string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
                     skipDriftCorrection = (stName == "Climbing" or stName == "Swimming")
                 end
 
-                if not skipDriftCorrection and fA.pos and fB.pos then
-                    local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
-                        :Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
-                    local dist = (r.Position - targetPos).Magnitude
+                if not skipDriftCorrection then
+                    -- Use Catmull-Rom interpolated position for smoother target
+                    local smoothTargetPos, _ = SmoothInterpolateFrames(currentFrameData, frameIdx, alpha)
+                    local targetPos = smoothTargetPos
+                    if not targetPos and fA.pos and fB.pos then
+                        targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
+                            :Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
+                    end
 
-                    if dist > 6 then
-                        -- Snap if way off
-                        r.CFrame = CFrame.new(targetPos) * r.CFrame.Rotation
-                    elseif dist > 1 then
-                        -- Nudge velocity to correct
-                        local dir = (targetPos - r.Position).Unit
-                        local correction = dir * (dist * 2) -- Proportional correction
-                        r.AssemblyLinearVelocity = r.AssemblyLinearVelocity + correction
+                    if targetPos then
+                        local dist = (r.Position - targetPos).Magnitude
+
+                        if dist > 10 then
+                            -- IMPROVED: Smooth lerp instead of instant snap (over 3-5 frames)
+                            local smoothSnapPos = r.Position:Lerp(targetPos, 0.4) -- 40% per frame = smooth snap
+                            r.CFrame = CFrame.new(smoothSnapPos) * r.CFrame.Rotation
+                        elseif dist > 3 then
+                            -- Medium drift: Stronger velocity correction
+                            local dir = (targetPos - r.Position).Unit
+                            local correction = dir * (dist * 1.5) -- Proportional correction
+                            r.AssemblyLinearVelocity = r.AssemblyLinearVelocity + correction
+                        elseif dist > 0.5 then
+                            -- Small drift: Gentle nudge
+                            local dir = (targetPos - r.Position).Unit
+                            local correction = dir * (dist * 0.8) -- Softer correction
+                            r.AssemblyLinearVelocity = r.AssemblyLinearVelocity + correction
+                        end
+                        -- Under 0.5 studs: no correction needed (natural movement)
                     end
                 end
 
@@ -5922,6 +6186,12 @@ function UIHandlers.SetupListMapUI()
         MapPlayerPopup.Visible = false
         StopPlayback()
         currentPlaybackFile = nil
+
+        -- Reset semua toggle via UIHandlers (didefinisikan setelah toggle dibuat)
+        if UIHandlers.ResetPlaybackToggles then
+            UIHandlers.ResetPlaybackToggles()
+        end
+
         UpdateSelectionVisuals()
     end)
 
@@ -6088,6 +6358,11 @@ function UIHandlers.SetupListMapUI()
 
     -- Toggles Row (Compact Pills - 2 rows of 3)
     local ToggleButtons = {}
+
+    -- Declare these variables early so ResetPlaybackToggles can access them
+    local godLoop = nil
+    local isFreestyle = false
+    local freestyleLoop = nil
     local function UpdateToggleVisual(id, active, isEffect)
         local toggle = ToggleButtons[id]
         if toggle then
@@ -6238,7 +6513,6 @@ function UIHandlers.SetupListMapUI()
         StatusLbl.TextColor3 = isReversing and C_YELLOW or C_TEXT_DIM
     end)
 
-    local godLoop = nil
     BtnGod.MouseButton1Click:Connect(function()
         isGodMode = not isGodMode
         UpdateToggleVisual("god", isGodMode)
@@ -6267,9 +6541,6 @@ function UIHandlers.SetupListMapUI()
     end)
 
     -- Freestyle Logic (Smart Spin) - RESTORED
-    local isFreestyle = false
-    local freestyleLoop = nil
-
     BtnSpinbot.MouseButton1Click:Connect(function()
         isFreestyle = not isFreestyle
         UpdateToggleVisual("spin", isFreestyle)
@@ -6346,6 +6617,63 @@ function UIHandlers.SetupListMapUI()
             end
         end
     end)
+
+    -- Fungsi Reset Semua Toggle (dipanggil saat popup ditutup)
+    UIHandlers.ResetPlaybackToggles = function()
+        -- Reset state variables
+        isLooping = false
+        isReversing = false
+        isMoonwalk = false
+        isRespawnOnEnd = false
+        isZoomPunch = false
+        isPathEnabled = false
+        ClearPath()
+
+        -- Reset toggle visuals
+        UpdateToggleVisual("loop", false)
+        UpdateToggleVisual("reverse", false)
+        UpdateToggleVisual("moonwalk", false)
+        UpdateToggleVisual("respawn", false)
+        UpdateToggleVisual("zoom", false)
+        UpdateToggleVisual("path", false)
+        UpdateToggleVisual("spin", false)
+        UpdateToggleVisual("god", false)
+
+        -- Reset God Mode
+        if isGodMode then
+            isGodMode = false
+            if godLoop then
+                godLoop:Disconnect()
+                godLoop = nil
+            end
+            local c = LocalPlayer.Character
+            local h = c and c:FindFirstChild("Humanoid")
+            if h then
+                h.MaxHealth = 100
+                h.Health = 100
+            end
+        end
+
+        -- Reset Freestyle/Spin
+        if isFreestyle then
+            isFreestyle = false
+            if freestyleLoop then
+                freestyleLoop:Disconnect()
+                freestyleLoop = nil
+            end
+            local c = LocalPlayer.Character
+            local h = c and c:FindFirstChild("Humanoid")
+            if h then
+                h.AutoRotate = true
+            end
+        end
+
+        -- Reset speed ke 1x
+        playbackSpeed = 1
+        if UIHandlers.BtnSpeed then
+            UIHandlers.BtnSpeed.Text = "1x"
+        end
+    end
 
     -- File List Scroll (Full Height now)
 

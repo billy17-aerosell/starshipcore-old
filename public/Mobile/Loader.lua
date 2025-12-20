@@ -503,6 +503,180 @@ end
 -- PLAYBACK ENGINE (Based on StarshipCore.lua)
 -- ═══════════════════════════════════════════════════════════════════
 
+-- SMOOTHING SETTINGS (Default values - no UI adjustment on mobile)
+local SMOOTH_SETTINGS = {
+    LiveSmoothingEnabled = true,    -- Auto-smooth on load
+    LiveSmoothingStrength = 5,      -- Default strength (1-10)
+    PositionBasedEnabled = true,    -- Position-based playback for smoother ground movement
+}
+
+-- ═══════════════════════════════════════════════════════════════════
+-- SMOOTHING FUNCTIONS (Same as PC StarshipCore.lua)
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Deep copy function
+local function DeepCopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == "table" then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[DeepCopy(orig_key)] = DeepCopy(orig_value)
+        end
+        setmetatable(copy, DeepCopy(getmetatable(orig)))
+    else
+        copy = orig
+    end
+    return copy
+end
+
+-- Catmull-Rom Spline Interpolation for ultra-smooth curves
+local function CatmullRomSpline(p0, p1, p2, p3, t)
+    local t2 = t * t
+    local t3 = t2 * t
+    return 0.5 * (
+        (2 * p1) +
+        (-p0 + p2) * t +
+        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+        (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+    )
+end
+
+-- Catmull-Rom for Vector3
+local function CatmullRomVector3(v0, v1, v2, v3, t)
+    return Vector3.new(
+        CatmullRomSpline(v0.X, v1.X, v2.X, v3.X, t),
+        CatmullRomSpline(v0.Y, v1.Y, v2.Y, v3.Y, t),
+        CatmullRomSpline(v0.Z, v1.Z, v2.Z, v3.Z, t)
+    )
+end
+
+-- Smooth interpolation between frames using Catmull-Rom (requires 4 frames context)
+local function SmoothInterpolateFrames(frames, frameIdx, alpha)
+    local n = #frames
+    if n < 2 then return nil, nil end
+
+    -- Get 4 frames for Catmull-Rom (clamp at boundaries)
+    local i0 = math.max(1, frameIdx - 1)
+    local i1 = frameIdx
+    local i2 = math.min(n, frameIdx + 1)
+    local i3 = math.min(n, frameIdx + 2)
+
+    local f0, f1, f2, f3 = frames[i0], frames[i1], frames[i2], frames[i3]
+
+    -- Interpolate position with Catmull-Rom
+    local smoothPos = nil
+    if f0.pos and f1.pos and f2.pos and f3.pos then
+        local p0 = Vector3.new(f0.pos.x, f0.pos.y, f0.pos.z)
+        local p1 = Vector3.new(f1.pos.x, f1.pos.y, f1.pos.z)
+        local p2 = Vector3.new(f2.pos.x, f2.pos.y, f2.pos.z)
+        local p3 = Vector3.new(f3.pos.x, f3.pos.y, f3.pos.z)
+        smoothPos = CatmullRomVector3(p0, p1, p2, p3, alpha)
+    elseif f1.pos and f2.pos then
+        -- Fallback to linear lerp
+        local p1 = Vector3.new(f1.pos.x, f1.pos.y, f1.pos.z)
+        local p2 = Vector3.new(f2.pos.x, f2.pos.y, f2.pos.z)
+        smoothPos = p1:Lerp(p2, alpha)
+    end
+
+    -- Interpolate velocity with Catmull-Rom (smoother acceleration)
+    local smoothVel = nil
+    if f0.vel and f1.vel and f2.vel and f3.vel then
+        local v0 = Vector3.new(f0.vel.x, f0.vel.y, f0.vel.z)
+        local v1 = Vector3.new(f1.vel.x, f1.vel.y, f1.vel.z)
+        local v2 = Vector3.new(f2.vel.x, f2.vel.y, f2.vel.z)
+        local v3 = Vector3.new(f3.vel.x, f3.vel.y, f3.vel.z)
+        smoothVel = CatmullRomVector3(v0, v1, v2, v3, alpha)
+    elseif f1.vel and f2.vel then
+        -- Fallback to linear lerp
+        local v1 = Vector3.new(f1.vel.x, f1.vel.y, f1.vel.z)
+        local v2 = Vector3.new(f2.vel.x, f2.vel.y, f2.vel.z)
+        smoothVel = v1:Lerp(v2, alpha)
+    end
+
+    return smoothPos, smoothVel
+end
+
+-- Gaussian weight calculation for smooth falloff
+local function GaussianWeight(distance, sigma)
+    return math.exp(-(distance * distance) / (2 * sigma * sigma))
+end
+
+-- Gaussian-weighted smoothing for frames (runs once on load)
+local function GetSmoothedFrames(frames, strength, isFlexible)
+    local processedFrames = DeepCopy(frames)
+    local iterations = math.clamp(strength or 1, 1, 10)
+    local kernelRadius = math.clamp(math.ceil(strength / 2), 1, 5)
+    local sigma = kernelRadius / 2
+
+    for iter = 1, iterations do
+        local tempFrames = DeepCopy(processedFrames)
+
+        for i = 2, #processedFrames - 1 do
+            local curr = processedFrames[i]
+
+            if isFlexible then
+                -- Gaussian-weighted position smoothing
+                if curr.pos then
+                    local weightSum = 0
+                    local posSum = Vector3.new(0, 0, 0)
+
+                    for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
+                        local neighbor = tempFrames[j]
+                        if neighbor.pos then
+                            local dist = math.abs(j - i)
+                            local weight = GaussianWeight(dist, sigma)
+                            local neighborPos = Vector3.new(neighbor.pos.x, neighbor.pos.y, neighbor.pos.z)
+                            posSum = posSum + neighborPos * weight
+                            weightSum = weightSum + weight
+                        end
+                    end
+
+                    if weightSum > 0 then
+                        local smoothedPos = posSum / weightSum
+                        local currPos = Vector3.new(curr.pos.x, curr.pos.y, curr.pos.z)
+                        local finalPos = currPos:Lerp(smoothedPos, 0.7)
+                        curr.pos.x = finalPos.X
+                        curr.pos.y = finalPos.Y
+                        curr.pos.z = finalPos.Z
+                    end
+                end
+
+                -- Gaussian-weighted velocity smoothing
+                if curr.vel then
+                    local weightSum = 0
+                    local velSum = Vector3.new(0, 0, 0)
+
+                    for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
+                        local neighbor = tempFrames[j]
+                        if neighbor.vel then
+                            local dist = math.abs(j - i)
+                            local weight = GaussianWeight(dist, sigma)
+                            local neighborVel = Vector3.new(neighbor.vel.x, neighbor.vel.y, neighbor.vel.z)
+                            velSum = velSum + neighborVel * weight
+                            weightSum = weightSum + weight
+                        end
+                    end
+
+                    if weightSum > 0 then
+                        local smoothedVel = velSum / weightSum
+                        local currVel = Vector3.new(curr.vel.x, curr.vel.y, curr.vel.z)
+                        local finalVel = currVel:Lerp(smoothedVel, 0.8)
+                        curr.vel.x = finalVel.X
+                        curr.vel.y = finalVel.Y
+                        curr.vel.z = finalVel.Z
+                    end
+                end
+            end
+        end
+    end
+    return processedFrames
+end
+
+-- ═══════════════════════════════════════════════════════════════════
+-- CORE PLAYBACK FUNCTIONS
+-- ═══════════════════════════════════════════════════════════════════
+
 -- Convert table to CFrame
 local function TblToCF(t)
     if not t then return CFrame.new() end
@@ -654,6 +828,16 @@ local function PlayRecording(fileName, force)
 
         local data = HttpService:JSONDecode(content)
         local framesToPlay = data.Frames or data
+
+        -- Detect mode: Flexible (has vel/pos) or Standard (has r/j)
+        local isFlexible = (data.Mode == "Flexible") or (framesToPlay[1] and framesToPlay[1].vel ~= nil)
+
+        -- LIVE SMOOTHING: Apply Gaussian smoothing on load (mobile default ON)
+        if SMOOTH_SETTINGS.LiveSmoothingEnabled and isFlexible and #framesToPlay > 3 then
+            WindUI:Notify({ Title = "Smoothing", Content = "Applying auto-smooth...", Duration = 1 })
+            task.wait()
+            framesToPlay = GetSmoothedFrames(framesToPlay, SMOOTH_SETTINGS.LiveSmoothingStrength, isFlexible)
+        end
 
         PlaybackState.frameData = framesToPlay
         PlaybackState.currentFile = fileName
@@ -1020,19 +1204,20 @@ local function PlayRecording(fileName, force)
                         )
                         vel = vel * speed
 
-                        -- Smooth velocity blending - increase blend factor at higher speeds
+                        -- IMPROVED: Higher velocity blending for smoother transitions (same as PC)
                         local currentVel = hrp.AssemblyLinearVelocity
-                        local baseBlend = 0.6
-                        local blendFactor = math.clamp(baseBlend * speed, 0.3, 0.95)
+                        local baseBlend = 0.85  -- Increased from 0.6 for smoother transitions
+                        local blendFactor = math.clamp(baseBlend * speed, 0.5, 0.98)
 
                         -- Check if in air state - use position-based for smooth jump like recording
                         local isInAir = (stateName == "Jumping" or stateName == "Freefall")
 
-                        if isInAir and fA.pos and fB.pos then
+                        -- IMPROVED: Use Catmull-Rom spline for smoother interpolation
+                        local smoothPos, smoothVel = SmoothInterpolateFrames(PlaybackState.frameData, frameIdx, alpha)
+
+                        if isInAir and smoothPos then
                             -- Follow recorded position for smooth jump arc (like recording)
-                            local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z):Lerp(
-                                Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha
-                            )
+                            local targetPos = smoothPos -- Use Catmull-Rom interpolated position
 
                             -- On time jump or high speed, snap directly to target position
                             if isTimeJump or speed >= 2 then
@@ -1051,18 +1236,82 @@ local function PlayRecording(fileName, force)
                                 hrp.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY * speed, horizVel.Z)
                             end
                         else
-                            -- On ground: use velocity-based movement (snap on time jump or high speed)
-                            if isTimeJump or speed >= 2 then
-                                hrp.AssemblyLinearVelocity = vel
-                                -- Also snap position to prevent drift at high speeds
-                                if fA.pos then
-                                    local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z):Lerp(
-                                        Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha
-                                    )
-                                    hrp.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
+                            -- IMPROVED: Position-Based Playback mode (smoother ground movement)
+                            if SMOOTH_SETTINGS.PositionBasedEnabled and smoothPos then
+                                -- Position-based: Use VELOCITY for animation, with STRONG position correction
+                                local currentPos = hrp.Position
+                                local posDiff = smoothPos - currentPos
+                                local distance = posDiff.Magnitude
+
+                                -- Calculate target velocity that will move us toward the path
+                                local correctionStrength = math.clamp(distance * 8, 0, 50)
+                                local correctionVel = distance > 0.01 and (posDiff.Unit * correctionStrength) or Vector3.new(0, 0, 0)
+
+                                -- Blend with recorded velocity for smooth acceleration
+                                local targetVel = smoothVel or vel
+                                local finalVel = targetVel + correctionVel
+
+                                -- Apply velocity (allows physics and animations to work properly)
+                                hrp.AssemblyLinearVelocity = currentVel:Lerp(finalVel, 0.85)
+
+                                -- Only snap position if WAY off (fallback safety)
+                                if distance > 8 then
+                                    local snapPos = currentPos:Lerp(smoothPos, 0.5)
+                                    hrp.CFrame = CFrame.new(snapPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
+                                end
+
+                                -- CRITICAL: Trigger walk/run animation using h:Move()
+                                if fA.md then
+                                    local moveDir = Vector3.new(fA.md.x, fA.md.y, fA.md.z)
+                                    if moveDir.Magnitude > 0.01 then
+                                        hum:Move(moveDir, false)
+                                    else
+                                        hum:Move(Vector3.new(0, 0, 0))
+                                    end
+                                elseif finalVel.Magnitude > 0.5 then
+                                    local flatVel = Vector3.new(finalVel.X, 0, finalVel.Z)
+                                    if flatVel.Magnitude > 0.1 then
+                                        hum:Move(flatVel.Unit, false)
+                                    end
+                                else
+                                    hum:Move(Vector3.new(0, 0, 0))
                                 end
                             else
-                                hrp.AssemblyLinearVelocity = currentVel:Lerp(vel, blendFactor)
+                                -- Velocity-based fallback (original approach)
+                                if isTimeJump or speed >= 2 then
+                                    hrp.AssemblyLinearVelocity = smoothVel or vel
+                                    if smoothPos then
+                                        hrp.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
+                                    elseif fA.pos then
+                                        local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z):Lerp(
+                                            Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha
+                                        )
+                                        hrp.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
+                                    end
+                                else
+                                    local targetVel = smoothVel or vel
+                                    hrp.AssemblyLinearVelocity = currentVel:Lerp(targetVel, blendFactor)
+
+                                    -- Subtle position correction to prevent drift
+                                    if smoothPos then
+                                        local posDiff = (smoothPos - hrp.Position)
+                                        local posCorrection = posDiff * 0.2
+                                        hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity + posCorrection
+                                    end
+
+                                    -- Trigger walk/run animation
+                                    if fA.md then
+                                        local moveDir = Vector3.new(fA.md.x, fA.md.y, fA.md.z)
+                                        if moveDir.Magnitude > 0.01 then
+                                            hum:Move(moveDir, false)
+                                        end
+                                    elseif targetVel.Magnitude > 0.5 then
+                                        local flatVel = Vector3.new(targetVel.X, 0, targetVel.Z)
+                                        if flatVel.Magnitude > 0.1 then
+                                            hum:Move(flatVel.Unit, false)
+                                        end
+                                    end
+                                end
                             end
                         end
                     end
@@ -1220,27 +1469,42 @@ local function PlayRecording(fileName, force)
                     local isInAirState = (stateName == "Jumping" or stateName == "Freefall")
                     local skipDriftCorrection = (stateName == "Climbing" or stateName == "Swimming" or isInAirState)
 
-                    if not skipDriftCorrection and fA.pos and fB.pos then
-                        local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z):Lerp(
-                            Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha
-                        )
-                        local dist = (hrp.Position - targetPos).Magnitude
-
-                        -- Check if actually moving (collision detection)
-                        local actualVel = hrp.AssemblyLinearVelocity.Magnitude
-                        local expectedVel = fA.vel and Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z).Magnitude or 0
-                        local isStuck = (expectedVel > 3 and actualVel < 1) -- Expected to move but not moving
-
-                        if dist > 10 then
-                            -- Snap only if VERY far off (increased threshold)
-                            hrp.CFrame = CFrame.new(targetPos) * hrp.CFrame.Rotation
-                        elseif dist > 2 and not isStuck then
-                            -- Only nudge if not stuck (collision)
-                            local dir = (targetPos - hrp.Position).Unit
-                            local correction = dir * (dist * 1.5) -- Reduced correction strength
-                            hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity + correction
+                    -- IMPROVED: Smooth Drift Correction (same as PC)
+                    if not skipDriftCorrection then
+                        -- Use Catmull-Rom interpolated position for smoother target
+                        local smoothTargetPos, _ = SmoothInterpolateFrames(PlaybackState.frameData, frameIdx, alpha)
+                        local targetPos = smoothTargetPos
+                        if not targetPos and fA.pos and fB.pos then
+                            targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z):Lerp(
+                                Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha
+                            )
                         end
-                        -- If stuck, don't force correction - let physics handle collision naturally
+
+                        if targetPos then
+                            local dist = (hrp.Position - targetPos).Magnitude
+
+                            -- Check if actually moving (collision detection)
+                            local actualVel = hrp.AssemblyLinearVelocity.Magnitude
+                            local expectedVel = fA.vel and Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z).Magnitude or 0
+                            local isStuck = (expectedVel > 3 and actualVel < 1)
+
+                            if dist > 10 then
+                                -- IMPROVED: Smooth lerp instead of instant snap
+                                local smoothSnapPos = hrp.Position:Lerp(targetPos, 0.4)
+                                hrp.CFrame = CFrame.new(smoothSnapPos) * hrp.CFrame.Rotation
+                            elseif dist > 3 and not isStuck then
+                                -- Medium drift: Stronger velocity correction
+                                local dir = (targetPos - hrp.Position).Unit
+                                local correction = dir * (dist * 1.5)
+                                hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity + correction
+                            elseif dist > 0.5 and not isStuck then
+                                -- Small drift: Gentle nudge
+                                local dir = (targetPos - hrp.Position).Unit
+                                local correction = dir * (dist * 0.8)
+                                hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity + correction
+                            end
+                            -- Under 0.5 studs: no correction needed
+                        end
                     end
                 end
             end

@@ -1190,7 +1190,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     end)
 
     -- 6. RECORDING TOOLS (New Feature)
-    local CardRecTools = CreateCard("RECORDING TOOLS", 125, 6)
+    local CardRecTools = CreateCard("RECORDING TOOLS", 180, 6) -- Increased height for new option
 
     -- Description
     local LblSmooth = Instance.new("TextLabel", CardRecTools)
@@ -1258,7 +1258,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     local BtnToggleSmooth = Instance.new("TextButton", CardRecTools)
     BtnToggleSmooth.Text = "LIVE SMOOTH: OFF"
-    BtnToggleSmooth.Size = UDim2.new(0.9, 0, 0, 30)
+    BtnToggleSmooth.Size = UDim2.new(0.43, 0, 0, 30)
     BtnToggleSmooth.Position = UDim2.new(0.05, 0, 0, 80)
     StyleBtn(BtnToggleSmooth, C_RED)
 
@@ -1270,11 +1270,40 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         UpdateSmoothHandler()
     end)
 
+    -- Position-Based Playback Toggle (smoother ground movement)
+    local isPosBased = UIHandlers.GetPositionBasedPlayback and UIHandlers.GetPositionBasedPlayback() or true
+    local BtnPosBased = Instance.new("TextButton", CardRecTools)
+    BtnPosBased.Text = "POS-BASED: " .. (isPosBased and "ON" or "OFF")
+    BtnPosBased.Size = UDim2.new(0.43, 0, 0, 30)
+    BtnPosBased.Position = UDim2.new(0.52, 0, 0, 80)
+    StyleBtn(BtnPosBased, isPosBased and C_GREEN or C_RED)
+
+    BtnPosBased.MouseButton1Click:Connect(function()
+        isPosBased = not isPosBased
+        BtnPosBased.Text = "POS-BASED: " .. (isPosBased and "ON" or "OFF")
+        BtnPosBased.TextColor3 = isPosBased and C_GREEN or C_RED
+        BtnPosBased.UIStroke.Color = isPosBased and C_GREEN or C_RED
+        if UIHandlers.SetPositionBasedPlayback then
+            UIHandlers.SetPositionBasedPlayback(isPosBased)
+        end
+    end)
+
+    -- Description for Position-Based
+    local LblPosBasedDesc = Instance.new("TextLabel", CardRecTools)
+    LblPosBasedDesc.Text = "POS-BASED: Smoother ground movement (follows path directly)"
+    LblPosBasedDesc.Size = UDim2.new(1, -20, 0, 15)
+    LblPosBasedDesc.Position = UDim2.new(0, 10, 0, 115)
+    LblPosBasedDesc.BackgroundTransparency = 1
+    LblPosBasedDesc.TextColor3 = C_TEXT_DIM
+    LblPosBasedDesc.Font = Enum.Font.Gotham
+    LblPosBasedDesc.TextSize = 9
+    LblPosBasedDesc.TextXAlignment = Enum.TextXAlignment.Left
+
     -- Manual Apply Button (Small, under toggle)
     local BtnManual = Instance.new("TextButton", CardRecTools)
     BtnManual.Text = "Manual Apply (Permanent)"
-    BtnManual.Size = UDim2.new(1, 0, 0, 20)
-    BtnManual.Position = UDim2.new(0, 0, 1, -25)
+    BtnManual.Size = UDim2.new(0.9, 0, 0, 25)
+    BtnManual.Position = UDim2.new(0.05, 0, 0, 140)
     BtnManual.BackgroundTransparency = 1
     BtnManual.TextColor3 = C_TEXT_DIM
     BtnManual.Font = Enum.Font.Gotham
