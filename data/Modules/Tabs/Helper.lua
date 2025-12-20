@@ -693,42 +693,82 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         local preDetectedPart = nil -- Pre-detected part
         local lastGroundTime = 0    -- Track when we left ground
 
-        -- Edge Detection Settings (SAFE VALUES)
+        -- Edge Detection Settings (BALANCED)
         local EDGE_DETECT_DISTANCE = 12   -- Raycast distance to detect ledge
         local EDGE_HEIGHT_TOLERANCE = 8   -- How much "almost there" we allow
-        local BOOST_POWER_UP = 8          -- Upward boost strength (SAFE - won't fly)
-        local BOOST_POWER_FORWARD = 12    -- Forward boost strength
-        local BOOST_COOLDOWN = 0.4        -- Cooldown between boosts (prevent spam)
+        local BOOST_POWER_UP = 10         -- Upward boost strength (increased)
+        local BOOST_POWER_FORWARD = 10    -- Forward boost strength
+        local BOOST_COOLDOWN = 0.4        -- Cooldown between boosts
         local UPWARD_DETECT_DISTANCE = 10 -- Raycast distance upward for ladders above head
 
         -- Ladder Grab Assist Settings
-        local LADDER_BOOST_MULTIPLIER = 1.3 -- Boost multiplier for ladder
+        local LADDER_BOOST_MULTIPLIER = 1.0 -- Boost multiplier for ladder (reduced - no extra boost)
         local PRE_DETECT_ENABLED = true     -- Enable ground pre-detection
         local INSTANT_BOOST_WINDOW = 0.15   -- Seconds after jump to use pre-detected target
         local detectedLadderPart = nil      -- Track detected ladder
         local hasBostedThisJump = false     -- Prevent multiple boosts per jump
 
-        -- Check if part is a ladder/truss
+        -- Check if part is a VERTICAL ladder/truss (not diagonal/horizontal)
         local function IsLadder(part)
             if not part then return false end
-            if part:IsA("TrussPart") then return true end
-            local name = part.Name:lower()
-            return name:find("ladder") or name:find("truss") or name:find("climb") or name:find("vine") or
-                name:find("rope")
+
+            -- Check if it's a TrussPart or has ladder-like name
+            local isLadderType = part:IsA("TrussPart")
+            if not isLadderType then
+                local name = part.Name:lower()
+                isLadderType = name:find("ladder") or name:find("truss") or name:find("climb") or
+                    name:find("vine") or name:find("rope")
+            end
+
+            if not isLadderType then return false end
+
+            -- Check orientation - only treat as ladder if mostly VERTICAL
+            -- Diagonal/horizontal ladders should be treated as platforms
+            local size = part.Size
+            local upVector = part.CFrame.UpVector
+
+            -- If the part's up vector is mostly vertical (Y > 0.7), it's a climbable ladder
+            -- If it's more horizontal/diagonal, treat as platform
+            local isVertical = math.abs(upVector.Y) > 0.7
+
+            -- Also check if height > width (tall ladder vs flat bridge)
+            local isTall = size.Y > math.max(size.X, size.Z) * 0.8
+
+            -- Only return true for VERTICAL ladders
+            return isVertical or isTall
         end
 
         -- Detect edge/ladder in front of player with MULTI-ANGLE detection for diagonal ladders
         -- Returns: hitPosition, hitPart (to check if ladder)
-        local function DetectEdgeForward(character, rootPart)
+        -- Now uses MoveDirection for Shift Lock compatibility
+        local function DetectEdgeForward(character, rootPart, humanoid)
             local rayParams = RaycastParams.new()
             rayParams.FilterDescendantsInstances = { character }
             rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
             local playerPos = rootPart.Position
             local playerTop = playerPos.Y + 2
+
+            -- Use MoveDirection if available (for Shift Lock compatibility)
+            -- Fall back to LookVector if not moving
+            local moveDir = humanoid and humanoid.MoveDirection or Vector3.new(0, 0, 0)
             local lookDir = rootPart.CFrame.LookVector
+
+            -- If moving, use move direction; otherwise use look direction
+            local primaryDir
+            if moveDir.Magnitude > 0.1 then
+                primaryDir = moveDir
+            else
+                primaryDir = lookDir
+            end
+
             local rightDir = rootPart.CFrame.RightVector
-            local horizontalLook = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
+            local horizontalLook = Vector3.new(primaryDir.X, 0, primaryDir.Z)
+            if horizontalLook.Magnitude > 0 then
+                horizontalLook = horizontalLook.Unit
+            else
+                horizontalLook = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
+            end
 
             -- Store best ladder hit (prioritize ladders!)
             local bestLadderHit = nil
@@ -828,6 +868,22 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 
 
+        -- Check if there's an obstacle above player's head
+        local function CheckOverhead(character, rootPart, checkDistance)
+            local rayParams = RaycastParams.new()
+            rayParams.FilterDescendantsInstances = { character }
+            rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+            -- Raycast from head position upward
+            local headPos = rootPart.Position + Vector3.new(0, 2, 0)
+            local hitResult = workspace:Raycast(headPos, Vector3.new(0, checkDistance, 0), rayParams)
+
+            if hitResult then
+                return true, hitResult.Position.Y - headPos.Y -- obstacle found, return distance
+            end
+            return false, checkDistance                       -- no obstacle
+        end
+
         -- Boost toward the edge (SAFE VERSION - simple ADD, no replace)
         local function BoostTowardEdge(rootPart, edgePosition, isLadderTarget)
             if edgeBoostCooldown or hasBostedThisJump then return false end
@@ -843,35 +899,60 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
             -- Only boost if actually moving upward or forward (not falling fast)
             if currentVel.Y < -20 then return false end
 
+            -- Check for overhead obstacles (increased check distance)
+            local character = rootPart.Parent
+            local hasOverhead, overheadDist = CheckOverhead(character, rootPart, 8)
+
             local boostVelocity
 
             if isLadderTarget and distance > 0 then
-                -- Ladder: boost toward it
+                -- Ladder: boost toward it with VERY MINIMAL force
                 local directDir = directionToEdge.Unit
-                local boostStrength = BOOST_POWER_FORWARD * LADDER_BOOST_MULTIPLIER
+                local boostStrength = BOOST_POWER_FORWARD * LADDER_BOOST_MULTIPLIER * 0.6 -- Reduced
+
+                -- Almost no upward boost for ladders to prevent head bump
+                local upwardBoost = 0
+                if not hasOverhead and overheadDist > 5 then
+                    upwardBoost = 1 -- Only tiny upward if no obstacle
+                end
 
                 boostVelocity = Vector3.new(
                     directDir.X * boostStrength,
-                    math.max(directDir.Y * boostStrength, BOOST_POWER_UP * 0.5), -- Some upward
+                    upwardBoost,
                     directDir.Z * boostStrength
                 )
             else
                 -- Platform: horizontal + upward
+                -- Use direction to edge, or MoveDirection for Shift Lock compatibility
                 local horizontalDir = Vector3.new(directionToEdge.X, 0, directionToEdge.Z)
                 if horizontalDir.Magnitude > 0 then
                     horizontalDir = horizontalDir.Unit
                 else
-                    horizontalDir = rootPart.CFrame.LookVector
+                    -- Fall back to humanoid MoveDirection if available
+                    local hum = rootPart.Parent and rootPart.Parent:FindFirstChildOfClass("Humanoid")
+                    if hum and hum.MoveDirection.Magnitude > 0.1 then
+                        horizontalDir = hum.MoveDirection
+                    else
+                        horizontalDir = rootPart.CFrame.LookVector
+                    end
                 end
 
                 -- Simple upward based on if target is above
                 local heightDiff = edgePosition.Y - rootPart.Position.Y
-                local upwardBoost = heightDiff > 0 and math.clamp(heightDiff * 0.4, 3, BOOST_POWER_UP) or 2
+                local upwardBoost = heightDiff > 0 and math.clamp(heightDiff * 0.5, 4, BOOST_POWER_UP) or 2
+
+                -- Reduce upward boost if overhead obstacle detected (but keep more power)
+                if hasOverhead then
+                    upwardBoost = math.min(upwardBoost, overheadDist * 0.6)
+                end
+
+                -- Use reduced forward boost
+                local forwardBoost = BOOST_POWER_FORWARD * 0.7
 
                 boostVelocity = Vector3.new(
-                    horizontalDir.X * BOOST_POWER_FORWARD,
+                    horizontalDir.X * forwardBoost,
                     upwardBoost,
-                    horizontalDir.Z * BOOST_POWER_FORWARD
+                    horizontalDir.Z * forwardBoost
                 )
             end
 
@@ -918,7 +999,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
                             -- Pre-detect while moving on ground
                             if h.MoveDirection.Magnitude > 0.1 then
-                                local hitPos, hitPart = DetectEdgeForward(c, r)
+                                local hitPos, hitPart = DetectEdgeForward(c, r, h)
                                 preDetectedEdge = hitPos
                                 preDetectedPart = hitPart
                             end
@@ -944,7 +1025,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
                             -- Detect in air if no target yet
                             if not detectedEdgePosition then
-                                local hitPos, hitPart = DetectEdgeForward(c, r)
+                                local hitPos, hitPart = DetectEdgeForward(c, r, h)
                                 detectedEdgePosition = hitPos
                                 detectedLadderPart = hitPart
                             end
