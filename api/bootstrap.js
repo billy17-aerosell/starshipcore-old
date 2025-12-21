@@ -4,6 +4,9 @@
 // With browser detection, obfuscated response, and Discord logging
 // Development mode: Skip loader intro and directly serve script
 
+// Owner userId - bypasses cross-platform restrictions
+const OWNER_USER_ID = "9268011358";
+
 import fs from "fs";
 import path from "path";
 

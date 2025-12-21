@@ -2,6 +2,9 @@
 // Supports both PC and Mobile platforms via ?platform=mobile query parameter
 // With Discord Webhook Logging Integration and device tracking
 
+// Owner userId - bypasses cross-platform restrictions
+const OWNER_USER_ID = "9268011358";
+
 import fs from "fs";
 import path from "path";
 
@@ -405,6 +408,16 @@ export default async function handler(req, res) {
     }
 
     // === CROSS-PLATFORM DETECTION ===
+    // Skip for owner - owner can access both platforms
+    if (userId === OWNER_USER_ID) {
+      console.log(
+        `[${timestamp}] 👑 OWNER CROSS-PLATFORM ACCESS GRANTED - ${platformLabel} | UserID: ${userId}`,
+      );
+      // Owner not in this platform's whitelist, but allow anyway
+      // Serve the loader script
+      return serveLoaderScript(res, config, "owner", "OWNER");
+    }
+
     // Check if user exists in the OTHER platform's whitelist
     const otherWhitelist = await getWhitelistFromRedis(
       config.otherWhitelistKey,

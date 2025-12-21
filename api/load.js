@@ -2,6 +2,9 @@
 // Supports both PC and Mobile platforms via ?platform=mobile query parameter
 // With Discord Webhook Logging Integration and cross-platform detection
 
+// Owner userId - bypasses cross-platform restrictions
+const OWNER_USER_ID = "9268011358";
+
 import fs from "fs";
 import path from "path";
 
@@ -441,6 +444,53 @@ export default async function handler(req, res) {
     }
 
     // === CROSS-PLATFORM DETECTION ===
+    // Skip for owner - owner can access both platforms
+    if (userId === OWNER_USER_ID) {
+      console.log(
+        `[${timestamp}] 👑 OWNER CROSS-PLATFORM ACCESS GRANTED - ${platformLabel} | UserID: ${userId}`,
+      );
+
+      // Calculate remaining days (null for owner = lifetime)
+      const remainingDays = null;
+
+      if (platform === "mobile") {
+        return await handleMobileSuccess(
+          res,
+          userId,
+          {
+            username: "OWNER",
+            type: "OWNER",
+            expiresAt: null,
+            addedAt: new Date().toISOString(),
+            maxDevices: 99,
+            restrictions: { maxDevices: 99 },
+          },
+          clientIP,
+          timestamp,
+          now,
+          remainingDays,
+          config,
+        );
+      } else {
+        return await handlePCSuccess(
+          res,
+          userId,
+          {
+            username: "OWNER",
+            type: "OWNER",
+            expiresAt: null,
+            addedAt: new Date().toISOString(),
+          },
+          clientIP,
+          timestamp,
+          now,
+          remainingDays,
+          config,
+          true, // isOwner
+        );
+      }
+    }
+
     const otherWhitelist = await getWhitelistFromRedis(
       config.otherWhitelistKey,
     );

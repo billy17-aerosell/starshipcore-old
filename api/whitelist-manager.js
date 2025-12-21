@@ -2,6 +2,9 @@
 // Supports both PC and Mobile platforms via ?platform=mobile query parameter
 // Full CRUD operations with Redis persistence
 
+// Owner userId - bypasses restrictions
+const OWNER_USER_ID = "9268011358";
+
 import fs from "fs";
 import path from "path";
 
