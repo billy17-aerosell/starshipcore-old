@@ -136,9 +136,38 @@ export default async function handler(req, res) {
     "Gecko",
   ];
 
-  const isBrowser = browserPatterns.some((pattern) =>
-    userAgent.includes(pattern),
+  // Roblox executor patterns - these should be allowed even if they contain browser-like UA
+  const robloxPatterns = [
+    "Roblox",
+    "RobloxApp",
+    "RobloxStudio",
+    "RobloxPlayer",
+    "GameClient",
+    "synapse",
+    "SYNAPSE_HTTP",
+    "krnl",
+    "fluxus",
+    "arceus",
+    "delta",
+    "hydrogen",
+    "evon",
+    "vegax",
+    "script-ware",
+    "scriptware",
+    "comet",
+  ];
+
+  // Check if it's a Roblox executor first (case insensitive)
+  const isRobloxExecutor = robloxPatterns.some((pattern) =>
+    userAgent.toLowerCase().includes(pattern.toLowerCase()),
   );
+
+  // Only flag as browser if it matches browser patterns AND is not a Roblox executor
+  // Also allow empty User-Agent (common for executors)
+  const isBrowser =
+    userAgent !== "" &&
+    !isRobloxExecutor &&
+    browserPatterns.some((pattern) => userAgent.includes(pattern));
 
   if (isBrowser) {
     console.log(

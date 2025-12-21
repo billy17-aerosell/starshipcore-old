@@ -210,21 +210,35 @@ export default async function handler(req, res) {
   }
 
   const { userId } = req.query;
+  const timestamp = new Date().toISOString();
+  const clientIP = getClientIP(req);
+  const userAgent = req.headers["user-agent"] || "";
+
+  // Debug logging
+  console.log(
+    `[${timestamp}] 📱 MOBILE-LOAD Request | UserID: ${userId || "MISSING"} | IP: ${clientIP} | UA: "${userAgent}"`,
+  );
 
   if (!userId) {
+    console.log(`[${timestamp}] ❌ MOBILE-LOAD - Missing userId parameter`);
     return res.status(400).json({ error: "Missing User ID" });
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const timestamp = new Date().toISOString();
-  const clientIP = getClientIP(req);
 
   try {
     // === CHECK MOBILE WHITELIST (Redis) ===
     const mobileWhitelist = await getMobileWhitelistFromRedis();
 
+    console.log(
+      `[${timestamp}] 📱 MOBILE-LOAD - Checking Redis whitelist for userId: ${userId}`,
+    );
+
     if (mobileWhitelist && mobileWhitelist[userId]) {
       const mobileUser = mobileWhitelist[userId];
+      console.log(
+        `[${timestamp}] 📱 MOBILE-LOAD - Found user in Redis: ${mobileUser.username} | Status: ${mobileUser.status}`,
+      );
 
       // Check if user is active
       if (mobileUser.status === "active") {
@@ -398,17 +412,28 @@ export default async function handler(req, res) {
     }
 
     // === CHECK FILE-BASED MOBILE WHITELIST (Fallback) ===
+    console.log(
+      `[${timestamp}] 📱 MOBILE-LOAD - User not in Redis, checking file-based whitelist`,
+    );
     const mobileKeysPath = path.join(process.cwd(), "data", "mobile-keys.json");
 
     if (fs.existsSync(mobileKeysPath)) {
+      console.log(`[${timestamp}] 📱 MOBILE-LOAD - Reading mobile-keys.json`);
       try {
         const mobileKeysData = JSON.parse(
           fs.readFileSync(mobileKeysPath, "utf8"),
         );
         const fileWhitelist = mobileKeysData.whitelist || {};
 
+        console.log(
+          `[${timestamp}] 📱 MOBILE-LOAD - File whitelist users: ${Object.keys(fileWhitelist).join(", ") || "EMPTY"}`,
+        );
+
         if (fileWhitelist[userId]) {
           const userData = fileWhitelist[userId];
+          console.log(
+            `[${timestamp}] 📱 MOBILE-LOAD - Found user in file: ${userData.username} | Status: ${userData.status || "active"}`,
+          );
 
           // Check expiry
           if (userData.expiresAt) {
@@ -453,6 +478,9 @@ export default async function handler(req, res) {
     }
 
     // === CROSS-PLATFORM DETECTION: Check if user is PC-only ===
+    console.log(
+      `[${timestamp}] 📱 MOBILE-LOAD - User not in Mobile whitelist, checking cross-platform`,
+    );
     const pcWhitelist = await getPCWhitelistFromRedis();
 
     if (pcWhitelist && pcWhitelist[userId]) {
@@ -522,7 +550,7 @@ export default async function handler(req, res) {
 
     // === NOT WHITELISTED AT ALL ===
     console.log(
-      `[${timestamp}] ❌ NOT WHITELISTED (Any Platform) - UserID: ${userId} | IP: ${clientIP}`,
+      `[${timestamp}] ❌ NOT WHITELISTED (Any Platform) - UserID: ${userId} | IP: ${clientIP} | Checked: Redis Mobile, File Mobile, Redis PC, File PC`,
     );
 
     await sendDiscordLog({

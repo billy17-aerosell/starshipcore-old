@@ -393,9 +393,23 @@ local function main()
         return game:HttpGet(MOBILE_UI_API .. userId)
     end)
 
-    if not mobileScriptSuccess or not mobileScript or mobileScript == "" then
+    if not mobileScriptSuccess then
         if loaderGui then loaderGui:Destroy() end
-        showError("Failed to load Mobile UI")
+        showError("Failed to load Mobile UI\n\nConnection Error")
+        return
+    end
+
+    if not mobileScript or mobileScript == "" then
+        if loaderGui then loaderGui:Destroy() end
+        showError("Failed to load Mobile UI\n\nEmpty Response")
+        return
+    end
+
+    -- Check if response is an error message
+    if mobileScript:find("error%(") then
+        if loaderGui then loaderGui:Destroy() end
+        local errorMsg = mobileScript:match('error%("(.-)"%)')
+        showError(errorMsg or "Mobile UI Access Denied")
         return
     end
 
