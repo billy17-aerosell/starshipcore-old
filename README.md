@@ -98,6 +98,30 @@ loadstring(game:HttpGet("https://starship-core.my.id/api/mobile-bootstrap"))()
 
 ---
 
+## 🛠️ Development Mode
+
+When testing locally with `vercel dev`, use these endpoints:
+
+### 💻 PC Development:
+```lua
+loadstring(game:HttpGet("http://localhost:3000/api/dev-pc-script"))()
+```
+
+### 📱 Mobile Development:
+```lua
+loadstring(game:HttpGet("http://localhost:3000/api/dev-mobile-ui"))()
+```
+
+### Running Local Server:
+```bash
+cd VercelProject
+vercel dev
+```
+
+> ⚠️ **Note:** Development endpoints only work on localhost. In production, they will return an error.
+
+---
+
 ### 📋 Supported Executors
 
 | Platform | Executors |
