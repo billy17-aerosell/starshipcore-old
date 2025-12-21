@@ -1,8 +1,9 @@
-// Whitelist Management API - Redis Version with File Fallback
+// Unified Whitelist Management API - Redis Version with File Fallback
+// Supports both PC and Mobile platforms via ?platform=mobile query parameter
 // Full CRUD operations with Redis persistence
 
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
 
 // Try to initialize Redis
 let redis = null;
@@ -11,11 +12,11 @@ let redisInitAttempted = false;
 async function getRedis() {
   if (!redisInitAttempted) {
     try {
-      const redisModule = await import('../lib/redis.js');
+      const redisModule = await import("../lib/redis.js");
       redis = redisModule.default;
-      console.log('✅ Redis module loaded');
+      console.log("✅ Redis module loaded");
     } catch (error) {
-      console.error('⚠️ Redis module load failed:', error.message);
+      console.error("⚠️ Redis module load failed:", error.message);
       redis = null;
     }
     redisInitAttempted = true;
@@ -23,39 +24,89 @@ async function getRedis() {
   return redis;
 }
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'CHANGE_ME_PLEASE';
-const WHITELIST_KEY = 'starship:whitelist';
-const METADATA_KEY = 'starship:metadata';
-const KEYS_FILE_PATH = path.join(process.cwd(), 'data', 'keys.json');
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "CHANGE_ME_PLEASE";
+
+// Platform-specific Redis keys and file paths
+const PLATFORM_CONFIG = {
+  pc: {
+    whitelistKey: "starship:whitelist",
+    metadataKey: "starship:metadata",
+    keysFilePath: path.join(process.cwd(), "data", "keys.json"),
+    defaultType: "VIP",
+  },
+  mobile: {
+    whitelistKey: "starship:mobile_whitelist",
+    metadataKey: "starship:mobile_metadata",
+    keysFilePath: path.join(process.cwd(), "data", "mobile-keys.json"),
+    defaultType: "MOBILE_VIP",
+  },
+};
 
 // === REDIS FUNCTIONS ===
-async function getWhitelistFromRedis() {
-  // Get all whitelist data as a single JSON string
-  const data = await redis.get(WHITELIST_KEY);
+async function getWhitelistFromRedis(platform) {
+  const config = PLATFORM_CONFIG[platform];
+  const data = await redis.get(config.whitelistKey);
   return data ? JSON.parse(data) : {};
 }
 
-async function getMetadataFromRedis() {
-  const data = await redis.get(METADATA_KEY);
-  return data ? JSON.parse(data) : { totalWhitelisted: 0, lastUpdated: new Date().toISOString() };
+async function getMetadataFromRedis(platform) {
+  const config = PLATFORM_CONFIG[platform];
+  const data = await redis.get(config.metadataKey);
+  return data
+    ? JSON.parse(data)
+    : { totalWhitelisted: 0, lastUpdated: new Date().toISOString() };
 }
 
-async function saveWhitelistToRedis(whitelist) {
-  await redis.set(WHITELIST_KEY, JSON.stringify(whitelist));
+async function saveWhitelistToRedis(platform, whitelist) {
+  const config = PLATFORM_CONFIG[platform];
+  await redis.set(config.whitelistKey, JSON.stringify(whitelist));
 }
 
-async function saveMetadataToRedis(metadata) {
+async function saveMetadataToRedis(platform, metadata) {
+  const config = PLATFORM_CONFIG[platform];
   metadata.lastUpdated = new Date().toISOString();
-  await redis.set(METADATA_KEY, JSON.stringify(metadata));
+  await redis.set(config.metadataKey, JSON.stringify(metadata));
 }
 
 // === FILE FUNCTIONS (Fallback) ===
-function getKeysDataFromFile() {
+function getKeysDataFromFile(platform) {
+  const config = PLATFORM_CONFIG[platform];
   try {
-    const data = fs.readFileSync(KEYS_FILE_PATH, 'utf8');
+    if (!fs.existsSync(config.keysFilePath)) {
+      // Create default file if not exists
+      const defaultData = {
+        keys: {},
+        whitelist: {},
+        metadata: {
+          totalWhitelisted: 0,
+          lastUpdated: new Date().toISOString(),
+        },
+      };
+      fs.writeFileSync(
+        config.keysFilePath,
+        JSON.stringify(defaultData, null, 2),
+      );
+      return defaultData;
+    }
+    const data = fs.readFileSync(config.keysFilePath, "utf8");
     return JSON.parse(data);
   } catch (error) {
-    return { keys: {}, whitelist: {}, metadata: { totalWhitelisted: 0, lastUpdated: new Date().toISOString() } };
+    return {
+      keys: {},
+      whitelist: {},
+      metadata: { totalWhitelisted: 0, lastUpdated: new Date().toISOString() },
+    };
+  }
+}
+
+function saveKeysDataToFile(platform, data) {
+  const config = PLATFORM_CONFIG[platform];
+  try {
+    fs.writeFileSync(config.keysFilePath, JSON.stringify(data, null, 2));
+    return true;
+  } catch (error) {
+    console.error(`Failed to save ${platform} keys file:`, error);
+    return false;
   }
 }
 
@@ -63,218 +114,478 @@ function getKeysDataFromFile() {
 export default async function handler(req, res) {
   // Get Redis client (may be null)
   const redisClient = await getRedis();
-  
+
   // Check admin auth
-  const adminAuth = req.headers['x-admin-secret'];
+  const adminAuth = req.headers["x-admin-secret"];
   if (adminAuth !== ADMIN_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized', message: 'Invalid admin credentials' });
+    return res
+      .status(401)
+      .json({ error: "Unauthorized", message: "Invalid admin credentials" });
   }
-  
+
+  // Determine platform (default: pc)
+  const platform = req.query.platform === "mobile" ? "mobile" : "pc";
+  const config = PLATFORM_CONFIG[platform];
+  const platformLabel = platform === "mobile" ? "📱 Mobile" : "💻 PC";
+
   const { action } = req.query;
-  
-  // ==== LIST ====
-  if (action === 'list' && req.method === 'GET') {
+  const { method } = req;
+
+  console.log(
+    `[Whitelist Manager] ${platformLabel} | Action: ${action} | Method: ${method}`,
+  );
+
+  // ==== MOBILE-STYLE ROUTING (method-based) ====
+  // Support both action-based (PC style) and method-based (Mobile style) routing
+  if (!action) {
     try {
-      let whitelist, metadata;
-      let backend = 'FileSystem';
-      
-      // Try Redis first
+      switch (method) {
+        case "GET":
+          return await handleList(req, res, redisClient, platform, config);
+        case "POST":
+          return await handleAdd(req, res, redisClient, platform, config);
+        case "PUT":
+          return await handleUpdate(req, res, redisClient, platform, config);
+        case "DELETE":
+          return await handleRemove(req, res, redisClient, platform, config);
+        default:
+          return res.status(405).json({ error: "Method not allowed" });
+      }
+    } catch (error) {
+      console.error(`${platformLabel} Whitelist Manager Error:`, error);
+      return res
+        .status(500)
+        .json({ error: "Internal server error", message: error.message });
+    }
+  }
+
+  // ==== PC-STYLE ROUTING (action-based) ====
+
+  // ==== LIST ====
+  if (action === "list" && method === "GET") {
+    return await handleList(req, res, redisClient, platform, config);
+  }
+
+  // ==== GET INFO ====
+  if (action === "info" && method === "GET") {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: "userId required" });
+
+    try {
+      let whitelist;
+
       if (redisClient) {
         try {
-          whitelist = await getWhitelistFromRedis();
-          metadata = await getMetadataFromRedis();
-          backend = 'Redis';
+          whitelist = await getWhitelistFromRedis(platform);
         } catch (redisError) {
-          console.warn('Redis read failed, falling back to file:', redisError.message);
-          const fileData = getKeysDataFromFile();
-          whitelist = fileData.whitelist || {};
-          metadata = fileData.metadata || {};
+          whitelist = getKeysDataFromFile(platform).whitelist || {};
         }
       } else {
-        const fileData = getKeysDataFromFile();
+        whitelist = getKeysDataFromFile(platform).whitelist || {};
+      }
+
+      if (!whitelist[userId]) {
+        return res.status(404).json({ error: "User not found", platform });
+      }
+
+      return res.status(200).json({ userId, platform, ...whitelist[userId] });
+    } catch (error) {
+      return res
+        .status(500)
+        .json({ error: "Failed to get user info", message: error.message });
+    }
+  }
+
+  // ==== ADD ====
+  if (action === "add" && method === "POST") {
+    return await handleAdd(req, res, redisClient, platform, config);
+  }
+
+  // ==== UPDATE ====
+  if (action === "update" && method === "PUT") {
+    return await handleUpdate(req, res, redisClient, platform, config);
+  }
+
+  // ==== REMOVE ====
+  if (action === "remove" && method === "DELETE") {
+    return await handleRemove(req, res, redisClient, platform, config);
+  }
+
+  // ==== SUSPEND ====
+  if (action === "suspend" && method === "POST") {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId required" });
+
+    try {
+      const whitelist = await getWhitelistFromRedis(platform);
+      if (!whitelist[userId])
+        return res.status(404).json({ error: "User not found", platform });
+
+      whitelist[userId].status = "suspended";
+      whitelist[userId].suspendedAt = new Date().toISOString();
+      await saveWhitelistToRedis(platform, whitelist);
+
+      return res.status(200).json({
+        success: true,
+        message: `User ${userId} suspended`,
+        platform,
+        data: whitelist[userId],
+      });
+    } catch (error) {
+      return res
+        .status(500)
+        .json({ error: "Failed to suspend user", message: error.message });
+    }
+  }
+
+  // ==== REACTIVATE ====
+  if (action === "reactivate" && method === "POST") {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId required" });
+
+    try {
+      const whitelist = await getWhitelistFromRedis(platform);
+      if (!whitelist[userId])
+        return res.status(404).json({ error: "User not found", platform });
+
+      whitelist[userId].status = "active";
+      whitelist[userId].reactivatedAt = new Date().toISOString();
+      delete whitelist[userId].suspendedAt;
+      await saveWhitelistToRedis(platform, whitelist);
+
+      return res.status(200).json({
+        success: true,
+        message: `User ${userId} reactivated`,
+        platform,
+        data: whitelist[userId],
+      });
+    } catch (error) {
+      return res
+        .status(500)
+        .json({ error: "Failed to reactivate user", message: error.message });
+    }
+  }
+
+  // ==== STATS (Mobile style) ====
+  if (action === "stats" && method === "GET") {
+    try {
+      let whitelist;
+
+      if (redisClient) {
+        whitelist = await getWhitelistFromRedis(platform);
+      } else {
+        const fileData = getKeysDataFromFile(platform);
+        whitelist = fileData.whitelist || {};
+      }
+
+      const totalUsers = Object.keys(whitelist).length;
+      const activeUsers = Object.values(whitelist).filter(
+        (u) => u.status === "active",
+      ).length;
+      const suspendedUsers = Object.values(whitelist).filter(
+        (u) => u.status === "suspended",
+      ).length;
+      const expiredUsers = Object.values(whitelist).filter((u) => {
+        if (!u.expiresAt) return false;
+        return new Date(u.expiresAt) < new Date();
+      }).length;
+
+      return res.status(200).json({
+        platform,
+        total: totalUsers,
+        active: activeUsers,
+        suspended: suspendedUsers,
+        expired: expiredUsers,
+      });
+    } catch (error) {
+      return res
+        .status(500)
+        .json({ error: "Failed to get stats", message: error.message });
+    }
+  }
+
+  return res.status(400).json({
+    error: "Invalid action",
+    platform,
+    availableActions: [
+      "list",
+      "add",
+      "update",
+      "remove",
+      "info",
+      "suspend",
+      "reactivate",
+      "stats",
+    ],
+  });
+}
+
+// === HANDLER FUNCTIONS ===
+
+async function handleList(req, res, redisClient, platform, config) {
+  const { userId, action } = req.query;
+
+  try {
+    let whitelist, metadata;
+    let backend = "FileSystem";
+
+    // Try Redis first
+    if (redisClient) {
+      try {
+        whitelist = await getWhitelistFromRedis(platform);
+        metadata = await getMetadataFromRedis(platform);
+        backend = "Redis";
+      } catch (redisError) {
+        console.warn(
+          "Redis read failed, falling back to file:",
+          redisError.message,
+        );
+        const fileData = getKeysDataFromFile(platform);
         whitelist = fileData.whitelist || {};
         metadata = fileData.metadata || {};
       }
-      
-      res.setHeader('X-Storage-Backend', backend);
-      return res.status(200).json({ whitelist, metadata });
-    } catch (error) {
-      return res.status(500).json({ error: 'Failed to list users', message: error.message });
+    } else {
+      const fileData = getKeysDataFromFile(platform);
+      whitelist = fileData.whitelist || {};
+      metadata = fileData.metadata || {};
     }
-  }
-  
-  // ==== GET INFO ====
-  if (action === 'info' && req.method === 'GET') {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ error: 'userId required' });
-    
-    try {
-      let whitelist;
-      
-      if (redisClient) {
-        try {
-          whitelist = await getWhitelistFromRedis();
-        } catch (redisError) {
-          whitelist = getKeysDataFromFile().whitelist || {};
-        }
-      } else {
-        whitelist = getKeysDataFromFile().whitelist || {};
-      }
-      
-      if (!whitelist[userId]) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
-      return res.status(200).json({ userId, ...whitelist[userId] });
-    } catch (error) {
-      return res.status(500).json({ error: 'Failed to get user info', message: error.message });
-    }
-  }
-  
-  // ==== ADD ====
-  if (action === 'add' && req.method === 'POST') {
-    const { userId, username, type = 'vip', expiresAt = null, maxDevices = 5, notes = '' } = req.body;
-    
-    if (!userId || !username) {
-      return res.status(400).json({ error: 'userId and username required' });
-    }
-    
-    if (!redisClient) {
-      return res.status(503).json({
-        error: 'Redis not available',
-        message: 'Redis client failed to initialize. Check REDIS_URL environment variable.',
-        solution: 'Verify REDIS_URL is set correctly in Vercel environment variables'
-      });
-    }
-    
-    try {
-      const whitelist = await getWhitelistFromRedis();
-      
-      if (whitelist[userId]) {
-        return res.status(409).json({ error: 'User already exists' });
-      }
-      
-      const newUser = {
-        userId, username, type,
-        status: 'active',
-        addedAt: new Date().toISOString(),
-        expiresAt,
-        restrictions: { maxDevices, ipTracking: true, webhookNotify: true },
-        permissions: { bypassAll: false, unlimitedAccess: false, noLogging: false },
-        notes
-      };
-      
-      // Add user to whitelist
-      whitelist[userId] = newUser;
-      await saveWhitelistToRedis(whitelist);
-      
-      // Update metadata
-      const metadata = await getMetadataFromRedis();
-      metadata.totalWhitelisted++;
-      await saveMetadataToRedis(metadata);
-      
-      return res.status(201).json({ success: true, message: `User ${username} added`, data: newUser });
-    } catch (error) {
-      console.error('Redis ADD error:', error);
-      return res.status(500).json({ 
-        error: 'Failed to add user', 
-        message: error.message,
-        details: 'Redis operation failed. Server logs may have more details.'
-      });
-    }
-  }
-  
-  // ==== UPDATE ====
-  if (action === 'update' && req.method === 'PUT') {
-    const { userId, ...updates } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId required' });
-    
-    try {
-      const whitelist = await getWhitelistFromRedis();
-      if (!whitelist[userId]) return res.status(404).json({ error: 'User not found' });
-      
+
+    // Get specific user (Mobile style)
+    if (userId) {
       const user = whitelist[userId];
-      if (updates.username) user.username = updates.username;
-      if (updates.type) user.type = updates.type;
-      if (updates.status) user.status = updates.status;
-      if (updates.expiresAt !== undefined) user.expiresAt = updates.expiresAt;
-      if (updates.notes !== undefined) user.notes = updates.notes;
-      if (updates.maxDevices !== undefined) user.restrictions.maxDevices = updates.maxDevices;
-      user.updatedAt = new Date().toISOString();
-      
-      whitelist[userId] = user;
-      await saveWhitelistToRedis(whitelist);
-      
-      return res.status(200).json({ success: true, message: `User ${userId} updated`, data: user });
-    } catch (error) {
-      return res.status(500).json({ error: 'Failed to update user', message: error.message });
+      if (!user) {
+        return res
+          .status(404)
+          .json({ error: "User not found", userId, platform });
+      }
+      return res.status(200).json({ userId, platform, ...user });
     }
-  }
-  
-  // ==== REMOVE ====
-  if (action === 'remove' && req.method === 'DELETE') {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId required' });
-    
-    try {
-      const whitelist = await getWhitelistFromRedis();
-      if (!whitelist[userId]) return res.status(404).json({ error: 'User not found' });
-      
-      const username = whitelist[userId].username;
-      delete whitelist[userId];
-      await saveWhitelistToRedis(whitelist);
-      
-      const metadata = await getMetadataFromRedis();
-      metadata.totalWhitelisted--;
-      await saveMetadataToRedis(metadata);
-      
-      return res.status(200).json({ success: true, message: `User ${username} removed` });
-    } catch (error) {
-      return res.status(500).json({ error: 'Failed to remove user', message: error.message });
+
+    // Get stats (Mobile style)
+    if (action === "stats") {
+      const totalUsers = Object.keys(whitelist).length;
+      const activeUsers = Object.values(whitelist).filter(
+        (u) => u.status === "active",
+      ).length;
+      const suspendedUsers = Object.values(whitelist).filter(
+        (u) => u.status === "suspended",
+      ).length;
+      const expiredUsers = Object.values(whitelist).filter((u) => {
+        if (!u.expiresAt) return false;
+        return new Date(u.expiresAt) < new Date();
+      }).length;
+
+      return res.status(200).json({
+        platform,
+        total: totalUsers,
+        active: activeUsers,
+        suspended: suspendedUsers,
+        expired: expiredUsers,
+        lastUpdated: metadata.lastUpdated,
+      });
     }
+
+    // List all users (both styles)
+    const userList = Object.entries(whitelist).map(([id, data]) => ({
+      userId: id,
+      ...data,
+    }));
+
+    res.setHeader("X-Storage-Backend", backend);
+    return res.status(200).json({
+      platform,
+      total: userList.length,
+      users: userList,
+      whitelist, // PC style compatibility
+      metadata,
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ error: "Failed to list users", message: error.message });
   }
-  
-  // ==== SUSPEND ====
-  if (action === 'suspend' && req.method === 'POST') {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId required' });
-    
-    try {
-      const whitelist = await getWhitelistFromRedis();
-      if (!whitelist[userId]) return res.status(404).json({ error: 'User not found' });
-      
-      whitelist[userId].status = 'suspended';
-      whitelist[userId].suspendedAt = new Date().toISOString();
-      await saveWhitelistToRedis(whitelist);
-      
-      return res.status(200).json({ success: true, message: `User ${userId} suspended`, data: whitelist[userId] });
-    } catch (error) {
-      return res.status(500).json({ error: 'Failed to suspend user', message: error.message });
+}
+
+async function handleAdd(req, res, redisClient, platform, config) {
+  const {
+    userId,
+    username,
+    type,
+    expiresAt = null,
+    duration,
+    maxDevices,
+    notes = "",
+    note = "",
+  } = req.body;
+
+  if (!userId || !username) {
+    return res.status(400).json({ error: "userId and username required" });
+  }
+
+  if (!redisClient) {
+    return res.status(503).json({
+      error: "Redis not available",
+      message:
+        "Redis client failed to initialize. Check REDIS_URL environment variable.",
+      solution:
+        "Verify REDIS_URL is set correctly in Vercel environment variables",
+    });
+  }
+
+  try {
+    const whitelist = await getWhitelistFromRedis(platform);
+
+    if (whitelist[userId]) {
+      return res.status(409).json({ error: "User already exists", platform });
     }
-  }
-  
-  // ==== REACTIVATE ====
-  if (action === 'reactivate' && req.method === 'POST') {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId required' });
-    
-    try {
-      const whitelist = await getWhitelistFromRedis();
-      if (!whitelist[userId]) return res.status(404).json({ error: 'User not found' });
-      
-      whitelist[userId].status = 'active';
-      whitelist[userId].reactivatedAt = new Date().toISOString();
-      delete whitelist[userId].suspendedAt;
-      await saveWhitelistToRedis(whitelist);
-      
-      return res.status(200).json({ success: true, message: `User ${userId} reactivated`, data: whitelist[userId] });
-    } catch (error) {
-      return res.status(500).json({ error: 'Failed to reactivate user', message: error.message });
+
+    // Calculate expiry date if duration is provided
+    let calculatedExpiry = expiresAt;
+    if (duration && duration !== "LIFETIME") {
+      const days = parseInt(duration);
+      if (!isNaN(days)) {
+        calculatedExpiry = new Date(
+          Date.now() + days * 24 * 60 * 60 * 1000,
+        ).toISOString();
+      }
     }
+
+    const newUser = {
+      userId,
+      username,
+      type: type || config.defaultType,
+      status: "active",
+      addedAt: new Date().toISOString(),
+      expiresAt: calculatedExpiry,
+      duration: duration || (calculatedExpiry ? undefined : "LIFETIME"),
+      restrictions: {
+        maxDevices: maxDevices || (platform === "mobile" ? 2 : 5),
+        ipTracking: true,
+        webhookNotify: true,
+      },
+      permissions: {
+        bypassAll: false,
+        unlimitedAccess: false,
+        noLogging: false,
+      },
+      notes: notes || note || "",
+      platform,
+    };
+
+    // Add user to whitelist
+    whitelist[userId] = newUser;
+    await saveWhitelistToRedis(platform, whitelist);
+
+    // Update metadata
+    const metadata = await getMetadataFromRedis(platform);
+    metadata.totalWhitelisted = Object.keys(whitelist).length;
+    await saveMetadataToRedis(platform, metadata);
+
+    return res.status(201).json({
+      success: true,
+      message: `${platform.toUpperCase()} user ${username} added`,
+      platform,
+      user: { userId, ...newUser },
+      data: newUser, // PC style compatibility
+    });
+  } catch (error) {
+    console.error("Redis ADD error:", error);
+    return res.status(500).json({
+      error: "Failed to add user",
+      message: error.message,
+      details: "Redis operation failed. Server logs may have more details.",
+    });
   }
-  
-  return res.status(400).json({ 
-    error: 'Invalid action',
-    availableActions: ['list', 'add', 'update', 'remove', 'info', 'suspend', 'reactivate']
-  });
+}
+
+async function handleUpdate(req, res, redisClient, platform, config) {
+  // Accept userId from query or body
+  const userId = req.query.userId || req.body.userId;
+  const updates = { ...req.body };
+  delete updates.userId;
+
+  if (!userId) return res.status(400).json({ error: "userId required" });
+
+  try {
+    const whitelist = await getWhitelistFromRedis(platform);
+    if (!whitelist[userId])
+      return res.status(404).json({ error: "User not found", platform });
+
+    const user = whitelist[userId];
+
+    // Handle duration update
+    if (updates.duration) {
+      if (updates.duration === "LIFETIME") {
+        updates.expiresAt = null;
+      } else {
+        const days = parseInt(updates.duration);
+        if (!isNaN(days)) {
+          updates.expiresAt = new Date(
+            Date.now() + days * 24 * 60 * 60 * 1000,
+          ).toISOString();
+        }
+      }
+    }
+
+    // Apply updates
+    if (updates.username) user.username = updates.username;
+    if (updates.type) user.type = updates.type;
+    if (updates.status) user.status = updates.status;
+    if (updates.expiresAt !== undefined) user.expiresAt = updates.expiresAt;
+    if (updates.notes !== undefined) user.notes = updates.notes;
+    if (updates.note !== undefined) user.notes = updates.note;
+    if (updates.maxDevices !== undefined) {
+      if (!user.restrictions) user.restrictions = {};
+      user.restrictions.maxDevices = updates.maxDevices;
+    }
+    user.updatedAt = new Date().toISOString();
+
+    whitelist[userId] = user;
+    await saveWhitelistToRedis(platform, whitelist);
+
+    return res.status(200).json({
+      success: true,
+      message: `${platform.toUpperCase()} user ${userId} updated`,
+      platform,
+      user: { userId, ...user },
+      data: user, // PC style compatibility
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ error: "Failed to update user", message: error.message });
+  }
+}
+
+async function handleRemove(req, res, redisClient, platform, config) {
+  // Accept userId from query or body
+  const userId = req.query.userId || req.body?.userId;
+
+  if (!userId) return res.status(400).json({ error: "userId required" });
+
+  try {
+    const whitelist = await getWhitelistFromRedis(platform);
+    if (!whitelist[userId])
+      return res.status(404).json({ error: "User not found", platform });
+
+    const deletedUser = whitelist[userId];
+    const username = deletedUser.username;
+    delete whitelist[userId];
+    await saveWhitelistToRedis(platform, whitelist);
+
+    const metadata = await getMetadataFromRedis(platform);
+    metadata.totalWhitelisted = Object.keys(whitelist).length;
+    await saveMetadataToRedis(platform, metadata);
+
+    return res.status(200).json({
+      success: true,
+      message: `${platform.toUpperCase()} user ${username} removed`,
+      platform,
+      deletedUser: { userId, ...deletedUser },
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ error: "Failed to remove user", message: error.message });
+  }
 }

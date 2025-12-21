@@ -1,6 +1,22 @@
 {
   "rewrites": [
     {
+      "source": "/api/mobile-whitelist-manager",
+      "destination": "/api/whitelist-manager?platform=mobile"
+    },
+    {
+      "source": "/api/mobile-bootstrap",
+      "destination": "/api/bootstrap?platform=mobile"
+    },
+    {
+      "source": "/api/mobile-load",
+      "destination": "/api/load?platform=mobile"
+    },
+    {
+      "source": "/api/get-mobile-loader",
+      "destination": "/api/get-loader?platform=mobile"
+    },
+    {
       "source": "/protected/(.*)",
       "destination": "/404"
     }

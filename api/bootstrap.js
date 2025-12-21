@@ -1,7 +1,8 @@
-// Bootstrap Endpoint - Public entry point for StarshipCore
-// Returns a small script that auto-detects userId and calls secure get-loader
+// Unified Bootstrap Endpoint - Public entry point for StarshipCore
+// Supports both PC and Mobile platforms via ?platform=mobile query parameter
+// Returns a small script that auto-detects userId and calls secure get-loader API
 // With browser detection, obfuscated response, and Discord logging
-// Development mode: Skip loader intro and directly serve StarshipCore
+// Development mode: Skip loader intro and directly serve script
 
 import fs from "fs";
 import path from "path";
@@ -46,6 +47,11 @@ async function sendDiscordLog(logData) {
           inline: true,
         },
         {
+          name: "📱 Platform",
+          value: logData.platform || "PC",
+          inline: true,
+        },
+        {
           name: "⏰ Timestamp",
           value: logData.timestamp,
           inline: true,
@@ -53,7 +59,7 @@ async function sendDiscordLog(logData) {
       ],
       timestamp: new Date().toISOString(),
       footer: {
-        text: "StarshipCore Security Monitor",
+        text: `${logData.platform === "mobile" ? "📱" : "💻"} StarshipCore Security Monitor`,
       },
     };
 
@@ -91,6 +97,29 @@ export default async function handler(req, res) {
   const userAgent = req.headers["user-agent"] || "";
   const referer = req.headers["referer"] || "Direct";
 
+  // Determine platform (default: pc)
+  const platform = req.query.platform === "mobile" ? "mobile" : "pc";
+  const platformLabel = platform === "mobile" ? "📱 Mobile" : "💻 PC";
+  const platformEmoji = platform === "mobile" ? "📱" : "💻";
+
+  // Platform-specific configuration
+  const platformConfig = {
+    pc: {
+      scriptFile: "StarshipCore.lua",
+      loaderEndpoint: "get-loader",
+      sessionPlatform: "pc",
+      bootstrapVersion: "2.0",
+    },
+    mobile: {
+      scriptFile: "MobileUI.lua",
+      loaderEndpoint: "get-mobile-loader",
+      sessionPlatform: "mobile",
+      bootstrapVersion: "2.0-mobile",
+    },
+  };
+
+  const config = platformConfig[platform];
+
   // Check for development mode
   const isDev =
     process.env.NODE_ENV === "development" ||
@@ -100,20 +129,20 @@ export default async function handler(req, res) {
   // Check for dev query parameter to force dev mode
   const forceDevMode = req.query.dev === "true" || req.query.dev === "1";
 
-  // Development Mode: Skip loader intro and directly serve StarshipCore
+  // Development Mode: Skip loader intro and directly serve script
   if (isDev || forceDevMode) {
     console.log(
-      `[${timestamp}] 🛠️ PC DEV MODE - Skipping loader, serving StarshipCore directly | IP: ${clientIP}`,
+      `[${timestamp}] 🛠️ ${platformLabel} DEV MODE - Skipping loader, serving ${config.scriptFile} directly | IP: ${clientIP}`,
     );
 
     try {
-      const scriptPath = path.join(process.cwd(), "data", "StarshipCore.lua");
+      const scriptPath = path.join(process.cwd(), "data", config.scriptFile);
 
       if (!fs.existsSync(scriptPath)) {
         console.error(
-          `[${timestamp}] ❌ DEV MODE - StarshipCore.lua not found`,
+          `[${timestamp}] ❌ DEV MODE - ${config.scriptFile} not found`,
         );
-        return res.status(404).send('error("StarshipCore.lua not found")');
+        return res.status(404).send(`error("${config.scriptFile} not found")`);
       }
 
       let scriptContent = fs.readFileSync(scriptPath, "utf8");
@@ -125,7 +154,7 @@ export default async function handler(req, res) {
 
       // Create a simple bootstrap that sets session and loads script directly
       const devBootstrap = `
--- StarshipCore PC - Development Mode
+-- StarshipCore ${platform === "mobile" ? "Mobile" : "PC"} - Development Mode
 -- Skipping authentication for faster development
 
 -- Set mock session data for development
@@ -134,7 +163,7 @@ getgenv().StarshipSession = {
     Duration = "DEVELOPMENT",
     Expiry = nil,
     RemainingDays = nil,
-    Platform = "pc",
+    Platform = "${config.sessionPlatform}",
     DeviceCount = 1,
     MaxDevices = 99,
     Username = game:GetService("Players").LocalPlayer.Name,
@@ -142,16 +171,16 @@ getgenv().StarshipSession = {
 }
 
 print("[StarshipCore] 🛠️ Development Mode - Auth Skipped")
-print("[StarshipCore] 💻 Loading StarshipCore directly...")
+print("[StarshipCore] ${platformEmoji} Loading ${config.scriptFile} directly...")
 
--- Load StarshipCore directly
+-- Load script directly
 ${scriptContent}
 `;
 
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("X-Mode", "development");
-      res.setHeader("X-Platform", "pc");
+      res.setHeader("X-Platform", platform);
 
       return res.status(200).send(devBootstrap);
     } catch (error) {
@@ -174,26 +203,68 @@ ${scriptContent}
     "Gecko",
   ];
 
-  const isBrowser = browserPatterns.some((pattern) =>
-    userAgent.includes(pattern),
+  // Roblox executor patterns - these should be allowed even if they contain browser-like UA
+  const robloxPatterns = [
+    "Roblox",
+    "RobloxApp",
+    "RobloxStudio",
+    "RobloxPlayer",
+    "GameClient",
+    "synapse",
+    "SYNAPSE_HTTP",
+    "krnl",
+    "fluxus",
+    "arceus",
+    "delta",
+    "hydrogen",
+    "evon",
+    "vegax",
+    "script-ware",
+    "scriptware",
+    "comet",
+  ];
+
+  // Check if it's a Roblox executor first (case insensitive)
+  const isRobloxExecutor = robloxPatterns.some((pattern) =>
+    userAgent.toLowerCase().includes(pattern.toLowerCase()),
   );
+
+  // Only flag as browser if it matches browser patterns AND is not a Roblox executor
+  // Also allow empty User-Agent (common for executors)
+  const isBrowser =
+    userAgent !== "" &&
+    !isRobloxExecutor &&
+    browserPatterns.some((pattern) => userAgent.includes(pattern));
+
+  // Log User-Agent for debugging (mobile only for now, can enable for both)
+  if (platform === "mobile") {
+    console.log(
+      `[${timestamp}] ${platformEmoji} Bootstrap - UA: "${userAgent}" | IP: ${clientIP} | IsBrowser: ${isBrowser}`,
+    );
+  }
 
   // If accessed from browser, log and return fake error page
   if (isBrowser) {
     console.log(
-      `[${timestamp}] 🚨 BROWSER ACCESS BLOCKED | IP: ${clientIP} | UA: ${userAgent.substring(0, 50)}`,
+      `[${timestamp}] 🚨 BROWSER ACCESS BLOCKED (${platformLabel}) | IP: ${clientIP} | UA: ${userAgent.substring(0, 50)}`,
     );
 
     // Send Discord alert for suspicious browser access
     await sendDiscordLog({
-      title: "🚨 Suspicious Browser Access Detected",
+      title: `🚨 Suspicious Browser Access - ${platformLabel} Bootstrap`,
       status: "suspicious",
       ip: clientIP,
       userAgent: userAgent,
-      endpoint: "/api/bootstrap",
+      endpoint: `/api/bootstrap${platform === "mobile" ? "?platform=mobile" : ""}`,
+      platform: platformLabel,
       timestamp: timestamp,
-      message: `⚠️ **Someone tried to access bootstrap from a browser!**\n\n**Referer:** \`${referer}\`\n**This could be:**\n• Hacker trying to discover API\n• Curious user\n• Bot/crawler`,
+      message: `⚠️ **Someone tried to access ${platform} bootstrap from a browser!**\n\n**Referer:** \`${referer}\`\n**This could be:**\n• Hacker trying to discover API\n• Curious user\n• Bot/crawler`,
     });
+
+    const bgColor = platform === "mobile" ? "#0f0f1a" : "#1a1a2e";
+    const accentColor = platform === "mobile" ? "#8b5cf6" : "#ff6b6b";
+    const containerBg = platform === "mobile" ? "#1a1a2e" : "#16213e";
+    const icon = platform === "mobile" ? "📱🚫" : "🚫";
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(403).send(`
@@ -206,29 +277,30 @@ ${scriptContent}
             font-family: Arial, sans-serif;
             text-align: center;
             padding: 50px;
-            background: #1a1a2e;
+            background: ${bgColor};
             color: #eee;
         }
-        h1 { color: #ff6b6b; font-size: 48px; }
+        h1 { color: ${accentColor}; font-size: 48px; }
         p { color: #888; margin: 10px 0; }
         .container {
             max-width: 500px;
             margin: 0 auto;
-            background: #16213e;
+            background: ${containerBg};
             padding: 40px;
             border-radius: 10px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            ${platform === "mobile" ? `border: 1px solid ${accentColor};` : ""}
         }
         .icon { font-size: 64px; margin-bottom: 20px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="icon">🚫</div>
+        <div class="icon">${icon}</div>
         <h1>403</h1>
         <p><strong>Forbidden</strong></p>
         <p>Direct access to this endpoint is not allowed.</p>
-        <p>This API is for authorized applications only.</p>
+        <p>This API is for authorized ${platform === "mobile" ? "mobile " : ""}applications only.</p>
     </div>
 </body>
 </html>
@@ -236,19 +308,24 @@ ${scriptContent}
   }
 
   // Log legitimate access (from Roblox executor)
-  console.log(`[${timestamp}] 🚀 Bootstrap requested | IP: ${clientIP}`);
+  console.log(
+    `[${timestamp}] ${platformEmoji} Bootstrap GRANTED | IP: ${clientIP}${platform === "mobile" ? ` | UA: "${userAgent}"` : ""}`,
+  );
 
   // Obfuscated bootstrap script
   // The actual URL is encoded to prevent easy discovery
-  const encodedUrl = Buffer.from(
-    "https://starship-core.my.id/api/get-loader?userId=",
-  ).toString("base64");
+  const loaderUrl = `https://starship-core.my.id/api/${config.loaderEndpoint}?userId=`;
+  const encodedUrl = Buffer.from(loaderUrl).toString("base64");
 
-  const bootstrapScript = `local a=game:GetService("Players")local b=a.LocalPlayer;if not b then b=a:GetPropertyChangedSignal("LocalPlayer"):Wait()end;local c=tostring(b.UserId)local function d(e)local f=""for g in e:gmatch(".")do local h=string.byte(g)if h>=65 and h<=90 then f=f..string.char((h-65+26-13)%26+65)elseif h>=97 and h<=122 then f=f..string.char((h-97+26-13)%26+97)else f=f..g end end;return f end;local function i(j)local k="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"j=string.gsub(j,"[^"..k.."=]","")return(j:gsub(".",function(l)if l=="="then return""end;local m,n="",k:find(l)-1;for o=6,1,-1 do m=m..(n%2^o-n%2^(o-1)>0 and"1"or"0")end;return m end):gsub("%d%d%d?%d?%d?%d?%d?%d?",function(l)if#l~=8 then return""end;local p=0;for o=1,8 do p=p+(l:sub(o,o)=="1"and 2^(8-o)or 0)end;return string.char(p)end))end;local q=i("${encodedUrl}")..c;local r,s=pcall(function()return game:HttpGet(q)end)if r and s then if s:find("error%(")then warn("[S] "..s)return end;local t,u=loadstring(s)if t then t()else warn("[S] Load failed: "..tostring(u))end else warn("[S] Connection failed")end`;
+  // Prefix for error messages (S for PC, SM for Mobile)
+  const errorPrefix = platform === "mobile" ? "SM" : "S";
+
+  const bootstrapScript = `local a=game:GetService("Players")local b=a.LocalPlayer;if not b then b=a:GetPropertyChangedSignal("LocalPlayer"):Wait()end;local c=tostring(b.UserId)local function d(e)local f=""for g in e:gmatch(".")do local h=string.byte(g)if h>=65 and h<=90 then f=f..string.char((h-65+26-13)%26+65)elseif h>=97 and h<=122 then f=f..string.char((h-97+26-13)%26+97)else f=f..g end end;return f end;local function i(j)local k="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"j=string.gsub(j,"[^"..k.."=]","")return(j:gsub(".",function(l)if l=="="then return""end;local m,n="",k:find(l)-1;for o=6,1,-1 do m=m..(n%2^o-n%2^(o-1)>0 and"1"or"0")end;return m end):gsub("%d%d%d?%d?%d?%d?%d?%d?",function(l)if#l~=8 then return""end;local p=0;for o=1,8 do p=p+(l:sub(o,o)=="1"and 2^(8-o)or 0)end;return string.char(p)end))end;local q=i("${encodedUrl}")..c;local r,s=pcall(function()return game:HttpGet(q)end)if r and s then if s:find("error%(")then warn("[${errorPrefix}] "..s)return end;local t,u=loadstring(s)if t then t()else warn("[${errorPrefix}] Load failed: "..tostring(u))end else warn("[${errorPrefix}] Connection failed")end`;
 
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.setHeader("X-Bootstrap-Version", "2.0");
+  res.setHeader("X-Bootstrap-Version", config.bootstrapVersion);
+  res.setHeader("X-Platform", platform);
 
   return res.status(200).send(bootstrapScript);
 }
