@@ -9,6 +9,24 @@
 
 warn("[Starship] Script Initialization Started...") -- DEBUG START
 
+-- SERVER-BASED LOADING MODE
+-- Automatically detects environment and loads modules from appropriate server
+-- No manual configuration needed!
+
+-- Auto-detect: Check if URL was injected by bootstrap/dev-script
+if _G.StarshipServerMode == nil then
+    _G.StarshipServerMode = true -- Always use server-based loading (easier updates)
+end
+
+-- Auto-detect server URL based on how script was loaded
+if _G.StarshipServerURL == nil then
+    -- Default to production if not set by dev-pc-script
+    _G.StarshipServerURL = "https://starship-core.my.id"
+end
+
+-- Store the base URL for reference
+_G.StarshipBaseURL = _G.StarshipServerURL
+
 -- FORCE CLEAR CACHE (Add this to ensure fresh load)
 _G.StarshipModulePrefix = nil
 if getgenv then
@@ -119,7 +137,106 @@ task.spawn(function()
 end)
 
 local function LoadModule(name)
-    -- 1. Try Cached Prefix
+    -- 0. Try HTTP Server Loading (Auto-detect: works for both dev and production)
+    if _G.StarshipServerMode then
+        local serverUrl = _G.StarshipServerURL or "https://starship-core.my.id"
+        local moduleUrl = serverUrl .. "/api/get-module?name=" .. name:gsub("/", "%%2F") .. ".lua"
+
+        -- Add user ID for production whitelist check (if available)
+        local userId = tostring(game.Players.LocalPlayer.UserId)
+        if userId and not serverUrl:find("localhost") then
+            moduleUrl = moduleUrl .. "&user=" .. userId
+        end
+
+        -- Only show debug in development
+        local isDev = serverUrl:find("localhost") ~= nil
+        if isDev then
+            warn("[Starship] HTTP Loading: " .. name .. " from " .. serverUrl)
+        end
+
+        local success, result = pcall(function()
+            return game:HttpGet(moduleUrl)
+        end)
+
+        if success and result then
+            -- Check if response is an error message
+            if result:match("^error%(") then
+                if isDev then
+                    warn("[Starship] HTTP Error for " .. name .. ": " .. result)
+                end
+                -- Check if response is JSON (encrypted module from production)
+            elseif result:sub(1, 1) == "{" then
+                -- Production mode: decrypt the module
+                local jsonSuccess, jsonData = pcall(function()
+                    return game:GetService("HttpService"):JSONDecode(result)
+                end)
+
+                if jsonSuccess and jsonData.status == "success" and jsonData.blob and jsonData.key then
+                    -- Decrypt XOR encrypted module
+                    local function base64Decode(data)
+                        local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+                        data = string.gsub(data, '[^' .. b .. '=]', '')
+                        return (data:gsub('.', function(x)
+                            if x == '=' then return '' end
+                            local r, f = '', (b:find(x) - 1)
+                            for i = 6, 1, -1 do r = r .. (f % 2 ^ i - f % 2 ^ (i - 1) > 0 and '1' or '0') end
+                            return r
+                        end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
+                            if #x ~= 8 then return '' end
+                            local c = 0
+                            for i = 1, 8 do c = c + (x:sub(i, i) == '1' and 2 ^ (8 - i) or 0) end
+                            return string.char(c)
+                        end))
+                    end
+
+                    local function xorDecrypt(data, key)
+                        local result = {}
+                        for i = 1, #data do
+                            local keyChar = key:byte(((i - 1) % #key) + 1)
+                            result[i] = string.char(bit32.bxor(data:byte(i), keyChar))
+                        end
+                        return table.concat(result)
+                    end
+
+                    local decoded = base64Decode(jsonData.blob)
+                    local decrypted = xorDecrypt(decoded, jsonData.key)
+
+                    local func, err = loadstring(decrypted)
+                    if func then
+                        return func()
+                    else
+                        warn("[Starship] Syntax Error in " .. name .. " (decrypted): " .. tostring(err))
+                    end
+                else
+                    if isDev then
+                        warn("[Starship] JSON parse failed or invalid response for " .. name)
+                    end
+                end
+            else
+                -- Plain text response (development mode)
+                local func, err = loadstring(result)
+                if func then
+                    if isDev then
+                        warn("[Starship] ✅ HTTP Loaded: " .. name)
+                    end
+                    return func()
+                else
+                    warn("[Starship] Syntax Error in " .. name .. " (HTTP): " .. tostring(err))
+                end
+            end
+        else
+            if isDev then
+                warn("[Starship] HTTP Failed for " .. name .. ": " .. tostring(result))
+            end
+        end
+
+        -- If HTTP fails, fall through to local file loading
+        if isDev then
+            warn("[Starship] Falling back to local file loading for: " .. name)
+        end
+    end
+
+    -- 1. Try Cached Prefix (Local File Mode)
     if _G.StarshipModulePrefix then
         local p = _G.StarshipModulePrefix .. name .. ".lua"
         local func, err = loadstring(readfile(p))
@@ -130,7 +247,7 @@ local function LoadModule(name)
         return func()
     end
 
-    -- 2. Exhaustive Search Paths
+    -- 2. Exhaustive Search Paths (Local File Mode)
     local paths = {
         "StarshipCore/Modules/" .. name .. ".lua",
         "StarshipCore\\Modules\\" .. name:gsub("/", "\\") .. ".lua",
@@ -1941,7 +2058,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
                                 -- Use stronger multiplier for tighter path following
                                 local correctionStrength = math.clamp(distance * 8, 0, 50) -- Stronger correction
                                 local correctionVel = distance > 0.01 and (posDiff.Unit * correctionStrength) or
-                                Vector3.new(0, 0, 0)
+                                    Vector3.new(0, 0, 0)
 
                                 -- Blend with recorded velocity for smooth acceleration
                                 local targetVel = smoothVel or vel

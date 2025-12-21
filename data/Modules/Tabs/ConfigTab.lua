@@ -19,9 +19,43 @@ if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
 if not isfolder(PROFILE_FOLDER) then makefolder(PROFILE_FOLDER) end
 
 -- Multi-Executor Autoexec Support
+-- Get Windows username for absolute paths
+local function GetWindowsUsername()
+    -- Try to get username from environment or common paths
+    local username = nil
+
+    -- Method 1: Try reading from a known file path pattern
+    local testPaths = {
+        "C:/Users/Administrator/AppData/Local",
+        "C:/Users/Default/AppData/Local",
+    }
+
+    -- Method 2: Check if seliware-autoexec folder exists in common locations
+    local commonUsernames = { "Administrator", "User", "Default", os.getenv and os.getenv("USERNAME") or nil }
+
+    for _, uname in ipairs(commonUsernames) do
+        if uname then
+            local testPath = "C:/Users/" .. uname .. "/AppData/Local/seliware-autoexec"
+            if isfolder and pcall(function() return isfolder(testPath) end) then
+                local exists = isfolder(testPath)
+                if exists then
+                    return uname
+                end
+            end
+        end
+    end
+
+    -- Fallback to Administrator (most common for Roblox exploits)
+    return "Administrator"
+end
+
+local WINDOWS_USERNAME = GetWindowsUsername()
+local SELIWARE_AUTOEXEC_PATH = "C:/Users/" .. WINDOWS_USERNAME .. "/AppData/Local/seliware-autoexec"
+
 local EXECUTOR_AUTOEXEC_PATHS = {
     -- Format: ["ExecutorName"] = "autoexec_folder_path"
-    ["Seliware"] = "autoexec",
+    -- Seliware uses absolute path in AppData
+    ["Seliware"] = SELIWARE_AUTOEXEC_PATH,
     ["Synapse X"] = "autoexec",
     ["Synapse Z"] = "autoexec",
     ["Script-Ware"] = "autoexec",
@@ -128,10 +162,36 @@ end
 local DetectedExecutor = DetectExecutor()
 local AUTOEXEC_FOLDER = GetAutoExecFolder(DetectedExecutor)
 
--- Ensure autoexec folder exists
-if not isfolder(AUTOEXEC_FOLDER) then
-    pcall(function() makefolder(AUTOEXEC_FOLDER) end)
+-- Check if path is absolute (Windows)
+local function IsAbsolutePath(path)
+    return path:match("^%a:") ~= nil or path:match("^/") ~= nil
 end
+
+-- Ensure autoexec folder exists (handle both relative and absolute paths)
+local function EnsureAutoExecFolder(folderPath)
+    if not folderPath then return false end
+
+    -- For absolute paths, we just try to use them (can't create with makefolder)
+    if IsAbsolutePath(folderPath) then
+        -- Try to check if folder exists, if not, inform user
+        if isfolder then
+            local success, exists = pcall(function() return isfolder(folderPath) end)
+            if success and exists then
+                return true
+            end
+        end
+        -- For Seliware, the folder should already exist if executor is installed
+        return true -- Assume it exists, writefile will fail if not
+    else
+        -- Relative path - create if needed
+        if not isfolder(folderPath) then
+            pcall(function() makefolder(folderPath) end)
+        end
+        return true
+    end
+end
+
+EnsureAutoExecFolder(AUTOEXEC_FOLDER)
 
 -- Auto Execute Settings
 local AUTO_EXEC_FILE = CONFIG_FOLDER .. "/AutoExecSettings.json"
@@ -140,6 +200,7 @@ local AutoExecSettings = {
     AutoLoadProfile = "",             -- Profile name to auto-load
     DelaySeconds = 1,                 -- Delay before auto-executing features
     SelectedExecutor = "Auto-Detect", -- User's executor choice
+    CustomPath = "",                  -- Custom autoexec path (for advanced users)
 }
 
 -- Load Auto Exec Settings on startup
@@ -153,20 +214,22 @@ local function LoadAutoExecSettings()
             if result.AutoLoadProfile then AutoExecSettings.AutoLoadProfile = result.AutoLoadProfile end
             if result.DelaySeconds then AutoExecSettings.DelaySeconds = result.DelaySeconds end
             if result.SelectedExecutor then AutoExecSettings.SelectedExecutor = result.SelectedExecutor end
+            if result.CustomPath then AutoExecSettings.CustomPath = result.CustomPath end
         end
     end
 
     -- Update AUTOEXEC_FOLDER based on settings
-    if AutoExecSettings.SelectedExecutor and AutoExecSettings.SelectedExecutor ~= "Auto-Detect" then
+    -- Priority: Custom Path > Selected Executor > Auto-Detect
+    if AutoExecSettings.CustomPath and AutoExecSettings.CustomPath ~= "" then
+        AUTOEXEC_FOLDER = AutoExecSettings.CustomPath
+    elseif AutoExecSettings.SelectedExecutor and AutoExecSettings.SelectedExecutor ~= "Auto-Detect" then
         AUTOEXEC_FOLDER = GetAutoExecFolder(AutoExecSettings.SelectedExecutor)
     else
         AUTOEXEC_FOLDER = GetAutoExecFolder(DetectedExecutor)
     end
 
     -- Ensure autoexec folder exists
-    if not isfolder(AUTOEXEC_FOLDER) then
-        pcall(function() makefolder(AUTOEXEC_FOLDER) end)
-    end
+    EnsureAutoExecFolder(AUTOEXEC_FOLDER)
 
     return AutoExecSettings
 end
@@ -180,17 +243,18 @@ local function GetCurrentExecutorName()
 end
 
 -- Update autoexec folder when executor changes
-local function UpdateAutoExecFolder(executorName)
-    if executorName == "Auto-Detect" then
+local function UpdateAutoExecFolder(executorName, customPath)
+    -- Priority: Custom Path > Selected Executor > Auto-Detect
+    if customPath and customPath ~= "" then
+        AUTOEXEC_FOLDER = customPath
+    elseif executorName == "Auto-Detect" then
         AUTOEXEC_FOLDER = GetAutoExecFolder(DetectedExecutor)
     else
         AUTOEXEC_FOLDER = GetAutoExecFolder(executorName)
     end
 
     -- Ensure folder exists
-    if not isfolder(AUTOEXEC_FOLDER) then
-        pcall(function() makefolder(AUTOEXEC_FOLDER) end)
-    end
+    EnsureAutoExecFolder(AUTOEXEC_FOLDER)
 end
 
 local function SaveAutoExecSettings()
@@ -219,14 +283,24 @@ end)
 
     if writefile then
         -- Ensure folder exists
-        if not isfolder(AUTOEXEC_FOLDER) then
-            pcall(function() makefolder(AUTOEXEC_FOLDER) end)
-        end
+        EnsureAutoExecFolder(AUTOEXEC_FOLDER)
 
-        local filePath = AUTOEXEC_FOLDER .. "/StarshipCore_AutoExec.lua"
-        local success = pcall(function()
+        -- Use correct path separator based on path type
+        local separator = IsAbsolutePath(AUTOEXEC_FOLDER) and "/" or "/"
+        local filePath = AUTOEXEC_FOLDER .. separator .. "StarshipCore_AutoExec.lua"
+
+        local success, err = pcall(function()
             writefile(filePath, scriptContent)
         end)
+
+        if not success then
+            -- Try alternative path format for Windows
+            filePath = AUTOEXEC_FOLDER:gsub("/", "\\") .. "\\StarshipCore_AutoExec.lua"
+            success = pcall(function()
+                writefile(filePath, scriptContent)
+            end)
+        end
+
         return success, filePath
     end
     return false, nil
@@ -1073,11 +1147,57 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
         end
     end)
 
+    -- Custom Path Row (for advanced users)
+    local CustomPathRow = Instance.new("Frame", AutoExecContainer)
+    CustomPathRow.Size = UDim2.new(1, 0, 0, 55)
+    CustomPathRow.BackgroundColor3 = C_SIDE
+    CustomPathRow.LayoutOrder = 4
+    Instance.new("UICorner", CustomPathRow).CornerRadius = UDim.new(0, 6)
+    RegisterTheme(CustomPathRow, "BackgroundColor3", "Side")
+
+    local CustomPathLabel = Instance.new("TextLabel", CustomPathRow)
+    CustomPathLabel.Text = "Custom Path (optional):"
+    CustomPathLabel.Size = UDim2.new(0.9, 0, 0, 18)
+    CustomPathLabel.Position = UDim2.new(0.05, 0, 0, 5)
+    CustomPathLabel.BackgroundTransparency = 1
+    CustomPathLabel.TextColor3 = C_TEXT
+    CustomPathLabel.Font = Enum.Font.Gotham
+    CustomPathLabel.TextSize = 9
+    CustomPathLabel.TextXAlignment = Enum.TextXAlignment.Left
+    RegisterTheme(CustomPathLabel, "TextColor3", "Text")
+
+    local CustomPathInput = Instance.new("TextBox", CustomPathRow)
+    CustomPathInput.Size = UDim2.new(0.9, 0, 0, 25)
+    CustomPathInput.Position = UDim2.new(0.05, 0, 0, 25)
+    CustomPathInput.BackgroundColor3 = C_ITEM
+    CustomPathInput.Text = AutoExecSettings.CustomPath or ""
+    CustomPathInput.PlaceholderText =
+    "Leave empty to use default (e.g. C:/Users/YourName/AppData/Local/seliware-autoexec)"
+    CustomPathInput.TextColor3 = C_TEXT
+    CustomPathInput.PlaceholderColor3 = C_TEXT_DIM
+    CustomPathInput.Font = Enum.Font.Gotham
+    CustomPathInput.TextSize = 9
+    CustomPathInput.TextXAlignment = Enum.TextXAlignment.Left
+    CustomPathInput.ClearTextOnFocus = false
+    Instance.new("UICorner", CustomPathInput).CornerRadius = UDim.new(0, 4)
+    Instance.new("UIPadding", CustomPathInput).PaddingLeft = UDim.new(0, 8)
+    RegisterTheme(CustomPathInput, "BackgroundColor3", "Item")
+    RegisterTheme(CustomPathInput, "TextColor3", "Text")
+
+    CustomPathInput.FocusLost:Connect(function()
+        AutoExecSettings.CustomPath = CustomPathInput.Text
+        if CustomPathInput.Text ~= "" then
+            UpdateAutoExecFolder(AutoExecSettings.SelectedExecutor, CustomPathInput.Text)
+        else
+            UpdateAutoExecFolder(AutoExecSettings.SelectedExecutor, nil)
+        end
+    end)
+
     -- Delay Row
     local DelayRow = Instance.new("Frame", AutoExecContainer)
     DelayRow.Size = UDim2.new(1, 0, 0, 35)
     DelayRow.BackgroundColor3 = C_SIDE
-    DelayRow.LayoutOrder = 4
+    DelayRow.LayoutOrder = 5
     Instance.new("UICorner", DelayRow).CornerRadius = UDim.new(0, 6)
     RegisterTheme(DelayRow, "BackgroundColor3", "Side")
 
@@ -1118,7 +1238,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     local SaveAutoExecBtn = Instance.new("TextButton", AutoExecContainer)
     SaveAutoExecBtn.Text = "💾 SAVE AUTO EXECUTE SETTINGS"
     SaveAutoExecBtn.Size = UDim2.new(1, 0, 0, 35)
-    SaveAutoExecBtn.LayoutOrder = 5
+    SaveAutoExecBtn.LayoutOrder = 6
     SaveAutoExecBtn.BackgroundColor3 = C_ACCENT
     SaveAutoExecBtn.TextColor3 = C_TEXT
     SaveAutoExecBtn.Font = Enum.Font.GothamBold
@@ -1131,7 +1251,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     local StatusLabel = Instance.new("TextLabel", AutoExecContainer)
     StatusLabel.Text = ""
     StatusLabel.Size = UDim2.new(1, 0, 0, 20)
-    StatusLabel.LayoutOrder = 6
+    StatusLabel.LayoutOrder = 7
     StatusLabel.BackgroundTransparency = 1
     StatusLabel.TextColor3 = C_GREEN
     StatusLabel.Font = Enum.Font.Gotham
@@ -1179,9 +1299,9 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
 
     -- Detected Executor Info
     local DetectedLabel = Instance.new("TextLabel", AutoExecContainer)
-    DetectedLabel.Text = "🔍 Detected Executor: " .. DetectedExecutor .. " | Folder: " .. AUTOEXEC_FOLDER
+    DetectedLabel.Text = "🔍 Detected: " .. DetectedExecutor .. " | Path: " .. AUTOEXEC_FOLDER
     DetectedLabel.Size = UDim2.new(1, 0, 0, 18)
-    DetectedLabel.LayoutOrder = 7
+    DetectedLabel.LayoutOrder = 8
     DetectedLabel.BackgroundTransparency = 1
     DetectedLabel.TextColor3 = C_ACCENT
     DetectedLabel.Font = Enum.Font.Gotham
@@ -1193,9 +1313,9 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     -- Instructions
     local InstructionsLabel = Instance.new("TextLabel", AutoExecContainer)
     InstructionsLabel.Text =
-    "📝 After enabling, the script will be placed in your executor's autoexec folder.\nRestart your executor for changes to take effect."
+    "📝 Seliware users: Use custom path C:/Users/YOURNAME/AppData/Local/seliware-autoexec\nRestart executor after saving for changes to take effect."
     InstructionsLabel.Size = UDim2.new(1, 0, 0, 35)
-    InstructionsLabel.LayoutOrder = 8
+    InstructionsLabel.LayoutOrder = 9
     InstructionsLabel.BackgroundTransparency = 1
     InstructionsLabel.TextColor3 = C_TEXT_DIM
     InstructionsLabel.Font = Enum.Font.Gotham

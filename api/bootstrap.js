@@ -160,6 +160,10 @@ export default async function handler(req, res) {
 -- StarshipCore ${platform === "mobile" ? "Mobile" : "PC"} - Development Mode
 -- Skipping authentication for faster development
 
+-- Server-based module loading configuration (auto-injected)
+_G.StarshipServerMode = true
+_G.StarshipServerURL = "http://localhost:3000"
+
 -- Set mock session data for development
 getgenv().StarshipSession = {
     Role = "DEV_MODE",
@@ -318,12 +322,13 @@ ${scriptContent}
   // Obfuscated bootstrap script
   // The actual URL is encoded to prevent easy discovery
   const loaderUrl = `https://starship-core.my.id/api/${config.loaderEndpoint}?userId=`;
+  const serverUrl = "https://starship-core.my.id";
   const encodedUrl = Buffer.from(loaderUrl).toString("base64");
 
   // Prefix for error messages (S for PC, SM for Mobile)
   const errorPrefix = platform === "mobile" ? "SM" : "S";
 
-  const bootstrapScript = `local a=game:GetService("Players")local b=a.LocalPlayer;if not b then b=a:GetPropertyChangedSignal("LocalPlayer"):Wait()end;local c=tostring(b.UserId)local function d(e)local f=""for g in e:gmatch(".")do local h=string.byte(g)if h>=65 and h<=90 then f=f..string.char((h-65+26-13)%26+65)elseif h>=97 and h<=122 then f=f..string.char((h-97+26-13)%26+97)else f=f..g end end;return f end;local function i(j)local k="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"j=string.gsub(j,"[^"..k.."=]","")return(j:gsub(".",function(l)if l=="="then return""end;local m,n="",k:find(l)-1;for o=6,1,-1 do m=m..(n%2^o-n%2^(o-1)>0 and"1"or"0")end;return m end):gsub("%d%d%d?%d?%d?%d?%d?%d?",function(l)if#l~=8 then return""end;local p=0;for o=1,8 do p=p+(l:sub(o,o)=="1"and 2^(8-o)or 0)end;return string.char(p)end))end;local q=i("${encodedUrl}")..c;local r,s=pcall(function()return game:HttpGet(q)end)if r and s then if s:find("error%(")then warn("[${errorPrefix}] "..s)return end;local t,u=loadstring(s)if t then t()else warn("[${errorPrefix}] Load failed: "..tostring(u))end else warn("[${errorPrefix}] Connection failed")end`;
+  const bootstrapScript = `_G.StarshipServerMode=true;_G.StarshipServerURL="${serverUrl}";local a=game:GetService("Players")local b=a.LocalPlayer;if not b then b=a:GetPropertyChangedSignal("LocalPlayer"):Wait()end;local c=tostring(b.UserId)local function d(e)local f=""for g in e:gmatch(".")do local h=string.byte(g)if h>=65 and h<=90 then f=f..string.char((h-65+26-13)%26+65)elseif h>=97 and h<=122 then f=f..string.char((h-97+26-13)%26+97)else f=f..g end end;return f end;local function i(j)local k="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"j=string.gsub(j,"[^"..k.."=]","")return(j:gsub(".",function(l)if l=="="then return""end;local m,n="",k:find(l)-1;for o=6,1,-1 do m=m..(n%2^o-n%2^(o-1)>0 and"1"or"0")end;return m end):gsub("%d%d%d?%d?%d?%d?%d?%d?",function(l)if#l~=8 then return""end;local p=0;for o=1,8 do p=p+(l:sub(o,o)=="1"and 2^(8-o)or 0)end;return string.char(p)end))end;local q=i("${encodedUrl}")..c;local r,s=pcall(function()return game:HttpGet(q)end)if r and s then if s:find("error%(")then warn("[${errorPrefix}] "..s)return end;local t,u=loadstring(s)if t then t()else warn("[${errorPrefix}] Load failed: "..tostring(u))end else warn("[${errorPrefix}] Connection failed")end`;
 
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
