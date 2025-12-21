@@ -170,8 +170,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // Get parameters (support both 'key' and 'userId')
-  const { key, userId } = req.query;
+  // Get parameters (support both 'key' and 'userId', and optional 'platform')
+  const { key, userId, platform } = req.query;
+  const platformLabel = platform === "mobile" ? "📱 Mobile" : "💻 PC";
 
   // Get client information
   const clientIP = getClientIP(req);
@@ -207,7 +208,7 @@ export default async function handler(req, res) {
         // VIP user - grant access
         const isOwner = userId === "9268011358";
         console.log(
-          `[${timestamp}] ${isOwner ? "👑 OWNER" : "💎 VIP"} ACCESS - UserID: ${userId} (${vipUser.username}) | IP: ${clientIP}`,
+          `[${timestamp}] ${isOwner ? "👑 OWNER" : "💎 VIP"} ACCESS [${platformLabel}] - UserID: ${userId} (${vipUser.username}) | IP: ${clientIP}`,
         );
 
         // Discord webhook with rate limiting
@@ -250,10 +251,10 @@ export default async function handler(req, res) {
                   : `${currentDevices}/${maxDevices} devices`;
 
               await sendDiscordLog({
-                title: `💎 VIP Access Granted`,
+                title: `💎 VIP Access Granted ${platformLabel}`,
                 status: "success",
                 statusMessage: "✅ Authorized (VIP)",
-                authType: `VIP (${vipUser.type})`,
+                authType: `VIP (${vipUser.type}) - ${platformLabel}`,
                 owner: vipUser.username,
                 ip: clientIP,
                 deviceCount: deviceInfo,
@@ -364,15 +365,15 @@ export default async function handler(req, res) {
                     : `${currentDevices}/${maxDevices} devices`;
 
                 await sendDiscordLog({
-                  title: `💎 VIP Access Granted`,
+                  title: `💎 VIP Access Granted ${platformLabel}`,
                   status: "success",
                   statusMessage: "✅ Authorized (VIP)",
-                  authType: `VIP (${vipUser.type})`,
+                  authType: `VIP (${vipUser.type}) - ${platformLabel}`,
                   owner: vipUser.username,
                   ip: ipChanged ? `${lastIP} → ${clientIP}` : clientIP,
                   deviceCount: deviceInfo,
                   timestamp: timestamp,
-                  message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username}${ipChanged ? "\n⚠️ IP Address Changed!" : ""}`,
+                  message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username} via ${platformLabel}${ipChanged ? "\n⚠️ IP Address Changed!" : ""}`,
                 });
 
                 console.log(`[${timestamp}] ✅ Webhook sent successfully`);
@@ -405,15 +406,15 @@ export default async function handler(req, res) {
                 : `${currentDevices}/${maxDevices} devices`;
 
             await sendDiscordLog({
-              title: `💎 VIP Access Granted`,
+              title: `💎 VIP Access Granted ${platformLabel}`,
               status: "success",
               statusMessage: "✅ Authorized (VIP)",
-              authType: `VIP (${vipUser.type})`,
+              authType: `VIP (${vipUser.type}) - ${platformLabel}`,
               owner: vipUser.username,
               ip: clientIP,
               deviceCount: deviceInfo,
               timestamp: timestamp,
-              message: `✅ VIP loader delivered to ${vipUser.username}\n⚠️ (Fallback mode - Rate limiting unavailable)`,
+              message: `✅ VIP loader delivered to ${vipUser.username} via ${platformLabel}\n⚠️ (Fallback mode - Rate limiting unavailable)`,
             });
 
             console.log(`[${timestamp}] ✅ Fallback webhook sent`);

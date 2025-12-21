@@ -1,602 +1,1373 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VIP User Management - StarshipCore</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .header {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 30px;
-            border-radius: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-        }
-
-        h1 {
-            color: #667eea;
-            font-size: 32px;
-            margin-bottom: 10px;
-        }
-
-        .subtitle {
-            color: #666;
-            font-size: 14px;
-        }
-
-        .auth-section {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 25px;
-            border-radius: 15px;
-            margin-bottom: 20px;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
-        }
-
-        .input-group {
-            margin-bottom: 15px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 600;
-            font-size: 14px;
-        }
-
-        input, select, textarea {
-            width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            font-size: 14px;
-            transition: all 0.3s;
-            background: white;
-        }
-
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .btn {
-            padding: 12px 25px;
-            border: none;
-            border-radius: 10px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 14px;
-            margin-right: 10px;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-success {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            color: white;
-        }
-
-        .btn-warning {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-        }
-
-        .btn-danger {
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-            color: white;
-        }
-
-        .users-list {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
-        }
-
-        .user-card {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 15px;
-            transition: all 0.3s;
-        }
-
-        .user-card:hover {
-            transform: translateX(5px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-        }
-
-        .user-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .user-name {
-            font-size: 18px;
-            font-weight: 700;
-            color: #333;
-        }
-
-        .user-type {
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .type-owner {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .type-vip {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-        }
-
-        .type-premium {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            color: white;
-        }
-
-        .user-details {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 10px;
-            margin-bottom: 15px;
-            font-size: 13px;
-        }
-
-        .detail-item {
-            color: #666;
-        }
-
-        .detail-label {
-            font-weight: 600;
-            color: #333;
-        }
-
-        .status-active {
-            color: #38ef7d;
-            font-weight: 700;
-        }
-
-        .status-suspended {
-            color: #f5576c;
-            font-weight: 700;
-        }
-
-        .notification {
-            padding: 15px 20px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-            display: none;
-            animation: slideIn 0.3s;
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .notification.success {
-            background: #d4edda;
-            color: #155724;
-            border-left: 4px solid #28a745;
-        }
-
-        .notification.error {
-            background: #f8d7da;
-            color: #721c24;
-            border-left: 4px solid #dc3545;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 20px;
-            color: #667eea;
-            font-weight: 600;
-        }
-
-        .hidden {
-            display: none;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎯 VIP User Management</h1>
-            <p class="subtitle">StarshipCore Whitelist Manager</p>
-        </div>
-
-        <div id="notification" class="notification"></div>
-
-        <div class="auth-section">
-            <h2 style="margin-bottom: 20px; color: #333;">🔐 Admin Authentication</h2>
-            <div class="input-group">
-                <label for="adminSecret">Admin Secret Key</label>
-                <input type="password" id="adminSecret" placeholder="Enter your admin secret key">
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
-                <input type="checkbox" id="rememberSecret" style="width: auto; cursor: pointer;">
-                <label for="rememberSecret" style="margin: 0; cursor: pointer; font-weight: 400; font-size: 13px;">
-                    💾 Remember secret key (saved in browser)
-                </label>
-            </div>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button class="btn btn-primary" onclick="saveAndConnect()">🔓 Connect & Load Users</button>
-                <button class="btn btn-warning" onclick="forgetSecret()" id="forgetBtn" style="display: none;">🗑️ Forget Secret</button>
-            </div>
-            <div id="savedSecretIndicator" style="margin-top: 10px; padding: 10px; background: #d4edda; border-radius: 8px; color: #155724; font-size: 13px; display: none;">
-                ✅ <strong>Secret key saved!</strong> You don't need to enter it again.
-            </div>
-        </div>
-
-        <div class="auth-section">
-            <h2 style="margin-bottom: 20px; color: #333;">➕ Add New VIP User</h2>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
-                <div class="input-group">
-                    <label for="userId">User ID *</label>
-                    <input type="text" id="userId" placeholder="e.g., 123456789">
-                </div>
-                <div class="input-group">
-                    <label for="username">Username *</label>
-                    <input type="text" id="username" placeholder="e.g., JohnDoe_VIP">
-                </div>
-                <div class="input-group">
-                    <label for="userType">Type</label>
-                    <select id="userType">
-                        <option value="vip">VIP</option>
-                        <option value="premium">Premium</option>
-                        <option value="standard">Standard</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label for="expiresAt">Expires At (leave empty for lifetime)</label>
-                    <input type="datetime-local" id="expiresAt">
-                </div>
-                <div class="input-group">
-                    <label for="maxDevices">Max Devices</label>
-                    <input type="number" id="maxDevices" value="5" min="1">
-                </div>
-            </div>
-            <div class="input-group">
-                <label for="notes">Notes</label>
-                <textarea id="notes" rows="2" placeholder="Add any notes about this user..."></textarea>
-            </div>
-            <button class="btn btn-success" onclick="addUser()">➕ Add VIP User</button>
-        </div>
-
-        <div class="users-list">
-            <h2 style="margin-bottom: 20px; color: #333;">👥 Whitelisted Users</h2>
-            <div id="loadingIndicator" class="loading hidden">Loading users...</div>
-            <div id="usersList"></div>
-        </div>
-    </div>
-
-    <script>
-        const API_BASE = window.location.origin;
-        const SECRET_STORAGE_KEY = 'vip_admin_secret';
-
-        // Load saved secret on page load
-        window.addEventListener('DOMContentLoaded', () => {
-            loadSavedSecret();
-        });
-
-        function loadSavedSecret() {
-            const savedSecret = localStorage.getItem(SECRET_STORAGE_KEY);
-            if (savedSecret) {
-                document.getElementById('adminSecret').value = savedSecret;
-                document.getElementById('rememberSecret').checked = true;
-                document.getElementById('savedSecretIndicator').style.display = 'block';
-                document.getElementById('forgetBtn').style.display = 'inline-block';
-                // Auto-load users if secret is saved
-                loadUsers();
-            }
-        }
-
-        function saveSecretToStorage(secret) {
-            const remember = document.getElementById('rememberSecret').checked;
-            if (remember) {
-                localStorage.setItem(SECRET_STORAGE_KEY, secret);
-                document.getElementById('savedSecretIndicator').style.display = 'block';
-                document.getElementById('forgetBtn').style.display = 'inline-block';
-                showNotification('✅ Secret key saved to browser!', 'success');
-            }
-        }
-
-        function forgetSecret() {
-            if (confirm('Are you sure you want to forget the saved secret key?')) {
-                localStorage.removeItem(SECRET_STORAGE_KEY);
-                document.getElementById('adminSecret').value = '';
-                document.getElementById('rememberSecret').checked = false;
-                document.getElementById('savedSecretIndicator').style.display = 'none';
-                document.getElementById('forgetBtn').style.display = 'none';
-                document.getElementById('usersList').innerHTML = '';
-                showNotification('🗑️ Secret key removed from browser', 'success');
-            }
-        }
-
-        function saveAndConnect() {
-            const secret = getAdminSecret();
-            if (!secret) {
-                showNotification('Please enter admin secret key', 'error');
-                return;
-            }
-            saveSecretToStorage(secret);
-            loadUsers();
-        }
-
-        function showNotification(message, type = 'success') {
-            const notification = document.getElementById('notification');
-            notification.textContent = message;
-            notification.className = `notification ${type}`;
-            notification.style.display = 'block';
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 5000);
-        }
-
-        function getAdminSecret() {
-            return document.getElementById('adminSecret').value;
-        }
-
-        async function loadUsers() {
-            const secret = getAdminSecret();
-            if (!secret) {
-                showNotification('Please enter admin secret key', 'error');
-                return;
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>VIP User Management - StarshipCore</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
             }
 
-            document.getElementById('loadingIndicator').classList.remove('hidden');
-            document.getElementById('usersList').innerHTML = '';
+            body {
+                font-family:
+                    "Inter",
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                padding: 20px;
+            }
 
-            try {
-                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=list`, {
-                    headers: {
-                        'X-Admin-Secret': secret
-                    }
-                });
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+            }
 
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(data.message || 'Failed to load users');
+            .header {
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 30px;
+                border-radius: 20px;
+                margin-bottom: 20px;
+                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            }
+
+            h1 {
+                color: #667eea;
+                font-size: 32px;
+                margin-bottom: 10px;
+            }
+
+            .subtitle {
+                color: #666;
+                font-size: 14px;
+            }
+
+            .auth-section {
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 25px;
+                border-radius: 15px;
+                margin-bottom: 20px;
+                box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            }
+
+            .input-group {
+                margin-bottom: 15px;
+            }
+
+            label {
+                display: block;
+                margin-bottom: 8px;
+                color: #333;
+                font-weight: 600;
+                font-size: 14px;
+            }
+
+            input,
+            select,
+            textarea {
+                width: 100%;
+                padding: 12px 15px;
+                border: 2px solid #e0e0e0;
+                border-radius: 10px;
+                font-size: 14px;
+                transition: all 0.3s;
+                background: white;
+            }
+
+            input:focus,
+            select:focus,
+            textarea:focus {
+                outline: none;
+                border-color: #667eea;
+                box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            }
+
+            .btn {
+                padding: 12px 25px;
+                border: none;
+                border-radius: 10px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s;
+                font-size: 14px;
+                margin-right: 10px;
+                margin-bottom: 5px;
+            }
+
+            .btn-primary {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+
+            .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            }
+
+            .btn-success {
+                background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+                color: white;
+            }
+
+            .btn-warning {
+                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                color: white;
+            }
+
+            .btn-danger {
+                background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+                color: white;
+            }
+
+            .btn-mobile {
+                background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+                color: white;
+            }
+
+            .btn-pc {
+                background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+                color: white;
+            }
+
+            /* Platform Tabs */
+            .platform-tabs {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 20px;
+            }
+
+            .platform-tab {
+                flex: 1;
+                padding: 20px;
+                border: 3px solid transparent;
+                border-radius: 15px;
+                cursor: pointer;
+                transition: all 0.3s;
+                text-align: center;
+                background: rgba(255, 255, 255, 0.7);
+            }
+
+            .platform-tab:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+            }
+
+            .platform-tab.active {
+                border-color: #667eea;
+                background: white;
+                box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+            }
+
+            .platform-tab.active.pc {
+                border-color: #3b82f6;
+                box-shadow: 0 5px 20px rgba(59, 130, 246, 0.3);
+            }
+
+            .platform-tab.active.mobile {
+                border-color: #8b5cf6;
+                box-shadow: 0 5px 20px rgba(139, 92, 246, 0.3);
+            }
+
+            .platform-icon {
+                font-size: 40px;
+                margin-bottom: 10px;
+            }
+
+            .platform-title {
+                font-size: 18px;
+                font-weight: 700;
+                color: #333;
+            }
+
+            .platform-desc {
+                font-size: 12px;
+                color: #666;
+                margin-top: 5px;
+            }
+
+            .platform-count {
+                display: inline-block;
+                padding: 5px 12px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                margin-top: 10px;
+            }
+
+            .pc .platform-count {
+                background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+                color: white;
+            }
+
+            .mobile .platform-count {
+                background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+                color: white;
+            }
+
+            /* Stats Cards */
+            .stats-container {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 15px;
+                margin-bottom: 20px;
+            }
+
+            .stat-card {
+                background: white;
+                padding: 20px;
+                border-radius: 12px;
+                text-align: center;
+                box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            }
+
+            .stat-value {
+                font-size: 28px;
+                font-weight: 700;
+                color: #667eea;
+            }
+
+            .stat-label {
+                font-size: 12px;
+                color: #666;
+                margin-top: 5px;
+            }
+
+            .users-list {
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 25px;
+                border-radius: 15px;
+                box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            }
+
+            .user-card {
+                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                padding: 20px;
+                border-radius: 12px;
+                margin-bottom: 15px;
+                transition: all 0.3s;
+                border-left: 4px solid #667eea;
+            }
+
+            .user-card.pc {
+                border-left-color: #3b82f6;
+            }
+
+            .user-card.mobile {
+                border-left-color: #8b5cf6;
+            }
+
+            .user-card:hover {
+                transform: translateX(5px);
+                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            }
+
+            .user-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 15px;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            .user-name {
+                font-size: 18px;
+                font-weight: 700;
+                color: #333;
+            }
+
+            .user-badges {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .user-type {
+                padding: 5px 15px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+            }
+
+            .type-owner,
+            .type-mobile_owner {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+
+            .type-vip,
+            .type-mobile_vip {
+                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                color: white;
+            }
+
+            .type-premium {
+                background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+                color: white;
+            }
+
+            .type-standard {
+                background: linear-gradient(135deg, #868686 0%, #4a4a4a 100%);
+                color: white;
+            }
+
+            .platform-badge {
+                padding: 5px 12px;
+                border-radius: 20px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+
+            .platform-badge.pc {
+                background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+                color: white;
+            }
+
+            .platform-badge.mobile {
+                background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+                color: white;
+            }
+
+            .user-details {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 10px;
+                margin-bottom: 15px;
+                font-size: 13px;
+            }
+
+            .detail-item {
+                color: #666;
+            }
+
+            .detail-label {
+                font-weight: 600;
+                color: #333;
+            }
+
+            .status-active {
+                color: #38ef7d;
+                font-weight: 700;
+            }
+
+            .status-suspended {
+                color: #f5576c;
+                font-weight: 700;
+            }
+
+            .notification {
+                padding: 15px 20px;
+                border-radius: 10px;
+                margin-bottom: 15px;
+                display: none;
+                animation: slideIn 0.3s;
+            }
+
+            @keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .notification.success {
+                background: #d4edda;
+                color: #155724;
+                border-left: 4px solid #28a745;
+            }
+
+            .notification.error {
+                background: #f8d7da;
+                color: #721c24;
+                border-left: 4px solid #dc3545;
+            }
+
+            .loading {
+                text-align: center;
+                padding: 20px;
+                color: #667eea;
+                font-weight: 600;
+            }
+
+            .hidden {
+                display: none !important;
+            }
+
+            .section-title {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 20px;
+            }
+
+            .section-title h2 {
+                color: #333;
+                margin: 0;
+            }
+
+            .section-title .badge {
+                padding: 5px 12px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                color: white;
+            }
+
+            .section-title .badge.pc {
+                background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            }
+
+            .section-title .badge.mobile {
+                background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            }
+
+            .form-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 15px;
+            }
+
+            @media (max-width: 768px) {
+                .platform-tabs {
+                    flex-direction: column;
                 }
 
-                displayUsers(data.whitelist);
-                showNotification(`✅ Loaded ${Object.keys(data.whitelist).length} users`, 'success');
-            } catch (error) {
-                showNotification(`❌ Error: ${error.message}`, 'error');
-            } finally {
-                document.getElementById('loadingIndicator').classList.add('hidden');
-            }
-        }
+                h1 {
+                    font-size: 24px;
+                }
 
-        function displayUsers(whitelist) {
-            const container = document.getElementById('usersList');
-            
-            if (!whitelist || Object.keys(whitelist).length === 0) {
-                container.innerHTML = '<p style="text-align: center; color: #999;">No users found</p>';
-                return;
+                .user-header {
+                    flex-direction: column;
+                    align-items: flex-start;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🎯 VIP User Management</h1>
+                <p class="subtitle">
+                    StarshipCore Whitelist Manager - PC & Mobile
+                </p>
+            </div>
+
+            <div id="notification" class="notification"></div>
+
+            <!-- Admin Authentication -->
+            <div class="auth-section">
+                <h2 style="margin-bottom: 20px; color: #333">
+                    🔐 Admin Authentication
+                </h2>
+                <div class="input-group">
+                    <label for="adminSecret">Admin Secret Key</label>
+                    <input
+                        type="password"
+                        id="adminSecret"
+                        placeholder="Enter your admin secret key"
+                    />
+                </div>
+                <div
+                    style="
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        margin-bottom: 15px;
+                    "
+                >
+                    <input
+                        type="checkbox"
+                        id="rememberSecret"
+                        style="width: auto; cursor: pointer"
+                    />
+                    <label
+                        for="rememberSecret"
+                        style="
+                            margin: 0;
+                            cursor: pointer;
+                            font-weight: 400;
+                            font-size: 13px;
+                        "
+                    >
+                        💾 Remember secret key (saved in browser)
+                    </label>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap">
+                    <button class="btn btn-primary" onclick="saveAndConnect()">
+                        🔓 Connect & Load Users
+                    </button>
+                    <button
+                        class="btn btn-warning"
+                        onclick="forgetSecret()"
+                        id="forgetBtn"
+                        style="display: none"
+                    >
+                        🗑️ Forget Secret
+                    </button>
+                </div>
+                <div
+                    id="savedSecretIndicator"
+                    style="
+                        margin-top: 10px;
+                        padding: 10px;
+                        background: #d4edda;
+                        border-radius: 8px;
+                        color: #155724;
+                        font-size: 13px;
+                        display: none;
+                    "
+                >
+                    ✅ <strong>Secret key saved!</strong> You don't need to
+                    enter it again.
+                </div>
+            </div>
+
+            <!-- Platform Tabs -->
+            <div class="platform-tabs">
+                <div
+                    class="platform-tab pc active"
+                    onclick="switchPlatform('pc')"
+                >
+                    <div class="platform-icon">💻</div>
+                    <div class="platform-title">PC Users</div>
+                    <div class="platform-desc">Desktop/Laptop VIP Access</div>
+                    <div class="platform-count" id="pcCount">0 users</div>
+                </div>
+                <div
+                    class="platform-tab mobile"
+                    onclick="switchPlatform('mobile')"
+                >
+                    <div class="platform-icon">📱</div>
+                    <div class="platform-title">Mobile Users</div>
+                    <div class="platform-desc">Phone/Tablet VIP Access</div>
+                    <div class="platform-count" id="mobileCount">0 users</div>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="stats-container" id="statsContainer">
+                <div class="stat-card">
+                    <div class="stat-value" id="statTotal">0</div>
+                    <div class="stat-label">Total Users</div>
+                </div>
+                <div class="stat-card">
+                    <div
+                        class="stat-value"
+                        id="statActive"
+                        style="color: #38ef7d"
+                    >
+                        0
+                    </div>
+                    <div class="stat-label">Active</div>
+                </div>
+                <div class="stat-card">
+                    <div
+                        class="stat-value"
+                        id="statSuspended"
+                        style="color: #f5576c"
+                    >
+                        0
+                    </div>
+                    <div class="stat-label">Suspended</div>
+                </div>
+                <div class="stat-card">
+                    <div
+                        class="stat-value"
+                        id="statExpired"
+                        style="color: #f59e0b"
+                    >
+                        0
+                    </div>
+                    <div class="stat-label">Expired</div>
+                </div>
+            </div>
+
+            <!-- Add User Form -->
+            <div class="auth-section">
+                <div class="section-title">
+                    <h2>➕ Add New VIP User</h2>
+                    <span class="badge pc" id="addFormBadge">💻 PC</span>
+                </div>
+                <div class="form-grid">
+                    <div class="input-group">
+                        <label for="userId">User ID *</label>
+                        <input
+                            type="text"
+                            id="userId"
+                            placeholder="e.g., 123456789"
+                        />
+                    </div>
+                    <div class="input-group">
+                        <label for="username">Username *</label>
+                        <input
+                            type="text"
+                            id="username"
+                            placeholder="e.g., JohnDoe_VIP"
+                        />
+                    </div>
+                    <div class="input-group">
+                        <label for="userType">Type</label>
+                        <select id="userType">
+                            <option value="vip">VIP</option>
+                            <option value="premium">Premium</option>
+                            <option value="standard">Standard</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="duration">Duration</label>
+                        <select id="duration">
+                            <option value="lifetime">
+                                Lifetime (Never expires)
+                            </option>
+                            <option value="7">7 Days</option>
+                            <option value="14">14 Days</option>
+                            <option value="30">30 Days</option>
+                            <option value="60">60 Days</option>
+                            <option value="90">90 Days</option>
+                            <option value="180">180 Days</option>
+                            <option value="365">365 Days (1 Year)</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="maxDevices">Max Devices</label>
+                        <input
+                            type="number"
+                            id="maxDevices"
+                            value="3"
+                            min="1"
+                            max="10"
+                        />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="notes">Notes</label>
+                    <textarea
+                        id="notes"
+                        rows="2"
+                        placeholder="Add any notes about this user..."
+                    ></textarea>
+                </div>
+                <button
+                    class="btn btn-success"
+                    onclick="addUser()"
+                    id="addUserBtn"
+                >
+                    ➕ Add PC VIP User
+                </button>
+            </div>
+
+            <!-- Users List -->
+            <div class="users-list">
+                <div class="section-title">
+                    <h2>👥 Whitelisted Users</h2>
+                    <span class="badge pc" id="listBadge">💻 PC</span>
+                </div>
+                <div id="loadingIndicator" class="loading hidden">
+                    Loading users...
+                </div>
+                <div id="usersList"></div>
+            </div>
+        </div>
+
+        <script>
+            const API_BASE = window.location.origin;
+            const SECRET_STORAGE_KEY = "vip_admin_secret";
+
+            let currentPlatform = "pc";
+            let pcUsers = {};
+            let mobileUsers = {};
+
+            // Initialize on page load
+            document.addEventListener("DOMContentLoaded", () => {
+                loadSavedSecret();
+            });
+
+            function loadSavedSecret() {
+                const savedSecret = localStorage.getItem(SECRET_STORAGE_KEY);
+                if (savedSecret) {
+                    document.getElementById("adminSecret").value = savedSecret;
+                    document.getElementById("rememberSecret").checked = true;
+                    document.getElementById(
+                        "savedSecretIndicator",
+                    ).style.display = "block";
+                    document.getElementById("forgetBtn").style.display =
+                        "inline-block";
+                    // Auto-load users
+                    loadAllUsers();
+                }
             }
 
-            container.innerHTML = Object.values(whitelist).map(user => `
-                <div class="user-card">
+            function saveSecretToStorage(secret) {
+                const remember =
+                    document.getElementById("rememberSecret").checked;
+                if (remember && secret) {
+                    localStorage.setItem(SECRET_STORAGE_KEY, secret);
+                    document.getElementById(
+                        "savedSecretIndicator",
+                    ).style.display = "block";
+                    document.getElementById("forgetBtn").style.display =
+                        "inline-block";
+                }
+            }
+
+            function forgetSecret() {
+                localStorage.removeItem(SECRET_STORAGE_KEY);
+                document.getElementById("adminSecret").value = "";
+                document.getElementById("rememberSecret").checked = false;
+                document.getElementById("savedSecretIndicator").style.display =
+                    "none";
+                document.getElementById("forgetBtn").style.display = "none";
+                document.getElementById("usersList").innerHTML = "";
+                showNotification("🗑️ Secret key forgotten", "success");
+            }
+
+            function saveAndConnect() {
+                const secret = document.getElementById("adminSecret").value;
+                if (!secret) {
+                    showNotification("Please enter admin secret key", "error");
+                    return;
+                }
+                saveSecretToStorage(secret);
+                loadAllUsers();
+            }
+
+            function showNotification(message, type) {
+                const notification = document.getElementById("notification");
+                notification.textContent = message;
+                notification.className = `notification ${type}`;
+                notification.style.display = "block";
+                setTimeout(() => {
+                    notification.style.display = "none";
+                }, 5000);
+            }
+
+            function getAdminSecret() {
+                return document.getElementById("adminSecret").value;
+            }
+
+            function switchPlatform(platform) {
+                currentPlatform = platform;
+
+                // Update tabs
+                document.querySelectorAll(".platform-tab").forEach((tab) => {
+                    tab.classList.remove("active");
+                });
+                document
+                    .querySelector(`.platform-tab.${platform}`)
+                    .classList.add("active");
+
+                // Update badges
+                const badgeText = platform === "pc" ? "💻 PC" : "📱 Mobile";
+                const badgeClass = platform;
+
+                document.getElementById("addFormBadge").textContent = badgeText;
+                document.getElementById("addFormBadge").className =
+                    `badge ${badgeClass}`;
+                document.getElementById("listBadge").textContent = badgeText;
+                document.getElementById("listBadge").className =
+                    `badge ${badgeClass}`;
+
+                // Update button
+                document.getElementById("addUserBtn").textContent =
+                    platform === "pc"
+                        ? "➕ Add PC VIP User"
+                        : "➕ Add Mobile VIP User";
+                document.getElementById("addUserBtn").className =
+                    platform === "pc" ? "btn btn-pc" : "btn btn-mobile";
+
+                // Update max devices default
+                document.getElementById("maxDevices").value =
+                    platform === "pc" ? "3" : "2";
+
+                // Display users for selected platform
+                displayUsers();
+                updateStats();
+            }
+
+            async function loadAllUsers() {
+                const secret = getAdminSecret();
+                if (!secret) {
+                    showNotification("Please enter admin secret key", "error");
+                    return;
+                }
+
+                document
+                    .getElementById("loadingIndicator")
+                    .classList.remove("hidden");
+                document.getElementById("usersList").innerHTML = "";
+
+                try {
+                    // Load PC users
+                    const pcResponse = await fetch(
+                        `${API_BASE}/api/whitelist-manager?action=list`,
+                        {
+                            headers: { "X-Admin-Secret": secret },
+                        },
+                    );
+                    const pcData = await pcResponse.json();
+
+                    if (pcResponse.ok) {
+                        pcUsers = pcData.whitelist || {};
+                    } else {
+                        throw new Error(
+                            pcData.message || "Failed to load PC users",
+                        );
+                    }
+
+                    // Load Mobile users
+                    const mobileResponse = await fetch(
+                        `${API_BASE}/api/mobile-whitelist-manager`,
+                        {
+                            headers: { "X-Admin-Secret": secret },
+                        },
+                    );
+                    const mobileData = await mobileResponse.json();
+
+                    if (mobileResponse.ok) {
+                        // Convert array to object if needed
+                        if (mobileData.users) {
+                            mobileUsers = {};
+                            mobileData.users.forEach((user) => {
+                                mobileUsers[user.userId] = user;
+                            });
+                        } else {
+                            mobileUsers = mobileData.whitelist || {};
+                        }
+                    }
+
+                    // Update counts
+                    document.getElementById("pcCount").textContent =
+                        `${Object.keys(pcUsers).length} users`;
+                    document.getElementById("mobileCount").textContent =
+                        `${Object.keys(mobileUsers).length} users`;
+
+                    displayUsers();
+                    updateStats();
+
+                    const totalUsers =
+                        Object.keys(pcUsers).length +
+                        Object.keys(mobileUsers).length;
+                    showNotification(
+                        `✅ Loaded ${totalUsers} total users (PC: ${Object.keys(pcUsers).length}, Mobile: ${Object.keys(mobileUsers).length})`,
+                        "success",
+                    );
+                } catch (error) {
+                    showNotification(`❌ Error: ${error.message}`, "error");
+                } finally {
+                    document
+                        .getElementById("loadingIndicator")
+                        .classList.add("hidden");
+                }
+            }
+
+            function updateStats() {
+                const users = currentPlatform === "pc" ? pcUsers : mobileUsers;
+                const userList = Object.values(users);
+
+                const total = userList.length;
+                const active = userList.filter(
+                    (u) => u.status === "active",
+                ).length;
+                const suspended = userList.filter(
+                    (u) => u.status === "suspended",
+                ).length;
+                const expired = userList.filter((u) => {
+                    if (!u.expiresAt) return false;
+                    return new Date(u.expiresAt) < new Date();
+                }).length;
+
+                document.getElementById("statTotal").textContent = total;
+                document.getElementById("statActive").textContent = active;
+                document.getElementById("statSuspended").textContent =
+                    suspended;
+                document.getElementById("statExpired").textContent = expired;
+            }
+
+            function displayUsers() {
+                const container = document.getElementById("usersList");
+                const users = currentPlatform === "pc" ? pcUsers : mobileUsers;
+
+                if (!users || Object.keys(users).length === 0) {
+                    container.innerHTML = `<p style="text-align: center; color: #999; padding: 40px;">No ${currentPlatform.toUpperCase()} users found</p>`;
+                    return;
+                }
+
+                const platformIcon = currentPlatform === "pc" ? "💻" : "📱";
+                const platformClass = currentPlatform;
+
+                container.innerHTML = Object.entries(users)
+                    .map(([userId, user]) => {
+                        const userType = user.type || "vip";
+                        const maxDevices =
+                            user.maxDevices ||
+                            user.restrictions?.maxDevices ||
+                            "Unlimited";
+                        const addedAt = user.addedAt
+                            ? new Date(user.addedAt).toLocaleDateString()
+                            : "Unknown";
+                        const expiresAt = user.expiresAt
+                            ? new Date(user.expiresAt).toLocaleDateString()
+                            : "Never";
+                        const isExpired =
+                            user.expiresAt &&
+                            new Date(user.expiresAt) < new Date();
+                        const status = isExpired
+                            ? "expired"
+                            : user.status || "active";
+
+                        return `
+                <div class="user-card ${platformClass}">
                     <div class="user-header">
                         <div>
-                            <div class="user-name">${user.username}</div>
-                            <div style="color: #666; font-size: 12px; margin-top: 3px;">ID: ${user.userId}</div>
+                            <div class="user-name">${user.username || "Unknown"}</div>
+                            <div style="color: #666; font-size: 12px; margin-top: 3px;">ID: ${userId}</div>
                         </div>
-                        <span class="user-type type-${user.type}">${user.type}</span>
+                        <div class="user-badges">
+                            <span class="platform-badge ${platformClass}">${platformIcon} ${currentPlatform.toUpperCase()}</span>
+                            <span class="user-type type-${userType.toLowerCase()}">${userType}</span>
+                        </div>
                     </div>
                     <div class="user-details">
                         <div class="detail-item">
-                            <span class="detail-label">Status:</span> 
-                            <span class="status-${user.status}">${user.status.toUpperCase()}</span>
+                            <span class="detail-label">Status:</span>
+                            <span class="status-${status}">${status.toUpperCase()}</span>
                         </div>
                         <div class="detail-item">
-                            <span class="detail-label">Max Devices:</span> ${user.restrictions.maxDevices || 'Unlimited'}
+                            <span class="detail-label">Max Devices:</span> ${maxDevices}
                         </div>
                         <div class="detail-item">
-                            <span class="detail-label">Expires:</span> ${user.expiresAt ? new Date(user.expiresAt).toLocaleDateString() : 'Never'}
+                            <span class="detail-label">Expires:</span> ${expiresAt} ${isExpired ? "⚠️" : ""}
                         </div>
                         <div class="detail-item">
-                            <span class="detail-label">Added:</span> ${new Date(user.addedAt).toLocaleDateString()}
+                            <span class="detail-label">Added:</span> ${addedAt}
                         </div>
                     </div>
-                    ${user.notes ? `<div style="color: #666; font-size: 13px; margin-top: 10px; font-style: italic;">📝 ${user.notes}</div>` : ''}
+                    ${user.notes || user.note ? `<div style="color: #666; font-size: 13px; margin-top: 10px; font-style: italic;">📝 ${user.notes || user.note}</div>` : ""}
                     <div style="margin-top: 15px;">
-                        ${user.status === 'active' && user.type !== 'owner' ? 
-                            `<button class="btn btn-warning" onclick="suspendUser('${user.userId}')">⏸️ Suspend</button>` : 
-                            user.status === 'suspended' ? 
-                            `<button class="btn btn-success" onclick="reactivateUser('${user.userId}')">▶️ Reactivate</button>` : ''
+                        ${
+                            status === "active" &&
+                            !userType.toLowerCase().includes("owner")
+                                ? `<button class="btn btn-warning" onclick="suspendUser('${userId}')">⏸️ Suspend</button>`
+                                : status === "suspended"
+                                  ? `<button class="btn btn-success" onclick="reactivateUser('${userId}')">▶️ Reactivate</button>`
+                                  : ""
                         }
-                        ${user.type !== 'owner' ? 
-                            `<button class="btn btn-danger" onclick="removeUser('${user.userId}', '${user.username}')">🗑️ Remove</button>` : ''
+                        ${
+                            !userType.toLowerCase().includes("owner")
+                                ? `<button class="btn btn-danger" onclick="removeUser('${userId}', '${user.username || "Unknown"}')">🗑️ Remove</button>`
+                                : ""
                         }
                     </div>
                 </div>
-            `).join('');
-        }
-
-        async function addUser() {
-            const secret = getAdminSecret();
-            if (!secret) {
-                showNotification('Please enter admin secret key', 'error');
-                return;
-            }
-
-            const userId = document.getElementById('userId').value;
-            const username = document.getElementById('username').value;
-            const userType = document.getElementById('userType').value;
-            const expiresAt = document.getElementById('expiresAt').value;
-            const maxDevices = parseInt(document.getElementById('maxDevices').value);
-            const notes = document.getElementById('notes').value;
-
-            if (!userId || !username) {
-                showNotification('User ID and Username are required', 'error');
-                return;
-            }
-
-            try {
-                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=add`, {
-                    method: 'POST',
-                    headers: {
-                        'X-Admin-Secret': secret,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        userId,
-                        username,
-                        type: userType,
-                        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
-                        maxDevices,
-                        notes
+            `;
                     })
-                });
+                    .join("");
+            }
 
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(data.message || data.error || 'Failed to add user');
+            async function addUser() {
+                const secret = getAdminSecret();
+                if (!secret) {
+                    showNotification("Please enter admin secret key", "error");
+                    return;
                 }
 
-                showNotification(`✅ ${data.message}`, 'success');
-                
-                // Clear form
-                document.getElementById('userId').value = '';
-                document.getElementById('username').value = '';
-                document.getElementById('expiresAt').value = '';
-                document.getElementById('maxDevices').value = '5';
-                document.getElementById('notes').value = '';
-                
-                // Reload users
-                loadUsers();
-            } catch (error) {
-                showNotification(`❌ Error: ${error.message}`, 'error');
-            }
-        }
+                const userId = document.getElementById("userId").value;
+                const username = document.getElementById("username").value;
+                const userType = document.getElementById("userType").value;
+                const duration = document.getElementById("duration").value;
+                const maxDevices = parseInt(
+                    document.getElementById("maxDevices").value,
+                );
+                const notes = document.getElementById("notes").value;
 
-        async function suspendUser(userId) {
-            if (!confirm(`Are you sure you want to suspend user ${userId}?`)) return;
-
-            const secret = getAdminSecret();
-            try {
-                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=suspend`, {
-                    method: 'POST',
-                    headers: {
-                        'X-Admin-Secret': secret,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ userId })
-                });
-
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(data.message || 'Failed to suspend user');
+                if (!userId || !username) {
+                    showNotification(
+                        "User ID and Username are required",
+                        "error",
+                    );
+                    return;
                 }
 
-                showNotification(`✅ ${data.message}`, 'success');
-                loadUsers();
-            } catch (error) {
-                showNotification(`❌ Error: ${error.message}`, 'error');
-            }
-        }
-
-        async function reactivateUser(userId) {
-            const secret = getAdminSecret();
-            try {
-                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=reactivate`, {
-                    method: 'POST',
-                    headers: {
-                        'X-Admin-Secret': secret,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ userId })
-                });
-
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(data.message || 'Failed to reactivate user');
+                // Calculate expiry date
+                let expiresAt = null;
+                if (duration !== "lifetime") {
+                    const days = parseInt(duration);
+                    expiresAt = new Date(
+                        Date.now() + days * 24 * 60 * 60 * 1000,
+                    ).toISOString();
                 }
 
-                showNotification(`✅ ${data.message}`, 'success');
-                loadUsers();
-            } catch (error) {
-                showNotification(`❌ Error: ${error.message}`, 'error');
+                try {
+                    let response;
+
+                    if (currentPlatform === "pc") {
+                        response = await fetch(
+                            `${API_BASE}/api/whitelist-manager?action=add`,
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "X-Admin-Secret": secret,
+                                },
+                                body: JSON.stringify({
+                                    userId,
+                                    username,
+                                    type: userType.toUpperCase(),
+                                    expiresAt,
+                                    maxDevices,
+                                    notes,
+                                    status: "active",
+                                }),
+                            },
+                        );
+                    } else {
+                        // Mobile
+                        response = await fetch(
+                            `${API_BASE}/api/mobile-whitelist-manager`,
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "X-Admin-Secret": secret,
+                                },
+                                body: JSON.stringify({
+                                    userId,
+                                    username,
+                                    type: `MOBILE_${userType.toUpperCase()}`,
+                                    duration:
+                                        duration === "lifetime"
+                                            ? "lifetime"
+                                            : duration,
+                                    maxDevices,
+                                    notes,
+                                }),
+                            },
+                        );
+                    }
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showNotification(
+                            `✅ ${username} added to ${currentPlatform.toUpperCase()} whitelist!`,
+                            "success",
+                        );
+
+                        // Clear form
+                        document.getElementById("userId").value = "";
+                        document.getElementById("username").value = "";
+                        document.getElementById("notes").value = "";
+
+                        // Reload users
+                        await loadAllUsers();
+                    } else {
+                        throw new Error(data.message || "Failed to add user");
+                    }
+                } catch (error) {
+                    showNotification(`❌ Error: ${error.message}`, "error");
+                }
             }
-        }
 
-        async function removeUser(userId, username) {
-            if (!confirm(`Are you sure you want to REMOVE user ${username} (${userId})? This cannot be undone!`)) return;
-
-            const secret = getAdminSecret();
-            try {
-                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=remove`, {
-                    method: 'DELETE',
-                    headers: {
-                        'X-Admin-Secret': secret,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ userId })
-                });
-
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(data.message || 'Failed to remove user');
+            async function suspendUser(userId) {
+                const secret = getAdminSecret();
+                if (!secret) {
+                    showNotification("Please enter admin secret key", "error");
+                    return;
                 }
 
-                showNotification(`✅ ${data.message}`, 'success');
-                loadUsers();
-            } catch (error) {
-                showNotification(`❌ Error: ${error.message}`, 'error');
+                if (
+                    !confirm(`Are you sure you want to suspend user ${userId}?`)
+                ) {
+                    return;
+                }
+
+                try {
+                    let response;
+
+                    if (currentPlatform === "pc") {
+                        response = await fetch(
+                            `${API_BASE}/api/whitelist-manager?action=update`,
+                            {
+                                method: "PUT",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "X-Admin-Secret": secret,
+                                },
+                                body: JSON.stringify({
+                                    userId,
+                                    status: "suspended",
+                                }),
+                            },
+                        );
+                    } else {
+                        response = await fetch(
+                            `${API_BASE}/api/mobile-whitelist-manager`,
+                            {
+                                method: "PUT",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "X-Admin-Secret": secret,
+                                },
+                                body: JSON.stringify({
+                                    userId,
+                                    status: "suspended",
+                                }),
+                            },
+                        );
+                    }
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showNotification(
+                            `⏸️ User ${userId} has been suspended`,
+                            "success",
+                        );
+                        await loadAllUsers();
+                    } else {
+                        throw new Error(
+                            data.message || "Failed to suspend user",
+                        );
+                    }
+                } catch (error) {
+                    showNotification(`❌ Error: ${error.message}`, "error");
+                }
             }
-        }
-    </script>
-</body>
+
+            async function reactivateUser(userId) {
+                const secret = getAdminSecret();
+                if (!secret) {
+                    showNotification("Please enter admin secret key", "error");
+                    return;
+                }
+
+                try {
+                    let response;
+
+                    if (currentPlatform === "pc") {
+                        response = await fetch(
+                            `${API_BASE}/api/whitelist-manager?action=update`,
+                            {
+                                method: "PUT",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "X-Admin-Secret": secret,
+                                },
+                                body: JSON.stringify({
+                                    userId,
+                                    status: "active",
+                                }),
+                            },
+                        );
+                    } else {
+                        response = await fetch(
+                            `${API_BASE}/api/mobile-whitelist-manager`,
+                            {
+                                method: "PUT",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "X-Admin-Secret": secret,
+                                },
+                                body: JSON.stringify({
+                                    userId,
+                                    status: "active",
+                                }),
+                            },
+                        );
+                    }
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showNotification(
+                            `▶️ User ${userId} has been reactivated`,
+                            "success",
+                        );
+                        await loadAllUsers();
+                    } else {
+                        throw new Error(
+                            data.message || "Failed to reactivate user",
+                        );
+                    }
+                } catch (error) {
+                    showNotification(`❌ Error: ${error.message}`, "error");
+                }
+            }
+
+            async function removeUser(userId, username) {
+                const secret = getAdminSecret();
+                if (!secret) {
+                    showNotification("Please enter admin secret key", "error");
+                    return;
+                }
+
+                if (
+                    !confirm(
+                        `⚠️ Are you sure you want to PERMANENTLY REMOVE ${username} (${userId}) from ${currentPlatform.toUpperCase()} whitelist?\n\nThis action cannot be undone!`,
+                    )
+                ) {
+                    return;
+                }
+
+                try {
+                    let response;
+
+                    if (currentPlatform === "pc") {
+                        response = await fetch(
+                            `${API_BASE}/api/whitelist-manager?action=remove`,
+                            {
+                                method: "DELETE",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "X-Admin-Secret": secret,
+                                },
+                                body: JSON.stringify({ userId }),
+                            },
+                        );
+                    } else {
+                        response = await fetch(
+                            `${API_BASE}/api/mobile-whitelist-manager`,
+                            {
+                                method: "DELETE",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "X-Admin-Secret": secret,
+                                },
+                                body: JSON.stringify({ userId }),
+                            },
+                        );
+                    }
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showNotification(
+                            `🗑️ ${username} has been removed from ${currentPlatform.toUpperCase()} whitelist`,
+                            "success",
+                        );
+                        await loadAllUsers();
+                    } else {
+                        throw new Error(
+                            data.message || "Failed to remove user",
+                        );
+                    }
+                } catch (error) {
+                    showNotification(`❌ Error: ${error.message}`, "error");
+                }
+            }
+
+            // Quick search/filter functionality
+            function filterUsers(searchTerm) {
+                const users = currentPlatform === "pc" ? pcUsers : mobileUsers;
+                const container = document.getElementById("usersList");
+
+                if (!searchTerm) {
+                    displayUsers();
+                    return;
+                }
+
+                const filtered = {};
+                Object.entries(users).forEach(([userId, user]) => {
+                    if (
+                        userId.includes(searchTerm) ||
+                        (user.username &&
+                            user.username
+                                .toLowerCase()
+                                .includes(searchTerm.toLowerCase()))
+                    ) {
+                        filtered[userId] = user;
+                    }
+                });
+
+                const platformIcon = currentPlatform === "pc" ? "💻" : "📱";
+                const platformClass = currentPlatform;
+
+                if (Object.keys(filtered).length === 0) {
+                    container.innerHTML = `<p style="text-align: center; color: #999; padding: 40px;">No users found matching "${searchTerm}"</p>`;
+                    return;
+                }
+
+                container.innerHTML = Object.entries(filtered)
+                    .map(([userId, user]) => {
+                        const userType = user.type || "vip";
+                        const maxDevices =
+                            user.maxDevices ||
+                            user.restrictions?.maxDevices ||
+                            "Unlimited";
+                        const addedAt = user.addedAt
+                            ? new Date(user.addedAt).toLocaleDateString()
+                            : "Unknown";
+                        const expiresAt = user.expiresAt
+                            ? new Date(user.expiresAt).toLocaleDateString()
+                            : "Never";
+                        const isExpired =
+                            user.expiresAt &&
+                            new Date(user.expiresAt) < new Date();
+                        const status = isExpired
+                            ? "expired"
+                            : user.status || "active";
+
+                        return `
+                <div class="user-card ${platformClass}">
+                    <div class="user-header">
+                        <div>
+                            <div class="user-name">${user.username || "Unknown"}</div>
+                            <div style="color: #666; font-size: 12px; margin-top: 3px;">ID: ${userId}</div>
+                        </div>
+                        <div class="user-badges">
+                            <span class="platform-badge ${platformClass}">${platformIcon} ${currentPlatform.toUpperCase()}</span>
+                            <span class="user-type type-${userType.toLowerCase()}">${userType}</span>
+                        </div>
+                    </div>
+                    <div class="user-details">
+                        <div class="detail-item">
+                            <span class="detail-label">Status:</span>
+                            <span class="status-${status}">${status.toUpperCase()}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Max Devices:</span> ${maxDevices}
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Expires:</span> ${expiresAt} ${isExpired ? "⚠️" : ""}
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Added:</span> ${addedAt}
+                        </div>
+                    </div>
+                    ${user.notes || user.note ? `<div style="color: #666; font-size: 13px; margin-top: 10px; font-style: italic;">📝 ${user.notes || user.note}</div>` : ""}
+                    <div style="margin-top: 15px;">
+                        ${
+                            status === "active" &&
+                            !userType.toLowerCase().includes("owner")
+                                ? `<button class="btn btn-warning" onclick="suspendUser('${userId}')">⏸️ Suspend</button>`
+                                : status === "suspended"
+                                  ? `<button class="btn btn-success" onclick="reactivateUser('${userId}')">▶️ Reactivate</button>`
+                                  : ""
+                        }
+                        ${
+                            !userType.toLowerCase().includes("owner")
+                                ? `<button class="btn btn-danger" onclick="removeUser('${userId}', '${user.username || "Unknown"}')">🗑️ Remove</button>`
+                                : ""
+                        }
+                    </div>
+                </div>
+            `;
+                    })
+                    .join("");
+            }
+        </script>
+    </body>
 </html>

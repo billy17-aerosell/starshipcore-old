@@ -21,25 +21,37 @@ local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/rel
 -- CREATE WINDOW
 -- ══════════════════════════════════════════════════════════════════
 local Window = WindUI:CreateWindow({
-    Title = "Starship Mobile",
-    Icon = "rocket",
-    Author = "Starship Team",
+    Title = "STARSHIP PREMIUM",
     Folder = "StarshipMobile",
+    Author = "By StarshipCore Team",
     Size = UDim2.fromOffset(420, 520),
     Transparent = true,
     Theme = "Dark",
     SideBarWidth = 140,
+    User = {
+        Enabled = true,
+        Anonymous = true, -- Set to true to hide real username
+        Callback = function()
+            -- Optional: callback when profile is clicked
+            WindUI:Notify({
+                Title = "Profile",
+                Content = "Welcome, " .. Players.LocalPlayer.DisplayName .. "!",
+                Duration = 3,
+            })
+        end,
+    },
     Topbar = {
         Height = 44,
         ButtonsType = "Default", -- "Default" or "Mac" style buttons (minimize, close)
     },
     OpenButton = {
         Title = "STARSHIP-CORE",
+        Icon = "rbxassetid://91946746369709",
         CornerRadius = UDim.new(1, 0), -- Fully rounded
         StrokeThickness = 2,
         Enabled = true,
-        Draggable = true, -- Bisa di-drag ke posisi yang diinginkan
-        OnlyMobile = false, -- Muncul di PC dan Mobile
+        Draggable = true,              -- Bisa di-drag ke posisi yang diinginkan
+        OnlyMobile = false,            -- Muncul di PC dan Mobile
         Color = ColorSequence.new(
             Color3.fromHex("#6366f1"), -- Indigo
             Color3.fromHex("#8b5cf6")  -- Purple gradient
@@ -48,13 +60,101 @@ local Window = WindUI:CreateWindow({
 })
 
 -- ══════════════════════════════════════════════════════════════════
+-- FPS, PING & ROLE TAGS (Top bar display)
+-- ══════════════════════════════════════════════════════════════════
+
+-- Get session data from StarshipSession (set by main loader)
+local function GetSessionData()
+    local session = getgenv().StarshipSession or {}
+    return {
+        Role = session.Role or "VIP",
+        Duration = session.Duration or "LIFETIME",
+        Expiry = session.Expiry
+    }
+end
+
+local sessionData = GetSessionData()
+
+-- Role Tag (VIP/OWNER)
+local roleColor = "#a855f7" -- Purple default
+if sessionData.Role == "OWNER" then
+    roleColor = "#f59e0b"   -- Orange/Gold for OWNER
+elseif sessionData.Role == "VIP" then
+    roleColor = "#a855f7"   -- Purple for VIP
+end
+
+local RoleTag = Window:Tag({
+    Title = sessionData.Role,
+    Color = Color3.fromHex(roleColor)
+})
+
+local FPSTag = Window:Tag({
+    Title = "FPS: 0",
+    Icon = "monitor",
+    Color = Color3.fromHex("#22c55e")
+})
+
+local PingTag = Window:Tag({
+    Title = "PING: 0ms",
+    Icon = "wifi",
+    Color = Color3.fromHex("#3b82f6")
+})
+
+-- Live update FPS & PING
+task.spawn(function()
+    local frameCount = 0
+    local lastTime = tick()
+
+    RunService.Heartbeat:Connect(function()
+        frameCount = frameCount + 1
+
+        local now = tick()
+        if now - lastTime >= 1 then
+            -- Update FPS
+            local fps = math.floor(frameCount / (now - lastTime))
+            local fpsColor = "#22c55e" -- Green
+            if fps < 30 then
+                fpsColor = "#ef4444"   -- Red
+            elseif fps < 50 then
+                fpsColor = "#eab308"   -- Yellow
+            end
+
+            pcall(function()
+                FPSTag:SetTitle("FPS: " .. fps)
+                FPSTag:SetColor(Color3.fromHex(fpsColor))
+            end)
+
+            -- Update Ping
+            local ping = 0
+            pcall(function()
+                ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+            end)
+
+            local pingColor = "#3b82f6" -- Blue
+            if ping > 150 then
+                pingColor = "#ef4444"   -- Red
+            elseif ping > 80 then
+                pingColor = "#eab308"   -- Yellow
+            end
+
+            pcall(function()
+                PingTag:SetTitle("PING: " .. ping .. "ms")
+                PingTag:SetColor(Color3.fromHex(pingColor))
+            end)
+
+            frameCount = 0
+            lastTime = now
+        end
+    end)
+end)
+
+-- ══════════════════════════════════════════════════════════════════
 -- VARIABLES
 -- ══════════════════════════════════════════════════════════════════
 local Connections = {}
 local Config = {
     WalkSpeed = 16,
     JumpPower = 50,
-    Gravity = 196.2,
     FlySpeed = 50,
 }
 
@@ -80,38 +180,65 @@ end
 -- ══════════════════════════════════════════════════════════════════
 local DashboardTab = Window:Tab({
     Title = "Dashboard",
-    Icon = "home",
+    Icon = "layout-dashboard",
 })
-local function GetAccountInfo()
-    local name = LocalPlayer.DisplayName
-    local user = LocalPlayer.Name
-    local age = LocalPlayer.AccountAge
-    local date = os.date("%d %B %Y")
-    local info = ""
-    info = info .. "[O] Display Name: " .. name .. string.char(10)
-    info = info .. "[O] Username: " .. user .. string.char(10)
-    info = info .. "[O] Role: Premium Member" .. string.char(10)
-    info = info .. "[O] Token: **********" .. string.char(10)
-    info = info .. "[O] Member Since: " .. date .. string.char(10)
-    info = info .. "[O] Account Age: " .. age .. " Days" .. string.char(10)
-    info = info .. "[O] Status: Active"
-    return info
+
+-- ══════════════════════════════════════════════════════════════════
+-- UTILITY FUNCTIONS FOR DASHBOARD
+-- ══════════════════════════════════════════════════════════════════
+local function GetGreeting()
+    local hour = tonumber(os.date("%H"))
+    if hour >= 5 and hour < 12 then
+        return "☀️ Good Morning"
+    elseif hour >= 12 and hour < 17 then
+        return "🌤️ Good Afternoon"
+    elseif hour >= 17 and hour < 21 then
+        return "🌆 Good Evening"
+    else
+        return "🌙 Good Night"
+    end
 end
-local function GetServerInfo()
-    local ping = "0"
-    pcall(function() ping = tostring(math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())) end)
-    local fps = tostring(math.floor(workspace:GetRealPhysicsFPS()))
-    local players = #game:GetService("Players"):GetPlayers()
-    local maxPlayers = game:GetService("Players").MaxPlayers
-    local executor = (identifyexecutor and identifyexecutor()) or "Unknown"
-    local info = ""
-    info = info .. "[O] Executor: " .. executor .. string.char(10)
-    info = info .. "[O] Place ID: " .. game.PlaceId .. string.char(10)
-    info = info .. "[O] Job ID: " .. string.sub(game.JobId, 1, 15) .. "..." .. string.char(10)
-    info = info .. "[O] Players: " .. players .. "/" .. maxPlayers .. string.char(10)
-    info = info .. "[O] Ping: " .. ping .. " ms" .. string.char(10)
-    info = info .. "[O] FPS: " .. fps
-    return info
+
+local function GetExecutorInfo()
+    local name, version = "Unknown", "?"
+    pcall(function()
+        if identifyexecutor then
+            name, version = identifyexecutor()
+        elseif getexecutorname then
+            name = getexecutorname()
+        end
+    end)
+    return name or "Unknown", version or "?"
+end
+
+local function GetPing()
+    local ping = 0
+    pcall(function()
+        ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+    end)
+    return ping
+end
+
+local function GetFPS()
+    return math.floor(workspace:GetRealPhysicsFPS())
+end
+
+local function GetServerAge()
+    local age = workspace.DistributedGameTime
+    local hours = math.floor(age / 3600)
+    local mins = math.floor((age % 3600) / 60)
+    return string.format("%dh %dm", hours, mins)
+end
+
+local function GetGameName()
+    local name = "Unknown Game"
+    pcall(function()
+        local info = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+        if info and info.Name then
+            name = info.Name
+        end
+    end)
+    return name
 end
 
 local function UpdateTool(char, toolName)
@@ -120,46 +247,228 @@ local function UpdateTool(char, toolName)
 
     local currentTool = char:FindFirstChildOfClass("Tool")
 
-    -- If frame has tool data
     if toolName then
-        -- If already equipped, do nothing
         if currentTool and currentTool.Name == toolName then return end
-
-        -- Unequip wrong tool
         if currentTool then hum:UnequipTools() end
 
-        -- Equip correct tool from Backpack
         local backpack = LocalPlayer.Backpack
         local newTool = backpack:FindFirstChild(toolName)
         if newTool then
             hum:EquipTool(newTool)
         end
     else
-        -- If frame has NO tool data, but we are holding one, unequip
         if currentTool then hum:UnequipTools() end
     end
 end
 
+-- ══════════════════════════════════════════════════════════════════
+-- WELCOME SECTION
+-- ══════════════════════════════════════════════════════════════════
+DashboardTab:Paragraph({
+    Title = GetGreeting() .. ", " .. LocalPlayer.DisplayName .. "!",
+    Desc = "Welcome to Starship Mobile • Version " .. VERSION,
+})
+
+DashboardTab:Space()
+
+-- ══════════════════════════════════════════════════════════════════
+-- VIP STATUS
+-- ══════════════════════════════════════════════════════════════════
+DashboardTab:Section({ Title = "💎 VIP Status", TextSize = 16 })
+
+local vipStatusDesc = "👑 Role: " .. sessionData.Role .. "\n" ..
+    "⏰ Duration: " .. sessionData.Duration .. "\n" ..
+    "✅ Status: Active"
+
+DashboardTab:Paragraph({
+    Title = "🎫 Your Subscription",
+    Desc = vipStatusDesc,
+})
+
+DashboardTab:Space()
+
+-- ══════════════════════════════════════════════════════════════════
+-- GAME DETECTION
+-- ══════════════════════════════════════════════════════════════════
+DashboardTab:Section({ Title = "🎮 Current Game", TextSize = 16 })
+
+local gameName = GetGameName()
+DashboardTab:Paragraph({
+    Title = "📍 " .. gameName,
+    Desc = "Place ID: " .. game.PlaceId,
+})
+
+DashboardTab:Space()
+
+-- ══════════════════════════════════════════════════════════════════
+-- ACCOUNT INFORMATION
+-- ══════════════════════════════════════════════════════════════════
+DashboardTab:Section({ Title = "👤 Your Account", TextSize = 16 })
+
+local accountDesc = "🏷️ Display Name: " .. LocalPlayer.DisplayName .. "\n" ..
+    "👤 Username: " .. LocalPlayer.Name .. "\n" ..
+    "🆔 User ID: " .. LocalPlayer.UserId .. "\n" ..
+    "📅 Account Age: " .. LocalPlayer.AccountAge .. " days\n" ..
+    "⭐ Status: Premium Member"
+
 local AccountCard = DashboardTab:Paragraph({
-    Title = "-| Information Account |-",
-    Desc = GetAccountInfo(),
-    Height = 150
+    Title = "🎭 Profile Info",
+    Desc = accountDesc,
 })
+
 DashboardTab:Space()
+
+-- ══════════════════════════════════════════════════════════════════
+-- SERVER INFORMATION
+-- ══════════════════════════════════════════════════════════════════
+DashboardTab:Section({ Title = "🌐 Server Details", TextSize = 16 })
+
+local serverDesc = "🔢 Place ID: " .. game.PlaceId .. "\n" ..
+    "🔑 Job ID: " .. string.sub(game.JobId, 1, 20) .. "...\n" ..
+    "👥 Players: " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers
+
 local ServerCard = DashboardTab:Paragraph({
-    Title = "-| Information Server |-",
-    Desc = GetServerInfo(),
-    Height = 140
+    Title = "🖥️ Server Info",
+    Desc = serverDesc,
 })
-DashboardTab:Space()
+
 DashboardTab:Button({
-    Title = "[O] Refresh Info",
+    Title = "📋 Copy Job ID",
+    Desc = "Copy server Job ID to clipboard",
     Callback = function()
-        AccountCard:SetDesc(GetAccountInfo())
-        ServerCard:SetDesc(GetServerInfo())
-        WindUI:Notify({ Title = "Refreshed", Content = "Dashboard updated", Duration = 1 })
+        if setclipboard then
+            setclipboard(game.JobId)
+            WindUI:Notify({ Title = "Copied!", Content = "Job ID copied to clipboard", Duration = 2 })
+        else
+            WindUI:Notify({ Title = "Error", Content = "Clipboard not available", Duration = 2 })
+        end
     end,
 })
+
+DashboardTab:Space()
+
+-- ══════════════════════════════════════════════════════════════════
+-- FRIENDS IN SERVER
+-- ══════════════════════════════════════════════════════════════════
+DashboardTab:Section({ Title = "👥 Friends in Server", TextSize = 16 })
+
+local function GetFriendsInServer()
+    local friends = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local success, isFriend = pcall(function()
+                return LocalPlayer:IsFriendsWith(player.UserId)
+            end)
+            if success and isFriend then
+                table.insert(friends, player.DisplayName .. " (@" .. player.Name .. ")")
+            end
+        end
+    end
+    if #friends == 0 then
+        return "No friends in this server"
+    end
+    return table.concat(friends, "\n")
+end
+
+local FriendsCard = DashboardTab:Paragraph({
+    Title = "🤝 Friends Here",
+    Desc = GetFriendsInServer(),
+})
+
+DashboardTab:Space()
+
+-- ══════════════════════════════════════════════════════════════════
+-- QUICK ACTIONS
+-- ══════════════════════════════════════════════════════════════════
+DashboardTab:Section({ Title = "⚡ Quick Actions", TextSize = 16 })
+
+DashboardTab:Button({
+    Title = "🔄 Refresh Dashboard",
+    Desc = "Update all statistics",
+    Callback = function()
+        -- Update Live Stats
+        local newExecName, newExecVersion = GetExecutorInfo()
+        local newStatsDesc = "⚡ Executor: " .. newExecName .. " (" .. newExecVersion .. ")\n" ..
+            "👥 Players: " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers .. "\n" ..
+            "📶 Ping: " .. GetPing() .. " ms\n" ..
+            "🖥️ FPS: " .. GetFPS() .. "\n" ..
+            "⏱️ Server Age: " .. GetServerAge()
+        LiveStatsCard:SetDesc(newStatsDesc)
+
+        -- Update Server Card
+        local newServerDesc = "🔢 Place ID: " .. game.PlaceId .. "\n" ..
+            "🔑 Job ID: " .. string.sub(game.JobId, 1, 20) .. "...\n" ..
+            "👥 Players: " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers
+        ServerCard:SetDesc(newServerDesc)
+
+        -- Update Friends
+        FriendsCard:SetDesc(GetFriendsInServer())
+
+        WindUI:Notify({ Title = "✅ Refreshed", Content = "Dashboard updated!", Duration = 2 })
+    end,
+})
+
+DashboardTab:Button({
+    Title = "💬 Copy Discord Invite",
+    Desc = "Get Starship Discord link",
+    Callback = function()
+        if setclipboard then
+            setclipboard("https://discord.gg/starship")
+            WindUI:Notify({ Title = "Copied!", Content = "Discord link copied!", Duration = 2 })
+        end
+    end,
+})
+
+DashboardTab:Button({
+    Title = "🔗 Rejoin Server",
+    Desc = "Rejoin the current server",
+    Callback = function()
+        WindUI:Notify({ Title = "Rejoining...", Content = "Teleporting to server...", Duration = 2 })
+        task.delay(1, function()
+            game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId)
+        end)
+    end,
+})
+
+DashboardTab:Button({
+    Title = "🌍 Server Hop",
+    Desc = "Join a different server",
+    Callback = function()
+        WindUI:Notify({ Title = "Server Hop", Content = "Finding new server...", Duration = 2 })
+        task.delay(1, function()
+            pcall(function()
+                local servers = game:GetService("HttpService"):JSONDecode(
+                    game:HttpGet("https://games.roblox.com/v1/games/" ..
+                        game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
+                )
+                for _, server in pairs(servers.data) do
+                    if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                        game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, server.id)
+                        return
+                    end
+                end
+                WindUI:Notify({ Title = "Error", Content = "No available servers found", Duration = 2 })
+            end)
+        end)
+    end,
+})
+
+-- ══════════════════════════════════════════════════════════════════
+-- AUTO-UPDATE STATS (Every 5 seconds)
+-- ══════════════════════════════════════════════════════════════════
+task.spawn(function()
+    while task.wait(5) do
+        pcall(function()
+            local newExecName, newExecVersion = GetExecutorInfo()
+            local newStatsDesc = "⚡ Executor: " .. newExecName .. " (" .. newExecVersion .. ")\n" ..
+                "👥 Players: " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers .. "\n" ..
+                "📶 Ping: " .. GetPing() .. " ms\n" ..
+                "🖥️ FPS: " .. GetFPS() .. "\n" ..
+                "⏱️ Server Age: " .. GetServerAge()
+            LiveStatsCard:SetDesc(newStatsDesc)
+        end)
+    end
+end)
 
 
 
@@ -172,7 +481,7 @@ local ToolsTab = Window:Tab({
 })
 
 -- 🏃 MOVEMENT
-ToolsTab:Section({ Title = "🏃 Movement Settings", TextSize = 20 })
+ToolsTab:Section({ Title = "🏃 Player Settings", TextSize = 20 })
 
 ToolsTab:Slider({
     Title = "WalkSpeed",
@@ -198,13 +507,42 @@ ToolsTab:Slider({
     end,
 })
 
-ToolsTab:Slider({
-    Title = "Gravity",
-    Desc = "World gravity (Default: 196)",
-    Step = 1,
-    Value = { Min = 0, Max = 196, Default = 196 },
-    Callback = function(v)
-        workspace.Gravity = v
+-- Infinite Jump
+local infiniteJumpConnection = nil
+local isInfiniteJumpOn = false
+
+ToolsTab:Toggle({
+    Title = "Infinite Jump",
+    Desc = "Jump in mid-air",
+    Default = false,
+    Callback = function(state)
+        isInfiniteJumpOn = state
+
+        if isInfiniteJumpOn then
+            infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
+                local hum = GetHumanoid()
+                if hum then
+                    hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            end)
+
+            WindUI:Notify({
+                Title = "Infinite Jump",
+                Content = "Infinite Jump enabled!",
+                Duration = 2
+            })
+        else
+            if infiniteJumpConnection then
+                infiniteJumpConnection:Disconnect()
+                infiniteJumpConnection = nil
+            end
+
+            WindUI:Notify({
+                Title = "Infinite Jump",
+                Content = "Infinite Jump disabled.",
+                Duration = 2
+            })
+        end
     end,
 })
 
@@ -338,6 +676,557 @@ ToolsTab:Button({
     end,
 })
 
+ToolsTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 📊 SPEED CHECKER
+-- ══════════════════════════════════════════════════════════════════
+ToolsTab:Section({ Title = "📊 Speed Checker", TextSize = 20 })
+
+local speedDisplayGui = nil
+local speedDisplayConnection = nil
+local isSpeedDisplayOn = false
+
+local function CreateSpeedDisplayMobile()
+    if speedDisplayGui then
+        speedDisplayGui:Destroy()
+    end
+
+    local parent
+    local success, cGui = pcall(function() return game:GetService("CoreGui") end)
+    if success and cGui then
+        parent = cGui
+    else
+        parent = LocalPlayer:WaitForChild("PlayerGui")
+    end
+
+    local screen = Instance.new("ScreenGui")
+    screen.Name = "StarshipSpeedDisplay"
+    screen.ResetOnSpawn = false
+    screen.DisplayOrder = 999998
+    screen.IgnoreGuiInset = true
+    screen.Parent = parent
+
+    local frame = Instance.new("Frame")
+    frame.Name = "SpeedFrame"
+    frame.Size = UDim2.fromOffset(140, 70)
+    frame.Position = UDim2.new(0.5, -70, 0, 50)
+    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    frame.BackgroundTransparency = 0.1
+    frame.BorderSizePixel = 0
+    frame.Active = true
+    frame.Draggable = true
+    frame.Parent = screen
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(99, 102, 241)
+    stroke.Thickness = 2
+    stroke.Parent = frame
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Text = "WALKSPEED"
+    titleLbl.Size = UDim2.new(1, 0, 0, 16)
+    titleLbl.Position = UDim2.new(0, 0, 0, 6)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.TextColor3 = Color3.fromRGB(150, 150, 160)
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.TextSize = 9
+    titleLbl.Parent = frame
+
+    local speedLbl = Instance.new("TextLabel")
+    speedLbl.Name = "SpeedValue"
+    speedLbl.Text = "0"
+    speedLbl.Size = UDim2.new(1, 0, 0, 28)
+    speedLbl.Position = UDim2.new(0, 0, 0, 22)
+    speedLbl.BackgroundTransparency = 1
+    speedLbl.TextColor3 = Color3.fromRGB(99, 102, 241)
+    speedLbl.Font = Enum.Font.GothamBold
+    speedLbl.TextSize = 24
+    speedLbl.Parent = frame
+
+    local unitLbl = Instance.new("TextLabel")
+    unitLbl.Text = "(default: 16)"
+    unitLbl.Size = UDim2.new(1, 0, 0, 12)
+    unitLbl.Position = UDim2.new(0, 0, 0, 50)
+    unitLbl.BackgroundTransparency = 1
+    unitLbl.TextColor3 = Color3.fromRGB(120, 120, 130)
+    unitLbl.Font = Enum.Font.Gotham
+    unitLbl.TextSize = 9
+    unitLbl.Parent = frame
+
+    return screen, frame
+end
+
+ToolsTab:Toggle({
+    Title = "Speed Display",
+    Desc = "Show current walkspeed on screen",
+    Default = false,
+    Callback = function(state)
+        isSpeedDisplayOn = state
+
+        if isSpeedDisplayOn then
+            local screen, frame = CreateSpeedDisplayMobile()
+            speedDisplayGui = screen
+
+            speedDisplayConnection = RunService.Heartbeat:Connect(function()
+                local hum = GetHumanoid()
+                if hum and speedDisplayGui then
+                    local speed = hum.WalkSpeed
+                    local speedLbl = speedDisplayGui:FindFirstChild("SpeedFrame")
+                    if speedLbl then
+                        speedLbl = speedLbl:FindFirstChild("SpeedValue")
+                    end
+                    if speedLbl then
+                        speedLbl.Text = string.format("%.0f", speed)
+                        if speed <= 16 then
+                            speedLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+                        elseif speed <= 30 then
+                            speedLbl.TextColor3 = Color3.fromRGB(34, 197, 94)
+                        elseif speed <= 60 then
+                            speedLbl.TextColor3 = Color3.fromRGB(234, 179, 8)
+                        else
+                            speedLbl.TextColor3 = Color3.fromRGB(239, 68, 68)
+                        end
+                    end
+                end
+            end)
+
+            WindUI:Notify({
+                Title = "Speed Display",
+                Content = "Speed display enabled!",
+                Duration = 2
+            })
+        else
+            if speedDisplayConnection then
+                speedDisplayConnection:Disconnect()
+                speedDisplayConnection = nil
+            end
+            if speedDisplayGui then
+                speedDisplayGui:Destroy()
+                speedDisplayGui = nil
+            end
+
+            WindUI:Notify({
+                Title = "Speed Display",
+                Content = "Speed display disabled.",
+                Duration = 2
+            })
+        end
+    end
+})
+
+ToolsTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🔒 SHIFT LOCK
+-- ══════════════════════════════════════════════════════════════════
+ToolsTab:Section({ Title = "🔒 Shift Lock", TextSize = 20 })
+
+local isShiftLockOn = false
+local shiftLockConnection = nil
+
+ToolsTab:Toggle({
+    Title = "Shift Lock",
+    Desc = "Lock camera behind character",
+    Default = false,
+    Callback = function(state)
+        isShiftLockOn = state
+
+        if isShiftLockOn then
+            shiftLockConnection = RunService.RenderStepped:Connect(function()
+                local char = GetCharacter()
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                local hum = char and char:FindFirstChild("Humanoid")
+                if root and hum then
+                    hum.AutoRotate = false
+                    UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+
+                    local cam = workspace.CurrentCamera
+                    local look = cam.CFrame.LookVector
+                    root.CFrame = CFrame.lookAt(root.Position, root.Position + Vector3.new(look.X, 0, look.Z))
+                end
+            end)
+
+            WindUI:Notify({
+                Title = "Shift Lock",
+                Content = "Shift Lock enabled!",
+                Duration = 2
+            })
+        else
+            if shiftLockConnection then
+                shiftLockConnection:Disconnect()
+                shiftLockConnection = nil
+            end
+            local char = GetCharacter()
+            local hum = char and char:FindFirstChild("Humanoid")
+            if hum then
+                hum.AutoRotate = true
+            end
+            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+
+            WindUI:Notify({
+                Title = "Shift Lock",
+                Content = "Shift Lock disabled.",
+                Duration = 2
+            })
+        end
+    end
+})
+
+ToolsTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🎭 STREAMER MODE (Privacy)
+-- ══════════════════════════════════════════════════════════════════
+ToolsTab:Section({ Title = "🎭 Streamer Mode", TextSize = 20 })
+
+local isStreamerMode = false
+local streamerSpoofConnections = {}
+local originalTexts = {}
+local spoofedUsername = ""
+local spoofedDisplayName = ""
+
+local randomNames = {
+    "Steve", "Alex", "ProGamer", "Noob123", "Player", "Guest",
+    "Anonymous", "Shadow", "Phoenix", "Dragon", "Ninja", "Master",
+    "Legend", "Hero", "Star", "Gamer", "Champion", "Warrior"
+}
+local randomSuffixes = { "123", "456", "789", "007", "999", "101", "XD", "_YT", "_TTV", "" }
+
+local function SpoofAllNames()
+    local fakeName = spoofedUsername ~= "" and spoofedUsername or "Player"
+    local fakeDisplay = spoofedDisplayName ~= "" and spoofedDisplayName or fakeName
+    local realName = LocalPlayer.Name
+    local realDisplay = LocalPlayer.DisplayName
+
+    local function SpoofGui(gui)
+        if not gui then return end
+        for _, obj in pairs(gui:GetDescendants()) do
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+                local text = obj.Text
+                if text and (text:find(realName) or text:find(realDisplay)) then
+                    if not originalTexts[obj] then
+                        originalTexts[obj] = text
+                    end
+                    obj.Text = text:gsub(realName, fakeName):gsub(realDisplay, fakeDisplay)
+                end
+            end
+        end
+    end
+
+    local function SpoofCharacter(character)
+        if not character then return end
+        for _, obj in pairs(character:GetDescendants()) do
+            if obj:IsA("BillboardGui") then
+                for _, child in pairs(obj:GetDescendants()) do
+                    if child:IsA("TextLabel") or child:IsA("TextButton") then
+                        local text = child.Text
+                        if text and (text:find(realName) or text:find(realDisplay)) then
+                            if not originalTexts[child] then
+                                originalTexts[child] = text
+                            end
+                            child.Text = text:gsub(realName, fakeName):gsub(realDisplay, fakeDisplay)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    pcall(function()
+        local playerList = game:GetService("CoreGui"):FindFirstChild("PlayerList")
+        if playerList then SpoofGui(playerList) end
+    end)
+
+    if LocalPlayer:FindFirstChild("PlayerGui") then
+        SpoofGui(LocalPlayer.PlayerGui)
+    end
+
+    if LocalPlayer.Character then
+        SpoofCharacter(LocalPlayer.Character)
+    end
+end
+
+local function RestoreAllNames()
+    for obj, text in pairs(originalTexts) do
+        if obj and obj.Parent then
+            pcall(function() obj.Text = text end)
+        end
+    end
+    originalTexts = {}
+end
+
+ToolsTab:Input({
+    Title = "Fake Username",
+    Desc = "Your spoofed username",
+    Placeholder = "Enter fake name...",
+    Callback = function(text)
+        spoofedUsername = text
+        if isStreamerMode then
+            SpoofAllNames()
+        end
+    end
+})
+
+ToolsTab:Input({
+    Title = "Fake Display Name",
+    Desc = "Your spoofed display name",
+    Placeholder = "Enter fake display...",
+    Callback = function(text)
+        spoofedDisplayName = text
+        if isStreamerMode then
+            SpoofAllNames()
+        end
+    end
+})
+
+ToolsTab:Button({
+    Title = "🎲 Random Name",
+    Desc = "Generate a random fake name",
+    Callback = function()
+        local name = randomNames[math.random(#randomNames)] .. randomSuffixes[math.random(#randomSuffixes)]
+        spoofedUsername = name
+        spoofedDisplayName = name
+        WindUI:Notify({
+            Title = "Random Name",
+            Content = "Generated: " .. name,
+            Duration = 2
+        })
+        if isStreamerMode then
+            SpoofAllNames()
+        end
+    end
+})
+
+ToolsTab:Toggle({
+    Title = "Enable Streamer Mode",
+    Desc = "Spoof your name (client-side only)",
+    Default = false,
+    Callback = function(state)
+        isStreamerMode = state
+
+        if isStreamerMode then
+            SpoofAllNames()
+
+            local lastSpoof = 0
+            local spoofLoop = RunService.Heartbeat:Connect(function()
+                if isStreamerMode and tick() - lastSpoof > 1 then
+                    lastSpoof = tick()
+                    SpoofAllNames()
+                end
+            end)
+            table.insert(streamerSpoofConnections, spoofLoop)
+
+            local charCon = LocalPlayer.CharacterAdded:Connect(function(char)
+                task.wait(1)
+                if isStreamerMode then
+                    SpoofAllNames()
+                end
+            end)
+            table.insert(streamerSpoofConnections, charCon)
+
+            WindUI:Notify({
+                Title = "Streamer Mode",
+                Content = "Name spoofing enabled!",
+                Duration = 3
+            })
+        else
+            for _, con in pairs(streamerSpoofConnections) do
+                if con then pcall(function() con:Disconnect() end) end
+            end
+            streamerSpoofConnections = {}
+            RestoreAllNames()
+
+            WindUI:Notify({
+                Title = "Streamer Mode",
+                Content = "Name spoofing disabled.",
+                Duration = 2
+            })
+        end
+    end
+})
+
+ToolsTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🌌 SKYBOX CHANGER
+-- ══════════════════════════════════════════════════════════════════
+ToolsTab:Section({ Title = "🌌 Skybox Changer", TextSize = 20 })
+
+local originalSky = nil
+local originalAtmosphere = nil
+local currentSkybox = "Default"
+local skyboxBypassConnection = nil
+
+local SkyboxPresets = {
+    ["Default"] = nil,
+    ["Galaxy Night"] = {
+        SkyboxBk = "rbxassetid://159454286",
+        SkyboxDn = "rbxassetid://159454296",
+        SkyboxFt = "rbxassetid://159454299",
+        SkyboxLf = "rbxassetid://159454286",
+        SkyboxRt = "rbxassetid://159454291",
+        SkyboxUp = "rbxassetid://159454293",
+        StarCount = 5000,
+    },
+    ["Blood Red"] = {
+        SkyboxBk = "rbxassetid://1012890",
+        SkyboxDn = "rbxassetid://1012891",
+        SkyboxFt = "rbxassetid://1012887",
+        SkyboxLf = "rbxassetid://1012889",
+        SkyboxRt = "rbxassetid://1012888",
+        SkyboxUp = "rbxassetid://1014449",
+        StarCount = 500,
+    },
+    ["Scary Red"] = {
+        SkyboxBk = "rbxassetid://108929045660200",
+        SkyboxDn = "rbxassetid://78646480540009",
+        SkyboxFt = "rbxassetid://90546017435179",
+        SkyboxLf = "rbxassetid://109838453114563",
+        SkyboxRt = "rbxassetid://94190734796082",
+        SkyboxUp = "rbxassetid://126944775797063",
+    },
+    ["Skybox HD"] = {
+        SkyboxBk = "rbxassetid://16553658937",
+        SkyboxDn = "rbxassetid://16553660713",
+        SkyboxFt = "rbxassetid://16553662144",
+        SkyboxLf = "rbxassetid://16553664042",
+        SkyboxRt = "rbxassetid://16553665766",
+        SkyboxUp = "rbxassetid://16553667750",
+        StarCount = 3000,
+    },
+    ["Night City"] = {
+        SkyboxBk = "rbxassetid://163897885",
+        SkyboxDn = "rbxassetid://163898013",
+        SkyboxFt = "rbxassetid://163899342",
+        SkyboxLf = "rbxassetid://163897886",
+        SkyboxRt = "rbxassetid://163897887",
+        SkyboxUp = "rbxassetid://163898013",
+        StarCount = 5000,
+    },
+}
+
+local function CaptureOriginalSky()
+    if originalSky then return end
+    local lighting = game:GetService("Lighting")
+    local existingSky = lighting:FindFirstChildOfClass("Sky")
+    if existingSky then
+        originalSky = {
+            SkyboxBk = existingSky.SkyboxBk,
+            SkyboxDn = existingSky.SkyboxDn,
+            SkyboxFt = existingSky.SkyboxFt,
+            SkyboxLf = existingSky.SkyboxLf,
+            SkyboxRt = existingSky.SkyboxRt,
+            SkyboxUp = existingSky.SkyboxUp,
+            StarCount = existingSky.StarCount,
+        }
+    end
+    originalAtmosphere = lighting.Ambient
+end
+
+local function StopSkyboxBypass()
+    if skyboxBypassConnection then
+        skyboxBypassConnection:Disconnect()
+        skyboxBypassConnection = nil
+    end
+end
+
+local function ApplySkyboxWithBypass(preset)
+    local lighting = game:GetService("Lighting")
+
+    skyboxBypassConnection = RunService.Heartbeat:Connect(function()
+        for _, child in pairs(lighting:GetChildren()) do
+            if child:IsA("Sky") then
+                child.SkyboxBk = preset.SkyboxBk
+                child.SkyboxDn = preset.SkyboxDn
+                child.SkyboxFt = preset.SkyboxFt
+                child.SkyboxLf = preset.SkyboxLf
+                child.SkyboxRt = preset.SkyboxRt
+                child.SkyboxUp = preset.SkyboxUp
+                child.StarCount = preset.StarCount or 0
+            end
+        end
+    end)
+end
+
+local function ApplySkybox(presetName)
+    local lighting = game:GetService("Lighting")
+    CaptureOriginalSky()
+    StopSkyboxBypass()
+
+    local preset = SkyboxPresets[presetName]
+
+    if presetName == "Default" then
+        local sky = lighting:FindFirstChildOfClass("Sky")
+        if sky and originalSky then
+            sky.SkyboxBk = originalSky.SkyboxBk
+            sky.SkyboxDn = originalSky.SkyboxDn
+            sky.SkyboxFt = originalSky.SkyboxFt
+            sky.SkyboxLf = originalSky.SkyboxLf
+            sky.SkyboxRt = originalSky.SkyboxRt
+            sky.SkyboxUp = originalSky.SkyboxUp
+            sky.StarCount = originalSky.StarCount
+        end
+        if originalAtmosphere then
+            lighting.Ambient = originalAtmosphere
+        end
+        currentSkybox = "Default"
+        return
+    end
+
+    if not preset then return end
+
+    local sky = lighting:FindFirstChildOfClass("Sky")
+    if not sky then
+        sky = Instance.new("Sky")
+        sky.Parent = lighting
+    end
+
+    sky.SkyboxBk = preset.SkyboxBk
+    sky.SkyboxDn = preset.SkyboxDn
+    sky.SkyboxFt = preset.SkyboxFt
+    sky.SkyboxLf = preset.SkyboxLf
+    sky.SkyboxRt = preset.SkyboxRt
+    sky.SkyboxUp = preset.SkyboxUp
+    sky.StarCount = preset.StarCount or 0
+
+    ApplySkyboxWithBypass(preset)
+    currentSkybox = presetName
+end
+
+local skyboxOptions = { "Default", "Galaxy Night", "Blood Red", "Scary Red", "Skybox HD", "Night City" }
+
+ToolsTab:Dropdown({
+    Title = "Select Skybox",
+    Desc = "Change the sky appearance",
+    Values = skyboxOptions,
+    Callback = function(selected)
+        ApplySkybox(selected)
+        WindUI:Notify({
+            Title = "Skybox Changed",
+            Content = "Applied: " .. selected,
+            Duration = 2
+        })
+    end
+})
+
+ToolsTab:Button({
+    Title = "🔄 Reset Skybox",
+    Desc = "Restore original skybox",
+    Callback = function()
+        ApplySkybox("Default")
+        WindUI:Notify({
+            Title = "Skybox Reset",
+            Content = "Restored to original skybox.",
+            Duration = 2
+        })
+    end
+})
+
 local ListMapTab = Window:Tab({
     Title = "Auto Walk",
     Icon = "folder-open",
@@ -465,7 +1354,7 @@ end
 local function GetFileOptions()
     RefreshFileList()
     if #mergedFiles == 0 then
-        return {"No files found"}
+        return { "No files found" }
     end
     return mergedFiles
 end
@@ -505,9 +1394,9 @@ end
 
 -- SMOOTHING SETTINGS (Default values - no UI adjustment on mobile)
 local SMOOTH_SETTINGS = {
-    LiveSmoothingEnabled = true,    -- Auto-smooth on load
-    LiveSmoothingStrength = 5,      -- Default strength (1-10)
-    PositionBasedEnabled = true,    -- Position-based playback for smoother ground movement
+    LiveSmoothingEnabled = true, -- Auto-smooth on load
+    LiveSmoothingStrength = 5,   -- Default strength (1-10)
+    PositionBasedEnabled = true, -- Position-based playback for smoother ground movement
 }
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -683,11 +1572,11 @@ local function TblToCF(t)
     -- Standard mode format: {p={x,y,z}, o={x,y,z}}
     if t.p and t.o then
         return CFrame.new(t.p.x, t.p.y, t.p.z) * CFrame.Angles(t.o.x, t.o.y, t.o.z)
-    -- Flexible mode root: {pos={x,y,z}, rot=yaw}
+        -- Flexible mode root: {pos={x,y,z}, rot=yaw}
     elseif t.pos then
         local yaw = t.rot or 0
         return CFrame.new(t.pos.x, t.pos.y, t.pos.z) * CFrame.Angles(0, math.rad(yaw), 0)
-    -- Raw CFrame array
+        -- Raw CFrame array
     elseif type(t) == "table" and #t >= 12 then
         return CFrame.new(unpack(t))
     end
@@ -924,13 +1813,18 @@ local function PlayRecording(fileName, force)
     -- If the nearest point is within the last 2 seconds, force restart from 0
     if bestT >= (PlaybackState.totalDuration - 2.0) then
         PlaybackState.currentTime = 0
-    -- Snap to Start: If nearest point is within first 1 second, start from 0
+        -- Snap to Start: If nearest point is within first 1 second, start from 0
     elseif bestT < 1.0 then
         PlaybackState.currentTime = 0
-    -- Otherwise, jump to nearest point if close enough to path
+        -- Otherwise, jump to nearest point if close enough to path
     elseif minDist < 500 then
         PlaybackState.currentTime = bestT
-        WindUI:Notify({ Title = "Smart Start", Content = string.format("Starting from %.1fs (%.0f studs away)", bestT, minDist), Duration = 2 })
+        WindUI:Notify({
+            Title = "Smart Start",
+            Content = string.format("Starting from %.1fs (%.0f studs away)", bestT,
+                minDist),
+            Duration = 2
+        })
     else
         PlaybackState.currentTime = 0
     end
@@ -1105,7 +1999,8 @@ local function PlayRecording(fileName, force)
             PlaybackState.lastPlaybackTime = PlaybackState.currentTime
 
             -- Find frames (optimized with binary search + caching)
-            local frameIdx = FindFrameIndex(PlaybackState.frameData, PlaybackState.currentTime, PlaybackState.lastFrameIndex)
+            local frameIdx = FindFrameIndex(PlaybackState.frameData, PlaybackState.currentTime,
+                PlaybackState.lastFrameIndex)
             PlaybackState.lastFrameIndex = frameIdx
             local fA, fB = PlaybackState.frameData[frameIdx], PlaybackState.frameData[frameIdx + 1]
 
@@ -1137,7 +2032,8 @@ local function PlayRecording(fileName, force)
                     vel = vel * speed
 
                     -- FORCE climbing/swimming state FIRST (before any movement)
-                    hum:ChangeState(isCurrentlyClimbing and Enum.HumanoidStateType.Climbing or Enum.HumanoidStateType.Swimming)
+                    hum:ChangeState(isCurrentlyClimbing and Enum.HumanoidStateType.Climbing or
+                        Enum.HumanoidStateType.Swimming)
 
                     -- Apply movement input for animation
                     if fA.md then
@@ -1188,7 +2084,8 @@ local function PlayRecording(fileName, force)
                     end
 
                     -- FORCE maintain climbing/swimming state again at end
-                    hum:ChangeState(isCurrentlyClimbing and Enum.HumanoidStateType.Climbing or Enum.HumanoidStateType.Swimming)
+                    hum:ChangeState(isCurrentlyClimbing and Enum.HumanoidStateType.Climbing or
+                        Enum.HumanoidStateType.Swimming)
 
                     -- Update hip height for swimming
                     if isCurrentlySwimming and fA.hh then
@@ -1206,7 +2103,7 @@ local function PlayRecording(fileName, force)
 
                         -- IMPROVED: Higher velocity blending for smoother transitions (same as PC)
                         local currentVel = hrp.AssemblyLinearVelocity
-                        local baseBlend = 0.85  -- Increased from 0.6 for smoother transitions
+                        local baseBlend = 0.85 -- Increased from 0.6 for smoother transitions
                         local blendFactor = math.clamp(baseBlend * speed, 0.5, 0.98)
 
                         -- Check if in air state - use position-based for smooth jump like recording
@@ -1245,7 +2142,8 @@ local function PlayRecording(fileName, force)
 
                                 -- Calculate target velocity that will move us toward the path
                                 local correctionStrength = math.clamp(distance * 8, 0, 50)
-                                local correctionVel = distance > 0.01 and (posDiff.Unit * correctionStrength) or Vector3.new(0, 0, 0)
+                                local correctionVel = distance > 0.01 and (posDiff.Unit * correctionStrength) or
+                                    Vector3.new(0, 0, 0)
 
                                 -- Blend with recorded velocity for smooth acceleration
                                 local targetVel = smoothVel or vel
@@ -1580,7 +2478,8 @@ local function PlayRecording(fileName, force)
             end
 
             -- Find frames
-            local frameIdx = FindFrameIndex(PlaybackState.frameData, PlaybackState.currentTime, PlaybackState.lastFrameIndex)
+            local frameIdx = FindFrameIndex(PlaybackState.frameData, PlaybackState.currentTime,
+                PlaybackState.lastFrameIndex)
             PlaybackState.lastFrameIndex = frameIdx
             local fA, fB = PlaybackState.frameData[frameIdx], PlaybackState.frameData[frameIdx + 1]
 
@@ -1697,7 +2596,8 @@ if #initialFiles == 0 then
         Callback = function()
             WindUI:Notify({
                 Title = "How to Use",
-                Content = "1. Record di PC dengan Starship\n2. Merge recordings di tab Merger\n3. File akan muncul di: " .. MERGER_FOLDER,
+                Content = "1. Record di PC dengan Starship\n2. Merge recordings di tab Merger\n3. File akan muncul di: " ..
+                    MERGER_FOLDER,
                 Duration = 6
             })
         end,
@@ -1723,7 +2623,7 @@ end
 -- 2. PLAYBACK CONTROLS (Bottom)
 -- ══════════════════════════════════════════════════════════════════
 
--- Mini Player Logic (Raw GUI)
+-- Mini Player Logic (Raw GUI) - Modern Compact Design
 local MiniPlayerGui = nil
 local function ToggleMiniPlayer(state)
     if state then
@@ -1740,160 +2640,204 @@ local function ToggleMiniPlayer(state)
 
         local screen = Instance.new("ScreenGui")
         screen.Name = "StarshipMini"
-        screen.Parent = parent
         screen.ResetOnSpawn = false
+        screen.DisplayOrder = 999999
+        screen.IgnoreGuiInset = true
+        screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        screen.Parent = parent
 
-        -- Main Container
+        -- Modern Compact Container - Responsive sizing (even smaller without toggles)
         local frame = Instance.new("Frame")
         frame.Name = "Main"
-        frame.Size = UDim2.fromOffset(220, 120) -- Reduced height
-        frame.Position = UDim2.new(0.5, -110, 0.1, 0)
-        frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+        frame.Size = UDim2.new(0, 160, 0, 70)       -- Ultra compact size for mobile
+        frame.Position = UDim2.new(0.5, -80, 0, 45) -- Centered top
+        frame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+        frame.BackgroundTransparency = 0.05
         frame.BorderSizePixel = 0
         frame.Active = true
         frame.Draggable = true
         frame.Parent = screen
 
-        local stroke = Instance.new("UIStroke")
-        stroke.Color = Color3.fromRGB(99, 102, 241) -- Indigo accent
-        stroke.Thickness = 2
-        stroke.Parent = frame
-
+        -- Rounded corners
         local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 12)
+        corner.CornerRadius = UDim.new(0, 14)
         corner.Parent = frame
 
-        local mainLayout = Instance.new("UIListLayout")
-        mainLayout.FillDirection = Enum.FillDirection.Vertical
-        mainLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        mainLayout.Padding = UDim.new(0, 8)
-        mainLayout.Parent = frame
+        -- Gradient border effect
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = Color3.fromRGB(99, 102, 241)
+        stroke.Thickness = 1.5
+        stroke.Transparency = 0.2
+        stroke.Parent = frame
 
-        local padding = Instance.new("UIPadding")
-        padding.PaddingTop = UDim.new(0, 10)
-        padding.PaddingBottom = UDim.new(0, 10)
-        padding.PaddingLeft = UDim.new(0, 10)
-        padding.PaddingRight = UDim.new(0, 10)
-        padding.Parent = frame
+        -- Inner shadow/glow effect
+        local innerGlow = Instance.new("Frame")
+        innerGlow.Size = UDim2.new(1, -4, 1, -4)
+        innerGlow.Position = UDim2.new(0, 2, 0, 2)
+        innerGlow.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+        innerGlow.BackgroundTransparency = 0.5
+        innerGlow.BorderSizePixel = 0
+        innerGlow.ZIndex = 0
+        innerGlow.Parent = frame
+        Instance.new("UICorner", innerGlow).CornerRadius = UDim.new(0, 12)
 
-        -- Helper to create rounded button
-        local function createBtn(text, color, parent, callback)
+        -- Header with title and close button
+        local header = Instance.new("Frame")
+        header.Size = UDim2.new(1, 0, 0, 22)
+        header.Position = UDim2.new(0, 0, 0, 0)
+        header.BackgroundTransparency = 1
+        header.ZIndex = 2
+        header.Parent = frame
+
+        -- Drag indicator (3 dots)
+        local dragIndicator = Instance.new("Frame")
+        dragIndicator.Size = UDim2.new(0, 30, 0, 3)
+        dragIndicator.Position = UDim2.new(0.5, -15, 0, 4)
+        dragIndicator.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+        dragIndicator.BackgroundTransparency = 0.5
+        dragIndicator.BorderSizePixel = 0
+        dragIndicator.ZIndex = 3
+        dragIndicator.Parent = header
+        Instance.new("UICorner", dragIndicator).CornerRadius = UDim.new(1, 0)
+
+        -- Title
+        local title = Instance.new("TextLabel")
+        title.Text = "🚀 Starship"
+        title.Size = UDim2.new(0.7, 0, 1, 0)
+        title.Position = UDim2.new(0, 8, 0, 0)
+        title.BackgroundTransparency = 1
+        title.TextColor3 = Color3.fromRGB(180, 180, 200)
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 9
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.ZIndex = 3
+        title.Parent = header
+
+        -- Close button (minimal X)
+        local closeBtn = Instance.new("TextButton")
+        closeBtn.Size = UDim2.new(0, 18, 0, 18)
+        closeBtn.Position = UDim2.new(1, -22, 0, 2)
+        closeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+        closeBtn.BackgroundTransparency = 0.3
+        closeBtn.Text = "×"
+        closeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        closeBtn.TextSize = 14
+        closeBtn.Font = Enum.Font.GothamBold
+        closeBtn.AutoButtonColor = true
+        closeBtn.ZIndex = 3
+        closeBtn.Parent = header
+        Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
+
+        closeBtn.MouseEnter:Connect(function()
+            closeBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+        end)
+        closeBtn.MouseLeave:Connect(function()
+            closeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+        end)
+        closeBtn.MouseButton1Click:Connect(function()
+            if MiniPlayerGui then
+                MiniPlayerGui:Destroy()
+                MiniPlayerGui = nil
+            end
+        end)
+
+        -- Content container (smaller height without toggles)
+        local content = Instance.new("Frame")
+        content.Size = UDim2.new(1, -12, 1, -26)
+        content.Position = UDim2.new(0, 6, 0, 22)
+        content.BackgroundTransparency = 1
+        content.ZIndex = 2
+        content.Parent = frame
+
+        -- Helper for compact buttons
+        local function createCompactBtn(text, color, size, pos, parent, callback)
             local btn = Instance.new("TextButton")
+            btn.Size = size
+            btn.Position = pos
             btn.BackgroundColor3 = color
             btn.Text = text
-            btn.TextColor3 = Color3.new(1,1,1)
-            btn.TextSize = 14
+            btn.TextColor3 = Color3.new(1, 1, 1)
+            btn.TextSize = 11
             btn.Font = Enum.Font.GothamBold
             btn.AutoButtonColor = true
+            btn.ZIndex = 3
             btn.Parent = parent
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 
-            local c = Instance.new("UICorner")
-            c.CornerRadius = UDim.new(0, 6)
-            c.Parent = btn
+            -- Hover effect
+            btn.MouseEnter:Connect(function()
+                btn.BackgroundTransparency = 0.1
+            end)
+            btn.MouseLeave:Connect(function()
+                btn.BackgroundTransparency = 0
+            end)
 
             btn.MouseButton1Click:Connect(callback)
             return btn
         end
 
-        -- 1. Playback Controls Row
-        local row1 = Instance.new("Frame")
-        row1.Size = UDim2.new(1, 0, 0, 30)
-        row1.BackgroundTransparency = 1
-        row1.LayoutOrder = 1
-        row1.Parent = frame
+        -- Play/Stop buttons (row 1) - slightly smaller
+        local btnPlay = createCompactBtn("▶", Color3.fromRGB(34, 197, 94),
+            UDim2.new(0.48, 0, 0, 24), UDim2.new(0, 0, 0, 0), content,
+            function()
+                if selectedFile then
+                    PlayRecording(selectedFile)
+                else
+                    WindUI:Notify({ Title = "Error", Content = "Select file first", Duration = 1 })
+                end
+            end)
 
-        local layout1 = Instance.new("UIListLayout")
-        layout1.FillDirection = Enum.FillDirection.Horizontal
-        layout1.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        layout1.Padding = UDim.new(0, 5)
-        layout1.Parent = row1
+        local btnStop = createCompactBtn("⏹", Color3.fromRGB(220, 60, 60),
+            UDim2.new(0.48, 0, 0, 24), UDim2.new(0.52, 0, 0, 0), content,
+            function()
+                StopPlayback()
+            end)
 
-        local btnPlay = createBtn("▶ Play", Color3.fromRGB(34, 197, 94), row1, function()
-            if selectedFile then PlayRecording(selectedFile) else WindUI:Notify({Title="No File", Content="Select file first", Duration=1}) end
-        end)
-        btnPlay.Size = UDim2.new(0.45, 0, 1, 0)
-
-        local btnStop = createBtn("⏹ Stop", Color3.fromRGB(239, 68, 68), row1, function()
-            StopPlayback()
-        end)
-        btnStop.Size = UDim2.new(0.45, 0, 1, 0)
-
-        -- 2. Speed Control Row
-        local row2 = Instance.new("Frame")
-        row2.Size = UDim2.new(1, 0, 0, 25)
-        row2.BackgroundTransparency = 1
-        row2.LayoutOrder = 2
-        row2.Parent = frame
-
-        local layout2 = Instance.new("UIListLayout")
-        layout2.FillDirection = Enum.FillDirection.Horizontal
-        layout2.VerticalAlignment = Enum.VerticalAlignment.Center
-        layout2.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        layout2.Padding = UDim.new(0, 5)
-        layout2.Parent = row2
+        -- Speed control (row 2) - adjusted position
+        local speedRow = Instance.new("Frame")
+        speedRow.Size = UDim2.new(1, 0, 0, 20)
+        speedRow.Position = UDim2.new(0, 0, 0, 27)
+        speedRow.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+        speedRow.ZIndex = 2
+        speedRow.Parent = content
+        Instance.new("UICorner", speedRow).CornerRadius = UDim.new(0, 6)
 
         local speedLabel = Instance.new("TextLabel")
-        speedLabel.Text = "Spd: " .. (PlaybackState.speed or 1) .. "x"
-        speedLabel.TextColor3 = Color3.new(0.9,0.9,0.9)
-        speedLabel.BackgroundTransparency = 1
+        speedLabel.Text = (PlaybackState.speed or 1) .. "x"
         speedLabel.Size = UDim2.new(0.4, 0, 1, 0)
-        speedLabel.Font = Enum.Font.Gotham
-        speedLabel.TextSize = 12
-        speedLabel.Parent = row2
+        speedLabel.Position = UDim2.new(0.3, 0, 0, 0)
+        speedLabel.BackgroundTransparency = 1
+        speedLabel.TextColor3 = Color3.fromRGB(99, 102, 241)
+        speedLabel.Font = Enum.Font.GothamBold
+        speedLabel.TextSize = 11
+        speedLabel.ZIndex = 3
+        speedLabel.Parent = speedRow
 
         local function updateSpeed(val)
             PlaybackState.speed = val
-            speedLabel.Text = "Spd: " .. val .. "x"
+            speedLabel.Text = val .. "x"
         end
 
-        local btnSlow = createBtn("-", Color3.fromRGB(60,60,60), row2, function()
-            local s = tonumber(PlaybackState.speed) or 1
-            s = math.max(0.1, s - 0.1)
-            updateSpeed(math.floor(s*10)/10)
-        end)
-        btnSlow.Size = UDim2.new(0.2, 0, 1, 0)
-
-        local btnFast = createBtn("+", Color3.fromRGB(60,60,60), row2, function()
-            local s = tonumber(PlaybackState.speed) or 1
-            s = math.min(5, s + 0.1)
-            updateSpeed(math.floor(s*10)/10)
-        end)
-        btnFast.Size = UDim2.new(0.2, 0, 1, 0)
-
-        -- 3. Toggles Row (Loop, Strict, Native)
-        local row3 = Instance.new("Frame")
-        row3.Size = UDim2.new(1, 0, 0, 25)
-        row3.BackgroundTransparency = 1
-        row3.LayoutOrder = 3
-        row3.Parent = frame
-
-        local layout3 = Instance.new("UIListLayout")
-        layout3.FillDirection = Enum.FillDirection.Horizontal
-        layout3.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        layout3.Padding = UDim.new(0, 5)
-        layout3.Parent = row3
-
-        local function createToggle(text, prop)
-            local isActive = PlaybackState[prop]
-            local color = isActive and Color3.fromRGB(99, 102, 241) or Color3.fromRGB(60,60,60)
-            local tBtn = createBtn(text, color, row3, function() end)
-            tBtn.Size = UDim2.new(0.3, 0, 1, 0)
-            tBtn.TextSize = 10
-
-            tBtn.MouseButton1Click:Connect(function()
-                PlaybackState[prop] = not PlaybackState[prop]
-                tBtn.BackgroundColor3 = PlaybackState[prop] and Color3.fromRGB(99, 102, 241) or Color3.fromRGB(60,60,60)
+        local btnSlow = createCompactBtn("−", Color3.fromRGB(50, 50, 65),
+            UDim2.new(0.28, 0, 1, -4), UDim2.new(0, 2, 0, 2), speedRow,
+            function()
+                local s = tonumber(PlaybackState.speed) or 1
+                s = math.max(0.1, s - 0.1)
+                updateSpeed(math.floor(s * 10) / 10)
             end)
-            return tBtn
-        end
+        btnSlow.TextSize = 14
 
-        createToggle("Loop", "isLooping")
-        createToggle("Respawn", "isRespawnOnEnd")
-        createToggle("Spin", "isSpinning")
+        local btnFast = createCompactBtn("+", Color3.fromRGB(50, 50, 65),
+            UDim2.new(0.28, 0, 1, -4), UDim2.new(0.72, -2, 0, 2), speedRow,
+            function()
+                local s = tonumber(PlaybackState.speed) or 1
+                s = math.min(5, s + 0.1)
+                updateSpeed(math.floor(s * 10) / 10)
+            end)
+        btnFast.TextSize = 12
 
         MiniPlayerGui = screen
-        WindUI:Notify({ Title = "Mini Player", Content = "Controls Active", Duration = 1.5 })
+        WindUI:Notify({ Title = "🎮 Mini Player", Content = "Drag to move", Duration = 1.5 })
     else
         if MiniPlayerGui then
             MiniPlayerGui:Destroy()
@@ -1924,6 +2868,166 @@ PlaybackSection:Toggle({
     Callback = ToggleMiniPlayer
 })
 
+PlaybackSection:Toggle({
+    Title = "Loop Playback",
+    Desc = "Restart recording when finished",
+    Default = false,
+    Callback = function(state)
+        PlaybackState.isLooping = state
+        WindUI:Notify({
+            Title = "Loop",
+            Content = state and "Loop enabled" or "Loop disabled",
+            Duration = 1.5
+        })
+    end
+})
+
+PlaybackSection:Toggle({
+    Title = "Respawn on End",
+    Desc = "Respawn character when recording ends",
+    Default = false,
+    Callback = function(state)
+        PlaybackState.isRespawnOnEnd = state
+        WindUI:Notify({
+            Title = "Respawn",
+            Content = state and "Respawn on end enabled" or "Respawn on end disabled",
+            Duration = 1.5
+        })
+    end
+})
+
+-- Anti-AFK Feature
+local antiAfkConnection = nil
+local isAntiAfkOn = false
+
+PlaybackSection:Toggle({
+    Title = "Anti-AFK",
+    Desc = "Prevent being kicked for inactivity",
+    Default = false,
+    Callback = function(state)
+        isAntiAfkOn = state
+
+        if isAntiAfkOn then
+            -- Connect to Idled event
+            antiAfkConnection = LocalPlayer.Idled:Connect(function()
+                local VirtualUser = game:GetService("VirtualUser")
+                VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                task.wait(1)
+                VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+            end)
+
+            WindUI:Notify({
+                Title = "Anti-AFK",
+                Content = "Anti-AFK enabled! You won't be kicked for inactivity.",
+                Duration = 3
+            })
+        else
+            -- Disconnect
+            if antiAfkConnection then
+                antiAfkConnection:Disconnect()
+                antiAfkConnection = nil
+            end
+
+            WindUI:Notify({
+                Title = "Anti-AFK",
+                Content = "Anti-AFK disabled.",
+                Duration = 2
+            })
+        end
+    end
+})
+
+-- Bypass Admin Feature
+local isBypassAdminOn = false
+local bypassAdminConnection = nil
+
+local function CheckForAdmin(player)
+    if player == LocalPlayer then
+        return
+    end
+    if not player.Parent then
+        return
+    end
+
+    local isAdmin = false
+
+    -- 1. Check Game Owner
+    if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
+        isAdmin = true
+    elseif game.CreatorType == Enum.CreatorType.Group then
+        local s, rank = pcall(function()
+            if not player.Parent then
+                return 0
+            end
+            return player:GetRankInGroup(game.CreatorId)
+        end)
+        if s and rank and rank >= 100 then -- Assume Rank 100+ is staff/admin
+            isAdmin = true
+        end
+
+        local s2, role = pcall(function()
+            if not player.Parent then
+                return ""
+            end
+            return player:GetRoleInGroup(game.CreatorId)
+        end)
+        if s2 and role then
+            local lowerRole = role:lower()
+            if
+                lowerRole:find("admin")
+                or lowerRole:find("mod")
+                or lowerRole:find("staff")
+                or lowerRole:find("dev")
+                or lowerRole:find("owner")
+            then
+                isAdmin = true
+            end
+        end
+    end
+
+    if isAdmin then
+        LocalPlayer:Kick(
+            "⚠️ Safety Triggered: Admin (" .. player.Name .. ") detected. Exiting to protect your account."
+        )
+    end
+end
+
+PlaybackSection:Toggle({
+    Title = "Bypass Admin",
+    Desc = "Auto-kick when admin/mod joins the server",
+    Default = false,
+    Callback = function(state)
+        isBypassAdminOn = state
+
+        if isBypassAdminOn then
+            -- Check existing players
+            for _, p in ipairs(Players:GetPlayers()) do
+                CheckForAdmin(p)
+            end
+
+            -- Connect to PlayerAdded event
+            bypassAdminConnection = Players.PlayerAdded:Connect(CheckForAdmin)
+
+            WindUI:Notify({
+                Title = "Bypass Admin",
+                Content = "Admin detection enabled! You will be kicked if admin joins.",
+                Duration = 3
+            })
+        else
+            -- Disconnect
+            if bypassAdminConnection then
+                bypassAdminConnection:Disconnect()
+                bypassAdminConnection = nil
+            end
+
+            WindUI:Notify({
+                Title = "Bypass Admin",
+                Content = "Admin detection disabled.",
+                Duration = 2
+            })
+        end
+    end
+})
 
 
 
@@ -1934,55 +3038,6 @@ PlaybackSection:Toggle({
 local FunTab = Window:Tab({
     Title = "Fun",
     Icon = "smile",
-})
-
--- Visual Effects
-FunTab:Section({ Title = "✨ Visual Effects", TextSize = 20 })
-
---[[
-FunTab:Toggle({
-    Title = "Noclip",
-    Desc = "Walk through walls",
-    Default = false,
-    Callback = function(state)
-        local conn
-        if state then
-            conn = RunService.Stepped:Connect(function()
-                local char = GetCharacter()
-                if char then
-                    for _, part in pairs(char:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            part.CanCollide = false
-                        end
-                    end
-                end
-            end)
-            table.insert(Connections, conn)
-        else
-            for i, c in pairs(Connections) do
-                if c.Connected then c:Disconnect() end
-            end
-        end
-    end,
-})
-]]
-
-FunTab:Toggle({
-    Title = "Infinite Jump",
-    Desc = "Jump in mid-air",
-    Default = false,
-    Callback = function(state)
-        local hum = GetHumanoid()
-        if hum then
-            if state then
-                UserInputService.JumpRequest:Connect(function()
-                    if GetHumanoid() then
-                        GetHumanoid():ChangeState(Enum.HumanoidStateType.Jumping)
-                    end
-                end)
-            end
-        end
-    end,
 })
 
 FunTab:Divider()
@@ -2038,6 +3093,394 @@ FunTab:Button({
     end,
 })
 
+FunTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 💥 TOUCH FLING
+-- ══════════════════════════════════════════════════════════════════
+FunTab:Section({ Title = "💥 Touch Fling", TextSize = 20 })
+
+local isFlingOn = false
+local flingLoop = nil
+local isHitboxExpanded = false
+local hitboxParts = {}
+
+FunTab:Toggle({
+    Title = "Expand Hitbox",
+    Desc = "Bigger hitbox = easier fling",
+    Default = false,
+    Callback = function(state)
+        isHitboxExpanded = state
+
+        local char = GetCharacter()
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        if isHitboxExpanded then
+            for i = 1, 4 do
+                local part = Instance.new("Part")
+                part.Name = "HitboxExpander"
+                part.Size = Vector3.new(4, 4, 0.5)
+                part.Transparency = 1
+                part.CanCollide = true
+                part.Massless = true
+                part.Parent = char
+
+                local weld = Instance.new("WeldConstraint")
+                weld.Part0 = hrp
+                weld.Part1 = part
+                weld.Parent = part
+
+                table.insert(hitboxParts, part)
+            end
+
+            if hitboxParts[1] then hitboxParts[1].CFrame = hrp.CFrame * CFrame.new(0, 0, -3) end
+            if hitboxParts[2] then hitboxParts[2].CFrame = hrp.CFrame * CFrame.new(0, 0, 3) end
+            if hitboxParts[3] then hitboxParts[3].CFrame = hrp.CFrame * CFrame.new(-3, 0, 0) end
+            if hitboxParts[4] then hitboxParts[4].CFrame = hrp.CFrame * CFrame.new(3, 0, 0) end
+
+            WindUI:Notify({ Title = "Hitbox", Content = "Hitbox expanded!", Duration = 2 })
+        else
+            for _, part in pairs(hitboxParts) do
+                if part and part.Parent then part:Destroy() end
+            end
+            hitboxParts = {}
+            WindUI:Notify({ Title = "Hitbox", Content = "Hitbox reset.", Duration = 2 })
+        end
+    end
+})
+
+FunTab:Toggle({
+    Title = "Touch Fling",
+    Desc = "Fling players on touch",
+    Default = false,
+    Callback = function(state)
+        isFlingOn = state
+
+        if isFlingOn then
+            flingLoop = RunService.Heartbeat:Connect(function()
+                local char = GetCharacter()
+                if not char then return end
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+
+                local currentVel = hrp.Velocity
+                hrp.Velocity = currentVel * 10000 + Vector3.new(0, 10000, 0)
+
+                if isHitboxExpanded then
+                    for _, part in pairs(hitboxParts) do
+                        if part and part.Parent then
+                            part.Velocity = hrp.Velocity
+                        end
+                    end
+                end
+
+                RunService.RenderStepped:Wait()
+
+                if char and char.Parent and hrp and hrp.Parent then
+                    hrp.Velocity = currentVel
+                end
+
+                RunService.Stepped:Wait()
+                if char and char.Parent and hrp and hrp.Parent then
+                    hrp.Velocity = currentVel + Vector3.new(0, 0.1, 0)
+                end
+            end)
+
+            WindUI:Notify({ Title = "Touch Fling", Content = "Fling enabled!", Duration = 2 })
+        else
+            if flingLoop then
+                flingLoop:Disconnect()
+                flingLoop = nil
+            end
+
+            local char = GetCharacter()
+            if char then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.Velocity = Vector3.new(0, 0, 0)
+                    hrp.RotVelocity = Vector3.new(0, 0, 0)
+                end
+            end
+
+            WindUI:Notify({ Title = "Touch Fling", Content = "Fling disabled.", Duration = 2 })
+        end
+    end
+})
+
+FunTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 👻 INVISIBLE
+-- ══════════════════════════════════════════════════════════════════
+FunTab:Section({ Title = "👻 Invisible", TextSize = 20 })
+
+local isInvisibleOn = false
+local invisibleLoop = nil
+
+FunTab:Toggle({
+    Title = "Invisible",
+    Desc = "Real invisible (others can't see you)",
+    Default = false,
+    Callback = function(state)
+        isInvisibleOn = state
+
+        if isInvisibleOn then
+            invisibleLoop = RunService.Heartbeat:Connect(function()
+                local char = GetCharacter()
+                if not char then return end
+
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                local hum = char:FindFirstChild("Humanoid")
+                if not hrp or not hum then return end
+
+                local currentCF = hrp.CFrame
+                local currentCamOffset = hum.CameraOffset
+
+                local hiddenCF = currentCF * CFrame.new(0, -200000, 0)
+                hrp.CFrame = hiddenCF
+
+                hum.CameraOffset = hiddenCF:ToObjectSpace(CFrame.new(currentCF.Position)).Position
+
+                RunService.RenderStepped:Wait()
+
+                hrp.CFrame = currentCF
+                hum.CameraOffset = currentCamOffset
+            end)
+
+            WindUI:Notify({ Title = "Invisible", Content = "You are now invisible to others!", Duration = 3 })
+        else
+            if invisibleLoop then
+                invisibleLoop:Disconnect()
+                invisibleLoop = nil
+            end
+
+            local char = GetCharacter()
+            if char then
+                local hum = char:FindFirstChild("Humanoid")
+                if hum then
+                    hum.CameraOffset = Vector3.new(0, 0, 0)
+                end
+            end
+
+            WindUI:Notify({ Title = "Invisible", Content = "Invisible disabled.", Duration = 2 })
+        end
+    end
+})
+
+FunTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 👁️ SPECTATE PLAYER
+-- ══════════════════════════════════════════════════════════════════
+FunTab:Section({ Title = "👁️ Spectate Player", TextSize = 20 })
+
+local spectateTarget = nil
+local isSpectating = false
+local spectateLoop = nil
+local lastKnownPosition = nil
+
+local function GetPlayerList()
+    local list = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            table.insert(list, p.Name)
+        end
+    end
+    return list
+end
+
+FunTab:Dropdown({
+    Title = "Select Player",
+    Desc = "Choose player to spectate",
+    Values = GetPlayerList(),
+    Callback = function(selected)
+        spectateTarget = Players:FindFirstChild(selected)
+        WindUI:Notify({ Title = "Spectate", Content = "Selected: " .. selected, Duration = 2 })
+    end
+})
+
+FunTab:Button({
+    Title = "🔄 Refresh Player List",
+    Callback = function()
+        WindUI:Notify({ Title = "Spectate", Content = "Re-open dropdown to see updated list", Duration = 2 })
+    end
+})
+
+FunTab:Toggle({
+    Title = "Spectate",
+    Desc = "Watch selected player",
+    Default = false,
+    Callback = function(state)
+        isSpectating = state
+
+        if isSpectating then
+            if not spectateTarget then
+                WindUI:Notify({ Title = "Error", Content = "Please select a player first!", Duration = 2 })
+                return
+            end
+
+            if not spectateTarget.Parent then
+                WindUI:Notify({ Title = "Error", Content = "Player left the game!", Duration = 2 })
+                spectateTarget = nil
+                return
+            end
+
+            spectateLoop = RunService.RenderStepped:Connect(function()
+                if not spectateTarget or not spectateTarget.Parent then
+                    isSpectating = false
+                    if spectateLoop then
+                        spectateLoop:Disconnect()
+                        spectateLoop = nil
+                    end
+                    WindUI:Notify({ Title = "Spectate", Content = "Player left!", Duration = 2 })
+                    return
+                end
+
+                local targetChar = spectateTarget.Character
+                local camera = workspace.CurrentCamera
+
+                if targetChar then
+                    local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+                    local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
+
+                    if targetHRP then
+                        lastKnownPosition = targetHRP.Position
+                        pcall(function()
+                            LocalPlayer:RequestStreamAroundAsync(targetHRP.Position, 5)
+                        end)
+                    end
+
+                    if targetHum then
+                        camera.CameraSubject = targetHum
+                    elseif targetHRP then
+                        camera.CameraSubject = targetHRP
+                    elseif lastKnownPosition then
+                        camera.CameraType = Enum.CameraType.Custom
+                        camera.CFrame = CFrame.new(lastKnownPosition + Vector3.new(0, 10, 15), lastKnownPosition)
+                    end
+                elseif lastKnownPosition then
+                    camera.CameraType = Enum.CameraType.Custom
+                    camera.CFrame = CFrame.new(lastKnownPosition + Vector3.new(0, 10, 15), lastKnownPosition)
+                end
+            end)
+
+            WindUI:Notify({ Title = "Spectate", Content = "Spectating " .. spectateTarget.Name, Duration = 3 })
+        else
+            if spectateLoop then
+                spectateLoop:Disconnect()
+                spectateLoop = nil
+            end
+            lastKnownPosition = nil
+
+            local myChar = GetCharacter()
+            if myChar then
+                local myHum = myChar:FindFirstChildOfClass("Humanoid")
+                if myHum then
+                    workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+                    workspace.CurrentCamera.CameraSubject = myHum
+                end
+            end
+
+            WindUI:Notify({ Title = "Spectate", Content = "Spectate stopped.", Duration = 2 })
+        end
+    end
+})
+
+FunTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🚶 AUTO FOLLOW
+-- ══════════════════════════════════════════════════════════════════
+FunTab:Section({ Title = "🚶 Auto Follow", TextSize = 20 })
+
+local followTarget = nil
+local isFollowing = false
+local followLoop = nil
+
+FunTab:Dropdown({
+    Title = "Select Target",
+    Desc = "Choose player to follow",
+    Values = GetPlayerList(),
+    Callback = function(selected)
+        followTarget = Players:FindFirstChild(selected)
+        WindUI:Notify({ Title = "Follow", Content = "Target: " .. selected, Duration = 2 })
+    end
+})
+
+FunTab:Toggle({
+    Title = "Auto Follow",
+    Desc = "Follow selected player automatically",
+    Default = false,
+    Callback = function(state)
+        isFollowing = state
+
+        if isFollowing then
+            if not followTarget then
+                WindUI:Notify({ Title = "Error", Content = "Please select a target first!", Duration = 2 })
+                return
+            end
+
+            if not followTarget.Parent then
+                WindUI:Notify({ Title = "Error", Content = "Player left the game!", Duration = 2 })
+                followTarget = nil
+                return
+            end
+
+            followLoop = RunService.Heartbeat:Connect(function()
+                if not isFollowing or not followTarget then
+                    isFollowing = false
+                    if followLoop then
+                        followLoop:Disconnect()
+                        followLoop = nil
+                    end
+                    return
+                end
+
+                if not followTarget.Parent then
+                    isFollowing = false
+                    if followLoop then
+                        followLoop:Disconnect()
+                        followLoop = nil
+                    end
+                    WindUI:Notify({ Title = "Follow", Content = "Target left the game!", Duration = 2 })
+                    return
+                end
+
+                local myChar = GetCharacter()
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                local myHum = myChar and myChar:FindFirstChild("Humanoid")
+
+                local tChar = followTarget.Character
+                local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                local tHum = tChar and tChar:FindFirstChild("Humanoid")
+
+                if not (myHRP and myHum and tHRP and tHum and tHum.Health > 0) then
+                    return
+                end
+
+                local look = tHRP.CFrame.LookVector
+                local behindPos = tHRP.Position - (look * 4) + Vector3.new(0, 0, 0)
+                local frontPoint = behindPos + look
+
+                myHRP.CFrame = CFrame.new(behindPos, frontPoint)
+            end)
+
+            WindUI:Notify({ Title = "Follow", Content = "Following " .. followTarget.Name, Duration = 3 })
+        else
+            if followLoop then
+                followLoop:Disconnect()
+                followLoop = nil
+            end
+
+            WindUI:Notify({ Title = "Follow", Content = "Follow stopped.", Duration = 2 })
+        end
+    end
+})
+
+FunTab:Divider()
+
 -- ══════════════════════════════════════════════════════════════════
 -- ⚙️ SETTINGS TAB
 -- ══════════════════════════════════════════════════════════════════
@@ -2046,59 +3489,277 @@ local SettingsTab = Window:Tab({
     Icon = "settings",
 })
 
--- UI Settings
-SettingsTab:Paragraph({ Title = "🎨 UI Settings", Desc = "" })
-SettingsTab:Space()
+-- ══════════════════════════════════════════════════════════════════
+-- 🎨 APPEARANCE SETTINGS
+-- ══════════════════════════════════════════════════════════════════
+SettingsTab:Section({ Title = "🎨 Appearance", TextSize = 16 })
 
 SettingsTab:Toggle({
-    Title = "Notifications",
-    Desc = "Show notifications",
+    Title = "Show Notifications",
+    Desc = "Display popup notifications",
     Default = true,
     Callback = function(state)
         -- Toggle notifications
+        WindUI:Notify({
+            Title = "Notifications",
+            Content = state and "Notifications enabled" or "Notifications disabled",
+            Duration = 2
+        })
+    end,
+})
+
+SettingsTab:Dropdown({
+    Title = "Theme",
+    Desc = "Choose UI color theme",
+    Values = { "Dark", "Light", "Midnight", "Aqua" },
+    Callback = function(selected)
+        pcall(function()
+            WindUI:SetTheme(selected)
+        end)
+        WindUI:Notify({ Title = "Theme", Content = "Theme changed to " .. selected, Duration = 2 })
+    end
+})
+
+SettingsTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🔧 GENERAL SETTINGS
+-- ══════════════════════════════════════════════════════════════════
+SettingsTab:Section({ Title = "🔧 General", TextSize = 16 })
+
+SettingsTab:Toggle({
+    Title = "Auto Anti-AFK",
+    Desc = "Automatically enable Anti-AFK on start",
+    Default = false,
+    Callback = function(state)
+        if state then
+            WindUI:Notify({ Title = "Auto Anti-AFK", Content = "Will be enabled on next load", Duration = 2 })
+        end
+    end,
+})
+
+SettingsTab:Toggle({
+    Title = "Remember Position",
+    Desc = "Save UI position between sessions",
+    Default = true,
+    Callback = function(state)
+        WindUI:Notify({ Title = "Position", Content = state and "Position will be saved" or "Position won't be saved", Duration = 2 })
     end,
 })
 
 SettingsTab:Divider()
 
--- About
-SettingsTab:Paragraph({ Title = "ℹ️ About", Desc = "" })
-SettingsTab:Space()
+-- ══════════════════════════════════════════════════════════════════
+-- ℹ️ ABOUT & INFO
+-- ══════════════════════════════════════════════════════════════════
+SettingsTab:Section({ Title = "ℹ️ About Starship", TextSize = 16 })
 
-SettingsTab:Button({
-    Title = "📱 Version: " .. VERSION,
-    Callback = function() end,
-})
-
-SettingsTab:Button({
+SettingsTab:Paragraph({
     Title = "🚀 Starship Mobile",
-    Desc = "Powered by WindUI",
-    Callback = function() end,
+    Desc = "Version: " .. VERSION .. "\n" ..
+        "Framework: WindUI\n" ..
+        "Platform: Mobile Optimized\n" ..
+        "Status: ✅ Active",
 })
+
+SettingsTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🔗 LINKS & SOCIAL
+-- ══════════════════════════════════════════════════════════════════
+SettingsTab:Section({ Title = "🔗 Links & Social", TextSize = 16 })
 
 SettingsTab:Button({
     Title = "💬 Join Discord",
-    Desc = "Get updates and support",
+    Desc = "Get updates, support & community",
     Callback = function()
         if setclipboard then
             setclipboard("https://discord.gg/starship")
-            WindUI:Notify({ Title = "Copied!", Content = "Discord link copied!", Duration = 3 })
+            WindUI:Notify({ Title = "✅ Copied!", Content = "Discord invite link copied to clipboard!", Duration = 3 })
+        else
+            WindUI:Notify({ Title = "Discord", Content = "https://discord.gg/qbPcSMg8", Duration = 5 })
         end
     end,
 })
+
+SettingsTab:Button({
+    Title = "⭐ Rate Us",
+    Desc = "Leave a review if you enjoy Starship",
+    Callback = function()
+        WindUI:Notify({ Title = "Thank You!", Content = "We appreciate your support! 💜", Duration = 3 })
+    end,
+})
+
+SettingsTab:Button({
+    Title = "📋 Copy Script",
+    Desc = "Copy loadstring to clipboard",
+    Callback = function()
+        if setclipboard then
+            setclipboard('loadstring(game:HttpGet("https://your-url.com/Mobile/Loader.lua"))()')
+            WindUI:Notify({ Title = "✅ Copied!", Content = "Loadstring copied to clipboard!", Duration = 3 })
+        end
+    end,
+})
+
+SettingsTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 👨‍💻 CREDITS
+-- ══════════════════════════════════════════════════════════════════
+SettingsTab:Section({ Title = "👨‍💻 Credits", TextSize = 16 })
+
+SettingsTab:Paragraph({
+    Title = "Development Team",
+    Desc = "🎨 UI/UX: Starship Team\n" ..
+        "💻 Backend: Starship Team\n" ..
+        "🛠️ Framework: WindUI by Footagesus\n" ..
+        "❤️ Special Thanks: Our Community",
+})
+
+SettingsTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- ⚠️ DANGER ZONE
+-- ══════════════════════════════════════════════════════════════════
+SettingsTab:Section({ Title = "⚠️ Danger Zone", TextSize = 16 })
+
+SettingsTab:Button({
+    Title = "🔄 Reset All Settings",
+    Desc = "Reset all settings to default",
+    Callback = function()
+        WindUI:Notify({ Title = "Reset", Content = "Settings have been reset!", Duration = 2 })
+    end,
+})
+
+SettingsTab:Button({
+    Title = "🗑️ Clear Cache",
+    Desc = "Clear saved data and cache",
+    Callback = function()
+        pcall(function()
+            if delfolder then
+                delfolder("StarshipMobile")
+                WindUI:Notify({ Title = "✅ Cleared", Content = "Cache has been cleared!", Duration = 2 })
+            else
+                WindUI:Notify({ Title = "Info", Content = "No cache to clear", Duration = 2 })
+            end
+        end)
+    end,
+})
+
+SettingsTab:Space()
+
+SettingsTab:Button({
+    Title = "❌ Close Starship",
+    Desc = "Close UI and Mini Player completely",
+    Callback = function()
+        -- Cleanup Mini Player
+        if MiniPlayerGui then
+            MiniPlayerGui:Destroy()
+            MiniPlayerGui = nil
+        end
+        -- Stop playback
+        StopPlayback()
+        -- Destroy WindUI Window
+        Window:Destroy()
+    end,
+})
+
+
 
 -- ══════════════════════════════════════════════════════════════════
 -- SELECT DEFAULT TAB & WELCOME
 -- ══════════════════════════════════════════════════════════════════
 DashboardTab:Select()
 
--- Handle Window Close
-Window:OnClose(function()
+-- Track window state untuk cleanup
+local isWindowDestroyed = false
+
+-- Fungsi cleanup untuk destroy semua
+local function CleanupAll()
+    if isWindowDestroyed then return end
+    isWindowDestroyed = true
+
     StopPlayback()
     if MiniPlayerGui then
         MiniPlayerGui:Destroy()
         MiniPlayerGui = nil
     end
+end
+
+-- Handle Window Close/Destroy
+Window:OnClose(function()
+    -- OnClose dipanggil saat minimize - Mini Player TETAP ada
+    -- Tidak melakukan cleanup di sini
+end)
+
+-- Method 1: OnDestroy callback (jika WindUI support)
+pcall(function()
+    if Window.OnDestroy then
+        Window:OnDestroy(CleanupAll)
+    end
+end)
+
+-- Method 2: Detect ScreenGui destroy dengan multiple name patterns
+task.spawn(function()
+    task.wait(0.5) -- Tunggu WindUI selesai setup
+
+    local function findWindUIScreen()
+        -- Cari di CoreGui
+        local success, coreGui = pcall(function() return game:GetService("CoreGui") end)
+        if success and coreGui then
+            for _, gui in ipairs(coreGui:GetChildren()) do
+                if gui:IsA("ScreenGui") then
+                    local name = gui.Name:lower()
+                    if name:find("windui") or name:find("starship") or name:find("ftgs") then
+                        return gui
+                    end
+                end
+            end
+        end
+
+        -- Cari di PlayerGui
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            for _, gui in ipairs(playerGui:GetChildren()) do
+                if gui:IsA("ScreenGui") then
+                    local name = gui.Name:lower()
+                    if name:find("windui") or name:find("starship") or name:find("ftgs") then
+                        return gui
+                    end
+                end
+            end
+        end
+
+        return nil
+    end
+
+    local windUIScreen = findWindUIScreen()
+
+    if windUIScreen then
+        -- Connect ke Destroying event
+        windUIScreen.Destroying:Connect(CleanupAll)
+
+        -- Juga connect ke AncestryChanged sebagai backup
+        windUIScreen.AncestryChanged:Connect(function(_, parent)
+            if parent == nil then
+                CleanupAll()
+            end
+        end)
+    end
+
+    -- Method 3: Polling backup - check setiap 2 detik apakah window masih ada
+    task.spawn(function()
+        while not isWindowDestroyed do
+            task.wait(2)
+
+            -- Check apakah WindUI screen masih exist
+            local screen = findWindUIScreen()
+            if not screen or not screen.Parent then
+                CleanupAll()
+                break
+            end
+        end
+    end)
 end)
 
 task.delay(1, function()

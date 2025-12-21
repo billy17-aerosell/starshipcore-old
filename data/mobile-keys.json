@@ -1,0 +1,22 @@
+{
+  "keys": {},
+  "whitelist": {
+    "9268011358": {
+      "username": "Standalone",
+      "type": "MOBILE_OWNER",
+      "status": "active",
+      "duration": "LIFETIME",
+      "expiresAt": null,
+      "maxDevices": 10,
+      "addedAt": "2025-01-01T00:00:00.000Z",
+      "note": "Owner - Full mobile access",
+      "platform": "mobile"
+    }
+  },
+  "metadata": {
+    "totalWhitelisted": 1,
+    "lastUpdated": "2025-01-01T00:00:00.000Z",
+    "platform": "mobile",
+    "description": "Separate whitelist for Starship Mobile - Independent from PC whitelist"
+  }
+}
