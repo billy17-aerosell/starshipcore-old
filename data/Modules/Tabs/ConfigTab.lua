@@ -15,17 +15,131 @@ local C_GREEN = Color3.fromRGB(60, 255, 160)
 
 local CONFIG_FOLDER = "StarshipCore/StarshipConfigs"
 local PROFILE_FOLDER = "StarshipCore/StarshipProfiles"
-local AUTOEXEC_FOLDER = "autoexec"
 if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
 if not isfolder(PROFILE_FOLDER) then makefolder(PROFILE_FOLDER) end
-if not isfolder(AUTOEXEC_FOLDER) then makefolder(AUTOEXEC_FOLDER) end
+
+-- Multi-Executor Autoexec Support
+local EXECUTOR_AUTOEXEC_PATHS = {
+    -- Format: ["ExecutorName"] = "autoexec_folder_path"
+    ["Seliware"] = "autoexec",
+    ["Synapse X"] = "autoexec",
+    ["Synapse Z"] = "autoexec",
+    ["Script-Ware"] = "autoexec",
+    ["ScriptWare"] = "autoexec",
+    ["Fluxus"] = "autoexec",
+    ["KRNL"] = "autoexec",
+    ["Krnl"] = "autoexec",
+    ["Solara"] = "autoexec",
+    ["Delta"] = "autoexec",
+    ["Hydrogen"] = "autoexec",
+    ["Wave"] = "autoexec",
+    ["Codex"] = "autoexec",
+    ["Electron"] = "autoexec",
+    ["Comet"] = "autoexec",
+    ["Nihon"] = "autoexec",
+    ["Celery"] = "autoexec",
+    ["Trigon"] = "autoexec",
+    ["Vegax"] = "autoexec",
+    ["Evon"] = "autoexec",
+    ["JJSploit"] = "autoexec",
+    ["Oxygen U"] = "autoexec",
+    ["Temple"] = "autoexec",
+    ["Arceus X"] = "autoexec",      -- Mobile
+    ["Codex Mobile"] = "autoexec",  -- Mobile
+    ["Fluxus Mobile"] = "autoexec", -- Mobile
+    ["Delta Mobile"] = "autoexec",  -- Mobile
+    ["Unknown"] = "autoexec",       -- Fallback
+}
+
+-- Executor name list for dropdown
+local EXECUTOR_LIST = {
+    "Auto-Detect",
+    "Seliware",
+    "Synapse X",
+    "Synapse Z",
+    "Script-Ware",
+    "Fluxus",
+    "KRNL",
+    "Solara",
+    "Delta",
+    "Hydrogen",
+    "Wave",
+    "Codex",
+    "Electron",
+    "Comet",
+    "Nihon",
+    "Celery",
+    "Trigon",
+    "Vegax",
+    "Evon",
+    "JJSploit",
+    "Oxygen U",
+    "Temple",
+    "Arceus X",
+    "Codex Mobile",
+    "Fluxus Mobile",
+    "Delta Mobile",
+}
+
+-- Detect current executor
+local function DetectExecutor()
+    local executorName = "Unknown"
+
+    -- Try identifyexecutor() first (most common)
+    if identifyexecutor then
+        local success, name, version = pcall(identifyexecutor)
+        if success and name then
+            executorName = tostring(name)
+        end
+        -- Try getexecutorname() as fallback
+    elseif getexecutorname then
+        local success, name = pcall(getexecutorname)
+        if success and name then
+            executorName = tostring(name)
+        end
+        -- Try checking for executor-specific globals
+    elseif syn then
+        executorName = "Synapse X"
+    elseif fluxus then
+        executorName = "Fluxus"
+    elseif KRNL_LOADED then
+        executorName = "KRNL"
+    elseif Hydrogen then
+        executorName = "Hydrogen"
+    elseif getgenv().Solara then
+        executorName = "Solara"
+    end
+
+    return executorName
+end
+
+-- Get autoexec folder for executor
+local function GetAutoExecFolder(executorName)
+    -- If executor is in our mapping, use it
+    for name, path in pairs(EXECUTOR_AUTOEXEC_PATHS) do
+        if executorName:lower():find(name:lower()) then
+            return path
+        end
+    end
+    -- Fallback to default
+    return "autoexec"
+end
+
+local DetectedExecutor = DetectExecutor()
+local AUTOEXEC_FOLDER = GetAutoExecFolder(DetectedExecutor)
+
+-- Ensure autoexec folder exists
+if not isfolder(AUTOEXEC_FOLDER) then
+    pcall(function() makefolder(AUTOEXEC_FOLDER) end)
+end
 
 -- Auto Execute Settings
 local AUTO_EXEC_FILE = CONFIG_FOLDER .. "/AutoExecSettings.json"
 local AutoExecSettings = {
     Enabled = false,
-    AutoLoadProfile = "", -- Profile name to auto-load
-    DelaySeconds = 1,     -- Delay before auto-executing features
+    AutoLoadProfile = "",             -- Profile name to auto-load
+    DelaySeconds = 1,                 -- Delay before auto-executing features
+    SelectedExecutor = "Auto-Detect", -- User's executor choice
 }
 
 -- Load Auto Exec Settings on startup
@@ -38,9 +152,45 @@ local function LoadAutoExecSettings()
             if result.Enabled ~= nil then AutoExecSettings.Enabled = result.Enabled end
             if result.AutoLoadProfile then AutoExecSettings.AutoLoadProfile = result.AutoLoadProfile end
             if result.DelaySeconds then AutoExecSettings.DelaySeconds = result.DelaySeconds end
+            if result.SelectedExecutor then AutoExecSettings.SelectedExecutor = result.SelectedExecutor end
         end
     end
+
+    -- Update AUTOEXEC_FOLDER based on settings
+    if AutoExecSettings.SelectedExecutor and AutoExecSettings.SelectedExecutor ~= "Auto-Detect" then
+        AUTOEXEC_FOLDER = GetAutoExecFolder(AutoExecSettings.SelectedExecutor)
+    else
+        AUTOEXEC_FOLDER = GetAutoExecFolder(DetectedExecutor)
+    end
+
+    -- Ensure autoexec folder exists
+    if not isfolder(AUTOEXEC_FOLDER) then
+        pcall(function() makefolder(AUTOEXEC_FOLDER) end)
+    end
+
     return AutoExecSettings
+end
+
+-- Get current executor name (detected or selected)
+local function GetCurrentExecutorName()
+    if AutoExecSettings.SelectedExecutor and AutoExecSettings.SelectedExecutor ~= "Auto-Detect" then
+        return AutoExecSettings.SelectedExecutor
+    end
+    return DetectedExecutor
+end
+
+-- Update autoexec folder when executor changes
+local function UpdateAutoExecFolder(executorName)
+    if executorName == "Auto-Detect" then
+        AUTOEXEC_FOLDER = GetAutoExecFolder(DetectedExecutor)
+    else
+        AUTOEXEC_FOLDER = GetAutoExecFolder(executorName)
+    end
+
+    -- Ensure folder exists
+    if not isfolder(AUTOEXEC_FOLDER) then
+        pcall(function() makefolder(AUTOEXEC_FOLDER) end)
+    end
 end
 
 local function SaveAutoExecSettings()
@@ -51,30 +201,65 @@ end
 
 -- Create autoexec script file for executor
 local function CreateAutoExecScript()
-    local scriptContent = [[
+    local currentExecutor = GetCurrentExecutorName()
+    local delayTime = AutoExecSettings.DelaySeconds or 2
+
+    local scriptContent = string.format([[
 -- StarshipCore Auto Execute Script
 -- This file is auto-generated. Do not edit manually.
--- Place this in your executor's autoexec folder
+-- Executor: %s
+-- Autoexec Folder: %s
+-- Generated for: StarshipCore
 
 task.spawn(function()
-    task.wait(2) -- Wait for game to load
+    task.wait(%d) -- Wait for game to load
     loadstring(game:HttpGet("https://starship-core.my.id/api/bootstrap"))()
 end)
-]]
+]], currentExecutor, AUTOEXEC_FOLDER, delayTime)
+
     if writefile then
-        writefile(AUTOEXEC_FOLDER .. "/StarshipCore_AutoExec.lua", scriptContent)
-        return true
+        -- Ensure folder exists
+        if not isfolder(AUTOEXEC_FOLDER) then
+            pcall(function() makefolder(AUTOEXEC_FOLDER) end)
+        end
+
+        local filePath = AUTOEXEC_FOLDER .. "/StarshipCore_AutoExec.lua"
+        local success = pcall(function()
+            writefile(filePath, scriptContent)
+        end)
+        return success, filePath
     end
-    return false
+    return false, nil
 end
 
 local function RemoveAutoExecScript()
     local path = AUTOEXEC_FOLDER .. "/StarshipCore_AutoExec.lua"
     if isfile and isfile(path) then
-        delfile(path)
+        pcall(function() delfile(path) end)
         return true
     end
     return false
+end
+
+-- Check if autoexec script exists
+local function AutoExecScriptExists()
+    local path = AUTOEXEC_FOLDER .. "/StarshipCore_AutoExec.lua"
+    if isfile then
+        return isfile(path)
+    end
+    return false
+end
+
+-- Get autoexec status info
+local function GetAutoExecStatus()
+    local status = {
+        Executor = GetCurrentExecutorName(),
+        DetectedExecutor = DetectedExecutor,
+        AutoExecFolder = AUTOEXEC_FOLDER,
+        ScriptExists = AutoExecScriptExists(),
+        Enabled = AutoExecSettings.Enabled,
+    }
+    return status
 end
 
 LoadAutoExecSettings()
@@ -291,7 +476,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
         btn.TextSize = 10
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
         local s = Instance.new("UIStroke", btn); s.Color = col; s.Transparency = 0.7; s.ApplyStrokeMode = Enum
-        .ApplyStrokeMode.Border
+            .ApplyStrokeMode.Border
 
         RegisterTheme(btn, "BackgroundColor3", "Side")
         -- Note: TextColor3 and Stroke Color here are variable (col), so we can't easily register them to a single theme type unless we know 'col' is always one of the theme colors.
@@ -505,8 +690,12 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
 
         btn.MouseButton1Click:Connect(function()
             local t = Themes[name]
-            Config.AccentColor = { R = math.floor(t.Accent.R * 255), G = math.floor(t.Accent.G * 255), B = math.floor(t
-            .Accent.B * 255) }
+            Config.AccentColor = {
+                R = math.floor(t.Accent.R * 255),
+                G = math.floor(t.Accent.G * 255),
+                B = math.floor(t
+                    .Accent.B * 255)
+            }
             ApplyTheme(name)
             -- Refresh Merger List to apply new theme colors
             if UIHandlers and UIHandlers.RefreshMergerList then
@@ -789,11 +978,106 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
         DropdownMenu.Visible = DropdownOpen
     end)
 
+    -- Executor Selection Row
+    local ExecutorRow = Instance.new("Frame", AutoExecContainer)
+    ExecutorRow.Size = UDim2.new(1, 0, 0, 35)
+    ExecutorRow.BackgroundColor3 = C_SIDE
+    ExecutorRow.LayoutOrder = 3
+    Instance.new("UICorner", ExecutorRow).CornerRadius = UDim.new(0, 6)
+    RegisterTheme(ExecutorRow, "BackgroundColor3", "Side")
+
+    local ExecutorLabel = Instance.new("TextLabel", ExecutorRow)
+    ExecutorLabel.Text = "Executor:"
+    ExecutorLabel.Size = UDim2.new(0.35, 0, 1, 0)
+    ExecutorLabel.Position = UDim2.new(0.05, 0, 0, 0)
+    ExecutorLabel.BackgroundTransparency = 1
+    ExecutorLabel.TextColor3 = C_TEXT
+    ExecutorLabel.Font = Enum.Font.Gotham
+    ExecutorLabel.TextSize = 10
+    ExecutorLabel.TextXAlignment = Enum.TextXAlignment.Left
+    RegisterTheme(ExecutorLabel, "TextColor3", "Text")
+
+    local ExecutorDropdown = Instance.new("TextButton", ExecutorRow)
+    ExecutorDropdown.Size = UDim2.new(0.55, 0, 0, 25)
+    ExecutorDropdown.Position = UDim2.new(0.4, 0, 0.5, -12)
+    ExecutorDropdown.BackgroundColor3 = C_ITEM
+    local displayExecutor = AutoExecSettings.SelectedExecutor or "Auto-Detect"
+    if displayExecutor == "Auto-Detect" then
+        displayExecutor = "Auto-Detect (" .. DetectedExecutor .. ")"
+    end
+    ExecutorDropdown.Text = displayExecutor
+    ExecutorDropdown.TextColor3 = C_ACCENT
+    ExecutorDropdown.Font = Enum.Font.GothamBold
+    ExecutorDropdown.TextSize = 9
+    ExecutorDropdown.TextTruncate = Enum.TextTruncate.AtEnd
+    Instance.new("UICorner", ExecutorDropdown).CornerRadius = UDim.new(0, 4)
+    RegisterTheme(ExecutorDropdown, "BackgroundColor3", "Item")
+    RegisterTheme(ExecutorDropdown, "TextColor3", "Accent")
+
+    -- Executor Dropdown Menu
+    local ExecDropdownOpen = false
+    local ExecDropdownMenu = Instance.new("ScrollingFrame", ExecutorRow)
+    ExecDropdownMenu.Size = UDim2.new(0.55, 0, 0, 150)
+    ExecDropdownMenu.Position = UDim2.new(0.4, 0, 1, 5)
+    ExecDropdownMenu.BackgroundColor3 = C_ITEM
+    ExecDropdownMenu.Visible = false
+    ExecDropdownMenu.ZIndex = 15
+    ExecDropdownMenu.ScrollBarThickness = 4
+    ExecDropdownMenu.CanvasSize = UDim2.new(0, 0, 0, 0)
+    ExecDropdownMenu.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Instance.new("UICorner", ExecDropdownMenu).CornerRadius = UDim.new(0, 6)
+    RegisterTheme(ExecDropdownMenu, "BackgroundColor3", "Item")
+
+    local ExecDropdownLayout = Instance.new("UIListLayout", ExecDropdownMenu)
+    ExecDropdownLayout.Padding = UDim.new(0, 2)
+    ExecDropdownLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    -- Populate executor dropdown
+    for i, execName in ipairs(EXECUTOR_LIST) do
+        local execBtn = Instance.new("TextButton", ExecDropdownMenu)
+        execBtn.Text = execName
+        if execName == "Auto-Detect" then
+            execBtn.Text = "Auto-Detect (" .. DetectedExecutor .. ")"
+        end
+        execBtn.Size = UDim2.new(1, -8, 0, 22)
+        execBtn.Position = UDim2.new(0, 4, 0, 0)
+        execBtn.BackgroundTransparency = 1
+        execBtn.TextColor3 = C_TEXT
+        execBtn.Font = Enum.Font.Gotham
+        execBtn.TextSize = 9
+        execBtn.ZIndex = 16
+        execBtn.LayoutOrder = i
+        RegisterTheme(execBtn, "TextColor3", "Text")
+
+        execBtn.MouseButton1Click:Connect(function()
+            AutoExecSettings.SelectedExecutor = execName
+            UpdateAutoExecFolder(execName)
+
+            local newDisplay = execName
+            if execName == "Auto-Detect" then
+                newDisplay = "Auto-Detect (" .. DetectedExecutor .. ")"
+            end
+            ExecutorDropdown.Text = newDisplay
+            ExecDropdownMenu.Visible = false
+            ExecDropdownOpen = false
+        end)
+    end
+
+    ExecutorDropdown.MouseButton1Click:Connect(function()
+        ExecDropdownOpen = not ExecDropdownOpen
+        ExecDropdownMenu.Visible = ExecDropdownOpen
+        -- Close profile dropdown if open
+        if ExecDropdownOpen then
+            DropdownMenu.Visible = false
+            DropdownOpen = false
+        end
+    end)
+
     -- Delay Row
     local DelayRow = Instance.new("Frame", AutoExecContainer)
     DelayRow.Size = UDim2.new(1, 0, 0, 35)
     DelayRow.BackgroundColor3 = C_SIDE
-    DelayRow.LayoutOrder = 3
+    DelayRow.LayoutOrder = 4
     Instance.new("UICorner", DelayRow).CornerRadius = UDim.new(0, 6)
     RegisterTheme(DelayRow, "BackgroundColor3", "Side")
 
@@ -834,7 +1118,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     local SaveAutoExecBtn = Instance.new("TextButton", AutoExecContainer)
     SaveAutoExecBtn.Text = "💾 SAVE AUTO EXECUTE SETTINGS"
     SaveAutoExecBtn.Size = UDim2.new(1, 0, 0, 35)
-    SaveAutoExecBtn.LayoutOrder = 4
+    SaveAutoExecBtn.LayoutOrder = 5
     SaveAutoExecBtn.BackgroundColor3 = C_ACCENT
     SaveAutoExecBtn.TextColor3 = C_TEXT
     SaveAutoExecBtn.Font = Enum.Font.GothamBold
@@ -847,7 +1131,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     local StatusLabel = Instance.new("TextLabel", AutoExecContainer)
     StatusLabel.Text = ""
     StatusLabel.Size = UDim2.new(1, 0, 0, 20)
-    StatusLabel.LayoutOrder = 5
+    StatusLabel.LayoutOrder = 6
     StatusLabel.BackgroundTransparency = 1
     StatusLabel.TextColor3 = C_GREEN
     StatusLabel.Font = Enum.Font.Gotham
@@ -864,12 +1148,13 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
         SaveAutoExecSettings()
 
         if AutoExecSettings.Enabled then
-            local success = CreateAutoExecScript()
+            local success, filePath = CreateAutoExecScript()
             if success then
-                StatusLabel.Text = "✅ Auto-exec script created in autoexec folder!"
+                local execName = GetCurrentExecutorName()
+                StatusLabel.Text = "✅ Script created: " .. AUTOEXEC_FOLDER .. "/StarshipCore_AutoExec.lua"
                 StatusLabel.TextColor3 = C_GREEN
             else
-                StatusLabel.Text = "⚠️ Could not create auto-exec script"
+                StatusLabel.Text = "⚠️ Could not create auto-exec script (check folder permissions)"
                 StatusLabel.TextColor3 = C_YELLOW
             end
         else
@@ -892,12 +1177,25 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
         SaveAutoExecBtn.Text = "💾 SAVE AUTO EXECUTE SETTINGS"
     end)
 
+    -- Detected Executor Info
+    local DetectedLabel = Instance.new("TextLabel", AutoExecContainer)
+    DetectedLabel.Text = "🔍 Detected Executor: " .. DetectedExecutor .. " | Folder: " .. AUTOEXEC_FOLDER
+    DetectedLabel.Size = UDim2.new(1, 0, 0, 18)
+    DetectedLabel.LayoutOrder = 7
+    DetectedLabel.BackgroundTransparency = 1
+    DetectedLabel.TextColor3 = C_ACCENT
+    DetectedLabel.Font = Enum.Font.Gotham
+    DetectedLabel.TextSize = 8
+    DetectedLabel.TextWrapped = true
+    DetectedLabel.TextXAlignment = Enum.TextXAlignment.Left
+    RegisterTheme(DetectedLabel, "TextColor3", "Accent")
+
     -- Instructions
     local InstructionsLabel = Instance.new("TextLabel", AutoExecContainer)
     InstructionsLabel.Text =
     "📝 After enabling, the script will be placed in your executor's autoexec folder.\nRestart your executor for changes to take effect."
     InstructionsLabel.Size = UDim2.new(1, 0, 0, 35)
-    InstructionsLabel.LayoutOrder = 6
+    InstructionsLabel.LayoutOrder = 8
     InstructionsLabel.BackgroundTransparency = 1
     InstructionsLabel.TextColor3 = C_TEXT_DIM
     InstructionsLabel.Font = Enum.Font.Gotham
