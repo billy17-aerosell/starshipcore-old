@@ -1,5 +1,5 @@
 // Mobile Bootstrap Endpoint - Public entry point for StarshipCore Mobile
-// Returns a small script that auto-detects userId and calls secure mobile-load API
+// Returns a small script that auto-detects userId and calls secure get-mobile-loader API
 // With browser detection, obfuscated response, and Discord logging
 
 // Helper function to send Discord webhook notification
@@ -167,17 +167,13 @@ export default async function handler(req, res) {
   console.log(`[${timestamp}] 📱 Mobile Bootstrap requested | IP: ${clientIP}`);
 
   // Obfuscated bootstrap script for Mobile
-  // The actual URL is encoded to prevent easy discovery
-  const encodedMobileUrl = Buffer.from(
-    "https://starship-core.my.id/api/mobile-load?userId=",
+  // Uses get-mobile-loader API (same pattern as PC bootstrap)
+  const encodedUrl = Buffer.from(
+    "https://starship-core.my.id/api/get-mobile-loader?userId=",
   ).toString("base64");
 
-  const encodedMobileScriptUrl = Buffer.from(
-    "https://starship-core.my.id/Mobile/Loader.lua",
-  ).toString("base64");
-
-  // Mobile bootstrap script - similar to PC but calls mobile endpoints
-  const mobileBootstrapScript = `local a=game:GetService("Players")local b=game:GetService("HttpService")local c=game:GetService("TweenService")local d=a.LocalPlayer;if not d then d=a:GetPropertyChangedSignal("LocalPlayer"):Wait()end;local e=tostring(d.UserId)local function f(g)local h="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"g=string.gsub(g,"[^"..h.."=]","")return(g:gsub(".",function(i)if i=="="then return""end;local j,k="",h:find(i)-1;for l=6,1,-1 do j=j..(k%2^l-k%2^(l-1)>0 and"1"or"0")end;return j end):gsub("%d%d%d?%d?%d?%d?%d?%d?",function(i)if#i~=8 then return""end;local m=0;for l=1,8 do m=m+(i:sub(l,l)=="1"and 2^(8-l)or 0)end;return string.char(m)end))end;local n=f("${encodedMobileUrl}")..e;local o=f("${encodedMobileScriptUrl}");local function p()local q=Instance.new("ScreenGui")q.Name="SMBL"q.ResetOnSpawn=false;q.ZIndexBehavior=Enum.ZIndexBehavior.Sibling;q.IgnoreGuiInset=true;pcall(function()q.Parent=game:GetService("CoreGui")end)if not q.Parent then q.Parent=d:WaitForChild("PlayerGui")end;local r=Instance.new("Frame")r.Size=UDim2.new(1,0,1,0)r.BackgroundColor3=Color3.fromHex("#0a0a0f")r.BorderSizePixel=0;r.Parent=q;local s=Instance.new("TextLabel")s.Size=UDim2.new(0,200,0,30)s.Position=UDim2.new(0.5,0,0.5,0)s.AnchorPoint=Vector2.new(0.5,0.5)s.BackgroundTransparency=1;s.Text="Loading..."s.TextColor3=Color3.fromHex("#8b5cf6")s.TextSize=18;s.Font=Enum.Font.GothamBold;s.Parent=r;return q,s end;local t,u=p()local function v(w)if u then u.Text=w end end;v("Authenticating...")local x,y=pcall(function()return game:HttpGet(n)end)if not x then if t then t:Destroy()end;warn("[SM] Connection failed")return end;v("Verifying license...")local z=nil;pcall(function()z=b:JSONDecode(y)end)if not z then if t then t:Destroy()end;warn("[SM] Invalid response")return end;if z.status~="success"then if t then t:Destroy()end;warn("[SM] "..(z.message or"Access denied"))return end;getgenv().StarshipSession={Role=z.role or"MOBILE VIP",Duration=z.duration or"LIFETIME",Expiry=z.expiry,RemainingDays=z.remainingDays,Platform="mobile",DeviceCount=z.deviceCount,MaxDevices=z.maxDevices,Username=z.username}v("Loading UI...")local A,B=pcall(function()return game:HttpGet(o)end)if not A or not B or B==""then if t then t:Destroy()end;warn("[SM] Failed to load UI")return end;v("Launching...")task.wait(0.3)if t then c:Create(t:FindFirstChild("Frame"),TweenInfo.new(0.3),{BackgroundTransparency=1}):Play()task.wait(0.3)t:Destroy()end;local C,D=loadstring(B)if C then C()else warn("[SM] Execution error: "..tostring(D))end`;
+  // Mobile bootstrap script - calls get-mobile-loader first (like PC pattern)
+  const mobileBootstrapScript = `local a=game:GetService("Players")local b=a.LocalPlayer;if not b then b=a:GetPropertyChangedSignal("LocalPlayer"):Wait()end;local c=tostring(b.UserId)local function d(e)local f=""for g in e:gmatch(".")do local h=string.byte(g)if h>=65 and h<=90 then f=f..string.char((h-65+26-13)%26+65)elseif h>=97 and h<=122 then f=f..string.char((h-97+26-13)%26+97)else f=f..g end end;return f end;local function i(j)local k="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"j=string.gsub(j,"[^"..k.."=]","")return(j:gsub(".",function(l)if l=="="then return""end;local m,n="",k:find(l)-1;for o=6,1,-1 do m=m..(n%2^o-n%2^(o-1)>0 and"1"or"0")end;return m end):gsub("%d%d%d?%d?%d?%d?%d?%d?",function(l)if#l~=8 then return""end;local p=0;for o=1,8 do p=p+(l:sub(o,o)=="1"and 2^(8-o)or 0)end;return string.char(p)end))end;local q=i("${encodedUrl}")..c;local r,s=pcall(function()return game:HttpGet(q)end)if r and s then if s:find("error%(")then warn("[SM] "..s)return end;local t,u=loadstring(s)if t then t()else warn("[SM] Load failed: "..tostring(u))end else warn("[SM] Connection failed")end`;
 
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");

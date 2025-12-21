@@ -12,7 +12,7 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Configuration
 local SECURE_API_URL = "https://starship-core.my.id"
-local MOBILE_SCRIPT_URL = SECURE_API_URL .. "/Mobile/Loader.lua"
+local MOBILE_UI_API = SECURE_API_URL .. "/api/get-mobile-ui?userId="
 local MOBILE_AUTH_API = SECURE_API_URL .. "/api/mobile-load"
 
 -- Encryption helpers
@@ -387,9 +387,10 @@ local function main()
     updateStatus("Loading Starship Mobile...", 0.85)
     task.wait(0.3)
 
-    -- Step 6: Load Mobile UI Script
+    -- Step 6: Load Mobile UI Script (from protected API)
+    local userId = tostring(LocalPlayer.UserId)
     local mobileScriptSuccess, mobileScript = pcall(function()
-        return game:HttpGet(MOBILE_SCRIPT_URL)
+        return game:HttpGet(MOBILE_UI_API .. userId)
     end)
 
     if not mobileScriptSuccess or not mobileScript or mobileScript == "" then
