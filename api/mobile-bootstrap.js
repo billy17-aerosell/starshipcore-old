@@ -1,6 +1,10 @@
 // Mobile Bootstrap Endpoint - Public entry point for StarshipCore Mobile
 // Returns a small script that auto-detects userId and calls secure get-mobile-loader API
 // With browser detection, obfuscated response, and Discord logging
+// Development mode: Skip loader intro and directly serve MobileUI
+
+import fs from "fs";
+import path from "path";
 
 // Helper function to send Discord webhook notification
 async function sendDiscordLog(logData) {
@@ -86,6 +90,68 @@ export default async function handler(req, res) {
     "unknown";
   const userAgent = req.headers["user-agent"] || "";
   const referer = req.headers["referer"] || "Direct";
+
+  // Check for development mode
+  const isDev =
+    process.env.NODE_ENV === "development" ||
+    process.env.VERCEL_ENV === "development" ||
+    req.headers.host?.includes("localhost");
+
+  // Check for dev query parameter to force dev mode
+  const forceDevMode = req.query.dev === "true" || req.query.dev === "1";
+
+  // Development Mode: Skip loader intro and directly serve MobileUI
+  if (isDev || forceDevMode) {
+    console.log(
+      `[${timestamp}] 🛠️ MOBILE DEV MODE - Skipping loader, serving MobileUI directly | IP: ${clientIP}`,
+    );
+
+    try {
+      const uiPath = path.join(process.cwd(), "data", "MobileUI.lua");
+
+      if (!fs.existsSync(uiPath)) {
+        console.error(`[${timestamp}] ❌ DEV MODE - MobileUI.lua not found`);
+        return res.status(404).send('error("MobileUI.lua not found")');
+      }
+
+      const uiScript = fs.readFileSync(uiPath, "utf8");
+
+      // Create a simple bootstrap that sets session and loads UI directly
+      const devBootstrap = `
+-- StarshipCore Mobile - Development Mode
+-- Skipping authentication for faster development
+
+-- Set mock session data for development
+getgenv().StarshipSession = {
+    Role = "DEV_MODE",
+    Duration = "DEVELOPMENT",
+    Expiry = nil,
+    RemainingDays = nil,
+    Platform = "mobile",
+    DeviceCount = 1,
+    MaxDevices = 99,
+    Username = game:GetService("Players").LocalPlayer.Name,
+    DevMode = true
+}
+
+print("[StarshipCore] 🛠️ Development Mode - Auth Skipped")
+print("[StarshipCore] 📱 Loading MobileUI directly...")
+
+-- Load MobileUI directly
+${uiScript}
+`;
+
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("X-Mode", "development");
+      res.setHeader("X-Platform", "mobile");
+
+      return res.status(200).send(devBootstrap);
+    } catch (error) {
+      console.error(`[${timestamp}] ❌ DEV MODE Error:`, error);
+      return res.status(500).send('error("Development mode error")');
+    }
+  }
 
   // Detect browser access
   const browserPatterns = [

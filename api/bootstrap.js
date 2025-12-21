@@ -1,6 +1,10 @@
 // Bootstrap Endpoint - Public entry point for StarshipCore
 // Returns a small script that auto-detects userId and calls secure get-loader
 // With browser detection, obfuscated response, and Discord logging
+// Development mode: Skip loader intro and directly serve StarshipCore
+
+import fs from "fs";
+import path from "path";
 
 // Helper function to send Discord webhook notification
 async function sendDiscordLog(logData) {
@@ -86,6 +90,75 @@ export default async function handler(req, res) {
     "unknown";
   const userAgent = req.headers["user-agent"] || "";
   const referer = req.headers["referer"] || "Direct";
+
+  // Check for development mode
+  const isDev =
+    process.env.NODE_ENV === "development" ||
+    process.env.VERCEL_ENV === "development" ||
+    req.headers.host?.includes("localhost");
+
+  // Check for dev query parameter to force dev mode
+  const forceDevMode = req.query.dev === "true" || req.query.dev === "1";
+
+  // Development Mode: Skip loader intro and directly serve StarshipCore
+  if (isDev || forceDevMode) {
+    console.log(
+      `[${timestamp}] 🛠️ PC DEV MODE - Skipping loader, serving StarshipCore directly | IP: ${clientIP}`,
+    );
+
+    try {
+      const scriptPath = path.join(process.cwd(), "data", "StarshipCore.lua");
+
+      if (!fs.existsSync(scriptPath)) {
+        console.error(
+          `[${timestamp}] ❌ DEV MODE - StarshipCore.lua not found`,
+        );
+        return res.status(404).send('error("StarshipCore.lua not found")');
+      }
+
+      let scriptContent = fs.readFileSync(scriptPath, "utf8");
+
+      // Remove BOM if present
+      if (scriptContent.charCodeAt(0) === 0xfeff) {
+        scriptContent = scriptContent.slice(1);
+      }
+
+      // Create a simple bootstrap that sets session and loads script directly
+      const devBootstrap = `
+-- StarshipCore PC - Development Mode
+-- Skipping authentication for faster development
+
+-- Set mock session data for development
+getgenv().StarshipSession = {
+    Role = "DEV_MODE",
+    Duration = "DEVELOPMENT",
+    Expiry = nil,
+    RemainingDays = nil,
+    Platform = "pc",
+    DeviceCount = 1,
+    MaxDevices = 99,
+    Username = game:GetService("Players").LocalPlayer.Name,
+    DevMode = true
+}
+
+print("[StarshipCore] 🛠️ Development Mode - Auth Skipped")
+print("[StarshipCore] 💻 Loading StarshipCore directly...")
+
+-- Load StarshipCore directly
+${scriptContent}
+`;
+
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("X-Mode", "development");
+      res.setHeader("X-Platform", "pc");
+
+      return res.status(200).send(devBootstrap);
+    } catch (error) {
+      console.error(`[${timestamp}] ❌ DEV MODE Error:`, error);
+      return res.status(500).send('error("Development mode error")');
+    }
+  }
 
   // Detect browser access
   const browserPatterns = [
