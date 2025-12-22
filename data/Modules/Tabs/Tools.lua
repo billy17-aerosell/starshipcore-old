@@ -1457,7 +1457,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             end
         end
 
-        -- Spoof BillboardGuis (nametags above heads)
+        -- Spoof BillboardGuis (nametags above heads) with property change listener
         local function SpoofCharacter(character)
             if not character then
                 return
@@ -1472,6 +1472,20 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
                                     originalTexts[child] = text
                                 end
                                 child.Text = text:gsub(realName, fakeName):gsub(realDisplay, fakeDisplay)
+
+                                -- Add property change listener to keep it spoofed
+                                if not child:GetAttribute("SpoofListener") then
+                                    child:SetAttribute("SpoofListener", true)
+                                    local con = child:GetPropertyChangedSignal("Text"):Connect(function()
+                                        if isSpoofing then
+                                            local newText = child.Text
+                                            if newText and (newText:find(realName) or newText:find(realDisplay)) then
+                                                child.Text = newText:gsub(realName, fakeName):gsub(realDisplay, fakeDisplay)
+                                            end
+                                        end
+                                    end)
+                                    table.insert(spoofConnections, con)
+                                end
                             end
                         end
                     end
@@ -1508,6 +1522,20 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
                                 originalTexts[child] = text
                             end
                             child.Text = text:gsub(realName, fakeName):gsub(realDisplay, fakeDisplay)
+
+                            -- Add property change listener to keep it spoofed
+                            if not child:GetAttribute("SpoofListener") then
+                                child:SetAttribute("SpoofListener", true)
+                                local con = child:GetPropertyChangedSignal("Text"):Connect(function()
+                                    if isSpoofing then
+                                        local newText = child.Text
+                                        if newText and (newText:find(realName) or newText:find(realDisplay)) then
+                                            child.Text = newText:gsub(realName, fakeName):gsub(realDisplay, fakeDisplay)
+                                        end
+                                    end
+                                end)
+                                table.insert(spoofConnections, con)
+                            end
                         end
                     end
                 end
@@ -1520,6 +1548,10 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             if obj and obj.Parent then
                 pcall(function()
                     obj.Text = text
+                    -- Clear the spoof listener attribute
+                    if obj:GetAttribute("SpoofListener") then
+                        obj:SetAttribute("SpoofListener", nil)
+                    end
                 end)
             end
         end
@@ -1541,10 +1573,10 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             -- Initial spoof
             SpoofAllNames()
 
-            -- Keep spoofing on changes (Optimized: every 1 second)
+            -- Keep spoofing on changes (Faster: every 0.2 seconds for nametags)
             local lastSpoof = 0
             local spoofLoop = RunService.Heartbeat:Connect(function()
-                if isSpoofing and tick() - lastSpoof > 1 then
+                if isSpoofing and tick() - lastSpoof > 0.2 then
                     lastSpoof = tick()
                     SpoofAllNames()
                 end
