@@ -89,11 +89,11 @@ local LoaderTranslations = {
 }
 
 -- Get localized text for loader
-local function L(key, ...)
+local function L(key, arg1)
     local lang = LoaderTranslations[LoaderCurrentLanguage] or LoaderTranslations["en"]
     local text = lang[key] or LoaderTranslations["en"][key] or key
-    if select("#", ...) > 0 then
-        return string.format(text, ...)
+    if arg1 ~= nil then
+        return string.format(text, arg1)
     end
     return text
 end
