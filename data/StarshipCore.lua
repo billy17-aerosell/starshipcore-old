@@ -8251,5 +8251,14 @@ local function StartLoader()
     end
 end
 
--- Start Loader Directly (Auth handled by Vercel API)
-task.spawn(StartLoader)
+-- Preload spoof name BEFORE showing main UI
+-- This ensures spoof is applied before the UI animation starts
+task.spawn(function()
+    -- Call PreloadSpoofName if available (from ConfigTab)
+    if UIHandlers and UIHandlers.PreloadSpoofName then
+        UIHandlers.PreloadSpoofName()
+    end
+
+    -- Now start the loader (UI animation)
+    StartLoader()
+end)

@@ -503,6 +503,109 @@ local function LoadConfig(name, Config, Themes)
     end
 end
 
+-- Preload spoof name BEFORE main UI shows (called from StarshipCore before StartLoader)
+local function PreloadSpoofName(UIHandlers, Config, Themes, UI)
+    -- Check if auto-exec is enabled and has a profile to load
+    if not AutoExecSettings.Enabled or AutoExecSettings.AutoLoadProfile == "" then
+        if getgenv then
+            getgenv().StarshipSpoofReady = true
+            getgenv().StarshipSpoofInProgress = false
+        end
+        return false
+    end
+
+    -- Load the profile data to check if it has SpoofName in auto-enable
+    local fileName = AutoExecSettings.AutoLoadProfile
+    if not fileName:match("%.json$") then fileName = fileName .. ".json" end
+    local path = "Starship/Profiles/" .. fileName
+
+    if not isfile or not isfile(path) then
+        if getgenv then
+            getgenv().StarshipSpoofReady = true
+            getgenv().StarshipSpoofInProgress = false
+        end
+        return false
+    end
+
+    local success, result = pcall(function()
+        local content = readfile(path)
+        return HttpService:JSONDecode(content)
+    end)
+
+    if not success or not result then
+        if getgenv then
+            getgenv().StarshipSpoofReady = true
+            getgenv().StarshipSpoofInProgress = false
+        end
+        return false
+    end
+
+    -- Check if SpoofName is in the auto-enable list
+    local hasSpoofName = false
+    if result.AutoEnable then
+        for _, id in ipairs(result.AutoEnable) do
+            if id == "SpoofName" then
+                hasSpoofName = true
+                break
+            end
+        end
+    end
+
+    if not hasSpoofName then
+        if getgenv then
+            getgenv().StarshipSpoofReady = true
+            getgenv().StarshipSpoofInProgress = false
+        end
+        return false
+    end
+
+    -- Has SpoofName - set flag and apply it
+    if getgenv then
+        getgenv().StarshipSpoofInProgress = true
+        getgenv().StarshipSpoofReady = false
+    end
+
+    -- Set the spoof name values first
+    if result.SpoofName and UIHandlers and UIHandlers.SetSpoofName then
+        local spoofName = result.SpoofName or ""
+        local spoofDisplayName = result.SpoofDisplayName or ""
+        UIHandlers.SetSpoofName(spoofName, spoofDisplayName)
+    end
+
+    -- Load AutoEnableList from profile
+    if result.AutoEnable then
+        -- Clear and reload AutoEnableList
+        for i = #AutoEnableList, 1, -1 do
+            table.remove(AutoEnableList, i)
+        end
+        for _, id in ipairs(result.AutoEnable) do
+            table.insert(AutoEnableList, id)
+        end
+    end
+
+    -- Enable spoof name
+    if UIHandlers and UIHandlers.ToggleSpoofName then
+        UIHandlers.ToggleSpoofName(true)
+    end
+
+    -- Wait for spoof to apply
+    task.wait(0.5)
+
+    -- Mark as ready
+    if getgenv then
+        getgenv().StarshipSpoofInProgress = false
+        getgenv().StarshipSpoofReady = true
+    end
+
+    -- Store that we preloaded so we don't reload again
+    if getgenv then
+        getgenv().StarshipProfilePreloaded = true
+        getgenv().StarshipPreloadedProfile = AutoExecSettings.AutoLoadProfile
+    end
+
+    return true
+end
+
 RunAutoEnable = function(UIHandlers)
     -- Check if SpoofName is in the auto-enable list
     local hasSpoofName = false
@@ -1709,11 +1812,16 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     -- Initial Theme Application
     if Config.Theme then ApplyTheme(Config.Theme) end
 
-    -- Auto-load profile if enabled
+    -- Auto-load profile if enabled (skip spoof since it was preloaded, but load rest of profile)
     if AutoExecSettings.Enabled and AutoExecSettings.AutoLoadProfile ~= "" then
         task.spawn(function()
             -- Wait for Welcome toast to appear first (1.5s base), then add user-configured delay
             task.wait(1.5 + (AutoExecSettings.DelaySeconds or 0))
+
+            -- Check if profile was already preloaded for spoof
+            local wasPreloaded = getgenv and getgenv().StarshipProfilePreloaded and
+                getgenv().StarshipPreloadedProfile == AutoExecSettings.AutoLoadProfile
+
             -- Pass true for suppressToast to avoid duplicate, show combined toast instead
             local success, result = LoadProfile(AutoExecSettings.AutoLoadProfile, Config, Themes, UI, UIHandlers, true)
             if success and UI and UI.ShowToast then
@@ -1725,6 +1833,11 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
                 UI.ShowToast(L("auto_loaded"), msg, "success", 3)
             end
         end)
+    end
+
+    -- Expose PreloadSpoofName for StarshipCore to call before StartLoader
+    UIHandlers.PreloadSpoofName = function()
+        return PreloadSpoofName(UIHandlers, Config, Themes, UI)
     end
 end
 
@@ -1738,6 +1851,7 @@ return {
     GetFeatureState = GetFeatureState,
     FeatureStates = FeatureStates,
     RunAutoEnable = RunAutoEnable,
+    PreloadSpoofName = PreloadSpoofName,
     AutoExecSettings = AutoExecSettings,
     SaveAutoExecSettings = SaveAutoExecSettings,
     LoadAutoExecSettings = LoadAutoExecSettings,
