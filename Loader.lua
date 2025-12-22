@@ -7,9 +7,9 @@ local TABS_FOLDER = MODULES_FOLDER .. "/Tabs"
 local MODULES = { "Config.lua", "UI.lua", "Intro.lua", "Animations.lua", "Locale.lua" }
 local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua", "Emotes.lua", "ConfigTab.lua" }
 
--- ═══════════════════════════════════════════════════════════════════
+-- ---------------------------------------------------------------------
 -- LOADER LOCALE SYSTEM (Inline - runs before Locale.lua is downloaded)
--- ═══════════════════════════════════════════════════════════════════
+-- ---------------------------------------------------------------------
 local LoaderCurrentLanguage = "en"
 
 -- Try to load saved language preference
@@ -32,18 +32,18 @@ local LoaderTranslations = {
         launching = "Launching Starship...",
         close = "Close",
         -- Error messages
-        access_denied = "🚫 ACCESS DENIED",
-        auth_required = "🔒 AUTHENTICATION REQUIRED",
-        account_suspended = "🚫 ACCOUNT SUSPENDED",
-        vip_expired = "⏰ VIP ACCESS EXPIRED",
-        connection_error = "📡 CONNECTION ERROR",
+        access_denied = "[!] ACCESS DENIED",
+        auth_required = "[!] AUTHENTICATION REQUIRED",
+        account_suspended = "[!] ACCOUNT SUSPENDED",
+        vip_expired = "[!] VIP ACCESS EXPIRED",
+        connection_error = "[!] CONNECTION ERROR",
         not_whitelisted_msg =
-        "⚠️ Your account is not authorized to use Starship.\n\n💎 To get VIP access, contact the administrator.\n\n📌 Your User ID: %s",
+        "Your account is not authorized to use Starship.\n\nTo get VIP access, contact the administrator.\n\nYour User ID: %s",
         suspended_msg =
-        "❌ Your VIP access has been suspended.\n\n📧 Contact administrator for more information.\n\n📌 Your User ID: %s",
+        "Your VIP access has been suspended.\n\nContact administrator for more information.\n\nYour User ID: %s",
         expired_msg =
-        "⌛ Your VIP subscription has expired.\n\n🔄 Renew your access to continue using Starship.\n\n📌 Your User ID: %s",
-        connection_msg = "🌐 Cannot connect to Starship server.\n\n🔄 Please check your internet connection and try again.",
+        "Your VIP subscription has expired.\n\nRenew your access to continue using Starship.\n\nYour User ID: %s",
+        connection_msg = "Cannot connect to Starship server.\n\nPlease check your internet connection and try again.",
         connection_failed = "Connection Failed: Server Unreachable",
         server_error_invalid = "Server Error: Invalid Response",
         access_denied_short = "ACCESS DENIED",
@@ -65,18 +65,18 @@ local LoaderTranslations = {
         launching = "Meluncurkan Starship...",
         close = "Tutup",
         -- Error messages
-        access_denied = "🚫 AKSES DITOLAK",
-        auth_required = "🔒 AUTENTIKASI DIPERLUKAN",
-        account_suspended = "🚫 AKUN DITANGGUHKAN",
-        vip_expired = "⏰ AKSES VIP KEDALUWARSA",
-        connection_error = "📡 KESALAHAN KONEKSI",
+        access_denied = "[!] AKSES DITOLAK",
+        auth_required = "[!] AUTENTIKASI DIPERLUKAN",
+        account_suspended = "[!] AKUN DITANGGUHKAN",
+        vip_expired = "[!] AKSES VIP KEDALUWARSA",
+        connection_error = "[!] KESALAHAN KONEKSI",
         not_whitelisted_msg =
-        "⚠️ Akun Anda tidak memiliki izin untuk menggunakan Starship.\n\n💎 Untuk mendapatkan akses VIP, hubungi administrator.\n\n📌 User ID Anda: %s",
+        "Akun Anda tidak memiliki izin untuk menggunakan Starship.\n\nUntuk mendapatkan akses VIP, hubungi administrator.\n\nUser ID Anda: %s",
         suspended_msg =
-        "❌ Akses VIP Anda telah ditangguhkan.\n\n📧 Hubungi administrator untuk informasi lebih lanjut.\n\n📌 User ID Anda: %s",
+        "Akses VIP Anda telah ditangguhkan.\n\nHubungi administrator untuk informasi lebih lanjut.\n\nUser ID Anda: %s",
         expired_msg =
-        "⌛ Langganan VIP Anda telah kedaluwarsa.\n\n🔄 Perpanjang akses Anda untuk terus menggunakan Starship.\n\n📌 User ID Anda: %s",
-        connection_msg = "🌐 Tidak dapat terhubung ke server Starship.\n\n🔄 Periksa koneksi internet Anda dan coba lagi.",
+        "Langganan VIP Anda telah kedaluwarsa.\n\nPerpanjang akses Anda untuk terus menggunakan Starship.\n\nUser ID Anda: %s",
+        connection_msg = "Tidak dapat terhubung ke server Starship.\n\nPeriksa koneksi internet Anda dan coba lagi.",
         connection_failed = "Koneksi Gagal: Server Tidak Dapat Dijangkau",
         server_error_invalid = "Kesalahan Server: Respons Tidak Valid",
         access_denied_short = "AKSES DITOLAK",
