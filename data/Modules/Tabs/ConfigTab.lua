@@ -391,7 +391,7 @@ local function SaveProfile(name, Config, UI, UIHandlers)
     end
 end
 
-local function LoadProfile(name, Config, Themes, UI, UIHandlers)
+local function LoadProfile(name, Config, Themes, UI, UIHandlers, suppressToast)
     local fileName = name or "Default"
     if not fileName:match("%.json$") then fileName = fileName .. ".json" end
     local path = PROFILE_FOLDER .. "/" .. fileName
@@ -425,7 +425,7 @@ local function LoadProfile(name, Config, Themes, UI, UIHandlers)
                 end
             end
 
-            if UI and UI.ShowToast then
+            if UI and UI.ShowToast and not suppressToast then
                 local msg = hasAutoEnable
                     and "Loaded: " .. fileName .. "\nAuto-enabling " .. #AutoEnableList .. " feature(s)..."
                     or "Loaded: " .. fileName
@@ -1541,10 +1541,17 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     -- Auto-load profile if enabled
     if AutoExecSettings.Enabled and AutoExecSettings.AutoLoadProfile ~= "" then
         task.spawn(function()
-            task.wait(AutoExecSettings.DelaySeconds or 1)
-            local success = LoadProfile(AutoExecSettings.AutoLoadProfile, Config, Themes, UI, UIHandlers)
+            -- Wait for Welcome toast to appear first (1.5s base), then add user-configured delay
+            task.wait(1.5 + (AutoExecSettings.DelaySeconds or 0))
+            -- Pass true for suppressToast to avoid duplicate, show combined toast instead
+            local success, result = LoadProfile(AutoExecSettings.AutoLoadProfile, Config, Themes, UI, UIHandlers, true)
             if success and UI and UI.ShowToast then
-                UI.ShowToast("Auto-Loaded", "Profile: " .. AutoExecSettings.AutoLoadProfile, "success", 2)
+                local featureCount = UIHandlers.AutoEnableList and #UIHandlers.AutoEnableList or 0
+                local msg = featureCount > 0
+                    and "Profile: " ..
+                    AutoExecSettings.AutoLoadProfile .. "\nAuto-enabling " .. featureCount .. " feature(s)..."
+                    or "Profile: " .. AutoExecSettings.AutoLoadProfile
+                UI.ShowToast("Auto-Loaded", msg, "success", 3)
             end
         end)
     end

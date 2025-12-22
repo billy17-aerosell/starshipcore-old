@@ -15,6 +15,15 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     local C_YELLOW = Color3.fromRGB(255, 220, 60)
     local C_GREEN = Color3.fromRGB(60, 255, 160)
 
+    -- Helper function to show toast when feature is toggled
+    local function ShowFeatureToast(featureName, isEnabled)
+        if UI and UI.ShowToast then
+            local status = isEnabled and "Enabled" or "Disabled"
+            local toastType = isEnabled and "success" or "info"
+            UI.ShowToast(featureName, status, toastType, 2)
+        end
+    end
+
     -- Ensure RegisterTheme exists
     if not RegisterTheme then
         RegisterTheme = function() end
@@ -315,6 +324,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             BtnAfk.Text = "Anti-AFK: ON"
             BtnAfk.TextColor3 = C_GREEN
             BtnAfk.UIStroke.Color = C_GREEN
+            ShowFeatureToast("Anti-AFK", true)
             afkCon = LocalPlayer.Idled:Connect(function()
                 game:GetService("VirtualUser"):Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
                 wait(1)
@@ -329,6 +339,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             BtnAfk.Text = "Anti-AFK: OFF"
             BtnAfk.TextColor3 = C_TEXT_DIM
             BtnAfk.UIStroke.Color = C_TEXT_DIM
+            ShowFeatureToast("Anti-AFK", false)
         end
     end
 
@@ -372,6 +383,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         BtnSL.UIStroke.Color = isSL and C_GREEN or C_RED
 
         if isSL then
+            ShowFeatureToast("Shift Lock", true)
             slLoop = RunService.RenderStepped:Connect(function()
                 local c = LocalPlayer.Character
                 local root = c and c:FindFirstChild("HumanoidRootPart")
@@ -397,6 +409,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
                 hum.AutoRotate = true
             end
             UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+            ShowFeatureToast("Shift Lock", false)
         end
     end
 
@@ -488,6 +501,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         BtnAntiAdmin.Text = "BYPASS ADMIN: " .. (isAntiAdmin and "ON" or "OFF")
         BtnAntiAdmin.TextColor3 = isAntiAdmin and C_GREEN or C_RED
         BtnAntiAdmin.UIStroke.Color = isAntiAdmin and C_GREEN or C_RED
+        ShowFeatureToast("Bypass Admin", isAntiAdmin)
 
         if isAntiAdmin then
             for _, p in ipairs(Players:GetPlayers()) do
@@ -576,6 +590,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         BtnFb.TextColor3 = isFb and C_GREEN or C_RED
         BtnFb.UIStroke.Color = isFb and C_GREEN or C_RED
         if isFb then
+            ShowFeatureToast("Fullbright", true)
             game:GetService("Lighting").Brightness = 2
             game:GetService("Lighting").ClockTime = 14
             game:GetService("Lighting").GlobalShadows = false
@@ -584,6 +599,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             game:GetService("Lighting").Brightness = 1
             game:GetService("Lighting").GlobalShadows = true
             game:GetService("Lighting").OutdoorAmbient = Color3.fromRGB(127, 127, 127)
+            ShowFeatureToast("Fullbright", false)
         end
     end
 

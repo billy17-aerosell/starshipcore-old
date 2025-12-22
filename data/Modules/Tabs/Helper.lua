@@ -16,6 +16,15 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     local C_YELLOW = Color3.fromRGB(255, 220, 60)
     local C_GREEN = Color3.fromRGB(60, 255, 160)
 
+    -- Helper function to show toast when feature is toggled
+    local function ShowFeatureToast(featureName, isEnabled)
+        if UI and UI.ShowToast then
+            local status = isEnabled and "Enabled" or "Disabled"
+            local toastType = isEnabled and "success" or "info"
+            UI.ShowToast(featureName, status, toastType, 2)
+        end
+    end
+
     local FOLDER_NAME = "StarshipCore"
 
     local function CFToTbl(cf)
@@ -421,6 +430,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
             BtnAutoJump.Text = "AUTO JUMP: " .. (isAutoJump and "ON" or "OFF")
             BtnAutoJump.TextColor3 = isAutoJump and C_GREEN or C_TEXT_DIM
             BtnAutoJump.UIStroke.Color = isAutoJump and C_GREEN or C_TEXT_DIM
+            ShowFeatureToast("Auto Jump", isAutoJump)
 
             if isAutoJump then
                 autoJumpLoop = RunService.Heartbeat:Connect(function()
@@ -745,6 +755,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
             BtnAirLock.Text = "AIR LOCK: " .. (isAirLock and "ON" or "OFF")
             BtnAirLock.TextColor3 = isAirLock and C_GREEN or C_TEXT_DIM
             BtnAirLock.UIStroke.Color = isAirLock and C_GREEN or C_TEXT_DIM
+            ShowFeatureToast("Air Lock", isAirLock)
 
             if isAirLock then
                 airLockLoop = RunService.RenderStepped:Connect(function()
@@ -910,6 +921,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
             BtnQuickBoost.Text = "QUICK BOOST: " .. (isQuickBoost and "ON" or "OFF")
             BtnQuickBoost.TextColor3 = isQuickBoost and C_GREEN or C_TEXT_DIM
             BtnQuickBoost.UIStroke.Color = isQuickBoost and C_GREEN or C_TEXT_DIM
+            ShowFeatureToast("Quick Boost", isQuickBoost)
 
             if isQuickBoost then
                 quickBoostLoop = RunService.Heartbeat:Connect(function(dt)
@@ -1109,6 +1121,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         BtnMomentum.Text = "ALWAYS MOMENTUM: " .. (isMomentum and "ON" or "OFF")
         BtnMomentum.TextColor3 = isMomentum and C_GREEN or C_TEXT_DIM
         BtnMomentum.UIStroke.Color = isMomentum and C_GREEN or C_TEXT_DIM
+        ShowFeatureToast("Always Momentum", isMomentum)
 
         if isMomentum then
             lockedSpeed = nil
@@ -1233,6 +1246,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         BtnSlip.Text = "ANTI-SLIP: " .. (isSlipOn and "ON" or "OFF")
         BtnSlip.TextColor3 = isSlipOn and C_GREEN or C_RED
         BtnSlip.UIStroke.Color = isSlipOn and C_GREEN or C_RED
+        ShowFeatureToast("Anti-Slip", isSlipOn)
 
         if isSlipOn then
             lastSafeY = nil
@@ -1420,6 +1434,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         BtnRagdoll.Text = "ANTI-RAGDOLL: " .. (isRagdollOn and "ON" or "OFF")
         BtnRagdoll.TextColor3 = isRagdollOn and C_GREEN or C_RED
         BtnRagdoll.UIStroke.Color = isRagdollOn and C_GREEN or C_RED
+        ShowFeatureToast("Anti-Ragdoll", isRagdollOn)
 
         if isRagdollOn then
             local c = LocalPlayer.Character
@@ -1637,6 +1652,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         BtnRealESP.Text = "REAL PATH ESP: " .. (isRealESP and "ON" or "OFF")
         BtnRealESP.TextColor3 = isRealESP and C_GREEN or C_RED
         BtnRealESP.UIStroke.Color = isRealESP and C_GREEN or C_RED
+        ShowFeatureToast("Real Path ESP", isRealESP)
 
         if isRealESP then
             -- Scan and test each platform with raycast

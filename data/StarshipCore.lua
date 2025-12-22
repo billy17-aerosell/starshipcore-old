@@ -7953,10 +7953,10 @@ local function StartLoader()
         getgenv().ToggleNametags(true)
     end
 
-    -- Show ready toast with slight delay for polish
-    task.delay(0.3, function()
-        ShowToast("Welcome", "Starship Core Ready", "success", 3)
-    end)
+    -- Show ready toast immediately after UI animation completes
+    if UIModule and UIModule.ShowToast then
+        UIModule.ShowToast("Welcome", "Starship Core Ready", "success", 3)
+    end
 end
 
 -- Start Loader Directly (Auth handled by Vercel API)
