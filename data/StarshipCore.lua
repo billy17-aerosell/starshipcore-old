@@ -8193,6 +8193,14 @@ SetTheme(C_ACCENT)
 
 -- Start Key System & Loader
 local function StartLoader()
+    -- Wait for spoof name to be ready if it's being auto-enabled
+    if getgenv and getgenv().StarshipSpoofInProgress then
+        local waitStart = tick()
+        while getgenv().StarshipSpoofInProgress and tick() - waitStart < 3 do
+            task.wait(0.1)
+        end
+    end
+
     -- Smooth Entrance Animation for Main UI
     if Main then
         -- Ensure MainBackground has correct transparency from start

@@ -359,16 +359,6 @@ local function createLoadingUI()
     ProgressText.TextSize = 12
     ProgressText.TextTransparency = 0
 
-    -- Welcome Message
-    local WelcomeMsg = Instance.new("TextLabel", MainFrame)
-    WelcomeMsg.Text = "Welcome back, " .. game:GetService("Players").LocalPlayer.Name .. "!"
-    WelcomeMsg.Size = UDim2.new(1, 0, 0, 20)
-    WelcomeMsg.Position = UDim2.new(0, 0, 0.28, 0)
-    WelcomeMsg.BackgroundTransparency = 1
-    WelcomeMsg.TextColor3 = Color3.fromRGB(150, 150, 160)
-    WelcomeMsg.Font = Enum.Font.Gotham
-    WelcomeMsg.TextSize = 14
-    WelcomeMsg.TextTransparency = 0
 
     -- Logo Rainbow Animation
     task.spawn(function()

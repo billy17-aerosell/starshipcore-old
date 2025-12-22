@@ -504,13 +504,51 @@ local function LoadConfig(name, Config, Themes)
 end
 
 RunAutoEnable = function(UIHandlers)
+    -- Check if SpoofName is in the auto-enable list
+    local hasSpoofName = false
     for _, id in ipairs(AutoEnableList) do
-        local handlerName = "Toggle" .. id
-        if UIHandlers and UIHandlers[handlerName] then
-            task.spawn(function()
-                task.wait(0.5)
-                UIHandlers[handlerName](true)
-            end)
+        if id == "SpoofName" then
+            hasSpoofName = true
+            break
+        end
+    end
+
+    -- If SpoofName is enabled, run it FIRST and wait for it to complete
+    if hasSpoofName and UIHandlers and UIHandlers.ToggleSpoofName then
+        -- Set flag to indicate spoof is in progress
+        if getgenv then
+            getgenv().StarshipSpoofInProgress = true
+            getgenv().StarshipSpoofReady = false
+        end
+
+        -- Enable spoof name first
+        UIHandlers.ToggleSpoofName(true)
+
+        -- Wait for spoof to apply to all elements
+        task.wait(0.5)
+
+        -- Set flag to indicate spoof is ready
+        if getgenv then
+            getgenv().StarshipSpoofInProgress = false
+            getgenv().StarshipSpoofReady = true
+        end
+    else
+        -- No spoof name, mark as ready immediately
+        if getgenv then
+            getgenv().StarshipSpoofReady = true
+        end
+    end
+
+    -- Run other auto-enable features (excluding SpoofName since it's already done)
+    for _, id in ipairs(AutoEnableList) do
+        if id ~= "SpoofName" then
+            local handlerName = "Toggle" .. id
+            if UIHandlers and UIHandlers[handlerName] then
+                task.spawn(function()
+                    task.wait(0.3)
+                    UIHandlers[handlerName](true)
+                end)
+            end
         end
     end
 end
