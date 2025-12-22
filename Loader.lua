@@ -7,6 +7,9 @@ local TABS_FOLDER = MODULES_FOLDER .. "/Tabs"
 local MODULES = { "Config.lua", "UI.lua", "Intro.lua", "Animations.lua", "Locale.lua" }
 local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua", "Emotes.lua", "ConfigTab.lua" }
 
+-- In-memory module storage (no files saved to disk for security!)
+local LoadedModules = {}
+
 local function xorEncrypt(text, key)
     local result = {}
     for i = 1, #text do
@@ -48,20 +51,15 @@ local function decrypt(encryptedBase64)
     return xorEncrypt(encrypted, ENCRYPTION_KEY)
 end
 
+-- Setup folder only for user data (recordings, configs) - NOT for modules
 local function setupFolders()
     if not isfolder(FOLDER_NAME) then
         makefolder(FOLDER_NAME)
     end
-    if not isfolder(MODULES_FOLDER) then
-        makefolder(MODULES_FOLDER)
-    end
-    if not isfolder(TABS_FOLDER) then
-        makefolder(TABS_FOLDER)
-    end
 end
 
--- Download module via secure API (encrypted in production)
-local function downloadModule(moduleName, savePath, userId)
+-- Download and load module directly to memory (no file saved!)
+local function downloadModule(moduleName, userId)
     local url = VERCEL_URL .. "/api/get-module?name=" .. moduleName .. "&user=" .. userId
 
     -- Debug: Log URL being called
@@ -101,9 +99,21 @@ local function downloadModule(moduleName, savePath, userId)
         -- Check if it's actually a Lua script (starts with comment or local/return)
         local trimmed = response:match("^%s*(.-)%s*$") or response
         if trimmed:match("^%-%-") or trimmed:match("^local%s") or trimmed:match("^return%s") then
-            warn("[Starship] Response looks like Lua, saving directly: " .. moduleName)
-            writefile(savePath, response)
-            return true
+            -- Load directly to memory
+            local func, err = loadstring(response)
+            if func then
+                local success, result = pcall(func)
+                if success then
+                    LoadedModules[moduleName] = result
+                    return true
+                else
+                    warn("[Starship] Execute error for " .. moduleName .. ": " .. tostring(result))
+                    return false
+                end
+            else
+                warn("[Starship] Loadstring error for " .. moduleName .. ": " .. tostring(err))
+                return false
+            end
         end
 
         return false
@@ -127,8 +137,21 @@ local function downloadModule(moduleName, savePath, userId)
             return false
         end
 
-        writefile(savePath, decryptedContent)
-        return true
+        -- Load directly to memory (NO FILE SAVED!)
+        local func, err = loadstring(decryptedContent)
+        if func then
+            local success, result = pcall(func)
+            if success then
+                LoadedModules[moduleName] = result
+                return true
+            else
+                warn("[Starship] Execute error for " .. moduleName .. ": " .. tostring(result))
+                return false
+            end
+        else
+            warn("[Starship] Loadstring error for " .. moduleName .. ": " .. tostring(err))
+            return false
+        end
     elseif data and data.status == "denied" then
         warn("[Starship] Access denied for module: " .. moduleName)
         return false
@@ -147,10 +170,9 @@ local function downloadModules(statusCallback)
     local totalFiles = #MODULES + #TABS
     local downloaded = 0
 
-    -- Download main modules via secure API
+    -- Download main modules via secure API (loaded to memory)
     for _, moduleName in ipairs(MODULES) do
-        local savePath = MODULES_FOLDER .. "/" .. moduleName
-        if downloadModule(moduleName, savePath, userId) then
+        if downloadModule(moduleName, userId) then
             downloaded = downloaded + 1
             if statusCallback then
                 statusCallback("Downloading: " .. moduleName, downloaded / totalFiles)
@@ -158,17 +180,19 @@ local function downloadModules(statusCallback)
         end
     end
 
-    -- Download tab modules via secure API
+    -- Download tab modules via secure API (loaded to memory)
     for _, tabName in ipairs(TABS) do
-        local savePath = TABS_FOLDER .. "/" .. tabName
         -- API expects "Tabs/Dashboard.lua" format
-        if downloadModule("Tabs/" .. tabName, savePath, userId) then
+        if downloadModule("Tabs/" .. tabName, userId) then
             downloaded = downloaded + 1
             if statusCallback then
                 statusCallback("Downloading: Tabs/" .. tabName, downloaded / totalFiles)
             end
         end
     end
+
+    -- Store loaded modules in global for main script to access
+    getgenv().StarshipModules = LoadedModules
 
     return downloaded == totalFiles
 end
