@@ -137,7 +137,24 @@ task.spawn(function()
 end)
 
 local function LoadModule(name)
-    -- 0. Try HTTP Server Loading (Auto-detect: works for both dev and production)
+    -- 0. FIRST: Try loading from memory (modules pre-loaded by Loader.lua)
+    if getgenv and getgenv().StarshipModules then
+        local memModules = getgenv().StarshipModules
+        -- Try exact match first
+        if memModules[name .. ".lua"] then
+            return memModules[name .. ".lua"]
+        end
+        -- Try with Tabs/ prefix
+        if memModules["Tabs/" .. name .. ".lua"] then
+            return memModules["Tabs/" .. name .. ".lua"]
+        end
+        -- Try without .lua extension
+        if memModules[name] then
+            return memModules[name]
+        end
+    end
+
+    -- 1. Try HTTP Server Loading (Auto-detect: works for both dev and production)
     if _G.StarshipServerMode then
         local serverUrl = _G.StarshipServerURL or "https://starship-core.my.id"
         local moduleUrl = serverUrl .. "/api/get-module?name=" .. name:gsub("/", "%%2F") .. ".lua"
@@ -236,7 +253,7 @@ local function LoadModule(name)
         end
     end
 
-    -- 1. Try Cached Prefix (Local File Mode)
+    -- 2. Try Cached Prefix (Local File Mode)
     if _G.StarshipModulePrefix then
         local p = _G.StarshipModulePrefix .. name .. ".lua"
         local func, err = loadstring(readfile(p))
@@ -247,7 +264,7 @@ local function LoadModule(name)
         return func()
     end
 
-    -- 2. Exhaustive Search Paths (Local File Mode)
+    -- 3. Exhaustive Search Paths (Local File Mode)
     local paths = {
         "StarshipCore/Modules/" .. name .. ".lua",
         "StarshipCore\\Modules\\" .. name:gsub("/", "\\") .. ".lua",
@@ -280,7 +297,7 @@ local function LoadModule(name)
         end
     end
 
-    -- 3. Deep Search (Last Resort)
+    -- 4. Deep Search (Last Resort)
     if name == "Config" or not _G.StarshipModulePrefix then
         warn("[Starship] Searching for module: " .. name)
         warn("[Starship] Current Directory Listing:") -- Added Debug
