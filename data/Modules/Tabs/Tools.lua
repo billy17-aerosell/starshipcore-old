@@ -1590,6 +1590,17 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         end
     end
 
+    -- Get spoof name for profile save (returns raw input values)
+    UIHandlers.GetSpoofName = function()
+        return InpSpoofName.Text or "", InpSpoofDisplay.Text or ""
+    end
+
+    -- Set spoof name from profile load
+    UIHandlers.SetSpoofName = function(spoofName, spoofDisplayName)
+        InpSpoofName.Text = spoofName or ""
+        InpSpoofDisplay.Text = spoofDisplayName or ""
+    end
+
     -- Quick presets
     local BtnRandom = Instance.new("TextButton", CardPrivacy)
     BtnRandom.Text = L("random_name")

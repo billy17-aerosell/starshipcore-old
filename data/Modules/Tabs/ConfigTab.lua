@@ -374,13 +374,22 @@ local function SaveProfile(name, Config, UI, UIHandlers)
             for k, v in pairs(Config.Keybinds) do kbData[k] = v.Name end
         end
 
+        -- Get spoof name from UIHandlers if available
+        local spoofName = ""
+        local spoofDisplayName = ""
+        if UIHandlers and UIHandlers.GetSpoofName then
+            spoofName, spoofDisplayName = UIHandlers.GetSpoofName()
+        end
+
         local data = HttpService:JSONEncode({
             Theme = Config.Theme,
             Language = Config.Language or "en",
             AccentColor = Config.AccentColor,
             Keybinds = kbData,
             AutoEnable = AutoEnableList,
-            IsAutoLoadProfile = (AutoExecSettings.AutoLoadProfile == name)
+            IsAutoLoadProfile = (AutoExecSettings.AutoLoadProfile == name),
+            SpoofName = spoofName,
+            SpoofDisplayName = spoofDisplayName
         })
 
         local fileName = name or "Default"
@@ -411,6 +420,14 @@ local function LoadProfile(name, Config, Themes, UI, UIHandlers, suppressToast)
                 end
             end
             if result.AccentColor then Config.AccentColor = result.AccentColor end
+
+            -- Load Spoof Name settings
+            if UIHandlers and UIHandlers.SetSpoofName then
+                local spoofName = result.SpoofName or ""
+                local spoofDisplayName = result.SpoofDisplayName or ""
+                UIHandlers.SetSpoofName(spoofName, spoofDisplayName)
+            end
+
             if result.Keybinds then
                 if not Config.Keybinds then Config.Keybinds = {} end
                 for k, v in pairs(result.Keybinds) do
