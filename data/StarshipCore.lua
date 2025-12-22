@@ -362,6 +362,13 @@ if not ConfigData then
     ConfigData = {}
 end
 
+local LocaleModule = LoadModule("Locale")
+if not LocaleModule then
+    LocaleModule = { Get = function(k) return k end, SetLanguage = function() end, GetLanguage = function() return "en" end }
+end
+-- Make Locale globally accessible
+_G.StarshipLocale = LocaleModule
+
 local UIModule = LoadModule("UI")
 if not UIModule then
     UIModule = {}
@@ -376,9 +383,202 @@ local Themes = ConfigData.Themes or {}
 local Config = ConfigData.DefaultConfig
     or {
         Theme = "Default",
+        Language = "en",
         AccentColor = { R = 90, G = 110, B = 245 },
         Keybinds = {},
     }
+
+-- Load saved language preference from file
+local CONFIG_FOLDER = "StarshipCore/StarshipConfigs"
+pcall(function()
+    if isfile and isfile(CONFIG_FOLDER .. "/Language.json") then
+        local langData = HttpService:JSONDecode(readfile(CONFIG_FOLDER .. "/Language.json"))
+        if langData and langData.Language then
+            Config.Language = langData.Language
+        end
+    end
+end)
+
+-- Initialize Locale with saved language
+if Config.Language and LocaleModule.SetLanguage then
+    LocaleModule.SetLanguage(Config.Language)
+end
+
+-- Helper function to get localized text
+local function L(key, ...)
+    if LocaleModule and LocaleModule.Get then
+        return LocaleModule.Get(key, ...)
+    end
+    return key
+end
+
+-- Helper function to register UI element for auto-refresh when language changes
+-- Usage: LR(TextLabel, "key") or LR(TextLabel, "key", function() return {arg1, arg2} end)
+local function LR(element, key, formatArgs)
+    if LocaleModule and LocaleModule.RegisterElement then
+        LocaleModule.RegisterElement(element, key, formatArgs)
+    else
+        -- Fallback if RegisterElement not available
+        if formatArgs then
+            local args = formatArgs()
+            if args then
+                element.Text = L(key, unpack(args))
+            else
+                element.Text = L(key)
+            end
+        else
+            element.Text = L(key)
+        end
+    end
+end
+
+-- Helper function to register UI element with custom update function
+-- Usage: LC(element, function(el, L) el.Text = L("key") .. ": " .. someValue end)
+local function LC(element, updateFunc)
+    if LocaleModule and LocaleModule.RegisterCustom then
+        LocaleModule.RegisterCustom(element, updateFunc)
+    else
+        -- Fallback
+        pcall(updateFunc, element, L)
+    end
+end
+
+-- Table to store UI elements that need refresh when language changes
+local LocalizedUI = {
+    -- Static text elements (simple key mapping)
+    Static = {},
+    -- Dynamic text elements (with custom update functions)
+    Dynamic = {},
+}
+
+-- Register a static UI element for language refresh
+local function RegisterLocalizedUI(element, key, prefix, suffix)
+    prefix = prefix or ""
+    suffix = suffix or ""
+    table.insert(LocalizedUI.Static, {
+        Element = element,
+        Key = key,
+        Prefix = prefix,
+        Suffix = suffix
+    })
+    element.Text = prefix .. L(key) .. suffix
+end
+
+-- Register a dynamic UI element with custom update function
+local function RegisterDynamicUI(element, updateFunc)
+    table.insert(LocalizedUI.Dynamic, {
+        Element = element,
+        UpdateFunc = updateFunc
+    })
+    pcall(updateFunc, element)
+end
+
+-- Refresh all localized UI elements
+local function RefreshAllLocalizedUI()
+    -- Refresh static elements
+    for _, item in ipairs(LocalizedUI.Static) do
+        if item.Element and item.Element.Parent then
+            item.Element.Text = (item.Prefix or "") .. L(item.Key) .. (item.Suffix or "")
+        end
+    end
+    -- Refresh dynamic elements
+    for _, item in ipairs(LocalizedUI.Dynamic) do
+        if item.Element and item.Element.Parent then
+            pcall(item.UpdateFunc, item.Element)
+        end
+    end
+end
+
+-- Tab modules storage for reactive refresh
+local TabModules = {
+    Tools = nil,
+    Fun = nil,
+    Warp = nil,
+    Helper = nil,
+    Dashboard = nil,
+    Config = nil,
+}
+local TabPages = {
+    Tools = nil,
+    Fun = nil,
+    Warp = nil,
+    Helper = nil,
+    Dashboard = nil,
+    Config = nil,
+}
+local TabParams = {} -- Will be set after UI is created
+
+-- Rebuild all localized tabs when language changes
+local function RebuildLocalizedTabs()
+    -- Rebuild Tools Tab
+    if TabModules.Tools and TabPages.Tools then
+        pcall(function()
+            TabModules.Tools(TabPages.Tools, TabParams.UIModule, TabParams.Connections, TabParams.Config,
+                TabParams.LocalPlayer, TabParams.UIHandlers, TabParams.RegisterTheme)
+        end)
+    end
+    -- Rebuild Fun Tab
+    if TabModules.Fun and TabPages.Fun then
+        pcall(function()
+            TabModules.Fun(TabPages.Fun, TabParams.UIModule, TabParams.Connections, TabParams.Config,
+                TabParams.LocalPlayer, TabParams.UIHandlers, TabParams.RegisterTheme)
+        end)
+    end
+    -- Rebuild Warp Tab
+    if TabModules.Warp and TabPages.Warp then
+        pcall(function()
+            TabModules.Warp(TabPages.Warp, TabParams.UIModule, TabParams.Connections, TabParams.Config,
+                TabParams.LocalPlayer, TabParams.UIHandlers, TabParams.ShowConfirm, TabParams.RegisterTheme)
+        end)
+    end
+    -- Rebuild Helper Tab
+    if TabModules.Helper and TabPages.Helper then
+        pcall(function()
+            TabModules.Helper(TabPages.Helper, TabParams.UIModule, TabParams.Connections, TabParams.Config,
+                TabParams.LocalPlayer, TabParams.UIHandlers, TabParams.ShowConfirm, TabParams.RegisterTheme)
+        end)
+    end
+    -- Rebuild Dashboard Tab
+    if TabModules.Dashboard and TabPages.Dashboard then
+        pcall(function()
+            TabModules.Dashboard(TabPages.Dashboard, TabParams.UIModule, TabParams.Connections, TabParams.Config,
+                TabParams.LocalPlayer, TabParams.UIHandlers, TabParams.RegisterTheme)
+        end)
+    end
+    -- Rebuild Config Tab
+    if TabModules.Config and TabPages.Config then
+        pcall(function()
+            if type(TabModules.Config) == "table" and TabModules.Config.SetupUI then
+                TabModules.Config.SetupUI(
+                    TabPages.Config,
+                    TabParams.UIModule,
+                    TabParams.Connections,
+                    TabParams.Config,
+                    TabParams.LocalPlayer,
+                    TabParams.UIHandlers,
+                    TabParams.Themes,
+                    TabParams.ThemeObjects,
+                    TabParams.Main
+                )
+                -- Re-apply current theme after rebuild
+                if TabModules.Config.ApplyTheme then
+                    TabModules.Config.ApplyTheme(TabParams.Config.Theme or "Default")
+                end
+            end
+        end)
+    end
+end
+
+-- Register language change callback
+if LocaleModule and LocaleModule.OnLanguageChange then
+    LocaleModule.OnLanguageChange(function(newLang, oldLang)
+        RefreshAllLocalizedUI()
+        -- Rebuild tabs with localized text (deferred to allow current handler to complete)
+        task.defer(function()
+            RebuildLocalizedTabs()
+        end)
+    end)
+end
 
 -- Restore missing global variables (consolidated into tables to reduce local register usage)
 local WarpPoints = {}
@@ -720,15 +920,15 @@ end
 function UIHandlers.SmoothRecording(strength)
     -- Legacy Manual Apply (Keep for editing)
     if not recordedData or not recordedData.Frames or #recordedData.Frames < 3 then
-        ShowToast("Smoothing Failed", "Not enough frames.", "error", 2)
+        ShowToast(L("smoothing_failed"), L("not_enough_frames"), "error", 2)
         return
     end
-    ShowLoadingModal(true, "PERMANENT SMOOTHING...", 0)
+    ShowLoadingModal(true, L("permanent_smoothing"), 0)
     task.wait()
     local isFlexible = (recordedData.Mode == "Flexible") or (recordedData.Frames[1].md ~= nil)
     recordedData.Frames = GetSmoothedFrames(recordedData.Frames, strength, isFlexible)
     ShowLoadingModal(false)
-    ShowToast("Success", "Path smoothed permanently (unsaved).", "success", 2)
+    ShowToast(L("success"), L("path_smoothed"), "success", 2)
     if isPathEnabled then
         GeneratePlaybackPath(recordedData.Frames)
     end
@@ -1345,7 +1545,7 @@ local function SaveRecording(fn)
     recordedData.Mode = isFlexibleRecording and "Flexible" or "Strict"
     writefile(GetWorkspacePath() .. "/" .. fn .. ".json", HttpService:JSONEncode(recordedData))
     ClearPath()
-    ShowToast("Recording Saved", "Saved " .. #recordedData.Frames .. " frames to " .. fn, "success", 2)
+    ShowToast(L("recording_saved"), L("frames_saved", #recordedData.Frames, fn), "success", 2)
     if RefreshPlayerList then
         RefreshPlayerList()
     end -- Auto Refresh UI
@@ -1415,7 +1615,7 @@ local function StopPlayback()
 
     -- Update UI if Merger Source
     if currentPlaybackSource == "Merger" and PBtnPlay then
-        PBtnPlay.Text = "PLAY"
+        PBtnPlay.Text = L("play")
         PBtnPlay.TextColor3 = C_GREEN
         PSliderFill.Size = UDim2.new(0, 0, 1, 0)
         if currentTotalDuration then
@@ -1545,7 +1745,7 @@ local function PreprocessFrames(frames)
 end
 
 local function PlayRecording(fn, force, skipDistanceCheck)
-    ShowToast("Loading Playback", "Preparing " .. fn .. "...", "info", 1.5)
+    ShowToast(L("loading_playback"), L("preparing", fn), "info", 1.5)
     task.wait(0.1) -- Allow UI to render
 
     local p = GetWorkspacePath() .. "/" .. fn
@@ -1553,7 +1753,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
         -- Try checking Merger folder if not found in main folder
         p = MERGER_FOLDER .. "/" .. fn
         if not isfile(p) then
-            ShowToast("Error", "File not found: " .. fn, "error", 3)
+            ShowToast(L("error"), L("file_not_found") .. ": " .. fn, "error", 3)
             return
         end
     end
@@ -1577,17 +1777,17 @@ local function PlayRecording(fn, force, skipDistanceCheck)
         local framesToPlay = d.Frames or d
 
         -- PERFORMANCE: Pre-process frames BEFORE smoothing
-        ShowLoadingModal(true, "OPTIMIZING FRAMES...", 0.3)
+        ShowLoadingModal(true, L("optimizing_frames"), 0.3)
         framesToPlay = PreprocessFrames(framesToPlay)
 
         if isLiveSmoothing and #framesToPlay > 3 then
             local isFlex = (d.Mode == "Flexible") or (framesToPlay[1].md ~= nil)
-            ShowLoadingModal(true, "AUTO SMOOTHING...", 0.5)
+            ShowLoadingModal(true, L("auto_smoothing"), 0.5)
             task.wait() -- Allow UI update
             framesToPlay = GetSmoothedFrames(framesToPlay, liveSmoothingStrength, isFlex)
             -- Re-process after smoothing (smoothing may change values)
             framesToPlay = PreprocessFrames(framesToPlay)
-            ShowToast("Live Smoothing", "Applied smoothing (Strength: " .. liveSmoothingStrength .. ")", "info", 2)
+            ShowToast(L("live_smoothing"), L("applied_smoothing", liveSmoothingStrength), "info", 2)
         end
 
         currentFrameData = framesToPlay
@@ -1604,11 +1804,8 @@ local function PlayRecording(fn, force, skipDistanceCheck)
                 if dist > MAP_DISTANCE_THRESHOLD then
                     -- Show warning toast immediately
                     ShowToast(
-                        "WARNING: Different Map?",
-                        string.format(
-                            "Nearest path point is %.0f studs away! This recording may be from a different game/map.",
-                            dist
-                        ),
+                        L("warning_different_map"),
+                        L("nearest_path_warning", dist),
                         "warning",
                         5
                     )
@@ -1616,11 +1813,8 @@ local function PlayRecording(fn, force, skipDistanceCheck)
                     -- Also show confirmation dialog if ShowConfirm is available
                     if ShowConfirm then
                         ShowConfirm(
-                            "DIFFERENT MAP DETECTED",
-                            string.format(
-                                "Nearest recording path point is %.0f studs away!\n\nThis recording might be from a different game/map.\n\nContinue anyway?",
-                                dist
-                            ),
+                            L("different_map_detected"),
+                            L("nearest_path_warning", dist) .. "\n\n" .. L("continue_anyway"),
                             function()
                                 -- User confirmed, play with skip flag
                                 PlayRecording(fn, true, true)
@@ -1653,7 +1847,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
     -- SMART RESUME / SMART START
     -- Always check for nearest point if resuming OR if starting fresh (to support mid-path start)
     if true then
-        ShowLoadingModal(true, "FINDING POSITION...")
+        ShowLoadingModal(true, L("finding_position"))
         task.wait()
 
         local bestT, minDst = currentPlaybackTime, math.huge
@@ -1714,7 +1908,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
     -- 1. PATH VISUAL
     if isPathEnabled then
-        ShowLoadingModal(true, "GENERATING PATH...")
+        ShowLoadingModal(true, L("generating_path"))
         task.wait()
         GeneratePlaybackPath(currentFrameData)
     else
@@ -1836,7 +2030,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
                         local savedFile = currentPlaybackFile
                         local savedLoop = isLooping
                         StopPlayback()
-                        ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
+                        ShowToast(L("respawn"), L("respawning_in"), "info", 5)
                         task.wait(5)
                         local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
                         if h then
@@ -1845,7 +2039,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
                         if savedLoop then
                             task.spawn(function()
                                 LocalPlayer.CharacterAdded:Wait()
-                                ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
+                                ShowToast(L("loop"), L("restarting_playback"), "info", 5)
                                 task.wait(5)
                                 if savedFile and UIHandlers.PlayMergerRecording then
                                     UIHandlers.PlayMergerRecording(savedFile, true)
@@ -1867,7 +2061,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
                         local savedFile = currentPlaybackFile
                         local savedLoop = isLooping
                         StopPlayback()
-                        ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
+                        ShowToast(L("respawn"), L("respawning_in"), "info", 5)
                         task.wait(5)
                         local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
                         if h then
@@ -1876,7 +2070,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
                         if savedLoop then
                             task.spawn(function()
                                 LocalPlayer.CharacterAdded:Wait()
-                                ShowToast("Loop", "Restarting playback in 5 seconds...", "info", 5)
+                                ShowToast(L("loop"), L("restarting_playback"), "info", 5)
                                 task.wait(5)
                                 if savedFile and UIHandlers.PlayMergerRecording then
                                     UIHandlers.PlayMergerRecording(savedFile, true)
@@ -2534,7 +2728,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
                         local savedFile = currentPlaybackFile
                         local savedLoop = isLooping
                         StopPlayback()
-                        ShowToast("Respawn", "Respawning in 5 seconds...", "info", 5)
+                        ShowToast(L("respawn"), L("respawning_in"), "info", 5)
                         task.wait(5)
                         local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
                         if h then
@@ -3391,7 +3585,7 @@ CloseBtn.TextColor3 = C_RED
 CloseBtn.TextSize = 22
 CloseBtn.Font = Enum.Font.GothamMedium
 CloseBtn.MouseButton1Click:Connect(function()
-    ShowConfirm("EXIT STARSHIP", "Are you sure you want to close the script completely?", function()
+    ShowConfirm(L("exit_starship"), L("exit_confirm"), function()
         -- Disable all active features before closing
         local toggleFunctions = {
             "ToggleAntiAFK",
@@ -3668,7 +3862,7 @@ do
     ProfileRank.Visible = true
 
     -- Fetch rank from Pastebin (same as nametag system)
-    ProfileRank.Text = "LOADING..."
+    ProfileRank.Text = L("loading")
     ProfileRank.TextColor3 = C_TEXT_DIM
 
     task.spawn(function()
@@ -3719,7 +3913,7 @@ do
     TagToggleMini.Size = UDim2.new(0.85, 0, 0, 20)
     TagToggleMini.Position = UDim2.new(0.075, 0, 1, -85)
     TagToggleMini.BackgroundColor3 = C_ITEM
-    TagToggleMini.Text = "TAGS: ON"
+    TagToggleMini.Text = L("tags") .. ": " .. L("on")
     TagToggleMini.TextColor3 = C_GREEN
     TagToggleMini.Font = Enum.Font.GothamBold
     TagToggleMini.TextSize = 10
@@ -3728,7 +3922,7 @@ do
     local miniTagsOn = true
     TagToggleMini.MouseButton1Click:Connect(function()
         miniTagsOn = not miniTagsOn
-        TagToggleMini.Text = "TAGS: " .. (miniTagsOn and "ON" or "OFF")
+        TagToggleMini.Text = L("tags") .. ": " .. (miniTagsOn and L("on") or L("off"))
         TagToggleMini.TextColor3 = miniTagsOn and C_GREEN or C_RED
         if getgenv().ToggleNametags then
             getgenv().ToggleNametags(miniTagsOn)
@@ -3770,7 +3964,7 @@ do
     RegisterTheme(stroke, "Color", "Accent")
 
     local title = Instance.new("TextLabel", ConfirmBox)
-    title.Text = "SYSTEM ALERT"
+    title.Text = L("system_alert")
     title.Size = UDim2.new(1, 0, 0, 30)
     title.Position = UDim2.new(0, 0, 0, 10)
     title.BackgroundTransparency = 1
@@ -3781,7 +3975,7 @@ do
     RegisterTheme(title, "TextColor3", "Accent")
 
     local msg = Instance.new("TextLabel", ConfirmBox)
-    msg.Text = "Confirm Action?"
+    msg.Text = L("confirm_action")
     msg.Size = UDim2.new(0.9, 0, 0, 40)
     msg.Position = UDim2.new(0.05, 0, 0, 45)
     msg.BackgroundTransparency = 1
@@ -3793,7 +3987,7 @@ do
     RegisterTheme(msg, "TextColor3", "Text")
 
     local btnYes = Instance.new("TextButton", ConfirmBox)
-    btnYes.Text = "CONFIRM"
+    btnYes.Text = L("confirm")
     btnYes.Size = UDim2.new(0.4, 0, 0, 35)
     btnYes.Position = UDim2.new(0.07, 0, 0, 130)
     btnYes.BackgroundColor3 = C_ACCENT
@@ -3803,9 +3997,11 @@ do
     btnYes.ZIndex = 10001
     Instance.new("UICorner", btnYes).CornerRadius = UDim.new(0, 6)
     RegisterTheme(btnYes, "BackgroundColor3", "Accent")
+    -- Register for localized UI refresh
+    RegisterLocalizedUI(btnYes, "confirm")
 
     local btnNo = Instance.new("TextButton", ConfirmBox)
-    btnNo.Text = "CANCEL"
+    btnNo.Text = L("cancel")
     btnNo.Size = UDim2.new(0.4, 0, 0, 35)
     btnNo.Position = UDim2.new(0.53, 0, 0, 130)
     btnNo.BackgroundColor3 = C_ITEM
@@ -3816,9 +4012,11 @@ do
     Instance.new("UICorner", btnNo).CornerRadius = UDim.new(0, 6)
     RegisterTheme(btnNo, "BackgroundColor3", "Item")
     RegisterTheme(btnNo, "TextColor3", "Text")
+    -- Register for localized UI refresh
+    RegisterLocalizedUI(btnNo, "cancel")
 
     ShowConfirm = function(t, m, callback, isInput)
-        title.Text = (t and t ~= "") and t or "SYSTEM ALERT"
+        title.Text = (t and t ~= "") and t or L("system_alert")
         msg.Text = m
         ConfirmOverlay.Visible = true
 
@@ -3832,7 +4030,7 @@ do
             inputBox.PlaceholderColor3 = Color3.fromRGB(180, 180, 180)
             inputBox.Font = Enum.Font.Gotham
             inputBox.TextSize = 11
-            inputBox.PlaceholderText = "Enter here..."
+            inputBox.PlaceholderText = L("enter_here")
             inputBox.Text = ""
             inputBox.ZIndex = 10001
             Instance.new("UICorner", inputBox).CornerRadius = UDim.new(0, 4)
@@ -3894,7 +4092,7 @@ UIHandlers.ShowSaveMergeModal = function(callback)
     RegisterTheme(stroke, "Color", "Accent")
 
     local Title = Instance.new("TextLabel", Box)
-    Title.Text = "SAVE MERGED FILE"
+    Title.Text = L("save_merged_file")
     Title.Size = UDim2.new(1, 0, 0, 30)
     Title.Position = UDim2.new(0, 0, 0, 10)
     Title.BackgroundTransparency = 1
@@ -3904,7 +4102,7 @@ UIHandlers.ShowSaveMergeModal = function(callback)
     RegisterTheme(Title, "TextColor3", "Accent")
 
     local InpName = Instance.new("TextBox", Box)
-    InpName.PlaceholderText = "Filename..."
+    InpName.PlaceholderText = L("filename")
     InpName.Text = ""
     InpName.Size = UDim2.new(0.86, 0, 0, 35)
     InpName.Position = UDim2.new(0.07, 0, 0, 50)
@@ -3917,7 +4115,7 @@ UIHandlers.ShowSaveMergeModal = function(callback)
     RegisterTheme(InpName, "TextColor3", "Text")
 
     local BtnSave = Instance.new("TextButton", Box)
-    BtnSave.Text = "SAVE"
+    BtnSave.Text = L("save")
     BtnSave.Size = UDim2.new(0.4, 0, 0, 35)
     BtnSave.Position = UDim2.new(0.07, 0, 0, 100)
     BtnSave.BackgroundColor3 = C_ACCENT
@@ -3928,7 +4126,7 @@ UIHandlers.ShowSaveMergeModal = function(callback)
     RegisterTheme(BtnSave, "BackgroundColor3", "Accent")
 
     local BtnCancel = Instance.new("TextButton", Box)
-    BtnCancel.Text = "CANCEL"
+    BtnCancel.Text = L("cancel")
     BtnCancel.Size = UDim2.new(0.4, 0, 0, 35)
     BtnCancel.Position = UDim2.new(0.53, 0, 0, 100)
     BtnCancel.BackgroundColor3 = C_ITEM
@@ -3941,7 +4139,7 @@ UIHandlers.ShowSaveMergeModal = function(callback)
 
     BtnSave.MouseButton1Click:Connect(function()
         if InpName.Text == "" then
-            InpName.PlaceholderText = "NAME REQUIRED!"
+            InpName.PlaceholderText = L("name_required")
             return
         end
         Overlay:Destroy()
@@ -4179,25 +4377,51 @@ PageDashboard.BackgroundTransparency = 1
 PageDashboard.Visible = false
 
 -- === INIT TAB MODULES ===
+-- Store common parameters for tab rebuilding on language change
+TabParams = {
+    UIModule = UIModule,
+    Connections = Connections,
+    Config = Config,
+    LocalPlayer = LocalPlayer,
+    UIHandlers = UIHandlers,
+    ShowConfirm = ShowConfirm,
+    RegisterTheme = RegisterTheme,
+    Themes = Themes,
+    ThemeObjects = ThemeObjects,
+    Main = Main,
+}
+
 -- Load and execute the modular tabs here
 local WarpTab = LoadModule("Tabs/Warp")
 if WarpTab then
     WarpTab(PageWarp, UIModule, Connections, Config, LocalPlayer, UIHandlers, ShowConfirm, RegisterTheme)
+    -- Store for reactive refresh
+    TabModules.Warp = WarpTab
+    TabPages.Warp = PageWarp
 end
 
 local FunTab = LoadModule("Tabs/Fun")
 if FunTab then
     FunTab(PageFun, UIModule, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
+    -- Store for reactive refresh
+    TabModules.Fun = FunTab
+    TabPages.Fun = PageFun
 end
 
 local ToolsTab = LoadModule("Tabs/Tools")
 if ToolsTab then
     ToolsTab(PageTools, UIModule, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
+    -- Store for reactive refresh
+    TabModules.Tools = ToolsTab
+    TabPages.Tools = PageTools
 end
 
 local HelperTab = LoadModule("Tabs/Helper")
 if HelperTab then
     HelperTab(PageHelper, UIModule, Connections, Config, LocalPlayer, UIHandlers, ShowConfirm, RegisterTheme)
+    -- Store for reactive refresh
+    TabModules.Helper = HelperTab
+    TabPages.Helper = PageHelper
 end
 
 local EmotesTab = LoadModule("Tabs/Emotes")
@@ -4224,10 +4448,18 @@ if ConfigTabModule then
         if ConfigTabModule.ApplyTheme then
             ConfigTabModule.ApplyTheme(Config.Theme or "Default")
         end
+        -- Store for reactive refresh
+        TabModules.Config = ConfigTabModule
+        TabPages.Config = PageConfig
     end
 end
 
 local DashboardTab = LoadModule("Tabs/Dashboard")
+if DashboardTab then
+    -- Store for reactive refresh (will be called below)
+    TabModules.Dashboard = DashboardTab
+    TabPages.Dashboard = PageDashboard
+end
 if DashboardTab then
     DashboardTab(PageDashboard, UIModule, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
 end
@@ -4301,7 +4533,7 @@ UIHandlers.StartCountdown = function(callback)
         task.wait(1)
     end
 
-    CountLbl.Text = "GO!"
+    CountLbl.Text = L("go")
 
     -- Unfreeze immediately BEFORE starting recording
     if r then
@@ -4343,7 +4575,7 @@ do
     RegisterTheme(StatusIcon, "TextColor3", "TextDim")
 
     RStatus = Instance.new("TextLabel", StatusCard)
-    RStatus.Text = "Ready to Record"
+    RStatus.Text = L("ready_to_record")
     RStatus.Size = UDim2.new(1, -50, 0, 20)
     RStatus.Position = UDim2.new(0, 40, 0, 8)
     RStatus.BackgroundTransparency = 1
@@ -4354,7 +4586,7 @@ do
     RegisterTheme(RStatus, "TextColor3", "Text")
 
     local RSubStatus = Instance.new("TextLabel", StatusCard)
-    RSubStatus.Text = "Press Start or F5 to begin"
+    RSubStatus.Text = L("press_start")
     RSubStatus.Size = UDim2.new(1, -50, 0, 15)
     RSubStatus.Position = UDim2.new(0, 40, 0, 28)
     RSubStatus.BackgroundTransparency = 1
@@ -4368,19 +4600,19 @@ do
         if isRecording and not isPaused then
             local t = tick() % 1
             StatusIcon.TextColor3 = (t < 0.5 and C_RED or C_TEXT_DIM)
-            RStatus.Text = "RECORDING IN PROGRESS"
+            RStatus.Text = L("recording_in_progress")
             RStatus.TextColor3 = C_RED
-            RSubStatus.Text = "Duration: " .. string.format("%.2fs", os.clock() - startTime)
+            RSubStatus.Text = L("duration") .. ": " .. string.format("%.2fs", os.clock() - startTime)
         elseif isPaused then
             StatusIcon.TextColor3 = C_YELLOW
-            RStatus.Text = "RECORDING PAUSED"
+            RStatus.Text = L("recording_paused")
             RStatus.TextColor3 = C_YELLOW
-            RSubStatus.Text = "Rewind Mode Active"
+            RSubStatus.Text = L("rewind_mode_active")
         else
             StatusIcon.TextColor3 = C_TEXT_DIM
-            RStatus.Text = "READY TO RECORD"
+            RStatus.Text = L("ready_to_record")
             RStatus.TextColor3 = C_TEXT
-            RSubStatus.Text = "Press Start or F5 to begin"
+            RSubStatus.Text = L("press_start")
         end
     end)
 end
@@ -4408,9 +4640,14 @@ do
         return b
     end
 
-    local BtnStart = CreateCtrlBtn("START", C_GREEN, "▶")
-    local BtnPause = CreateCtrlBtn("PAUSE", C_YELLOW, "⏸")
-    local BtnStop = CreateCtrlBtn("STOP", C_RED, "⏹")
+    local BtnStart = CreateCtrlBtn(L("start"), C_GREEN, "▶")
+    local BtnPause = CreateCtrlBtn(L("pause"), C_YELLOW, "⏸")
+    local BtnStop = CreateCtrlBtn(L("stop"), C_RED, "⏹")
+
+    -- Register for language refresh
+    RegisterDynamicUI(BtnStart, function(el) el.Text = "▶  " .. L("start") end)
+    RegisterDynamicUI(BtnPause, function(el) el.Text = "⏸  " .. L("pause") end)
+    RegisterDynamicUI(BtnStop, function(el) el.Text = "⏹  " .. L("stop") end)
 
     BtnStart.MouseButton1Click:Connect(function()
         UIHandlers.StartCountdown(StartRecording)
@@ -4438,7 +4675,11 @@ do
     RegisterTheme(SettingsPanel, "BackgroundColor3", "Item")
 
     local BtnToggleMode = Instance.new("TextButton", SettingsPanel)
-    BtnToggleMode.Text = "MODE: STRICT"
+    BtnToggleMode.Text = L("mode_strict")
+    -- Register for language refresh (dynamic based on isFlexibleRecording state)
+    RegisterDynamicUI(BtnToggleMode, function(el)
+        el.Text = isFlexibleRecording and L("mode_flexible") or L("mode_strict")
+    end)
     BtnToggleMode.Size = UDim2.new(0.5, -10, 0, 30)
     BtnToggleMode.Position = UDim2.new(0, 5, 0, 5)
     BtnToggleMode.BackgroundColor3 = C_MAIN
@@ -4450,7 +4691,11 @@ do
     RegisterTheme(BtnToggleMode, "TextColor3", "Text")
 
     BtnTogglePath = Instance.new("TextButton", SettingsPanel)
-    BtnTogglePath.Text = "PATH: ON"
+    BtnTogglePath.Text = L("path_on")
+    -- Register for language refresh (dynamic based on isPathEnabled state)
+    RegisterDynamicUI(BtnTogglePath, function(el)
+        el.Text = isPathEnabled and L("path_on") or L("path_off")
+    end)
     BtnTogglePath.Size = UDim2.new(0.35, -5, 0, 30)
     BtnTogglePath.Position = UDim2.new(0.5, 5, 0, 5)
     BtnTogglePath.BackgroundColor3 = C_MAIN
@@ -4492,7 +4737,7 @@ do
 
     BtnToggleMode.MouseButton1Click:Connect(function()
         isFlexibleRecording = not isFlexibleRecording
-        BtnToggleMode.Text = isFlexibleRecording and "MODE: FLEXIBLE" or "MODE: STRICT"
+        BtnToggleMode.Text = isFlexibleRecording and L("mode_flexible") or L("mode_strict")
         BtnToggleMode.TextColor3 = isFlexibleRecording and C_ACCENT or C_TEXT
     end)
 
@@ -4552,7 +4797,7 @@ end
 
 do
     local hdr = Instance.new("TextLabel", RewindFrame)
-    hdr.Text = "REWIND CONTROL"
+    hdr.Text = L("rewind_control")
     hdr.Size = UDim2.new(1, 0, 0, 20)
     hdr.BackgroundTransparency = 1
     hdr.TextColor3 = C_TEXT_DIM
@@ -4560,6 +4805,7 @@ do
     hdr.TextSize = 10
     hdr.Position = UDim2.new(0, 0, 0, 5)
     RegisterTheme(hdr, "TextColor3", "TextDim")
+    RegisterLocalizedUI(hdr, "rewind_control")
 
     local dragging = false
     RewindSliderBg.MouseButton1Down:Connect(function()
@@ -4577,7 +4823,8 @@ do
     end)
 
     local btnResume = Instance.new("TextButton", RewindFrame)
-    btnResume.Text = "RESUME RECORDING"
+    btnResume.Text = L("resume_recording")
+    RegisterLocalizedUI(btnResume, "resume_recording")
     btnResume.Size = UDim2.new(0.9, 0, 0, 25)
     btnResume.Position = UDim2.new(0.05, 0, 0.65, 0)
     btnResume.BackgroundColor3 = C_GREEN
@@ -4614,7 +4861,7 @@ local ShowSaveRecordingModal -- Forward Declaration
     FileHeader.BackgroundTransparency = 1
 
     local FileTitle = Instance.new("TextLabel", FileHeader)
-    FileTitle.Text = "  RECORDINGS"
+    FileTitle.Text = "  " .. L("recordings")
     FileTitle.Size = UDim2.new(0.3, 0, 1, 0)
     FileTitle.BackgroundTransparency = 1
     FileTitle.TextColor3 = C_TEXT_DIM
@@ -4622,6 +4869,7 @@ local ShowSaveRecordingModal -- Forward Declaration
     FileTitle.TextSize = 10
     FileTitle.TextXAlignment = Enum.TextXAlignment.Left
     RegisterTheme(FileTitle, "TextColor3", "TextDim")
+    RegisterLocalizedUI(FileTitle, "recordings", "  ")
 
     local PInpWorkspace = Instance.new("TextButton", FileHeader)
     PInpWorkspace.Name = "WorkspaceInput"
@@ -4637,7 +4885,7 @@ local ShowSaveRecordingModal -- Forward Declaration
     RegisterTheme(PInpWorkspace, "TextColor3", "Accent")
 
     local PRefresh = Instance.new("TextButton", FileHeader)
-    PRefresh.Text = "REFRESH"
+    PRefresh.Text = L("refresh")
     PRefresh.Size = UDim2.new(0, 60, 0, 20)
     PRefresh.Position = UDim2.new(1, -65, 0, 7)
     PRefresh.BackgroundColor3 = C_MAIN
@@ -4647,6 +4895,7 @@ local ShowSaveRecordingModal -- Forward Declaration
     Instance.new("UICorner", PRefresh).CornerRadius = UDim.new(0, 4)
     RegisterTheme(PRefresh, "BackgroundColor3", "Main")
     RegisterTheme(PRefresh, "TextColor3", "Text")
+    RegisterLocalizedUI(PRefresh, "refresh")
 
     local PScroll = Instance.new("ScrollingFrame", FileListCard)
     PScroll.Size = UDim2.new(1, -10, 1, -35)
@@ -4825,9 +5074,9 @@ local ShowSaveRecordingModal -- Forward Declaration
                     end)
 
                     btnDel.MouseButton1Click:Connect(function()
-                        ShowConfirm("DELETE FILE", "Delete " .. n .. "?", function()
+                        ShowConfirm(L("delete_file"), L("delete") .. " " .. n .. "?", function()
                             delfile(f)
-                            ShowToast("File Deleted", "Deleted " .. n, "success", 2)
+                            ShowToast(L("file_deleted"), L("deleted", n), "success", 2)
 
                             if UIHandlers.RefreshMergerList then
                                 UIHandlers.RefreshMergerList()
@@ -4935,7 +5184,7 @@ local ShowSaveRecordingModal -- Forward Declaration
         Instance.new("UIStroke", Card).Color = C_ACCENT
 
         local Title = Instance.new("TextLabel", Card)
-        Title.Text = "SAVE RECORDING"
+        Title.Text = L("save_recording")
         Title.Size = UDim2.new(1, 0, 0, 40)
         Title.BackgroundTransparency = 1
         Title.TextColor3 = C_TEXT
@@ -4943,7 +5192,7 @@ local ShowSaveRecordingModal -- Forward Declaration
         Title.TextSize = 14
 
         local InpName = Instance.new("TextBox", Card)
-        InpName.PlaceholderText = "Enter Filename..."
+        InpName.PlaceholderText = L("enter_filename")
         InpName.Text = "Rec_" .. os.date("%H%M%S")
         InpName.Size = UDim2.new(0.8, 0, 0, 35)
         InpName.Position = UDim2.new(0.1, 0, 0, 50)
@@ -4973,7 +5222,7 @@ local ShowSaveRecordingModal -- Forward Declaration
 
         -- Workspace Selection
         local LblWS = Instance.new("TextLabel", Card)
-        LblWS.Text = "Workspace:"
+        LblWS.Text = L("workspace") .. ":"
         LblWS.Size = UDim2.new(0.3, 0, 0, 30)
         LblWS.Position = UDim2.new(0.1, 0, 0, 95)
         LblWS.BackgroundTransparency = 1
@@ -5017,7 +5266,7 @@ local ShowSaveRecordingModal -- Forward Declaration
 
                 -- New Workspace Input
                 local NewWSInput = Instance.new("TextBox", WSList)
-                NewWSInput.PlaceholderText = "+ New Workspace..."
+                NewWSInput.PlaceholderText = "+ " .. L("new_workspace") .. "..."
                 NewWSInput.Text = ""
                 NewWSInput.Size = UDim2.new(1, -4, 0, 25)
                 NewWSInput.BackgroundColor3 = C_MAIN
@@ -5084,7 +5333,7 @@ local ShowSaveRecordingModal -- Forward Declaration
         end)
 
         local BtnSave = Instance.new("TextButton", Card)
-        BtnSave.Text = "SAVE"
+        BtnSave.Text = L("save")
         BtnSave.Size = UDim2.new(0.35, 0, 0, 35)
         BtnSave.Position = UDim2.new(0.1, 0, 0, 180) -- Moved down
         BtnSave.BackgroundColor3 = C_GREEN
@@ -5093,7 +5342,7 @@ local ShowSaveRecordingModal -- Forward Declaration
         Instance.new("UICorner", BtnSave).CornerRadius = UDim.new(0, 6)
 
         local BtnDiscard = Instance.new("TextButton", Card)
-        BtnDiscard.Text = "DISCARD"
+        BtnDiscard.Text = L("discard")
         BtnDiscard.Size = UDim2.new(0.35, 0, 0, 35)
         BtnDiscard.Position = UDim2.new(0.55, 0, 0, 180) -- Moved down
         BtnDiscard.BackgroundColor3 = C_RED
@@ -5223,7 +5472,7 @@ UIHandlers.OnStopClick = function()
     if isRecording or isPaused then
         StopRecording()
         RewindFrame.Visible = false
-        RStatus.Text = "Status: Idle"
+        RStatus.Text = L("status_idle")
         RStatus.TextColor3 = C_TEXT_DIM
         ShowSaveRecordingModal()
     end
@@ -5238,7 +5487,7 @@ end
 
 UIHandlers.OnTogglePathClick = function()
     isPathEnabled = not isPathEnabled
-    BtnTogglePath.Text = "Path Visualizer: " .. (isPathEnabled and "ON" or "OFF")
+    BtnTogglePath.Text = L("path_visualizer") .. ": " .. (isPathEnabled and L("on") or L("off"))
     BtnTogglePath.TextColor3 = isPathEnabled and C_GREEN or C_TEXT_DIM
 
     if isPathEnabled then
@@ -5452,7 +5701,8 @@ UIHandlers.RefreshMergerList = function()
 
         -- Update counter label
         if MergerRefs.CounterLabel then
-            MergerRefs.CounterLabel.Text = "Selected: " .. #MergerRefs.mergeList .. " / " .. #jsonFiles .. " files"
+            MergerRefs.CounterLabel.Text = L("selected") ..
+                ": " .. #MergerRefs.mergeList .. " / " .. #jsonFiles .. " " .. L("total_files")
         end
 
         local displayIdx = 0
@@ -5598,7 +5848,9 @@ function UIHandlers.InitMergerUI()
     SearchIcon.TextSize = 14
 
     MergerRefs.SearchBox = Instance.new("TextBox", SearchCard)
-    MergerRefs.SearchBox.PlaceholderText = "Search files..."
+    MergerRefs.SearchBox.PlaceholderText = L("search_files")
+    -- Register placeholder for language refresh (need custom handling for PlaceholderText)
+    RegisterDynamicUI(MergerRefs.SearchBox, function(el) el.PlaceholderText = L("search_files") end)
     MergerRefs.SearchBox.Text = ""
     MergerRefs.SearchBox.Size = UDim2.new(0.5, -40, 0, 25)
     MergerRefs.SearchBox.Position = UDim2.new(0, 35, 0.5, -12)
@@ -5617,7 +5869,8 @@ function UIHandlers.InitMergerUI()
 
     -- Counter Label
     MergerRefs.CounterLabel = Instance.new("TextLabel", SearchCard)
-    MergerRefs.CounterLabel.Text = "Selected: 0 / 0 files"
+    MergerRefs.CounterLabel.Text = L("selected") .. ": 0 / 0 " .. L("total_files")
+    -- CounterLabel is updated dynamically in RefreshMergerList, no need to register here
     MergerRefs.CounterLabel.Size = UDim2.new(0.45, -10, 1, 0)
     MergerRefs.CounterLabel.Position = UDim2.new(0.55, 0, 0, 0)
     MergerRefs.CounterLabel.BackgroundTransparency = 1
@@ -5645,7 +5898,8 @@ function UIHandlers.InitMergerUI()
     MergeHeader.Size = UDim2.new(1, 0, 0, 32) -- Diperbesar dari 30 ke 32
     MergeHeader.BackgroundTransparency = 1
     local MergeTitle = Instance.new("TextLabel", MergeHeader)
-    MergeTitle.Text = "  SELECT FILES TO MERGE"
+    MergeTitle.Text = "  " .. L("select_files_to_merge")
+    RegisterLocalizedUI(MergeTitle, "select_files_to_merge", "  ")
     MergeTitle.Size = UDim2.new(0.4, 0, 1, 0) -- Dikurangi dari 0.5 ke 0.4
     MergeTitle.BackgroundTransparency = 1
     MergeTitle.TextColor3 = C_TEXT_DIM
@@ -5813,7 +6067,7 @@ function UIHandlers.InitMergerUI()
 
     BtnPlusMerge.MouseButton1Click:Connect(function()
         if ShowConfirm then
-            ShowConfirm("NEW WORKSPACE", "Enter name for new workspace:", function(name)
+            ShowConfirm(L("new_workspace"), L("workspace_name"), function(name)
                 if name and name ~= "" then
                     local newPath = RECORDER_FOLDER .. "/" .. name
                     if not isfolder(newPath) then
@@ -5823,7 +6077,7 @@ function UIHandlers.InitMergerUI()
                             UIHandlers.RefreshMergerList()
                         end
                     else
-                        ShowConfirm("ERROR", "Workspace already exists!", function() end)
+                        ShowConfirm(L("error"), L("workspace_exists"), function() end)
                     end
                 end
             end, true)
@@ -5851,7 +6105,7 @@ function UIHandlers.InitMergerUI()
     RegisterTheme(ActionCard, "BackgroundColor3", "Item")
 
     MMergeBtn = Instance.new("TextButton", ActionCard)
-    MMergeBtn.Text = "MERGE SELECTED FILES"
+    MMergeBtn.Text = L("merge_selected")
     MMergeBtn.Size = UDim2.new(0.9, 0, 0, 40)
     MMergeBtn.Position = UDim2.new(0.05, 0, 0, 10)
     MMergeBtn.BackgroundColor3 = C_ACCENT
@@ -5862,17 +6116,17 @@ function UIHandlers.InitMergerUI()
 
     MMergeBtn.MouseButton1Click:Connect(function()
         if #MergerRefs.mergeList < 2 then
-            MMergeBtn.Text = "SELECT AT LEAST 2 FILES!"
+            MMergeBtn.Text = L("select_at_least_two")
             MMergeBtn.BackgroundColor3 = C_RED
             task.wait(1)
-            MMergeBtn.Text = "MERGE SELECTED FILES"
+            MMergeBtn.Text = L("merge_selected")
             MMergeBtn.BackgroundColor3 = C_ACCENT
             return
         end
 
         UIHandlers.ShowSaveMergeModal(function(name)
             task.spawn(function()
-                ShowLoadingModal(true, "Initializing Merge...", 0)
+                ShowLoadingModal(true, L("preparing", "Merge"), 0)
                 task.wait(0.1) -- Allow UI to update
 
                 local finalFrames = {}
@@ -5882,7 +6136,7 @@ function UIHandlers.InitMergerUI()
                 for i, item in ipairs(MergerRefs.mergeList) do
                     -- Update Progress (0% to 80% allocated for processing)
                     local progress = ((i - 1) / totalFiles) * 0.8
-                    ShowLoadingModal(true, "Merging File " .. i .. "/" .. totalFiles, progress)
+                    ShowLoadingModal(true, L("merge") .. " " .. i .. "/" .. totalFiles, progress)
                     task.wait() -- Yield per file to keep UI responsive
 
                     local s, content = pcall(readfile, item.p)
@@ -5996,13 +6250,13 @@ function UIHandlers.InitMergerUI()
                 local finalData = { FPS = 60, Frames = finalFrames }
 
                 -- Saving (90% to 100%)
-                ShowLoadingModal(true, "Saving File...", 0.95)
+                ShowLoadingModal(true, L("saving_file"), 0.95)
                 task.wait(0.1)
 
                 writefile(MERGER_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode(finalData))
 
                 ShowLoadingModal(false)
-                ShowToast("Merge Complete", "Merged " .. totalFiles .. " files into " .. name, "success", 3)
+                ShowToast(L("merge_complete"), L("merged_files", totalFiles, name), "success", 3)
 
                 MergerRefs.mergeList = {}
                 if UIHandlers.RefreshMergerList then
@@ -6052,7 +6306,8 @@ function UIHandlers.SetupListMapUI()
     RegisterTheme(HeaderCard, "BackgroundColor3", "Item")
 
     local HeaderTitle = Instance.new("TextLabel", HeaderCard)
-    HeaderTitle.Text = "MERGED RECORDINGS (MAP LIST)"
+    HeaderTitle.Text = L("map_recordings")
+    RegisterLocalizedUI(HeaderTitle, "map_recordings")
     HeaderTitle.Size = UDim2.new(1, -80, 1, 0) -- Full height, minus button space
     HeaderTitle.Position = UDim2.new(0, 15, 0, 0)
     HeaderTitle.BackgroundTransparency = 1
@@ -6063,7 +6318,8 @@ function UIHandlers.SetupListMapUI()
     RegisterTheme(HeaderTitle, "TextColor3", "Text")
 
     local BtnRefresh = Instance.new("TextButton", HeaderCard)
-    BtnRefresh.Text = "REFRESH"
+    BtnRefresh.Text = L("refresh")
+    RegisterLocalizedUI(BtnRefresh, "refresh")
     BtnRefresh.Size = UDim2.new(0, 60, 0, 24)
     BtnRefresh.AnchorPoint = Vector2.new(1, 0.5)
     BtnRefresh.Position = UDim2.new(1, -10, 0.5, 0) -- Centered Vertically
@@ -6090,7 +6346,11 @@ function UIHandlers.SetupListMapUI()
     SettingsRow.LayoutOrder = 2
 
     local BtnStrictRetarget = Instance.new("TextButton", SettingsRow)
-    BtnStrictRetarget.Text = "STRICT RETARGET: OFF"
+    BtnStrictRetarget.Text = L("strict_retarget") .. ": " .. L("off")
+    -- Register for language refresh (dynamic based on isStrictRetarget state)
+    RegisterDynamicUI(BtnStrictRetarget, function(el)
+        el.Text = L("strict_retarget") .. ": " .. (isStrictRetarget and L("on") or L("off"))
+    end)
     BtnStrictRetarget.Size = UDim2.new(0.48, -5, 1, 0)
     BtnStrictRetarget.Position = UDim2.new(0, 0, 0, 0)
     BtnStrictRetarget.BackgroundColor3 = C_ITEM
@@ -6101,7 +6361,11 @@ function UIHandlers.SetupListMapUI()
     RegisterTheme(BtnStrictRetarget, "BackgroundColor3", "Item")
 
     local BtnNativeAnim = Instance.new("TextButton", SettingsRow)
-    BtnNativeAnim.Text = "NATIVE ANIM: OFF"
+    BtnNativeAnim.Text = L("native_anim") .. ": " .. L("off")
+    -- Register for language refresh (dynamic based on isNativeAnim state)
+    RegisterDynamicUI(BtnNativeAnim, function(el)
+        el.Text = L("native_anim") .. ": " .. (isNativeAnim and L("on") or L("off"))
+    end)
     BtnNativeAnim.Size = UDim2.new(0.48, -5, 1, 0)
     BtnNativeAnim.Position = UDim2.new(0.52, 0, 0, 0)
     BtnNativeAnim.BackgroundColor3 = C_ITEM
@@ -6114,13 +6378,13 @@ function UIHandlers.SetupListMapUI()
     -- Logic for Buttons
     BtnStrictRetarget.MouseButton1Click:Connect(function()
         isStrictRetarget = not isStrictRetarget
-        BtnStrictRetarget.Text = "STRICT RETARGET: " .. (isStrictRetarget and "ON" or "OFF")
+        BtnStrictRetarget.Text = L("strict_retarget") .. ": " .. (isStrictRetarget and L("on") or L("off"))
         BtnStrictRetarget.TextColor3 = isStrictRetarget and C_GREEN or C_TEXT_DIM
     end)
 
     BtnNativeAnim.MouseButton1Click:Connect(function()
         isNativeAnim = not isNativeAnim
-        BtnNativeAnim.Text = "NATIVE ANIM: " .. (isNativeAnim and "ON" or "OFF")
+        BtnNativeAnim.Text = L("native_anim") .. ": " .. (isNativeAnim and L("on") or L("off"))
         BtnNativeAnim.TextColor3 = isNativeAnim and C_GREEN or C_TEXT_DIM
     end)
 
@@ -6137,7 +6401,9 @@ function UIHandlers.SetupListMapUI()
     SearchBar.Position = UDim2.new(0, 35, 0, 0)
     SearchBar.BackgroundTransparency = 1
     SearchBar.TextColor3 = C_TEXT
-    SearchBar.PlaceholderText = "Search files..."
+    SearchBar.PlaceholderText = L("search_files")
+    -- Register placeholder for language refresh
+    RegisterDynamicUI(SearchBar, function(el) el.PlaceholderText = L("search_files") end)
     SearchBar.PlaceholderColor3 = C_TEXT_DIM
     SearchBar.Font = Enum.Font.Gotham
     SearchBar.TextSize = 11
@@ -6227,7 +6493,7 @@ function UIHandlers.SetupListMapUI()
     RegisterTheme(BtnSpeed, "TextColor3", "Accent")
 
     local PFileLbl = Instance.new("TextLabel", PopupHeader)
-    PFileLbl.Text = "No File Selected"
+    PFileLbl.Text = L("no_file_selected")
     PFileLbl.Size = UDim2.new(1, -110, 1, 0)
     PFileLbl.Position = UDim2.new(0, 52, 0, 0)
     PFileLbl.BackgroundTransparency = 1
@@ -6603,7 +6869,8 @@ function UIHandlers.SetupListMapUI()
     StatusRow.ZIndex = 301
 
     local StatusLbl = Instance.new("TextLabel", StatusRow)
-    StatusLbl.Text = "Ready"
+    StatusLbl.Text = L("ready")
+    RegisterLocalizedUI(StatusLbl, "ready")
     StatusLbl.Size = UDim2.new(1, 0, 1, 0)
     StatusLbl.BackgroundTransparency = 1
     StatusLbl.TextColor3 = C_TEXT_DIM
@@ -6974,7 +7241,7 @@ function UIHandlers.SetupListMapUI()
                             UpdateSelectionVisuals(true) -- Skip image load (will set selected color)
 
                             MapPlayerPopup.Visible = true
-                            PBtnPlay.Text = "PLAY"
+                            PBtnPlay.Text = L("play")
                             PBtnPlay.TextColor3 = C_GREEN
 
                             -- Preload Data for Playback
@@ -7261,7 +7528,7 @@ function UIHandlers.SetupListMapUI()
             end
 
             -- Force UI Update (Visuals)
-            PBtnPlay.Text = "PLAY"
+            PBtnPlay.Text = L("play")
             PBtnPlay.TextColor3 = C_GREEN
             PSliderFill.Size = UDim2.new(0, 0, 1, 0)
             if currentTotalDuration then

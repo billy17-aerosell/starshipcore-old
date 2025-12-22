@@ -4,6 +4,14 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     local UserInputService = game:GetService("UserInputService")
     local TweenService = game:GetService("TweenService")
 
+    -- Helper function to get localized text
+    local function L(key, ...)
+        if _G.StarshipLocale and _G.StarshipLocale.Get then
+            return _G.StarshipLocale.Get(key, ...)
+        end
+        return key
+    end
+
     -- UPDATED THEME
     local C_MAIN = Color3.fromRGB(10, 10, 14)
     local C_SIDE = Color3.fromRGB(15, 15, 20)
@@ -273,22 +281,22 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     end
 
     -- 1. TOUCH FLING
-    local CardFling = CreateCard("TOUCH FLING", 130, 1)
+    local CardFling = CreateCard(L("touch_fling"), 130, 1)
 
     local BtnFling = Instance.new("TextButton", CardFling)
-    BtnFling.Text = "FLING: OFF"
+    BtnFling.Text = L("fling") .. ": " .. L("off")
     BtnFling.Size = UDim2.new(0.94, 0, 0, 35)
     BtnFling.Position = UDim2.new(0.03, 0, 0, 35)
     StyleBtn(BtnFling, C_RED)
 
     local BtnExpandHitbox = Instance.new("TextButton", CardFling)
-    BtnExpandHitbox.Text = "EXPAND HITBOX: OFF"
+    BtnExpandHitbox.Text = L("expand_hitbox") .. ": " .. L("off")
     BtnExpandHitbox.Size = UDim2.new(0.94, 0, 0, 35)
     BtnExpandHitbox.Position = UDim2.new(0.03, 0, 0, 75)
     StyleBtn(BtnExpandHitbox, C_RED)
 
     local FlingInfo = Instance.new("TextLabel", CardFling)
-    FlingInfo.Text = "Bigger hitbox = easier fling!"
+    FlingInfo.Text = L("bigger_hitbox")
     FlingInfo.Size = UDim2.new(1, 0, 0, 20)
     FlingInfo.Position = UDim2.new(0, 0, 0, 105)
     FlingInfo.BackgroundTransparency = 1
@@ -304,7 +312,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     -- Expand Hitbox Function
     local function ToggleHitbox()
         isHitboxExpanded = not isHitboxExpanded
-        BtnExpandHitbox.Text = "EXPAND HITBOX: " .. (isHitboxExpanded and "ON" or "OFF")
+        BtnExpandHitbox.Text = L("expand_hitbox") .. ": " .. (isHitboxExpanded and L("on") or L("off"))
         BtnExpandHitbox.TextColor3 = isHitboxExpanded and C_GREEN or C_RED
 
         local c = LocalPlayer.Character
@@ -364,7 +372,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 
     BtnFling.MouseButton1Click:Connect(function()
         isFling = not isFling
-        BtnFling.Text = "FLING: " .. (isFling and "ON" or "OFF")
+        BtnFling.Text = L("fling") .. ": " .. (isFling and L("on") or L("off"))
         BtnFling.TextColor3 = isFling and C_GREEN or C_RED
 
         if isFling then
@@ -428,7 +436,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     end)
 
     -- 3. INVISIBLE (FE Bypass)
-    local CardInvis = CreateCard("INVISIBLE", 85, 3)
+    local CardInvis = CreateCard(L("invisible"), 85, 3)
 
     local BtnInvis = Instance.new("TextButton", CardInvis)
     BtnInvis.Text = "INVISIBLE: OFF"
@@ -513,7 +521,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     BtnInvis.MouseButton1Click:Connect(UIHandlers.ToggleRealInvisible)
 
     -- 4. TELEPORT TO PLAYER
-    local CardTeleport = CreateCard("TELEPORT TO PLAYER", 150, 4)
+    local CardTeleport = CreateCard(L("teleport_to_player"), 150, 4)
 
     local BtnPlayerDropdown2 = Instance.new("TextButton", CardTeleport)
     BtnPlayerDropdown2.Text = "Select Player ▼"
@@ -610,7 +618,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     end)
 
     local BtnTeleport = Instance.new("TextButton", CardTeleport)
-    BtnTeleport.Text = "TELEPORT"
+    BtnTeleport.Text = L("teleport")
     BtnTeleport.Size = UDim2.new(0.94, 0, 0, 30)
     BtnTeleport.Position = UDim2.new(0.03, 0, 0, 80)
     StyleBtn(BtnTeleport, C_ACCENT)
@@ -691,7 +699,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 
         -- Multi-step teleport to bypass anti-cheat
         if distance > 100 then
-            TeleportStatus.Text = "Teleporting in steps..."
+            TeleportStatus.Text = L("teleporting_steps")
             TeleportStatus.TextColor3 = C_YELLOW
 
             local steps = math.ceil(distance / 100) -- 100 studs per step
@@ -708,7 +716,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
             myRoot.CFrame = targetPos
         end
 
-        TeleportStatus.Text = "Teleported to " .. selectedPlayer2.Name .. "!"
+        TeleportStatus.Text = L("teleported_to") .. " " .. selectedPlayer2.Name .. "!"
         TeleportStatus.TextColor3 = C_GREEN
 
         -- Reset status after 2 seconds
@@ -719,7 +727,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     end)
 
     -- 5. SPECTATE PLAYER
-    local CardSpectate = CreateCard("SPECTATE PLAYER", 150, 5)
+    local CardSpectate = CreateCard(L("spectate_player"), 150, 5)
 
     local BtnPlayerDropdown3 = Instance.new("TextButton", CardSpectate)
     BtnPlayerDropdown3.Text = "Select Player ▼"
@@ -961,7 +969,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     end)
 
     -- 6. FRIENDS IN SERVER (Click player to see their friends)
-    local CardFriends = CreateCard("👥 FRIENDS IN SERVER", 85, 6)
+    local CardFriends = CreateCard("👥 " .. L("friends_in_server"), 85, 6)
 
     local BtnOpenFriends = Instance.new("TextButton", CardFriends)
     BtnOpenFriends.Text = "👥 VIEW PLAYERS & FRIENDS"
@@ -1285,7 +1293,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     end)
 
     -- 7. OBJECT AURA (Trash Thrower)
-    local CardAura = CreateCard("OBJECT AURA (TRASH THROWER)", 310, 7); if CardAura:FindFirstChild("UIStroke") then CardAura.UIStroke.Transparency = 0 end
+    local CardAura = CreateCard(L("object_aura"), 310, 7); if CardAura:FindFirstChild("UIStroke") then CardAura.UIStroke.Transparency = 0 end
 
     local BtnPlayerDropdown4 = Instance.new("TextButton", CardAura)
     BtnPlayerDropdown4.Text = "Select Target ▼"
@@ -1437,9 +1445,9 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
         if isAuraActive then
             -- Stop Aura
             isAuraActive = false
-            BtnAura.Text = "START FLING"
+            BtnAura.Text = L("start_fling")
             BtnAura.BackgroundColor3 = C_ACCENT
-            AuraStatus.Text = "Fling stopped"
+            AuraStatus.Text = L("fling_stopped")
             AuraStatus.TextColor3 = C_TEXT_DIM
 
             if auraLoop then
@@ -2161,7 +2169,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
             end
         end
     end
-    CreateToggle(ManipContent, "Black Hole", false, ToggleBlackHole).LayoutOrder = 1
+    CreateToggle(ManipContent, L("black_hole"), false, ToggleBlackHole).LayoutOrder = 1
 
     -- Invert Gravity
     local gravActive = false
@@ -2345,11 +2353,11 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
             end
         end
     end
-    CreateToggle(ManipContent, "Part Magnet", false, ToggleMagnet).LayoutOrder = 4
-    CreateSlider(ManipContent, "Magnet Radius", 10, 200, 50, function(v)
+    CreateToggle(ManipContent, L("part_magnet"), false, ToggleMagnet).LayoutOrder = 4
+    CreateSlider(ManipContent, L("magnet_radius"), 10, 200, 50, function(v)
         magRadius = v
     end).LayoutOrder = 5
-    CreateSlider(ManipContent, "Magnet Strength", 10, 500, 100, function(v)
+    CreateSlider(ManipContent, L("magnet_strength"), 10, 500, 100, function(v)
         magStrength = v
     end).LayoutOrder = 6
 
@@ -2403,7 +2411,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     end)
 
     -- AUTO FOLLOW
-    local CardFollow = CreateCard("AUTO FOLLOW", 140, 10)
+    local CardFollow = CreateCard(L("auto_follow"), 140, 10)
 
     local followTarget = nil
     local isFollowing = false

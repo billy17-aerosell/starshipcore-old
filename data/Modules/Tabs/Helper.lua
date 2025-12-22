@@ -16,10 +16,18 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     local C_YELLOW = Color3.fromRGB(255, 220, 60)
     local C_GREEN = Color3.fromRGB(60, 255, 160)
 
+    -- Helper function to get localized text
+    local function L(key, ...)
+        if _G.StarshipLocale and _G.StarshipLocale.Get then
+            return _G.StarshipLocale.Get(key, ...)
+        end
+        return key
+    end
+
     -- Helper function to show toast when feature is toggled
     local function ShowFeatureToast(featureName, isEnabled)
         if UI and UI.ShowToast then
-            local status = isEnabled and "Enabled" or "Disabled"
+            local status = isEnabled and L("enabled") or L("disabled")
             local toastType = isEnabled and "success" or "info"
             UI.ShowToast(featureName, status, toastType, 2)
         end
@@ -38,6 +46,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     if not RegisterTheme then
         RegisterTheme = function() end
     end
+
+    -- Clear existing children for reactive refresh support
+    PageHelper:ClearAllChildren()
 
     local HelperScroll = Instance.new("ScrollingFrame", PageHelper)
     HelperScroll.Size = UDim2.new(1, 0, 1, 0)
@@ -106,8 +117,36 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         end
     end
 
+    -- Helper function to create feature button with subtitle description
+    local function CreateFeatureButton(parent, text, subtitle, size, position, color)
+        local container = Instance.new("Frame", parent)
+        container.Size = size
+        container.Position = position
+        container.BackgroundTransparency = 1
+
+        local btn = Instance.new("TextButton", container)
+        btn.Text = text
+        btn.Size = UDim2.new(1, 0, 0, 35)
+        btn.Position = UDim2.new(0, 0, 0, 0)
+        StyleBtn(btn, color)
+
+        local desc = Instance.new("TextLabel", container)
+        desc.Text = subtitle
+        desc.Size = UDim2.new(1, 0, 0, 14)
+        desc.Position = UDim2.new(0, 0, 0, 37)
+        desc.BackgroundTransparency = 1
+        desc.TextColor3 = C_TEXT_DIM
+        desc.Font = Enum.Font.Gotham
+        desc.TextSize = 9
+        desc.TextXAlignment = Enum.TextXAlignment.Center
+        desc.TextWrapped = true
+        RegisterTheme(desc, "TextColor3", "TextDim")
+
+        return btn, container
+    end
+
     -- 0. CHARACTER & FLY
-    local CardChar = CreateCard("CHARACTER & FLY", 145, 0)
+    local CardChar = CreateCard(L("character_fly"), 145, 0)
 
     -- Speed
     local WSVal = Instance.new("TextBox", CardChar)
@@ -407,14 +446,17 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
     -- 4. JUMP ASSIST
     do
-        local CardJump = CreateCard("JUMP ASSIST", 80, 4)
+        local CardJump = CreateCard(L("jump_assist"), 100, 4)
 
         -- Auto Jump
-        local BtnAutoJump = Instance.new("TextButton", CardJump)
-        BtnAutoJump.Text = "AUTO JUMP: OFF"
-        BtnAutoJump.Size = UDim2.new(0.45, 0, 0, 35)
-        BtnAutoJump.Position = UDim2.new(0.03, 0, 0, 35)
-        StyleBtn(BtnAutoJump, C_TEXT_DIM)
+        local BtnAutoJump, AutoJumpContainer = CreateFeatureButton(
+            CardJump,
+            L("auto_jump") .. ": " .. L("off"),
+            L("auto_jump_desc"),
+            UDim2.new(0.45, 0, 0, 55),
+            UDim2.new(0.03, 0, 0, 35),
+            C_TEXT_DIM
+        )
 
         local isAutoJump, autoJumpLoop = false, nil
 
@@ -427,7 +469,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
             end
 
             isAutoJump = not isAutoJump
-            BtnAutoJump.Text = "AUTO JUMP: " .. (isAutoJump and "ON" or "OFF")
+            BtnAutoJump.Text = L("auto_jump") .. ": " .. (isAutoJump and L("on") or L("off"))
             BtnAutoJump.TextColor3 = isAutoJump and C_GREEN or C_TEXT_DIM
             BtnAutoJump.UIStroke.Color = isAutoJump and C_GREEN or C_TEXT_DIM
             ShowFeatureToast("Auto Jump", isAutoJump)
@@ -455,11 +497,14 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         UIHandlers.ToggleAutoJump = ToggleAutoJump
 
         -- Air Lock (Edge Assist + Velocity Boost for Obby)
-        local BtnAirLock = Instance.new("TextButton", CardJump)
-        BtnAirLock.Text = "AIR LOCK: OFF"
-        BtnAirLock.Size = UDim2.new(0.45, 0, 0, 35)
-        BtnAirLock.Position = UDim2.new(0.52, 0, 0, 35)
-        StyleBtn(BtnAirLock, C_TEXT_DIM)
+        local BtnAirLock, AirLockContainer = CreateFeatureButton(
+            CardJump,
+            L("air_lock") .. ": " .. L("off"),
+            L("air_lock_desc"),
+            UDim2.new(0.45, 0, 0, 55),
+            UDim2.new(0.52, 0, 0, 35),
+            C_TEXT_DIM
+        )
 
         local isAirLock, airLockLoop = false, nil
         local edgeBoostCooldown = false
@@ -834,32 +879,34 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     -- 5. QUICK BOOST (L2/R2 or A/D Control)
     -- Technique: Press L2/R2 or A/D in air to get vertical boost
     do
-        local CardQuickBoost = CreateCard("QUICK BOOST", 120, 5)
+        local CardBoost = CreateCard("QUICK BOOST", 100, 5)
 
-        -- Quick Boost Toggle
-        local BtnQuickBoost = Instance.new("TextButton", CardQuickBoost)
-        BtnQuickBoost.Text = "QUICK BOOST: OFF"
-        BtnQuickBoost.Size = UDim2.new(0.94, 0, 0, 35)
-        BtnQuickBoost.Position = UDim2.new(0.03, 0, 0, 35)
-        StyleBtn(BtnQuickBoost, C_TEXT_DIM)
+        local BtnQuickBoost, QuickBoostContainer = CreateFeatureButton(
+            CardBoost,
+            L("quick_boost") .. ": " .. L("off"),
+            L("quick_boost_desc"),
+            UDim2.new(0.94, 0, 0, 55),
+            UDim2.new(0.03, 0, 0, 35),
+            C_TEXT_DIM
+        )
 
         -- Boost Power Slider
         -- Clamp existing config value to new max of 20
         Config.QuickBoostPower = math.clamp(Config.QuickBoostPower or 10, 0, 20)
-        local LblBoostPower = Instance.new("TextLabel", CardQuickBoost)
-        LblBoostPower.Text = "BOOST POWER: " .. Config.QuickBoostPower
-        LblBoostPower.Size = UDim2.new(1, -20, 0, 20)
-        LblBoostPower.Position = UDim2.new(0, 15, 0, 75)
+        local LblBoostPower = Instance.new("TextLabel", CardBoost)
+        LblBoostPower.Text = "BOOST: " .. Config.QuickBoostPower
+        LblBoostPower.Size = UDim2.new(0.35, 0, 0, 20)
+        LblBoostPower.Position = UDim2.new(0.6, 0, 0, 35)
         LblBoostPower.BackgroundTransparency = 1
         LblBoostPower.TextColor3 = C_TEXT_DIM
         LblBoostPower.Font = Enum.Font.GothamBold
         LblBoostPower.TextSize = 10
         LblBoostPower.TextXAlignment = Enum.TextXAlignment.Left
 
-        local SldBoostBg = Instance.new("TextButton", CardQuickBoost)
+        local SldBoostBg = Instance.new("TextButton", CardBoost)
         SldBoostBg.Text = ""
-        SldBoostBg.Size = UDim2.new(0.9, 0, 0, 6)
-        SldBoostBg.Position = UDim2.new(0.05, 0, 0, 95)
+        SldBoostBg.Size = UDim2.new(0.35, 0, 0, 6)
+        SldBoostBg.Position = UDim2.new(0.6, 0, 0, 55)
         SldBoostBg.BackgroundColor3 = C_SIDE
         SldBoostBg.AutoButtonColor = false
         Instance.new("UICorner", SldBoostBg).CornerRadius = UDim.new(0, 3)
@@ -918,7 +965,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
             end
 
             isQuickBoost = not isQuickBoost
-            BtnQuickBoost.Text = "QUICK BOOST: " .. (isQuickBoost and "ON" or "OFF")
+            BtnQuickBoost.Text = L("quick_boost") .. ": " .. (isQuickBoost and L("on") or L("off"))
             BtnQuickBoost.TextColor3 = isQuickBoost and C_GREEN or C_TEXT_DIM
             BtnQuickBoost.UIStroke.Color = isQuickBoost and C_GREEN or C_TEXT_DIM
             ShowFeatureToast("Quick Boost", isQuickBoost)
@@ -1012,13 +1059,16 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     end
 
     -- 1. ALWAYS MOMENTUM
-    local CardMomentum = CreateCard("ALWAYS MOMENTUM", 80, 1)
+    local CardMomentum = CreateCard(L("always_momentum"), 100, 1)
 
-    local BtnMomentum = Instance.new("TextButton", CardMomentum)
-    BtnMomentum.Text = "ALWAYS MOMENTUM: OFF"
-    BtnMomentum.Size = UDim2.new(0.94, 0, 0, 35)
-    BtnMomentum.Position = UDim2.new(0.03, 0, 0, 35)
-    StyleBtn(BtnMomentum, C_TEXT_DIM)
+    local BtnMomentum, MomentumContainer = CreateFeatureButton(
+        CardMomentum,
+        L("always_momentum") .. ": " .. L("off"),
+        L("always_momentum_desc"),
+        UDim2.new(0.94, 0, 0, 55),
+        UDim2.new(0.03, 0, 0, 35),
+        C_TEXT_DIM
+    )
 
     local isMomentum, momentumLoop = false, nil
     local lockedSpeed = nil
@@ -1118,7 +1168,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         end
 
         isMomentum = not isMomentum
-        BtnMomentum.Text = "ALWAYS MOMENTUM: " .. (isMomentum and "ON" or "OFF")
+        BtnMomentum.Text = L("always_momentum") .. ": " .. (isMomentum and L("on") or L("off"))
         BtnMomentum.TextColor3 = isMomentum and C_GREEN or C_TEXT_DIM
         BtnMomentum.UIStroke.Color = isMomentum and C_GREEN or C_TEXT_DIM
         ShowFeatureToast("Always Momentum", isMomentum)
@@ -1169,19 +1219,22 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     UIHandlers.ToggleMomentum = ToggleMomentum
 
     -- 2. ANTI-SLIP
-    local CardSlip = CreateCard("ANTI-SLIP", 135, 2)
+    local CardSlip = CreateCard(L("anti_slip"), 155, 2)
 
-    local BtnSlip = Instance.new("TextButton", CardSlip)
-    BtnSlip.Text = "ANTI-SLIP: OFF"
-    BtnSlip.Size = UDim2.new(0.94, 0, 0, 35)
-    BtnSlip.Position = UDim2.new(0.03, 0, 0, 35)
-    StyleBtn(BtnSlip, C_RED)
+    local BtnSlip, SlipContainer = CreateFeatureButton(
+        CardSlip,
+        L("anti_slip") .. ": " .. L("off"),
+        L("anti_slip_desc"),
+        UDim2.new(0.94, 0, 0, 55),
+        UDim2.new(0.03, 0, 0, 35),
+        C_RED
+    )
 
     -- Size Slider
     local LblSize = Instance.new("TextLabel", CardSlip)
-    LblSize.Text = "SIZE: 0.5"
+    LblSize.Text = L("size") .. ": 0.5"
     LblSize.Size = UDim2.new(1, -20, 0, 20)
-    LblSize.Position = UDim2.new(0, 15, 0, 80)
+    LblSize.Position = UDim2.new(0, 15, 0, 95)
     LblSize.BackgroundTransparency = 1
     LblSize.TextColor3 = C_TEXT_DIM
     LblSize.Font = Enum.Font.GothamBold
@@ -1191,7 +1244,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     local SldBg = Instance.new("TextButton", CardSlip)
     SldBg.Text = ""
     SldBg.Size = UDim2.new(0.9, 0, 0, 6)
-    SldBg.Position = UDim2.new(0.05, 0, 0, 100)
+    SldBg.Position = UDim2.new(0.05, 0, 0, 115)
     SldBg.BackgroundColor3 = C_SIDE
     SldBg.AutoButtonColor = false
     Instance.new("UICorner", SldBg).CornerRadius = UDim.new(0, 3)
@@ -1206,14 +1259,14 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     local slipLoop = nil
     local modifiedParts = {}
 
-    LblSize.Text = "SIZE: 3.0" -- Update default label
+    LblSize.Text = L("size") .. ": 3.0" -- Update default label
 
     local function UpdateSlider(input)
         local rx = input.Position.X - SldBg.AbsolutePosition.X
         local sc = math.clamp(rx / SldBg.AbsoluteSize.X, 0, 1)
         targetSize = 1 + (sc * 9) -- Range 1-10 studs
         SldFill.Size = UDim2.new(sc, 0, 1, 0)
-        LblSize.Text = string.format("SIZE: %.1f", targetSize)
+        LblSize.Text = L("size") .. ": " .. string.format("%.1f", targetSize)
     end
 
     local dragging = false
@@ -1243,7 +1296,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         end
 
         isSlipOn = not isSlipOn
-        BtnSlip.Text = "ANTI-SLIP: " .. (isSlipOn and "ON" or "OFF")
+        BtnSlip.Text = L("anti_slip") .. ": " .. (isSlipOn and L("on") or L("off"))
         BtnSlip.TextColor3 = isSlipOn and C_GREEN or C_RED
         BtnSlip.UIStroke.Color = isSlipOn and C_GREEN or C_RED
         ShowFeatureToast("Anti-Slip", isSlipOn)
@@ -1363,19 +1416,22 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     UIHandlers.ToggleAntiSlip = ToggleAntiSlip
 
     -- 3. ANTI-RAGDOLL
-    local CardRagdoll = CreateCard("ANTI-RAGDOLL", 135, 3)
+    local CardRagdoll = CreateCard(L("anti_ragdoll"), 140, 3)
 
-    local BtnRagdoll = Instance.new("TextButton", CardRagdoll)
-    BtnRagdoll.Text = "ANTI-RAGDOLL: OFF"
-    BtnRagdoll.Size = UDim2.new(0.94, 0, 0, 35)
-    BtnRagdoll.Position = UDim2.new(0.03, 0, 0, 35)
-    StyleBtn(BtnRagdoll, C_RED)
+    local BtnRagdoll, RagdollContainer = CreateFeatureButton(
+        CardRagdoll,
+        L("anti_ragdoll") .. ": " .. L("off"),
+        L("anti_ragdoll_desc"),
+        UDim2.new(0.94, 0, 0, 55),
+        UDim2.new(0.03, 0, 0, 35),
+        C_RED
+    )
 
     -- Max Velocity Slider
     local LblMaxVel = Instance.new("TextLabel", CardRagdoll)
-    LblMaxVel.Text = "MAX VELOCITY: 100"
+    LblMaxVel.Text = L("max_velocity") .. ": 50"
     LblMaxVel.Size = UDim2.new(1, -20, 0, 20)
-    LblMaxVel.Position = UDim2.new(0, 15, 0, 80)
+    LblMaxVel.Position = UDim2.new(0, 15, 0, 95)
     LblMaxVel.BackgroundTransparency = 1
     LblMaxVel.TextColor3 = C_TEXT_DIM
     LblMaxVel.Font = Enum.Font.GothamBold
@@ -1385,7 +1441,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     local SldVelBg = Instance.new("TextButton", CardRagdoll)
     SldVelBg.Text = ""
     SldVelBg.Size = UDim2.new(0.9, 0, 0, 6)
-    SldVelBg.Position = UDim2.new(0.05, 0, 0, 100)
+    SldVelBg.Position = UDim2.new(0.05, 0, 0, 115)
     SldVelBg.BackgroundColor3 = C_SIDE
     SldVelBg.AutoButtonColor = false
     Instance.new("UICorner", SldVelBg).CornerRadius = UDim.new(0, 3)
@@ -1405,7 +1461,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         local sc = math.clamp(rx / SldVelBg.AbsoluteSize.X, 0, 1)
         maxVelocity = math.floor(50 + (sc * 150)) -- Range 50-200
         SldVelFill.Size = UDim2.new(sc, 0, 1, 0)
-        LblMaxVel.Text = "MAX VELOCITY: " .. maxVelocity
+        LblMaxVel.Text = L("max_velocity") .. ": " .. maxVelocity
     end
 
     local draggingVel = false
@@ -1539,29 +1595,32 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     UIHandlers.ToggleAntiRagdoll = ToggleAntiRagdoll
 
     -- 5. REAL PATH ESP
-    local CardESP = CreateCard("REAL PATH ESP", 160, 5)
+    local CardESP = CreateCard(L("real_path_esp"), 175, 5)
 
-    local BtnRealESP = Instance.new("TextButton", CardESP)
-    BtnRealESP.Text = "REAL PATH ESP: OFF"
-    BtnRealESP.Size = UDim2.new(0.94, 0, 0, 35)
-    BtnRealESP.Position = UDim2.new(0.03, 0, 0, 35)
-    StyleBtn(BtnRealESP, C_RED)
+    local BtnRealESP, RealESPContainer = CreateFeatureButton(
+        CardESP,
+        L("real_path_esp") .. ": " .. L("off"),
+        L("real_path_esp_desc"),
+        UDim2.new(0.94, 0, 0, 55),
+        UDim2.new(0.03, 0, 0, 35),
+        C_RED
+    )
 
     -- Color Legend
-    local LblLegend = Instance.new("TextLabel", CardESP)
-    LblLegend.Text = "COLOR INFO (Range: 75 studs):"
-    LblLegend.Size = UDim2.new(0.94, 0, 0, 18)
-    LblLegend.Position = UDim2.new(0.03, 0, 0, 75)
-    LblLegend.BackgroundTransparency = 1
-    LblLegend.TextColor3 = C_TEXT_DIM
-    LblLegend.TextSize = 12
-    LblLegend.Font = Enum.Font.GothamBold
-    LblLegend.TextXAlignment = Enum.TextXAlignment.Left
+    local LblColorInfo = Instance.new("TextLabel", CardESP)
+    LblColorInfo.Text = L("color_info")
+    LblColorInfo.Size = UDim2.new(0.94, 0, 0, 18)
+    LblColorInfo.Position = UDim2.new(0.03, 0, 0, 95)
+    LblColorInfo.BackgroundTransparency = 1
+    LblColorInfo.TextColor3 = C_TEXT_DIM
+    LblColorInfo.TextSize = 12
+    LblColorInfo.Font = Enum.Font.GothamBold
+    LblColorInfo.TextXAlignment = Enum.TextXAlignment.Left
 
     local LblGreen = Instance.new("TextLabel", CardESP)
-    LblGreen.Text = "● GREEN = SAFE (CanCollide ON)"
+    LblGreen.Text = L("green_safe")
     LblGreen.Size = UDim2.new(0.94, 0, 0, 14)
-    LblGreen.Position = UDim2.new(0.03, 0, 0, 91)
+    LblGreen.Position = UDim2.new(0.03, 0, 0, 111)
     LblGreen.BackgroundTransparency = 1
     LblGreen.TextColor3 = Color3.new(0, 1, 0)
     LblGreen.TextSize = 10
@@ -1569,9 +1628,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     LblGreen.TextXAlignment = Enum.TextXAlignment.Left
 
     local LblCyan = Instance.new("TextLabel", CardESP)
-    LblCyan.Text = "● CYAN = Ladder WALKABLE (CanCollide ON)"
+    LblCyan.Text = L("cyan_ladder")
     LblCyan.Size = UDim2.new(0.94, 0, 0, 14)
-    LblCyan.Position = UDim2.new(0.03, 0, 0, 105)
+    LblCyan.Position = UDim2.new(0.03, 0, 0, 125)
     LblCyan.BackgroundTransparency = 1
     LblCyan.TextColor3 = Color3.fromRGB(0, 255, 255)
     LblCyan.TextSize = 10
@@ -1579,9 +1638,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     LblCyan.TextXAlignment = Enum.TextXAlignment.Left
 
     local LblOrange = Instance.new("TextLabel", CardESP)
-    LblOrange.Text = "● ORANGE = Ladder NOT WALKABLE (CanCollide OFF)"
+    LblOrange.Text = L("orange_ladder")
     LblOrange.Size = UDim2.new(0.94, 0, 0, 14)
-    LblOrange.Position = UDim2.new(0.03, 0, 0, 119)
+    LblOrange.Position = UDim2.new(0.03, 0, 0, 139)
     LblOrange.BackgroundTransparency = 1
     LblOrange.TextColor3 = Color3.fromRGB(255, 165, 0)
     LblOrange.TextSize = 10
@@ -1589,9 +1648,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     LblOrange.TextXAlignment = Enum.TextXAlignment.Left
 
     local LblRed = Instance.new("TextLabel", CardESP)
-    LblRed.Text = "● RED = FAKE (CanCollide OFF - Will Fall!)"
+    LblRed.Text = L("red_fake")
     LblRed.Size = UDim2.new(0.94, 0, 0, 14)
-    LblRed.Position = UDim2.new(0.03, 0, 0, 133)
+    LblRed.Position = UDim2.new(0.03, 0, 0, 153)
     LblRed.BackgroundTransparency = 1
     LblRed.TextColor3 = Color3.new(1, 0, 0)
     LblRed.TextSize = 10
@@ -1649,7 +1708,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         end
 
         isRealESP = not isRealESP
-        BtnRealESP.Text = "REAL PATH ESP: " .. (isRealESP and "ON" or "OFF")
+        BtnRealESP.Text = L("real_path_esp") .. ": " .. (isRealESP and L("on") or L("off"))
         BtnRealESP.TextColor3 = isRealESP and C_GREEN or C_RED
         BtnRealESP.UIStroke.Color = isRealESP and C_GREEN or C_RED
         ShowFeatureToast("Real Path ESP", isRealESP)

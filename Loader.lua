@@ -4,7 +4,7 @@ local ENCRYPTION_KEY = "StarshipSecretKey2025"
 local FOLDER_NAME = "StarshipCore"
 local MODULES_FOLDER = FOLDER_NAME .. "/Modules"
 local TABS_FOLDER = MODULES_FOLDER .. "/Tabs"
-local MODULES = { "Config.lua", "UI.lua", "Intro.lua", "Animations.lua" }
+local MODULES = { "Config.lua", "UI.lua", "Intro.lua", "Animations.lua", "Locale.lua" }
 local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua", "Emotes.lua", "ConfigTab.lua" }
 
 local function xorEncrypt(text, key)

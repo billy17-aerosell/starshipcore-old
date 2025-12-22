@@ -1,6 +1,14 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
+-- Helper function to get localized text
+local function L(key, ...)
+    if _G.StarshipLocale and _G.StarshipLocale.Get then
+        return _G.StarshipLocale.Get(key, ...)
+    end
+    return key
+end
+
 local Colors = {
     MAIN = Color3.fromRGB(10, 10, 14),
     ITEM = Color3.fromRGB(20, 20, 28),
@@ -78,12 +86,13 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
 
     -- Greeting Text
     local hour = tonumber(os.date("%H"))
-    local greeting = "Good Evening"
+    local greetingKey = "good_evening"
     if hour >= 5 and hour < 12 then
-        greeting = "Good Morning"
+        greetingKey = "good_morning"
     elseif hour >= 12 and hour < 17 then
-        greeting = "Good Afternoon"
+        greetingKey = "good_afternoon"
     end
+    local greeting = L(greetingKey)
 
     local GreetingLabel = Instance.new("TextLabel", WelcomeCard)
     GreetingLabel.Text = greeting .. ","
@@ -112,7 +121,7 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
 
     -- Premium Badge (if applicable)
     local PremiumBadge = Instance.new("TextLabel", WelcomeCard)
-    PremiumBadge.Text = "PREMIUM"
+    PremiumBadge.Text = L("premium")
     PremiumBadge.Size = UDim2.new(0, 70, 0, 22)
     PremiumBadge.Position = UDim2.new(1, -82, 0.5, -11)
     PremiumBadge.BackgroundColor3 = Colors.ACCENT
@@ -144,7 +153,7 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
 
     -- Title
     local gameDetectionTitle = Instance.new("TextLabel", GameDetectionCard)
-    gameDetectionTitle.Text = "🎮  GAME DETECTION"
+    gameDetectionTitle.Text = "🎮  " .. L("game_detection")
     gameDetectionTitle.Size = UDim2.new(1, 0, 0, 20)
     gameDetectionTitle.BackgroundTransparency = 1
     gameDetectionTitle.TextColor3 = Colors.TEXT_DIM
@@ -267,18 +276,18 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
     end
 
     -- === 1. SERVER INFORMATION (Left Column) ===
-    local ServerCard = CreateCard(LeftCol, "SERVER INFO", 160, 1)
+    local ServerCard = CreateCard(LeftCol, L("server_info"), 160, 1)
 
-    local placeIdVal = CreateInfoRow(ServerCard, "Place ID", tostring(game.PlaceId), 28)
-    local jobIdVal = CreateInfoRow(ServerCard, "Job ID", string.sub(game.JobId, 1, 14) .. "..", 50)
-    local playerCountVal = CreateInfoRow(ServerCard, "Players", "0/0", 72)
-    local serverAgeVal = CreateInfoRow(ServerCard, "Server Age", "...", 94)
-    local pingVal = CreateInfoRow(ServerCard, "Ping", "0ms", 116)
-    local fpsVal = CreateInfoRow(ServerCard, "FPS", "0", 138)
+    local placeIdVal = CreateInfoRow(ServerCard, L("place_id"), tostring(game.PlaceId), 28)
+    local jobIdVal = CreateInfoRow(ServerCard, L("job_id"), string.sub(game.JobId, 1, 14) .. "..", 50)
+    local playerCountVal = CreateInfoRow(ServerCard, L("players"), "0/0", 72)
+    local serverAgeVal = CreateInfoRow(ServerCard, L("server_age"), "...", 94)
+    local pingVal = CreateInfoRow(ServerCard, L("ping"), "0ms", 116)
+    local fpsVal = CreateInfoRow(ServerCard, L("fps"), "0", 138)
 
     -- Copy Job ID button
     local copyJobBtn = Instance.new("TextButton", ServerCard)
-    copyJobBtn.Text = "COPY"
+    copyJobBtn.Text = L("copy")
     copyJobBtn.Size = UDim2.new(0, 50, 0, 18)
     copyJobBtn.Position = UDim2.new(1, -58, 0, 52)
     copyJobBtn.BackgroundColor3 = Colors.MAIN
@@ -293,14 +302,14 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
     copyJobBtn.MouseButton1Click:Connect(function()
         if setclipboard then
             setclipboard(game.JobId)
-            copyJobBtn.Text = "OK!"
+            copyJobBtn.Text = L("ok")
             task.wait(1)
-            copyJobBtn.Text = "COPY"
+            copyJobBtn.Text = L("copy")
         end
     end)
 
     -- === 2. EXECUTOR INFORMATION (Left Column) ===
-    local ExecCard = CreateCard(LeftCol, "EXECUTOR INFO", 100, 2)
+    local ExecCard = CreateCard(LeftCol, L("executor_info"), 100, 2)
 
     local function GetExecutorName()
         if identifyexecutor then
@@ -321,17 +330,17 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
     end
 
     local execName, execVersion = GetExecutorName()
-    CreateInfoRow(ExecCard, "Executor", execName, 28)
-    CreateInfoRow(ExecCard, "Version", execVersion, 50)
+    CreateInfoRow(ExecCard, L("executor"), execName, 28)
+    CreateInfoRow(ExecCard, L("version"), execVersion, 50)
 
     local hwid = "N/A"
     pcall(function()
         hwid = string.sub(game:GetService("RbxAnalyticsService"):GetClientId(), 1, 12) .. ".."
     end)
-    local hwidVal = CreateInfoRow(ExecCard, "HWID", hwid, 72)
+    local hwidVal = CreateInfoRow(ExecCard, L("hwid"), hwid, 72)
 
     local copyHwidBtn = Instance.new("TextButton", ExecCard)
-    copyHwidBtn.Text = "COPY"
+    copyHwidBtn.Text = L("copy")
     copyHwidBtn.Size = UDim2.new(0, 50, 0, 18)
     copyHwidBtn.Position = UDim2.new(1, -58, 0, 74)
     copyHwidBtn.BackgroundColor3 = Colors.MAIN
@@ -347,15 +356,15 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
         pcall(function()
             if setclipboard then
                 setclipboard(game:GetService("RbxAnalyticsService"):GetClientId())
-                copyHwidBtn.Text = "OK!"
+                copyHwidBtn.Text = L("ok")
                 task.wait(1)
-                copyHwidBtn.Text = "COPY"
+                copyHwidBtn.Text = L("copy")
             end
         end)
     end)
 
     -- === 3. FRIENDS IN SERVER (Right Column) ===
-    local FriendsCard = CreateCard(RightCol, "FRIENDS IN SERVER", 120, 1)
+    local FriendsCard = CreateCard(RightCol, L("friends_in_game"), 120, 1)
 
     local FriendsScroll = Instance.new("ScrollingFrame", FriendsCard)
     FriendsScroll.Size = UDim2.new(1, -16, 1, -35)
@@ -419,7 +428,7 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
                     RegisterTheme(name, "TextColor3", "Text")
 
                     local tpBtn = Instance.new("TextButton", row)
-                    tpBtn.Text = "TP"
+                    tpBtn.Text = L("tp")
                     tpBtn.Size = UDim2.new(0, 32, 0, 22)
                     tpBtn.Position = UDim2.new(1, -38, 0.5, -11)
                     tpBtn.BackgroundColor3 = Colors.ACCENT
@@ -443,7 +452,7 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
 
         if friendCount == 0 then
             local noFriends = Instance.new("TextLabel", FriendsScroll)
-            noFriends.Text = "No friends in server"
+            noFriends.Text = L("no_friends")
             noFriends.Size = UDim2.new(1, 0, 0, 30)
             noFriends.BackgroundTransparency = 1
             noFriends.TextColor3 = Colors.TEXT_DIM
@@ -459,10 +468,10 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
     Players.PlayerRemoving:Connect(RefreshFriends)
 
     -- === 4. DISCORD (Right Column) ===
-    local DiscordCard = CreateCard(RightCol, "DISCORD", 60, 2)
+    local DiscordCard = CreateCard(RightCol, L("discord"), 60, 2)
 
     local discordBtn = Instance.new("TextButton", DiscordCard)
-    discordBtn.Text = "COPY DISCORD INVITE"
+    discordBtn.Text = L("copy_discord")
     discordBtn.Size = UDim2.new(0.92, 0, 0, 28)
     discordBtn.Position = UDim2.new(0.04, 0, 0, 32)
     discordBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
@@ -474,17 +483,17 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
     discordBtn.MouseButton1Click:Connect(function()
         if setclipboard then
             setclipboard(DISCORD_LINK)
-            discordBtn.Text = "COPIED!"
+            discordBtn.Text = L("copied")
             task.wait(1)
-            discordBtn.Text = "COPY DISCORD INVITE"
+            discordBtn.Text = L("copy_discord")
         end
     end)
 
     -- === 5. PLAYER INFO (Right Column) ===
-    local PlayerCard = CreateCard(RightCol, "YOUR ACCOUNT", 100, 3)
-    local UsernameValue = CreateInfoRow(PlayerCard, "Username", LocalPlayer.Name, 28)
-    local DisplayNameValue = CreateInfoRow(PlayerCard, "Display Name", LocalPlayer.DisplayName, 50)
-    CreateInfoRow(PlayerCard, "User ID", tostring(LocalPlayer.UserId), 72)
+    local PlayerCard = CreateCard(RightCol, L("your_account"), 100, 3)
+    local UsernameValue = CreateInfoRow(PlayerCard, L("username"), LocalPlayer.Name, 28)
+    local DisplayNameValue = CreateInfoRow(PlayerCard, L("display_name"), LocalPlayer.DisplayName, 50)
+    CreateInfoRow(PlayerCard, L("user_id"), tostring(LocalPlayer.UserId), 72)
 
     -- Store references for spoof name updates
     UIHandlers.DashboardUsernameLabel = UsernameValue

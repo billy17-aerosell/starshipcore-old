@@ -376,6 +376,7 @@ local function SaveProfile(name, Config, UI, UIHandlers)
 
         local data = HttpService:JSONEncode({
             Theme = Config.Theme,
+            Language = Config.Language or "en",
             AccentColor = Config.AccentColor,
             Keybinds = kbData,
             AutoEnable = AutoEnableList,
@@ -402,6 +403,13 @@ local function LoadProfile(name, Config, Themes, UI, UIHandlers, suppressToast)
         end)
         if success and result then
             if result.Theme and Themes[result.Theme] then Config.Theme = result.Theme end
+            if result.Language then
+                Config.Language = result.Language
+                -- Update Locale module
+                if _G.StarshipLocale and _G.StarshipLocale.SetLanguage then
+                    _G.StarshipLocale.SetLanguage(result.Language)
+                end
+            end
             if result.AccentColor then Config.AccentColor = result.AccentColor end
             if result.Keybinds then
                 if not Config.Keybinds then Config.Keybinds = {} end
@@ -499,6 +507,14 @@ local function GetFeatureState(id)
 end
 
 local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, UIHandlers, Themes, ThemeObjects, Main)
+    -- Helper function to get localized text
+    local function L(key, ...)
+        if _G.StarshipLocale and _G.StarshipLocale.Get then
+            return _G.StarshipLocale.Get(key, ...)
+        end
+        return key
+    end
+
     local function RegisterTheme(obj, prop, type)
         table.insert(ThemeObjects, { Object = obj, Property = prop, Type = type })
     end
@@ -567,7 +583,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     end
 
     -- KEYBIND SETTINGS CARD
-    local KBCard = CreateCard("KEYBIND SETTINGS", 0, 1)
+    local KBCard = CreateCard(L("keybinds"), 0, 1)
     KBCard.AutomaticSize = Enum.AutomaticSize.Y
 
     local KBList = Instance.new("Frame", KBCard)
@@ -721,7 +737,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     end
 
     -- THEME CARD
-    local ThemeCard = CreateCard("THEME SETTINGS", 0, 2)
+    local ThemeCard = CreateCard(L("themes"), 0, 2)
     ThemeCard.AutomaticSize = Enum.AutomaticSize.Y
 
     local ThemeContainer = Instance.new("Frame", ThemeCard)
@@ -845,8 +861,108 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
         end)
     end
 
+    -- LANGUAGE SELECTOR CARD
+    local LanguageCard = CreateCard(L("language"), 90, 3)
+
+    local LangLabel = Instance.new("TextLabel", LanguageCard)
+    LangLabel.Text = L("select_language") .. ":"
+    LangLabel.Size = UDim2.new(0.4, 0, 0, 30)
+    LangLabel.Position = UDim2.new(0.05, 0, 0, 35)
+    LangLabel.BackgroundTransparency = 1
+    LangLabel.TextColor3 = C_TEXT
+    LangLabel.Font = Enum.Font.Gotham
+    LangLabel.TextSize = 11
+    LangLabel.TextXAlignment = Enum.TextXAlignment.Left
+    RegisterTheme(LangLabel, "TextColor3", "Text")
+
+    local LangContainer = Instance.new("Frame", LanguageCard)
+    LangContainer.Size = UDim2.new(0.5, 0, 0, 35)
+    LangContainer.Position = UDim2.new(0.45, 0, 0, 35)
+    LangContainer.BackgroundTransparency = 1
+
+    local LangLayout = Instance.new("UIListLayout", LangContainer)
+    LangLayout.FillDirection = Enum.FillDirection.Horizontal
+    LangLayout.Padding = UDim.new(0, 8)
+    LangLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    LangLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+
+    -- Language buttons
+    local languages = {
+        { code = "en", name = "English", flag = "🇺🇸" },
+        { code = "id", name = "Indonesia", flag = "🇮🇩" },
+    }
+
+    -- Load saved language preference
+    local currentLang = Config.Language or "en"
+    pcall(function()
+        if isfile(CONFIG_FOLDER .. "/Language.json") then
+            local langData = HttpService:JSONDecode(readfile(CONFIG_FOLDER .. "/Language.json"))
+            if langData and langData.Language then
+                currentLang = langData.Language
+                Config.Language = currentLang
+                -- Also update Locale module
+                if _G.StarshipLocale and _G.StarshipLocale.SetLanguage then
+                    _G.StarshipLocale.SetLanguage(currentLang)
+                end
+            end
+        end
+    end)
+
+    local langButtons = {}
+    for i, lang in ipairs(languages) do
+        local langBtn = Instance.new("TextButton", LangContainer)
+        langBtn.Text = lang.flag .. " " .. lang.name
+        langBtn.Size = UDim2.new(0, 90, 0, 30)
+        langBtn.BackgroundColor3 = (currentLang == lang.code) and C_ACCENT or C_SIDE
+        langBtn.TextColor3 = C_TEXT
+        langBtn.Font = Enum.Font.GothamBold
+        langBtn.TextSize = 10
+        langBtn.LayoutOrder = i
+        Instance.new("UICorner", langBtn).CornerRadius = UDim.new(0, 6)
+        local stroke = Instance.new("UIStroke", langBtn)
+        stroke.Color = C_ACCENT
+        stroke.Transparency = (currentLang == lang.code) and 0 or 0.7
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        RegisterTheme(langBtn, "TextColor3", "Text")
+        RegisterTheme(stroke, "Color", "Accent")
+
+        langButtons[lang.code] = { btn = langBtn, stroke = stroke }
+
+        langBtn.MouseButton1Click:Connect(function()
+            -- Update config
+            Config.Language = lang.code
+
+            -- Update Locale module if available
+            if _G.StarshipLocale and _G.StarshipLocale.SetLanguage then
+                _G.StarshipLocale.SetLanguage(lang.code)
+            end
+
+            -- Save language preference to file immediately
+            local langConfig = { Language = lang.code }
+            pcall(function()
+                writefile(CONFIG_FOLDER .. "/Language.json", HttpService:JSONEncode(langConfig))
+            end)
+
+            -- Update button visuals
+            for code, data in pairs(langButtons) do
+                if code == lang.code then
+                    data.btn.BackgroundColor3 = C_ACCENT
+                    data.stroke.Transparency = 0
+                else
+                    data.btn.BackgroundColor3 = C_SIDE
+                    data.stroke.Transparency = 0.7
+                end
+            end
+
+            -- Show toast with success notice (no restart needed - reactive refresh)
+            if UI and UI.ShowToast then
+                UI.ShowToast(L("language"), L("language_changed"), "success", 2)
+            end
+        end)
+    end
+
     -- PROFILE SYSTEM CARD
-    local ProfileCard = CreateCard("PROFILE SYSTEM", 250, 4)
+    local ProfileCard = CreateCard(L("profile") .. " SYSTEM", 250, 4)
 
     local ProfileInfo = Instance.new("TextLabel", ProfileCard)
     ProfileInfo.Text = "Profiles save ALL settings + enabled features"
@@ -1351,9 +1467,9 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
 
         if UI and UI.ShowToast then
             local msg = AutoExecSettings.Enabled
-                and "Auto Execute enabled! Script will run automatically on game start."
-                or "Auto Execute disabled."
-            UI.ShowToast("Auto Execute", msg, "success", 3)
+                and L("auto_execute_enabled")
+                or L("auto_execute_disabled")
+            UI.ShowToast(L("auto_execute"), msg, "success", 3)
         end
 
         SaveAutoExecBtn.Text = "✅ SAVED!"
@@ -1363,7 +1479,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
 
     -- Detected Executor Info
     local DetectedLabel = Instance.new("TextLabel", AutoExecContainer)
-    DetectedLabel.Text = "🔍 Detected: " .. DetectedExecutor .. " | Path: " .. AUTOEXEC_FOLDER
+    DetectedLabel.Text = L("detected") .. ": " .. DetectedExecutor .. " | " .. L("path") .. ": " .. AUTOEXEC_FOLDER
     DetectedLabel.Size = UDim2.new(1, 0, 0, 18)
     DetectedLabel.LayoutOrder = 8
     DetectedLabel.BackgroundTransparency = 1
@@ -1376,8 +1492,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
 
     -- Instructions
     local InstructionsLabel = Instance.new("TextLabel", AutoExecContainer)
-    InstructionsLabel.Text =
-    "📝 Seliware users: Use custom path C:/Users/YOURNAME/AppData/Local/seliware-autoexec\nRestart executor after saving for changes to take effect."
+    InstructionsLabel.Text = L("seliware_instructions")
     InstructionsLabel.Size = UDim2.new(1, 0, 0, 35)
     InstructionsLabel.LayoutOrder = 9
     InstructionsLabel.BackgroundTransparency = 1
@@ -1389,7 +1504,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     RegisterTheme(InstructionsLabel, "TextColor3", "TextDim")
 
     local AutoInfo = Instance.new("TextLabel", AutoCard)
-    AutoInfo.Text = "Select features to auto-enable when script loads"
+    AutoInfo.Text = L("select_features")
     AutoInfo.Size = UDim2.new(0.9, 0, 0, 15)
     AutoInfo.Position = UDim2.new(0.05, 0, 0, 30)
     AutoInfo.BackgroundTransparency = 1
@@ -1489,7 +1604,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
         -- Save to a special auto-enable file
         writefile(CONFIG_FOLDER .. "/AutoEnable.json", HttpService:JSONEncode(AutoEnableList))
         if UI and UI.ShowToast then
-            UI.ShowToast("Auto-Enable Saved", "Settings saved! Also included when you save a profile.", "success", 2)
+            UI.ShowToast(L("auto_enable_saved"), L("auto_enable_desc"), "success", 2)
         end
         BtnSaveAuto.Text = "SAVED!"
         task.wait(1)
@@ -1548,10 +1663,10 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
             if success and UI and UI.ShowToast then
                 local featureCount = UIHandlers.AutoEnableList and #UIHandlers.AutoEnableList or 0
                 local msg = featureCount > 0
-                    and "Profile: " ..
-                    AutoExecSettings.AutoLoadProfile .. "\nAuto-enabling " .. featureCount .. " feature(s)..."
-                    or "Profile: " .. AutoExecSettings.AutoLoadProfile
-                UI.ShowToast("Auto-Loaded", msg, "success", 3)
+                    and L("profile") .. ": " ..
+                    AutoExecSettings.AutoLoadProfile .. "\n" .. L("auto_enabling", featureCount)
+                    or L("profile") .. ": " .. AutoExecSettings.AutoLoadProfile
+                UI.ShowToast(L("auto_loaded"), msg, "success", 3)
             end
         end)
     end

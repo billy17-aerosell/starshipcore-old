@@ -3,17 +3,25 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     local AvatarEditorService = game:GetService("AvatarEditorService")
     local HttpService = game:GetService("HttpService")
     local RunService = game:GetService("RunService")
-    
+
+    -- Helper function to get localized text
+    local function L(key, ...)
+        if _G.StarshipLocale and _G.StarshipLocale.Get then
+            return _G.StarshipLocale.Get(key, ...)
+        end
+        return key
+    end
+
     -- UPDATED THEME
-    local C_MAIN=Color3.fromRGB(10, 10, 14); 
-    local C_SIDE=Color3.fromRGB(15, 15, 20); 
-    local C_ACCENT=Color3.fromRGB(90, 110, 245); -- Midnight Blue
-    local C_TEXT=Color3.fromRGB(240, 240, 250); 
-    local C_TEXT_DIM=Color3.fromRGB(140, 140, 160); 
-    local C_ITEM=Color3.fromRGB(20, 20, 28); 
-    local C_RED=Color3.fromRGB(255, 80, 80); 
-    local C_YELLOW=Color3.fromRGB(255, 220, 60); 
-    local C_GREEN=Color3.fromRGB(60, 255, 160)
+    local C_MAIN = Color3.fromRGB(10, 10, 14);
+    local C_SIDE = Color3.fromRGB(15, 15, 20);
+    local C_ACCENT = Color3.fromRGB(90, 110, 245); -- Midnight Blue
+    local C_TEXT = Color3.fromRGB(240, 240, 250);
+    local C_TEXT_DIM = Color3.fromRGB(140, 140, 160);
+    local C_ITEM = Color3.fromRGB(20, 20, 28);
+    local C_RED = Color3.fromRGB(255, 80, 80);
+    local C_YELLOW = Color3.fromRGB(255, 220, 60);
+    local C_GREEN = Color3.fromRGB(60, 255, 160)
 
     -- Ensure RegisterTheme exists
     if not RegisterTheme then RegisterTheme = function() end end
@@ -28,33 +36,34 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     EmoteWindow.ZIndex = 200
     Instance.new("UICorner", EmoteWindow).CornerRadius = UDim.new(0, 12)
     RegisterTheme(EmoteWindow, "BackgroundColor3", "Side")
-    
+
     local Stroke = Instance.new("UIStroke", EmoteWindow)
     Stroke.Color = C_ACCENT
     Stroke.Thickness = 1
     Stroke.Transparency = 0.6
     RegisterTheme(Stroke, "Color", "Accent")
-    
+
     -- Dragging
     local dragging, dragInput, dragStart, startPos
-    EmoteWindow.InputBegan:Connect(function(input) 
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then 
+    EmoteWindow.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             dragStart = input.Position
             startPos = EmoteWindow.Position
-        end 
+        end
     end)
-    EmoteWindow.InputChanged:Connect(function(input) 
-        if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end 
+    EmoteWindow.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
     end)
-    UserInputService.InputChanged:Connect(function(input) 
-        if input == dragInput and dragging then 
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
             local delta = input.Position - dragStart
-            EmoteWindow.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y) 
-        end 
+            EmoteWindow.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y)
+        end
     end)
-    UserInputService.InputEnded:Connect(function(input) 
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end 
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
     end)
 
     -- Header
@@ -62,9 +71,9 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     Header.Size = UDim2.new(1, 0, 0, 40)
     Header.BackgroundTransparency = 1
     Header.ZIndex = 201
-    
+
     local Title = Instance.new("TextLabel", Header)
-    Title.Text = "EMOTES MENU"
+    Title.Text = L("emotes_menu")
     Title.Size = UDim2.new(1, -40, 1, 0)
     Title.Position = UDim2.new(0, 15, 0, 0)
     Title.BackgroundTransparency = 1
@@ -74,7 +83,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     Title.TextXAlignment = Enum.TextXAlignment.Left
     Title.ZIndex = 202
     RegisterTheme(Title, "TextColor3", "Text")
-    
+
     local CloseBtn = Instance.new("TextButton", Header)
     CloseBtn.Text = "×"
     CloseBtn.Size = UDim2.new(0, 40, 1, 0)
@@ -98,13 +107,13 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     TabFrame.Size = UDim2.new(1, 0, 0, 30)
     TabFrame.BackgroundTransparency = 1
     TabFrame.ZIndex = 202
-    
+
     local BtnCatalog = Instance.new("TextButton", TabFrame)
     BtnCatalog.Size = UDim2.new(0.48, 0, 1, 0)
     BtnCatalog.Position = UDim2.new(0, 0, 0, 0)
     BtnCatalog.BackgroundColor3 = C_ACCENT
-    BtnCatalog.Text = "CATALOG"
-    BtnCatalog.TextColor3 = Color3.new(0,0,0)
+    BtnCatalog.Text = L("emotes_catalog")
+    BtnCatalog.TextColor3 = Color3.new(0, 0, 0)
     BtnCatalog.Font = Enum.Font.GothamBold
     BtnCatalog.TextSize = 12
     BtnCatalog.ZIndex = 203
@@ -114,7 +123,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     BtnSaved.Size = UDim2.new(0.48, 0, 1, 0)
     BtnSaved.Position = UDim2.new(0.52, 0, 0, 0)
     BtnSaved.BackgroundColor3 = C_ITEM
-    BtnSaved.Text = "SAVED"
+    BtnSaved.Text = L("emotes_saved")
     BtnSaved.TextColor3 = C_TEXT_DIM
     BtnSaved.Font = Enum.Font.GothamBold
     BtnSaved.TextSize = 12
@@ -140,7 +149,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     local savedEmotes = {}
     local SAVE_FILE = "StarshipEmotes.json"
     local CurrentTrack = nil
-    
+
     local Settings = {
         ["Speed"] = 1,
         ["Fade In"] = 0.1,
@@ -169,7 +178,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
         if not humanoid then return end
 
         if CurrentTrack then CurrentTrack:Stop(Settings["Fade Out"]) end
-        
+
         local animId = "rbxassetid://" .. tostring(id)
         -- Attempt to resolve if it's a catalog ID
         local ok, result = pcall(function() return game:GetObjects(animId) end)
@@ -181,13 +190,13 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
         newAnim.AnimationId = animId
         local newTrack = humanoid:LoadAnimation(newAnim)
         newTrack.Priority = Enum.AnimationPriority.Action4
-        
+
         if Settings["Stop Other Animations On Play"] then
             for _, t in pairs(humanoid.Animator:GetPlayingAnimationTracks()) do
                 if t ~= newTrack and t.Priority ~= Enum.AnimationPriority.Action4 then t:Stop() end
             end
         end
-        
+
         newTrack:Play(Settings["Fade In"], math.max(0.001, Settings["Weight"]), Settings["Speed"])
         CurrentTrack = newTrack
         CurrentTrack.Looped = Settings["Looped"]
@@ -212,7 +221,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     BtnSearch.Position = UDim2.new(0.66, 0, 0, 0)
     BtnSearch.BackgroundColor3 = C_ACCENT
     BtnSearch.Text = "SEARCH"
-    BtnSearch.TextColor3 = Color3.new(0,0,0)
+    BtnSearch.TextColor3 = Color3.new(0, 0, 0)
     BtnSearch.Font = Enum.Font.GothamBold
     BtnSearch.TextSize = 10
     BtnSearch.ZIndex = 203
@@ -255,7 +264,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     CatalogScroll.ScrollBarImageColor3 = C_ACCENT
     CatalogScroll.ZIndex = 203
     RegisterTheme(CatalogScroll, "ScrollBarImageColor3", "Accent")
-    
+
     local LoadingLabel = Instance.new("TextLabel", ContentCatalog)
     LoadingLabel.Size = UDim2.new(1, 0, 1, -40)
     LoadingLabel.Position = UDim2.new(0, 0, 0, 40)
@@ -267,7 +276,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     LoadingLabel.Visible = false
     LoadingLabel.ZIndex = 205
     RegisterTheme(LoadingLabel, "TextColor3", "TextDim")
-    
+
     local CatalogLayout = Instance.new("UIGridLayout", CatalogScroll)
     CatalogLayout.CellSize = UDim2.new(0, 100, 0, 140)
     CatalogLayout.CellPadding = UDim2.new(0, 10, 0, 10)
@@ -279,10 +288,10 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
         card.ZIndex = 204
         Instance.new("UICorner", card).CornerRadius = UDim.new(0, 12)
         local cs = Instance.new("UIStroke", card); cs.Color = C_ACCENT; cs.Transparency = 0.8
-        
+
         RegisterTheme(card, "BackgroundColor3", "Item")
         RegisterTheme(cs, "Color", "Accent")
-        
+
         local img = Instance.new("ImageLabel", card)
         img.Size = UDim2.new(1, -10, 0, 80)
         img.Position = UDim2.new(0, 5, 0, 5)
@@ -291,7 +300,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
         local thumbId = item.AssetId or item.Id
         img.Image = "rbxthumb://type=Asset&id=" .. tostring(thumbId) .. "&w=150&h=150"
         img.ZIndex = 205
-        
+
         local name = Instance.new("TextLabel", card)
         name.Size = UDim2.new(1, -10, 0, 20)
         name.Position = UDim2.new(0, 5, 0, 85)
@@ -309,7 +318,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
         btnPlay.Size = UDim2.new(0.45, 0, 0, 20)
         btnPlay.Position = UDim2.new(0, 5, 1, -25)
         btnPlay.BackgroundColor3 = C_GREEN
-        btnPlay.TextColor3 = Color3.new(0,0,0)
+        btnPlay.TextColor3 = Color3.new(0, 0, 0)
         btnPlay.Font = Enum.Font.GothamBold
         btnPlay.TextSize = 9
         btnPlay.ZIndex = 205
@@ -321,24 +330,32 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
         btnAction.Size = UDim2.new(0.45, 0, 0, 20)
         btnAction.Position = UDim2.new(0.55, 0, 1, -25)
         btnAction.BackgroundColor3 = isSaved and C_RED or C_ACCENT
-        btnAction.TextColor3 = Color3.new(0,0,0)
+        btnAction.TextColor3 = Color3.new(0, 0, 0)
         btnAction.Font = Enum.Font.GothamBold
         btnAction.TextSize = 9
         btnAction.ZIndex = 205
         Instance.new("UICorner", btnAction).CornerRadius = UDim.new(0, 4)
-        
+
         btnAction.MouseButton1Click:Connect(function()
             if isSaved then
                 for i, v in ipairs(savedEmotes) do
-                    if v.Id == item.Id then table.remove(savedEmotes, i) break end
+                    if v.Id == item.Id then
+                        table.remove(savedEmotes, i)
+                        break
+                    end
                 end
                 saveEmotesToData()
                 card:Destroy()
             else
                 local exists = false
-                for _, v in ipairs(savedEmotes) do if v.Id == item.Id then exists = true break end end
+                for _, v in ipairs(savedEmotes) do
+                    if v.Id == item.Id then
+                        exists = true
+                        break
+                    end
+                end
                 if not exists then
-                    table.insert(savedEmotes, {Id = item.Id, Name = item.Name, AssetId = thumbId})
+                    table.insert(savedEmotes, { Id = item.Id, Name = item.Name, AssetId = thumbId })
                     saveEmotesToData()
                     btnAction.Text = "SAVED"
                     task.wait(1)
@@ -349,11 +366,11 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     end
 
     local currentPages = nil
-    
+
     local function LoadPage(items)
         for _, c in pairs(CatalogScroll:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
         if #items == 0 then
-             warn("Starship: No emotes found on this page")
+            warn("Starship: No emotes found on this page")
         end
         for _, item in ipairs(items) do
             CreateEmoteCard(item, CatalogScroll, false)
@@ -365,21 +382,21 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     local function SearchCatalog(keyword)
         LoadingLabel.Visible = true
         CatalogScroll.Visible = false
-        currentPages = nil 
-        
+        currentPages = nil
+
         local params = CatalogSearchParams.new()
         params.SearchKeyword = keyword
-        params.AssetTypes = {Enum.AvatarAssetType.EmoteAnimation}
+        params.AssetTypes = { Enum.AvatarAssetType.EmoteAnimation }
         params.SortType = Enum.CatalogSortType.Relevance
         params.Limit = 30
         params.IncludeOffSale = true
         params.SalesTypeFilter = Enum.SalesTypeFilter.All
-        
+
         task.spawn(function()
             local s, pages = pcall(function() return AvatarEditorService:SearchCatalog(params) end)
             LoadingLabel.Visible = false
             CatalogScroll.Visible = true
-            
+
             if s and pages then
                 currentPages = pages
                 LoadPage(currentPages:GetCurrentPage())
@@ -388,7 +405,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
             end
         end)
     end
-    
+
     BtnNext.MouseButton1Click:Connect(function()
         if currentPages and not currentPages.IsFinished then
             LoadingLabel.Visible = true
@@ -401,7 +418,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
             end)
         end
     end)
-    
+
     local function RefreshSaved()
         for _, c in pairs(ContentSaved:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
         local SavedScroll = Instance.new("ScrollingFrame", ContentSaved)
@@ -411,33 +428,33 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
         SavedScroll.ScrollBarThickness = 4
         SavedScroll.ScrollBarImageColor3 = C_ACCENT
         SavedScroll.ZIndex = 203
-        
+
         local SavedLayout = Instance.new("UIGridLayout", SavedScroll)
         SavedLayout.CellSize = UDim2.new(0, 100, 0, 140)
         SavedLayout.CellPadding = UDim2.new(0, 10, 0, 10)
         SavedLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        
+
         for _, item in ipairs(savedEmotes) do
             CreateEmoteCard(item, SavedScroll, true)
         end
-        SavedScroll.CanvasSize = UDim2.new(0, 0, 0, math.ceil(#savedEmotes/3) * 150)
+        SavedScroll.CanvasSize = UDim2.new(0, 0, 0, math.ceil(#savedEmotes / 3) * 150)
     end
 
     BtnSearch.MouseButton1Click:Connect(function() SearchCatalog(SearchBox.Text) end)
     SearchBox.FocusLost:Connect(function(enter) if enter then SearchCatalog(SearchBox.Text) end end)
-    
+
     task.defer(function() SearchCatalog("") end)
 
     BtnCatalog.MouseButton1Click:Connect(function()
         ContentCatalog.Visible = true; ContentSaved.Visible = false
-        BtnCatalog.BackgroundColor3 = C_ACCENT; BtnCatalog.TextColor3 = Color3.new(0,0,0)
+        BtnCatalog.BackgroundColor3 = C_ACCENT; BtnCatalog.TextColor3 = Color3.new(0, 0, 0)
         BtnSaved.BackgroundColor3 = C_ITEM; BtnSaved.TextColor3 = C_TEXT_DIM
     end)
-    
+
     BtnSaved.MouseButton1Click:Connect(function()
         ContentCatalog.Visible = false; ContentSaved.Visible = true
         BtnCatalog.BackgroundColor3 = C_ITEM; BtnCatalog.TextColor3 = C_TEXT_DIM
-        BtnSaved.BackgroundColor3 = C_ACCENT; BtnSaved.TextColor3 = Color3.new(0,0,0)
+        BtnSaved.BackgroundColor3 = C_ACCENT; BtnSaved.TextColor3 = Color3.new(0, 0, 0)
         RefreshSaved()
     end)
     -- Settings Panel (Small Overlay)
@@ -445,9 +462,9 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     SettingsFrame.Size = UDim2.new(1, 0, 0, 100)
     SettingsFrame.Position = UDim2.new(0, 0, 1, -100)
     SettingsFrame.BackgroundColor3 = C_SIDE
-    SettingsFrame.Visible = false 
+    SettingsFrame.Visible = false
     SettingsFrame.ZIndex = 210
-    
+
     local BtnSettings = Instance.new("TextButton", Header)
     BtnSettings.Size = UDim2.new(0, 30, 1, 0)
     BtnSettings.Position = UDim2.new(1, -80, 0, 0)
@@ -458,21 +475,21 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
     BtnSettings.Font = Enum.Font.GothamBold
     BtnSettings.TextSize = 18
     BtnSettings.ZIndex = 202
-    
+
     local SettingsPanel = Instance.new("ScrollingFrame", EmoteContainer)
     SettingsPanel.Size = UDim2.new(1, 0, 1, -40)
     SettingsPanel.Position = UDim2.new(0, 0, 0, 40)
     SettingsPanel.BackgroundColor3 = C_SIDE
     SettingsPanel.Visible = false
     SettingsPanel.ZIndex = 210
-    
+
     BtnSettings.MouseButton1Click:Connect(function()
         SettingsPanel.Visible = not SettingsPanel.Visible
     end)
-    
+
     local SLayout = Instance.new("UIListLayout", SettingsPanel)
     SLayout.Padding = UDim.new(0, 5)
-    
+
     local function AddToggle(name)
         local f = Instance.new("Frame", SettingsPanel)
         f.Size = UDim2.new(1, 0, 0, 30)
@@ -488,8 +505,9 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
         b.TextSize = 11
         b.ZIndex = 212
         Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
-        local ts = Instance.new("UIStroke", b); ts.Color = Settings[name] and C_GREEN or C_RED; ts.Transparency = 0.6; ts.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        
+        local ts = Instance.new("UIStroke", b); ts.Color = Settings[name] and C_GREEN or C_RED; ts.Transparency = 0.6; ts.ApplyStrokeMode =
+            Enum.ApplyStrokeMode.Border
+
         b.MouseButton1Click:Connect(function()
             Settings[name] = not Settings[name]
             b.Text = name .. ": " .. (Settings[name] and "ON" or "OFF")
@@ -498,7 +516,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
             if name == "Looped" and CurrentTrack then CurrentTrack.Looped = Settings[name] end
         end)
     end
-    
+
     local function AddSlider(name, min, max)
         local f = Instance.new("Frame", SettingsPanel)
         f.Size = UDim2.new(1, 0, 0, 40)
@@ -514,7 +532,7 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
         l.TextSize = 10
         l.TextXAlignment = Enum.TextXAlignment.Left
         l.ZIndex = 212
-        
+
         local s = Instance.new("TextButton", f)
         s.Text = ""
         s.Size = UDim2.new(0.9, 0, 0, 6)
@@ -522,13 +540,13 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
         s.BackgroundColor3 = C_ITEM
         s.ZIndex = 212
         Instance.new("UICorner", s)
-        
+
         local fill = Instance.new("Frame", s)
-        fill.Size = UDim2.new((Settings[name]-min)/(max-min), 0, 1, 0)
+        fill.Size = UDim2.new((Settings[name] - min) / (max - min), 0, 1, 0)
         fill.BackgroundColor3 = C_ACCENT
         fill.ZIndex = 213
         Instance.new("UICorner", fill)
-        
+
         local dragging = false
         s.MouseButton1Down:Connect(function() dragging = true end)
         UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
@@ -543,12 +561,12 @@ local function SetupEmotesUI(ScreenGui, UI, Connections, Config, LocalPlayer, UI
             end
         end)
     end
-    
+
     AddSlider("Speed", 0, 5)
     AddToggle("Looped")
     AddToggle("Stop Emote When Moving")
     AddToggle("Allow Invisible")
-    
+
     -- Loop for moving check
     RunService.RenderStepped:Connect(function()
         if Settings["Stop Emote When Moving"] and CurrentTrack and CurrentTrack.IsPlaying then

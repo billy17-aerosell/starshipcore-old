@@ -15,10 +15,18 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     local C_YELLOW = Color3.fromRGB(255, 220, 60)
     local C_GREEN = Color3.fromRGB(60, 255, 160)
 
+    -- Helper function to get localized text
+    local function L(key, ...)
+        if _G.StarshipLocale and _G.StarshipLocale.Get then
+            return _G.StarshipLocale.Get(key, ...)
+        end
+        return key
+    end
+
     -- Helper function to show toast when feature is toggled
     local function ShowFeatureToast(featureName, isEnabled)
         if UI and UI.ShowToast then
-            local status = isEnabled and "Enabled" or "Disabled"
+            local status = isEnabled and L("enabled") or L("disabled")
             local toastType = isEnabled and "success" or "info"
             UI.ShowToast(featureName, status, toastType, 2)
         end
@@ -98,11 +106,39 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         end
     end
 
+    -- Helper function to create feature button with subtitle description
+    local function CreateFeatureButton(parent, text, subtitle, size, position, color)
+        local container = Instance.new("Frame", parent)
+        container.Size = size
+        container.Position = position
+        container.BackgroundTransparency = 1
+
+        local btn = Instance.new("TextButton", container)
+        btn.Text = text
+        btn.Size = UDim2.new(1, 0, 0, 35)
+        btn.Position = UDim2.new(0, 0, 0, 0)
+        StyleBtn(btn, color)
+
+        local desc = Instance.new("TextLabel", container)
+        desc.Text = subtitle
+        desc.Size = UDim2.new(1, 0, 0, 14)
+        desc.Position = UDim2.new(0, 0, 0, 37)
+        desc.BackgroundTransparency = 1
+        desc.TextColor3 = C_TEXT_DIM
+        desc.Font = Enum.Font.Gotham
+        desc.TextSize = 9
+        desc.TextXAlignment = Enum.TextXAlignment.Center
+        desc.TextWrapped = true
+        RegisterTheme(desc, "TextColor3", "TextDim")
+
+        return btn, container
+    end
+
     -- 1. SPEED CHECKER
-    local CardSpeed = CreateCard("SPEED CHECKER", 85, 1)
+    local CardSpeed = CreateCard(L("speed_checker"), 85, 1)
 
     local BtnSpeedCheck = Instance.new("TextButton", CardSpeed)
-    BtnSpeedCheck.Text = "SPEED DISPLAY: OFF"
+    BtnSpeedCheck.Text = L("speed_display") .. ": " .. L("off")
     BtnSpeedCheck.Size = UDim2.new(0.94, 0, 0, 35)
     BtnSpeedCheck.Position = UDim2.new(0.03, 0, 0, 35)
     StyleBtn(BtnSpeedCheck, C_RED)
@@ -158,7 +194,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
         -- Icon/Title row
         local titleLbl = Instance.new("TextLabel", speedGui)
-        titleLbl.Text = "WALKSPEED"
+        titleLbl.Text = L("walkspeed")
         titleLbl.Size = UDim2.new(1, 0, 0, 18)
         titleLbl.Position = UDim2.new(0, 0, 0, 8)
         titleLbl.BackgroundTransparency = 1
@@ -179,7 +215,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
         -- Unit label
         local unitLbl = Instance.new("TextLabel", speedGui)
-        unitLbl.Text = "(default: 16)"
+        unitLbl.Text = L("default_speed")
         unitLbl.Size = UDim2.new(1, 0, 0, 14)
         unitLbl.Position = UDim2.new(0, 0, 0, 56)
         unitLbl.BackgroundTransparency = 1
@@ -241,7 +277,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     local function ToggleSpeedCheck()
         isSpeedCheck = not isSpeedCheck
-        BtnSpeedCheck.Text = isSpeedCheck and "SPEED DISPLAY: ON" or "SPEED DISPLAY: OFF"
+        BtnSpeedCheck.Text = L("speed_display") .. ": " .. (isSpeedCheck and L("on") or L("off"))
         BtnSpeedCheck.TextColor3 = isSpeedCheck and C_GREEN or C_RED
         BtnSpeedCheck.UIStroke.Color = isSpeedCheck and C_GREEN or C_RED
 
@@ -301,12 +337,15 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     end
 
     -- 2. AUTOMATION
-    local CardAuto = CreateCard("AUTOMATION", 120, 2)
-    local BtnAfk = Instance.new("TextButton", CardAuto)
-    BtnAfk.Text = "Anti-AFK: OFF"
-    BtnAfk.Size = UDim2.new(0.45, 0, 0, 35)
-    BtnAfk.Position = UDim2.new(0.03, 0, 0, 35)
-    StyleBtn(BtnAfk, C_TEXT_DIM)
+    local CardAuto = CreateCard(L("automation"), 140, 2)
+    local BtnAfk, AfkContainer = CreateFeatureButton(
+        CardAuto,
+        L("anti_afk") .. ": " .. L("off"),
+        L("anti_afk_desc"),
+        UDim2.new(0.45, 0, 0, 55),
+        UDim2.new(0.03, 0, 0, 35),
+        C_TEXT_DIM
+    )
 
     local afkCon = nil
     local isAfkOn = false
@@ -321,7 +360,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         isAfkOn = not isAfkOn
 
         if isAfkOn then
-            BtnAfk.Text = "Anti-AFK: ON"
+            BtnAfk.Text = L("anti_afk") .. ": " .. L("on")
             BtnAfk.TextColor3 = C_GREEN
             BtnAfk.UIStroke.Color = C_GREEN
             ShowFeatureToast("Anti-AFK", true)
@@ -336,7 +375,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
                 afkCon:Disconnect()
                 afkCon = nil
             end
-            BtnAfk.Text = "Anti-AFK: OFF"
+            BtnAfk.Text = L("anti_afk") .. ": " .. L("off")
             BtnAfk.TextColor3 = C_TEXT_DIM
             BtnAfk.UIStroke.Color = C_TEXT_DIM
             ShowFeatureToast("Anti-AFK", false)
@@ -348,11 +387,14 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     end)
     UIHandlers.ToggleAntiAFK = ToggleAntiAFK
 
-    local BtnEmotes = Instance.new("TextButton", CardAuto)
-    BtnEmotes.Text = "EMOTES MENU"
-    BtnEmotes.Size = UDim2.new(0.45, 0, 0, 35)
-    BtnEmotes.Position = UDim2.new(0.52, 0, 0, 35)
-    StyleBtn(BtnEmotes, C_TEXT)
+    local BtnEmotes, EmotesContainer = CreateFeatureButton(
+        CardAuto,
+        L("emotes_menu"),
+        L("emotes_menu_desc"),
+        UDim2.new(0.45, 0, 0, 55),
+        UDim2.new(0.52, 0, 0, 35),
+        C_TEXT
+    )
 
     BtnEmotes.MouseButton1Click:Connect(function()
         if UIHandlers.ToggleEmoteWindow then
@@ -360,12 +402,16 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         end
     end)
 
-    -- SHIFTLOCK
-    local BtnSL = Instance.new("TextButton", CardAuto)
-    BtnSL.Text = "SHIFT LOCK: OFF"
-    BtnSL.Size = UDim2.new(0.94, 0, 0, 35)
-    BtnSL.Position = UDim2.new(0.03, 0, 0, 75)
-    StyleBtn(BtnSL, C_RED)
+    -- SHIFT LOCK
+    local CardSL = CreateCard(L("shift_lock"), 100, 2)
+    local BtnSL, SLContainer = CreateFeatureButton(
+        CardSL,
+        L("shift_lock") .. ": " .. L("off"),
+        L("shift_lock_desc"),
+        UDim2.new(0.9, 0, 0, 55),
+        UDim2.new(0.05, 0, 0, 35),
+        C_RED
+    )
 
     local isSL = false
     local slLoop = nil
@@ -378,7 +424,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         end
 
         isSL = not isSL
-        BtnSL.Text = isSL and "SHIFT LOCK: ON" or "SHIFT LOCK: OFF"
+        BtnSL.Text = L("shift_lock") .. ": " .. (isSL and L("on") or L("off"))
         BtnSL.TextColor3 = isSL and C_GREEN or C_RED
         BtnSL.UIStroke.Color = isSL and C_GREEN or C_RED
 
@@ -428,13 +474,16 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     table.insert(Connections, slKeyConnection)
 
     -- SECURITY (Admin Detection)
-    local CardSec = CreateCard("SECURITY", 85, 3)
+    local CardSec = CreateCard(L("security"), 105, 3)
 
-    local BtnAntiAdmin = Instance.new("TextButton", CardSec)
-    BtnAntiAdmin.Text = "BYPASS ADMIN: OFF"
-    BtnAntiAdmin.Size = UDim2.new(0.9, 0, 0, 35)
-    BtnAntiAdmin.Position = UDim2.new(0.05, 0, 0, 35)
-    StyleBtn(BtnAntiAdmin, C_RED)
+    local BtnAntiAdmin, AntiAdminContainer = CreateFeatureButton(
+        CardSec,
+        L("bypass_admin") .. ": " .. L("off"),
+        L("bypass_admin_desc"),
+        UDim2.new(0.9, 0, 0, 55),
+        UDim2.new(0.05, 0, 0, 35),
+        C_RED
+    )
 
     local isAntiAdmin = false
     local adminCon = nil
@@ -498,7 +547,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         end
 
         isAntiAdmin = not isAntiAdmin
-        BtnAntiAdmin.Text = "BYPASS ADMIN: " .. (isAntiAdmin and "ON" or "OFF")
+        BtnAntiAdmin.Text = L("bypass_admin") .. ": " .. (isAntiAdmin and L("on") or L("off"))
         BtnAntiAdmin.TextColor3 = isAntiAdmin and C_GREEN or C_RED
         BtnAntiAdmin.UIStroke.Color = isAntiAdmin and C_GREEN or C_RED
         ShowFeatureToast("Bypass Admin", isAntiAdmin)
@@ -523,7 +572,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     UIHandlers.ToggleBypassAdmin = ToggleBypassAdmin
 
     -- 3. ENVIRONMENT
-    local CardEnv = CreateCard("ENVIRONMENT", 110, 4)
+    local CardEnv = CreateCard(L("environment"), 135, 4)
 
     -- Time Slider
     local TimeVal = Instance.new("TextLabel", CardEnv)
@@ -570,11 +619,14 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     end)
 
     -- Fullbright Toggle
-    local BtnFb = Instance.new("TextButton", CardEnv)
-    BtnFb.Text = "FULLBRIGHT: OFF"
-    BtnFb.Size = UDim2.new(0.9, 0, 0, 35)
-    BtnFb.Position = UDim2.new(0.05, 0, 0, 65)
-    StyleBtn(BtnFb, C_RED)
+    local BtnFb, FbContainer = CreateFeatureButton(
+        CardEnv,
+        L("fullbright") .. ": " .. L("off"),
+        L("fullbright_desc"),
+        UDim2.new(0.9, 0, 0, 55),
+        UDim2.new(0.05, 0, 0, 65),
+        C_RED
+    )
 
     local isFb = false
 
@@ -586,7 +638,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         end
 
         isFb = not isFb
-        BtnFb.Text = isFb and "FULLBRIGHT: ON" or "FULLBRIGHT: OFF"
+        BtnFb.Text = L("fullbright") .. ": " .. (isFb and L("on") or L("off"))
         BtnFb.TextColor3 = isFb and C_GREEN or C_RED
         BtnFb.UIStroke.Color = isFb and C_GREEN or C_RED
         if isFb then
@@ -620,10 +672,10 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         AnimDB = loadstring(readfile(ModulesPath .. "/Animations.lua"))()
     end
 
-    local CardAnim = CreateCard("CUSTOM ANIMATIONS", 400, 4)
+    local CardAnim = CreateCard(L("custom_animations"), 400, 4)
 
     local AnimStatus = Instance.new("TextLabel", CardAnim)
-    AnimStatus.Text = "Status: Ready"
+    AnimStatus.Text = L("status_ready")
     AnimStatus.Size = UDim2.new(1, -20, 0, 20)
     AnimStatus.Position = UDim2.new(0, 10, 1, -25)
     AnimStatus.BackgroundTransparency = 1
@@ -633,7 +685,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     AnimStatus.TextXAlignment = Enum.TextXAlignment.Left
 
     local function NotifyAnim(text)
-        AnimStatus.Text = "Status: " .. text
+        AnimStatus.Text = L("status") .. ": " .. text
         if UI and UI.ShowToast then
             UI.ShowToast("Animation System", text, "info", 2)
         end
@@ -813,17 +865,17 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         end -- Force refresh
         task.wait(0.1)
         unfreeze()
-        NotifyAnim("Set " .. animType)
+        NotifyAnim(L("set_anim") .. " " .. animType)
     end
 
     local BtnType = Instance.new("TextButton", CardAnim)
-    BtnType.Text = "TYPE: Idle"
+    BtnType.Text = L("type") .. ": Idle"
     BtnType.Size = UDim2.new(0.4, 0, 0, 30)
     BtnType.Position = UDim2.new(0.03, 0, 0, 30)
     StyleBtn(BtnType, C_ACCENT)
 
     local InpSearch = Instance.new("TextBox", CardAnim)
-    InpSearch.PlaceholderText = "Search..."
+    InpSearch.PlaceholderText = L("search")
     InpSearch.Text = ""
     InpSearch.Size = UDim2.new(0.5, 0, 0, 30)
     InpSearch.Position = UDim2.new(0.46, 0, 0, 30)
@@ -887,7 +939,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
                     AnimDB[CurrentAnimType][item.Name] = nil
                     SaveAnimDB()
                     RefreshAnimList()
-                    NotifyAnim("Deleted: " .. item.Name)
+                    NotifyAnim(L("deleted_item") .. ": " .. item.Name)
                 end)
             end
         end
@@ -898,7 +950,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         local idx = table.find(AnimTypes, CurrentAnimType) or 1
         idx = (idx % #AnimTypes) + 1
         CurrentAnimType = AnimTypes[idx]
-        BtnType.Text = "TYPE: " .. CurrentAnimType
+        BtnType.Text = L("type") .. ": " .. CurrentAnimType
         RefreshAnimList()
     end)
 
@@ -907,7 +959,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     -- Add Custom Animation UI
     local InpName = Instance.new("TextBox", CardAnim)
-    InpName.PlaceholderText = "Anim Name..."
+    InpName.PlaceholderText = L("anim_name")
     InpName.Text = ""
     InpName.Size = UDim2.new(0.45, 0, 0, 30)
     InpName.Position = UDim2.new(0.03, 0, 0, 260)
@@ -918,7 +970,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     Instance.new("UICorner", InpName).CornerRadius = UDim.new(0, 4)
 
     local InpID = Instance.new("TextBox", CardAnim)
-    InpID.PlaceholderText = "Asset ID / URL..."
+    InpID.PlaceholderText = L("asset_id_url")
     InpID.Text = ""
     InpID.Size = UDim2.new(0.45, 0, 0, 30)
     InpID.Position = UDim2.new(0.50, 0, 0, 260)
@@ -929,7 +981,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     Instance.new("UICorner", InpID).CornerRadius = UDim.new(0, 4)
 
     local BtnAddAnim = Instance.new("TextButton", CardAnim)
-    BtnAddAnim.Text = "ADD / APPLY ANIMATION"
+    BtnAddAnim.Text = L("add_apply_animation")
     BtnAddAnim.Size = UDim2.new(0.92, 0, 0, 30)
     BtnAddAnim.Position = UDim2.new(0.03, 0, 0, 300)
     StyleBtn(BtnAddAnim, C_GREEN)
@@ -950,7 +1002,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         local name = InpName.Text
 
         if rawID == "" then
-            NotifyAnim("ID Required!")
+            NotifyAnim(L("id_required"))
             return
         end
 
@@ -975,7 +1027,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         end
 
         if not finalID then
-            NotifyAnim("Invalid ID Format")
+            NotifyAnim(L("invalid_id_format"))
             return
         end
 
@@ -992,13 +1044,13 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         SaveAnimDB()
 
         RefreshAnimList()
-        NotifyAnim("Added: " .. name)
+        NotifyAnim(L("added") .. ": " .. name)
         InpName.Text = ""
         InpID.Text = ""
     end)
 
     local BtnReset = Instance.new("TextButton", CardAnim)
-    BtnReset.Text = "RESET TO ORIGINAL"
+    BtnReset.Text = L("reset_to_original")
     BtnReset.Size = UDim2.new(0.92, 0, 0, 30)
     BtnReset.Position = UDim2.new(0.03, 0, 0, 340)
     StyleBtn(BtnReset, C_RED)
@@ -1007,22 +1059,22 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         local orig = OriginalAnims[CurrentAnimType]
         if orig then
             SetAnimation(CurrentAnimType, orig)
-            NotifyAnim("Reset to Original")
+            NotifyAnim(L("reset_original"))
         else
-            NotifyAnim("Original Not Found")
+            NotifyAnim(L("original_not_found"))
         end
     end)
 
     -- 5. SERVER
-    local CardSrv = CreateCard("SERVER", 75, 5)
+    local CardSrv = CreateCard(L("server"), 75, 5)
     local BtnBrowser = Instance.new("TextButton", CardSrv)
-    BtnBrowser.Text = "BROWSER"
+    BtnBrowser.Text = L("browser")
     BtnBrowser.Size = UDim2.new(0.45, 0, 0, 35)
     BtnBrowser.Position = UDim2.new(0.03, 0, 0, 35)
     StyleBtn(BtnBrowser, C_ACCENT)
 
     local BtnRejoin = Instance.new("TextButton", CardSrv)
-    BtnRejoin.Text = "REJOIN"
+    BtnRejoin.Text = L("rejoin")
     BtnRejoin.Size = UDim2.new(0.45, 0, 0, 35)
     BtnRejoin.Position = UDim2.new(0.52, 0, 0, 35)
     StyleBtn(BtnRejoin, C_RED)
@@ -1045,7 +1097,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     RegisterTheme(SBS, "Color", "Accent")
 
     local SBTitle = Instance.new("TextLabel", SBrowser)
-    SBTitle.Text = "SERVER LIST"
+    SBTitle.Text = L("server_list")
     SBTitle.Size = UDim2.new(1, 0, 0, 40)
     SBTitle.Position = UDim2.new(0, 20, 0, 0)
     SBTitle.BackgroundTransparency = 1
@@ -1123,7 +1175,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             end
         end
         SBStat.Visible = true
-        SBStat.Text = "Fetching Servers..."
+        SBStat.Text = L("fetching_servers")
         SBList.Visible = false
         task.spawn(function()
             local url = "https://games.roblox.com/v1/games/"
@@ -1136,7 +1188,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
                 local d = HttpService:JSONDecode(r)
                 if d and d.data then
                     if #d.data == 0 then
-                        SBStat.Text = "No servers found."
+                        SBStat.Text = L("no_servers_found")
                         SBStat.Visible = true
                         return
                     end
@@ -1168,7 +1220,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
                             RegisterTheme(inf, "TextColor3", "Text")
 
                             local bj = Instance.new("TextButton", f)
-                            bj.Text = "JOIN"
+                            bj.Text = L("join")
                             bj.Size = UDim2.new(0.25, 0, 0.8, 0)
                             bj.Position = UDim2.new(0.72, 0, 0.1, 0)
                             bj.BackgroundColor3 = C_GREEN
@@ -1187,11 +1239,11 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
                     SBStat.Visible = false
                     SBList.Visible = true
                 else
-                    SBStat.Text = "Invalid Data."
+                    SBStat.Text = L("invalid_data")
                     SBStat.Visible = true
                 end
             else
-                SBStat.Text = "Error: " .. tostring(r)
+                SBStat.Text = L("error") .. ": " .. tostring(r)
                 SBStat.Visible = true
             end
         end)
@@ -1206,11 +1258,11 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     end)
 
     -- 6. RECORDING TOOLS (New Feature)
-    local CardRecTools = CreateCard("RECORDING TOOLS", 180, 6) -- Increased height for new option
+    local CardRecTools = CreateCard(L("recording_tools"), 180, 6) -- Increased height for new option
 
     -- Description
     local LblSmooth = Instance.new("TextLabel", CardRecTools)
-    LblSmooth.Text = "LIVE SMOOTHING (AUTO)"
+    LblSmooth.Text = L("live_smoothing_auto")
     LblSmooth.Size = UDim2.new(1, -20, 0, 20)
     LblSmooth.Position = UDim2.new(0, 15, 0, 35)
     LblSmooth.BackgroundTransparency = 1
@@ -1221,7 +1273,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     -- Strength Slider
     local LblStr = Instance.new("TextLabel", CardRecTools)
-    LblStr.Text = "STRENGTH: 4"
+    LblStr.Text = L("strength") .. ": 4"
     LblStr.Size = UDim2.new(0, 80, 0, 20)
     LblStr.Position = UDim2.new(0.75, 0, 0, 35)
     LblStr.BackgroundTransparency = 1
@@ -1267,20 +1319,20 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             local sc = math.clamp(rx / SldStrBg.AbsoluteSize.X, 0, 1)
             smoothStrength = math.max(1, math.floor(sc * 10))
             SldStrFill.Size = UDim2.new(sc, 0, 1, 0)
-            LblStr.Text = "STRENGTH: " .. smoothStrength
+            LblStr.Text = L("strength") .. ": " .. smoothStrength
             UpdateSmoothHandler()
         end
     end)
 
     local BtnToggleSmooth = Instance.new("TextButton", CardRecTools)
-    BtnToggleSmooth.Text = "LIVE SMOOTH: OFF"
+    BtnToggleSmooth.Text = L("live_smooth") .. ": " .. L("off")
     BtnToggleSmooth.Size = UDim2.new(0.43, 0, 0, 30)
     BtnToggleSmooth.Position = UDim2.new(0.05, 0, 0, 80)
     StyleBtn(BtnToggleSmooth, C_RED)
 
     BtnToggleSmooth.MouseButton1Click:Connect(function()
         isLiveSmooth = not isLiveSmooth
-        BtnToggleSmooth.Text = "LIVE SMOOTH: " .. (isLiveSmooth and "ON" or "OFF")
+        BtnToggleSmooth.Text = L("live_smooth") .. ": " .. (isLiveSmooth and L("on") or L("off"))
         BtnToggleSmooth.TextColor3 = isLiveSmooth and C_GREEN or C_RED
         BtnToggleSmooth.UIStroke.Color = isLiveSmooth and C_GREEN or C_RED
         UpdateSmoothHandler()
@@ -1289,14 +1341,14 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     -- Position-Based Playback Toggle (smoother ground movement)
     local isPosBased = UIHandlers.GetPositionBasedPlayback and UIHandlers.GetPositionBasedPlayback() or true
     local BtnPosBased = Instance.new("TextButton", CardRecTools)
-    BtnPosBased.Text = "POS-BASED: " .. (isPosBased and "ON" or "OFF")
+    BtnPosBased.Text = L("pos_based") .. ": " .. (isPosBased and L("on") or L("off"))
     BtnPosBased.Size = UDim2.new(0.43, 0, 0, 30)
     BtnPosBased.Position = UDim2.new(0.52, 0, 0, 80)
     StyleBtn(BtnPosBased, isPosBased and C_GREEN or C_RED)
 
     BtnPosBased.MouseButton1Click:Connect(function()
         isPosBased = not isPosBased
-        BtnPosBased.Text = "POS-BASED: " .. (isPosBased and "ON" or "OFF")
+        BtnPosBased.Text = L("pos_based") .. ": " .. (isPosBased and L("on") or L("off"))
         BtnPosBased.TextColor3 = isPosBased and C_GREEN or C_RED
         BtnPosBased.UIStroke.Color = isPosBased and C_GREEN or C_RED
         if UIHandlers.SetPositionBasedPlayback then
@@ -1306,7 +1358,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     -- Description for Position-Based
     local LblPosBasedDesc = Instance.new("TextLabel", CardRecTools)
-    LblPosBasedDesc.Text = "POS-BASED: Smoother ground movement (follows path directly)"
+    LblPosBasedDesc.Text = L("pos_based_desc")
     LblPosBasedDesc.Size = UDim2.new(1, -20, 0, 15)
     LblPosBasedDesc.Position = UDim2.new(0, 10, 0, 115)
     LblPosBasedDesc.BackgroundTransparency = 1
@@ -1317,7 +1369,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     -- Manual Apply Button (Small, under toggle)
     local BtnManual = Instance.new("TextButton", CardRecTools)
-    BtnManual.Text = "Manual Apply (Permanent)"
+    BtnManual.Text = L("manual_apply")
     BtnManual.Size = UDim2.new(0.9, 0, 0, 25)
     BtnManual.Position = UDim2.new(0.05, 0, 0, 140)
     BtnManual.BackgroundTransparency = 1
@@ -1332,10 +1384,10 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     end)
 
     -- 7. PRIVACY / STREAMER MODE
-    local CardPrivacy = CreateCard("PRIVACY (STREAMER MODE)", 180, 7)
+    local CardPrivacy = CreateCard(L("privacy_streamer"), 180, 7)
 
     local LblPrivacy = Instance.new("TextLabel", CardPrivacy)
-    LblPrivacy.Text = "Spoof your name for streaming/screenshots (CLIENT-SIDE ONLY - only you see the fake name)"
+    LblPrivacy.Text = L("privacy_desc")
     LblPrivacy.Size = UDim2.new(1, -20, 0, 20)
     LblPrivacy.Position = UDim2.new(0, 10, 0, 28)
     LblPrivacy.BackgroundTransparency = 1
@@ -1345,7 +1397,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     LblPrivacy.TextXAlignment = Enum.TextXAlignment.Left
 
     local InpSpoofName = Instance.new("TextBox", CardPrivacy)
-    InpSpoofName.PlaceholderText = "Fake Username..."
+    InpSpoofName.PlaceholderText = L("fake_username")
     InpSpoofName.Text = ""
     InpSpoofName.Size = UDim2.new(0.45, 0, 0, 30)
     InpSpoofName.Position = UDim2.new(0.03, 0, 0, 50)
@@ -1356,7 +1408,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     Instance.new("UICorner", InpSpoofName).CornerRadius = UDim.new(0, 6)
 
     local InpSpoofDisplay = Instance.new("TextBox", CardPrivacy)
-    InpSpoofDisplay.PlaceholderText = "Fake Display Name..."
+    InpSpoofDisplay.PlaceholderText = L("fake_display_name")
     InpSpoofDisplay.Text = ""
     InpSpoofDisplay.Size = UDim2.new(0.45, 0, 0, 30)
     InpSpoofDisplay.Position = UDim2.new(0.52, 0, 0, 50)
@@ -1367,7 +1419,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     Instance.new("UICorner", InpSpoofDisplay).CornerRadius = UDim.new(0, 6)
 
     local BtnSpoof = Instance.new("TextButton", CardPrivacy)
-    BtnSpoof.Text = "SPOOF: OFF"
+    BtnSpoof.Text = L("spoof") .. ": " .. L("off")
     BtnSpoof.Size = UDim2.new(0.94, 0, 0, 35)
     BtnSpoof.Position = UDim2.new(0.03, 0, 0, 90)
     StyleBtn(BtnSpoof, C_RED)
@@ -1481,7 +1533,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     local function ToggleSpoof()
         isSpoofing = not isSpoofing
-        BtnSpoof.Text = "SPOOF: " .. (isSpoofing and "ON" or "OFF")
+        BtnSpoof.Text = L("spoof") .. ": " .. (isSpoofing and L("on") or L("off"))
         BtnSpoof.TextColor3 = isSpoofing and C_GREEN or C_RED
         BtnSpoof.UIStroke.Color = isSpoofing and C_GREEN or C_RED
 
@@ -1540,7 +1592,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     -- Quick presets
     local BtnRandom = Instance.new("TextButton", CardPrivacy)
-    BtnRandom.Text = "RANDOM NAME"
+    BtnRandom.Text = L("random_name")
     BtnRandom.Size = UDim2.new(0.45, 0, 0, 30)
     BtnRandom.Position = UDim2.new(0.03, 0, 0, 135)
     StyleBtn(BtnRandom, C_ACCENT)
@@ -1574,7 +1626,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     end)
 
     local BtnClear = Instance.new("TextButton", CardPrivacy)
-    BtnClear.Text = "CLEAR"
+    BtnClear.Text = L("clear")
     BtnClear.Size = UDim2.new(0.45, 0, 0, 30)
     BtnClear.Position = UDim2.new(0.52, 0, 0, 135)
     StyleBtn(BtnClear, C_TEXT_DIM)
@@ -1588,10 +1640,10 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     end)
 
     -- 8. PLAYERS (Hide Players Feature)
-    local CardPlayers = CreateCard("PLAYERS", 85, 8)
+    local CardPlayers = CreateCard(L("players_section"), 85, 8)
 
     local BtnHidePlayers = Instance.new("TextButton", CardPlayers)
-    BtnHidePlayers.Text = "HIDE ALL PLAYERS: OFF"
+    BtnHidePlayers.Text = L("hide_all_players") .. ": " .. L("off")
     BtnHidePlayers.Size = UDim2.new(0.94, 0, 0, 35)
     BtnHidePlayers.Position = UDim2.new(0.03, 0, 0, 35)
     StyleBtn(BtnHidePlayers, C_RED)
@@ -1643,7 +1695,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     local function ToggleHidePlayers()
         isHidePlayers = not isHidePlayers
-        BtnHidePlayers.Text = "HIDE ALL PLAYERS: " .. (isHidePlayers and "ON" or "OFF")
+        BtnHidePlayers.Text = L("hide_all_players") .. ": " .. (isHidePlayers and L("on") or L("off"))
         BtnHidePlayers.TextColor3 = isHidePlayers and C_GREEN or C_RED
         BtnHidePlayers.UIStroke.Color = isHidePlayers and C_GREEN or C_RED
 
@@ -1688,7 +1740,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     BtnHidePlayers.MouseButton1Click:Connect(ToggleHidePlayers)
 
     -- 9. SKYBOX CHANGER
-    local CardSkybox = CreateCard("🌌 SKYBOX CHANGER", 140, 9)
+    local CardSkybox = CreateCard("🌌 " .. L("skybox_changer"), 140, 9)
 
     local originalSky = nil
     local originalAtmosphere = nil
@@ -1859,7 +1911,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     -- Status Label
     local SkyboxStatus = Instance.new("TextLabel", CardSkybox)
-    SkyboxStatus.Text = "Current: Default"
+    SkyboxStatus.Text = L("current") .. ": Default"
     SkyboxStatus.Size = UDim2.new(0.94, 0, 0, 20)
     SkyboxStatus.Position = UDim2.new(0.03, 0, 0, 30)
     SkyboxStatus.BackgroundTransparency = 1
@@ -1871,7 +1923,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     -- Dropdown Button
     local BtnSkyboxDropdown = Instance.new("TextButton", CardSkybox)
-    BtnSkyboxDropdown.Text = "🌌 Select Skybox ▼"
+    BtnSkyboxDropdown.Text = "🌌 " .. L("select_skybox") .. " ▼"
     BtnSkyboxDropdown.Size = UDim2.new(0.94, 0, 0, 35)
     BtnSkyboxDropdown.Position = UDim2.new(0.03, 0, 0, 55)
     StyleBtn(BtnSkyboxDropdown, C_ACCENT)
@@ -1916,7 +1968,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             opt.MouseButton1Click:Connect(function()
                 ApplySkybox(name)
                 BtnSkyboxDropdown.Text = "🌌 " .. name .. " ▼"
-                SkyboxStatus.Text = "Current: " .. name
+                SkyboxStatus.Text = L("current") .. ": " .. name
                 SkyboxStatus.TextColor3 = (name == "Default") and C_TEXT_DIM or C_GREEN
                 SkyboxDropdown.Visible = false
                 skyboxDropdownOpen = false
@@ -1937,22 +1989,22 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     -- Reset Button
     local BtnSkyboxReset = Instance.new("TextButton", CardSkybox)
-    BtnSkyboxReset.Text = "🔄 RESET TO ORIGINAL"
+    BtnSkyboxReset.Text = "🔄 " .. L("reset_to_original")
     BtnSkyboxReset.Size = UDim2.new(0.94, 0, 0, 30)
     BtnSkyboxReset.Position = UDim2.new(0.03, 0, 0, 100)
     StyleBtn(BtnSkyboxReset, C_RED)
 
     BtnSkyboxReset.MouseButton1Click:Connect(function()
         ApplySkybox("Default")
-        BtnSkyboxDropdown.Text = "🌌 Select Skybox ▼"
-        SkyboxStatus.Text = "Current: Default"
+        BtnSkyboxDropdown.Text = "🌌 " .. L("select_skybox") .. " ▼"
+        SkyboxStatus.Text = L("current") .. ": Default"
         SkyboxStatus.TextColor3 = C_TEXT_DIM
         SkyboxDropdown.Visible = false
         skyboxDropdownOpen = false
     end)
 
     -- HD SHADER / GRAPHICS ENHANCER
-    local CardShader = CreateCard("✨ HD SHADER", 180, 99)
+    local CardShader = CreateCard("✨ " .. L("hd_shader"), 180, 99)
 
     local shaderEnabled = false
     local shaderEffects = {}
@@ -2110,7 +2162,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     -- Preset dropdown
     local BtnPresetDropdown = Instance.new("TextButton", CardShader)
-    BtnPresetDropdown.Text = "🎨 Preset: OFF ▼"
+    BtnPresetDropdown.Text = "🎨 " .. L("preset") .. ": OFF ▼"
     BtnPresetDropdown.Size = UDim2.new(0.94, 0, 0, 35)
     BtnPresetDropdown.Position = UDim2.new(0.03, 0, 0, 35)
     StyleBtn(BtnPresetDropdown, C_TEXT)
@@ -2143,7 +2195,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     -- Status label (defined before PopulatePresetDropdown)
     local ShaderStatus = Instance.new("TextLabel", CardShader)
-    ShaderStatus.Text = "Select a preset to enhance graphics"
+    ShaderStatus.Text = L("select_preset")
     ShaderStatus.Size = UDim2.new(1, 0, 0, 15)
     ShaderStatus.Position = UDim2.new(0, 0, 0, 145)
     ShaderStatus.BackgroundTransparency = 1
@@ -2183,16 +2235,16 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
             btn.MouseButton1Click:Connect(function()
                 ApplyShaderPreset(presetName)
-                BtnPresetDropdown.Text = "🎨 Preset: " .. presetName .. " ▼"
+                BtnPresetDropdown.Text = "🎨 " .. L("preset") .. ": " .. presetName .. " ▼"
                 PresetDropdown.Visible = false
                 presetDropdownOpen = false
                 PopulatePresetDropdown()
 
                 if presetName == "OFF" then
-                    ShaderStatus.Text = "Shader disabled"
+                    ShaderStatus.Text = L("shader_disabled")
                     ShaderStatus.TextColor3 = C_TEXT_DIM
                 else
-                    ShaderStatus.Text = "✓ " .. presetName .. " shader active!"
+                    ShaderStatus.Text = "✓ " .. presetName .. " " .. L("shader_active")
                     ShaderStatus.TextColor3 = C_GREEN
                 end
             end)
@@ -2212,41 +2264,41 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     -- Quick toggle buttons
     local BtnQuickHD = Instance.new("TextButton", CardShader)
-    BtnQuickHD.Text = "🎬 HD Natural"
+    BtnQuickHD.Text = "🎬 " .. L("hd_natural")
     BtnQuickHD.Size = UDim2.new(0.46, 0, 0, 30)
     BtnQuickHD.Position = UDim2.new(0.03, 0, 0, 75)
     StyleBtn(BtnQuickHD, C_GREEN)
 
     local BtnQuickCine = Instance.new("TextButton", CardShader)
-    BtnQuickCine.Text = "🎥 Cinematic"
+    BtnQuickCine.Text = "🎥 " .. L("cinematic")
     BtnQuickCine.Size = UDim2.new(0.46, 0, 0, 30)
     BtnQuickCine.Position = UDim2.new(0.51, 0, 0, 75)
     StyleBtn(BtnQuickCine, C_ACCENT)
 
     local BtnToggleOff = Instance.new("TextButton", CardShader)
-    BtnToggleOff.Text = "❌ TURN OFF"
+    BtnToggleOff.Text = "❌ " .. L("turn_off")
     BtnToggleOff.Size = UDim2.new(0.94, 0, 0, 30)
     BtnToggleOff.Position = UDim2.new(0.03, 0, 0, 110)
     StyleBtn(BtnToggleOff, C_RED)
 
     BtnQuickHD.MouseButton1Click:Connect(function()
         ApplyShaderPreset("HD Natural")
-        BtnPresetDropdown.Text = "🎨 Preset: HD Natural ▼"
-        ShaderStatus.Text = "✓ HD Natural shader active!"
+        BtnPresetDropdown.Text = "🎨 " .. L("preset") .. ": HD Natural ▼"
+        ShaderStatus.Text = "✓ " .. L("hd_natural") .. " " .. L("shader_active")
         ShaderStatus.TextColor3 = C_GREEN
     end)
 
     BtnQuickCine.MouseButton1Click:Connect(function()
         ApplyShaderPreset("Cinematic")
-        BtnPresetDropdown.Text = "🎨 Preset: Cinematic ▼"
-        ShaderStatus.Text = "✓ Cinematic shader active!"
+        BtnPresetDropdown.Text = "🎨 " .. L("preset") .. ": Cinematic ▼"
+        ShaderStatus.Text = "✓ " .. L("cinematic") .. " " .. L("shader_active")
         ShaderStatus.TextColor3 = C_GREEN
     end)
 
     BtnToggleOff.MouseButton1Click:Connect(function()
         ApplyShaderPreset("OFF")
-        BtnPresetDropdown.Text = "🎨 Preset: OFF ▼"
-        ShaderStatus.Text = "Shader disabled"
+        BtnPresetDropdown.Text = "🎨 " .. L("preset") .. ": OFF ▼"
+        ShaderStatus.Text = L("shader_disabled")
         ShaderStatus.TextColor3 = C_TEXT_DIM
     end)
 end

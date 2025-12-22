@@ -72,6 +72,7 @@ const ALLOWED_MODULES = [
   "UI.lua",
   "Intro.lua",
   "Animations.lua",
+  "Locale.lua",
   "Tabs/Dashboard.lua",
   "Tabs/Tools.lua",
   "Tabs/Warp.lua",
