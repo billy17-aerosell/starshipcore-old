@@ -2,11 +2,10 @@ local HttpService = game:GetService("HttpService")
 local VERCEL_URL = "https://starship-core.my.id"
 local ENCRYPTION_KEY = "StarshipSecretKey2025"
 local FOLDER_NAME = "StarshipCore"
+local MODULES_FOLDER = FOLDER_NAME .. "/Modules"
+local TABS_FOLDER = MODULES_FOLDER .. "/Tabs"
 local MODULES = { "Config.lua", "UI.lua", "Intro.lua", "Animations.lua", "Locale.lua" }
 local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua", "Emotes.lua", "ConfigTab.lua" }
-
--- In-memory module storage (no files saved to disk!)
-local LoadedModules = {}
 
 local function xorEncrypt(text, key)
     local result = {}
@@ -49,15 +48,20 @@ local function decrypt(encryptedBase64)
     return xorEncrypt(encrypted, ENCRYPTION_KEY)
 end
 
--- Setup folder only for user data (recordings, configs) - NOT for modules
 local function setupFolders()
     if not isfolder(FOLDER_NAME) then
         makefolder(FOLDER_NAME)
     end
+    if not isfolder(MODULES_FOLDER) then
+        makefolder(MODULES_FOLDER)
+    end
+    if not isfolder(TABS_FOLDER) then
+        makefolder(TABS_FOLDER)
+    end
 end
 
--- Download and load module directly to memory (no file saved!)
-local function downloadModule(moduleName, userId)
+-- Download module via secure API (encrypted in production)
+local function downloadModule(moduleName, savePath, userId)
     local url = VERCEL_URL .. "/api/get-module?name=" .. moduleName .. "&user=" .. userId
 
     -- Debug: Log URL being called
@@ -97,21 +101,9 @@ local function downloadModule(moduleName, userId)
         -- Check if it's actually a Lua script (starts with comment or local/return)
         local trimmed = response:match("^%s*(.-)%s*$") or response
         if trimmed:match("^%-%-") or trimmed:match("^local%s") or trimmed:match("^return%s") then
-            -- Load directly to memory
-            local func, err = loadstring(response)
-            if func then
-                local success, result = pcall(func)
-                if success then
-                    LoadedModules[moduleName] = result
-                    return true
-                else
-                    warn("[Starship] Execute error for " .. moduleName .. ": " .. tostring(result))
-                    return false
-                end
-            else
-                warn("[Starship] Loadstring error for " .. moduleName .. ": " .. tostring(err))
-                return false
-            end
+            warn("[Starship] Response looks like Lua, saving directly: " .. moduleName)
+            writefile(savePath, response)
+            return true
         end
 
         return false
@@ -135,21 +127,8 @@ local function downloadModule(moduleName, userId)
             return false
         end
 
-        -- Load directly to memory (NO FILE SAVED!)
-        local func, err = loadstring(decryptedContent)
-        if func then
-            local success, result = pcall(func)
-            if success then
-                LoadedModules[moduleName] = result
-                return true
-            else
-                warn("[Starship] Execute error for " .. moduleName .. ": " .. tostring(result))
-                return false
-            end
-        else
-            warn("[Starship] Loadstring error for " .. moduleName .. ": " .. tostring(err))
-            return false
-        end
+        writefile(savePath, decryptedContent)
+        return true
     elseif data and data.status == "denied" then
         warn("[Starship] Access denied for module: " .. moduleName)
         return false
@@ -168,9 +147,10 @@ local function downloadModules(statusCallback)
     local totalFiles = #MODULES + #TABS
     local downloaded = 0
 
-    -- Download main modules via secure API (loaded to memory)
+    -- Download main modules via secure API
     for _, moduleName in ipairs(MODULES) do
-        if downloadModule(moduleName, userId) then
+        local savePath = MODULES_FOLDER .. "/" .. moduleName
+        if downloadModule(moduleName, savePath, userId) then
             downloaded = downloaded + 1
             if statusCallback then
                 statusCallback("Downloading: " .. moduleName, downloaded / totalFiles)
@@ -178,19 +158,17 @@ local function downloadModules(statusCallback)
         end
     end
 
-    -- Download tab modules via secure API (loaded to memory)
+    -- Download tab modules via secure API
     for _, tabName in ipairs(TABS) do
+        local savePath = TABS_FOLDER .. "/" .. tabName
         -- API expects "Tabs/Dashboard.lua" format
-        if downloadModule("Tabs/" .. tabName, userId) then
+        if downloadModule("Tabs/" .. tabName, savePath, userId) then
             downloaded = downloaded + 1
             if statusCallback then
                 statusCallback("Downloading: Tabs/" .. tabName, downloaded / totalFiles)
             end
         end
     end
-
-    -- Store loaded modules in global for main script to access
-    getgenv().StarshipModules = LoadedModules
 
     return downloaded == totalFiles
 end
@@ -404,41 +382,41 @@ local function showError(message)
 
     -- Detect error type from message
     local errorType = "denied" -- default
-    local titleText = "ACCESS DENIED"
+    local titleText = "🚫 ACCESS DENIED"
     local titleColor = Color3.fromRGB(255, 80, 80)
     local frameColor = Color3.fromRGB(30, 30, 35)
     local accentColor = Color3.fromRGB(255, 80, 80)
 
     if message:lower():find("not whitelisted") or message:lower():find("authentication required") then
         errorType = "auth_required"
-        titleText = "AUTHENTICATION REQUIRED"
+        titleText = "🔒 AUTHENTICATION REQUIRED"
         titleColor = Color3.fromRGB(255, 165, 0) -- Orange
         accentColor = Color3.fromRGB(255, 165, 0)
         message =
-            "Your account is not authorized to use Starship.\n\nTo get VIP access, contact the administrator.\n\nYour User ID: "
+            "⚠️ Your account is not authorized to use Starship.\n\n💎 To get VIP access, contact the administrator.\n\n📌 Your User ID: "
             .. tostring(Players.LocalPlayer.UserId)
     elseif message:lower():find("suspended") or message:lower():find("banned") then
         errorType = "banned"
-        titleText = "ACCOUNT SUSPENDED"
+        titleText = "🚫 ACCOUNT SUSPENDED"
         titleColor = Color3.fromRGB(200, 0, 0) -- Dark Red
         accentColor = Color3.fromRGB(200, 0, 0)
         message =
-            "Your VIP access has been suspended.\n\nContact administrator for more information.\n\nYour User ID: "
+            "❌ Your VIP access has been suspended.\n\n📧 Contact administrator for more information.\n\n📌 Your User ID: "
             .. tostring(Players.LocalPlayer.UserId)
     elseif message:lower():find("expired") then
         errorType = "expired"
-        titleText = "VIP ACCESS EXPIRED"
+        titleText = "⏰ VIP ACCESS EXPIRED"
         titleColor = Color3.fromRGB(255, 200, 0) -- Yellow
         accentColor = Color3.fromRGB(255, 200, 0)
         message =
-            "Your VIP subscription has expired.\n\nRenew your access to continue using Starship.\n\nYour User ID: "
+            "⌛ Your VIP subscription has expired.\n\n🔄 Renew your access to continue using Starship.\n\n📌 Your User ID: "
             .. tostring(Players.LocalPlayer.UserId)
     elseif message:lower():find("connection") or message:lower():find("unreachable") then
         errorType = "connection"
-        titleText = "CONNECTION ERROR"
+        titleText = "📡 CONNECTION ERROR"
         titleColor = Color3.fromRGB(100, 100, 255) -- Blue
         accentColor = Color3.fromRGB(100, 100, 255)
-        message = "Cannot connect to Starship server.\n\nPlease check your internet connection and try again."
+        message = "🌐 Cannot connect to Starship server.\n\n🔄 Please check your internet connection and try again."
     end
 
     -- Create enhanced error UI
@@ -570,7 +548,7 @@ local function main()
     end)
 
     -- 3. Secure Login & Download Script
-    -- Auto-detect User ID (cannot be hardcoded by users!)
+    -- 🔒 Auto-detect User ID (cannot be hardcoded by users!)
     updateStatus("Authenticating with Secure Server...", 0.6)
     task.wait(0.5)
 
