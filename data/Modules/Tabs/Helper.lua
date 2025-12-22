@@ -98,7 +98,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     end
 
     -- 0. CHARACTER & FLY
-    local CardChar = CreateCard("CHARACTER & FLY", 185, 0)
+    local CardChar = CreateCard("CHARACTER & FLY", 145, 0)
 
     -- Speed
     local WSVal = Instance.new("TextBox", CardChar)
@@ -231,142 +231,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         end
     end)
 
-    -- Jump
-    local JPVal = Instance.new("TextBox", CardChar)
-    JPVal.Text = ""
-    JPVal.PlaceholderText = "50"
-    JPVal.Size = UDim2.new(0.15, 0, 0, 35)
-    JPVal.Position = UDim2.new(0.82, 0, 0, 75)
-    JPVal.BackgroundColor3 = C_SIDE
-    JPVal.TextColor3 = C_TEXT
-    JPVal.Font = Enum.Font.Gotham
-    Instance.new("UICorner", JPVal).CornerRadius = UDim.new(0, 6)
-    local SldJP = Instance.new("TextButton", CardChar)
-    SldJP.Text = ""
-    SldJP.Size = UDim2.new(0.55, 0, 0, 6)
-    SldJP.Position = UDim2.new(0.25, 0, 0, 90)
-    SldJP.BackgroundColor3 = C_SIDE
-    SldJP.AutoButtonColor = false
-    Instance.new("UICorner", SldJP)
-    local FillJP = Instance.new("Frame", SldJP)
-    FillJP.Size = UDim2.new(0, 0, 1, 0)
-    FillJP.BackgroundColor3 = C_ACCENT
-    Instance.new("UICorner", FillJP)
-    local BtnTogJP = Instance.new("TextButton", CardChar)
-    BtnTogJP.Text = "JUMP: OFF"
-    BtnTogJP.Size = UDim2.new(0.2, 0, 0, 35)
-    BtnTogJP.Position = UDim2.new(0.03, 0, 0, 75)
-    StyleBtn(BtnTogJP, C_RED)
-    local isJPEnabled, jpCon, defJP, tgtJP = false, nil, 50, 50
-    local function UpdateJPVisual(v)
-        v = math.clamp(v, 0, 500)
-        local p = v / 500
-        FillJP.Size = UDim2.new(p, 0, 1, 0)
-        JPVal.Text = tostring(math.floor(v))
-    end
-    local function ApplyJump(v)
-        local c = LocalPlayer.Character
-        local h = c and c:FindFirstChild("Humanoid")
-        if h then
-            h.UseJumpPower = true
-            h.JumpPower = v
-        end
-    end
-    local function SetJP(v, up)
-        tgtJP = v
-        UpdateJPVisual(v)
-        if up and isJPEnabled then
-            ApplyJump(v)
-        end
-    end
-    local function ToggleJump(forceEnable)
-        if forceEnable ~= nil then
-            if forceEnable == isJPEnabled then
-                return
-            end
-        end
-
-        local c = LocalPlayer.Character
-        local h = c and c:FindFirstChild("Humanoid")
-        if not isJPEnabled then
-            isJPEnabled = true
-            BtnTogJP.Text = "JUMP: ON"
-            BtnTogJP.TextColor3 = C_GREEN
-            BtnTogJP.UIStroke.Color = C_GREEN
-            if h then
-                h.UseJumpPower = true
-                defJP = h.JumpPower
-            end
-            SetJP(tgtJP, true)
-            if jpCon then
-                jpCon:Disconnect()
-            end
-            jpCon = RunService.Heartbeat:Connect(function()
-                local c = LocalPlayer.Character
-                local h = c and c:FindFirstChild("Humanoid")
-                if h and math.abs(h.JumpPower - tgtJP) > 1 then
-                    h.UseJumpPower = true
-                    h.JumpPower = tgtJP
-                end
-            end)
-            table.insert(Connections, jpCon)
-        else
-            isJPEnabled = false
-            BtnTogJP.Text = "JUMP: OFF"
-            BtnTogJP.TextColor3 = C_RED
-            BtnTogJP.UIStroke.Color = C_RED
-            if jpCon then
-                jpCon:Disconnect()
-                jpCon = nil
-            end
-            ApplyJump(defJP)
-            UpdateJPVisual(tgtJP)
-        end
-    end
-    BtnTogJP.MouseButton1Click:Connect(function()
-        ToggleJump()
-    end)
-    UIHandlers.ToggleJump = ToggleJump
-    local dragJP = false
-    SldJP.MouseButton1Down:Connect(function()
-        dragJP = true
-    end)
-    UserInputService.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragJP = false
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if dragJP and i.UserInputType == Enum.UserInputType.MouseMovement then
-            local sc = math.clamp((i.Position.X - SldJP.AbsolutePosition.X) / SldJP.AbsoluteSize.X, 0, 1)
-            local n = math.floor(sc * 500)
-            if isJPEnabled then
-                SetJP(n, true)
-            else
-                UpdateJPVisual(n)
-                tgtJP = n
-            end
-        end
-    end)
-    JPVal.FocusLost:Connect(function()
-        local v = tonumber(JPVal.Text)
-        if v then
-            if isJPEnabled then
-                SetJP(v, true)
-            else
-                UpdateJPVisual(v)
-                tgtJP = v
-            end
-        else
-            JPVal.Text = "50"
-        end
-    end)
-
     -- Inf Jump
     local BtnInfJump = Instance.new("TextButton", CardChar)
     BtnInfJump.Text = "INFINITE JUMP: OFF"
     BtnInfJump.Size = UDim2.new(0.94, 0, 0, 30)
-    BtnInfJump.Position = UDim2.new(0.03, 0, 0, 115)
+    BtnInfJump.Position = UDim2.new(0.03, 0, 0, 75)
     StyleBtn(BtnInfJump, C_TEXT_DIM)
     local isInfJump, infJumpCon = false, nil
     local function ToggleInfJump(forceEnable)
@@ -407,13 +276,13 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     local BtnFly = Instance.new("TextButton", CardChar)
     BtnFly.Text = "Fly: OFF"
     BtnFly.Size = UDim2.new(0.45, 0, 0, 35)
-    BtnFly.Position = UDim2.new(0.03, 0, 0, 150)
+    BtnFly.Position = UDim2.new(0.03, 0, 0, 110)
     StyleBtn(BtnFly, C_TEXT_DIM)
     local InpFlySpd = Instance.new("TextBox", CardChar)
     InpFlySpd.PlaceholderText = "Spd"
     InpFlySpd.Text = "50"
     InpFlySpd.Size = UDim2.new(0.45, 0, 0, 35)
-    InpFlySpd.Position = UDim2.new(0.52, 0, 0, 150)
+    InpFlySpd.Position = UDim2.new(0.52, 0, 0, 110)
     InpFlySpd.BackgroundColor3 = C_SIDE
     InpFlySpd.TextColor3 = C_TEXT
     InpFlySpd.Font = Enum.Font.Gotham
@@ -529,7 +398,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
     -- 4. JUMP ASSIST
     do
-        local CardJump = CreateCard("JUMP ASSIST", 170, 4)
+        local CardJump = CreateCard("JUMP ASSIST", 80, 4)
 
         -- Auto Jump
         local BtnAutoJump = Instance.new("TextButton", CardJump)
@@ -575,115 +444,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         end)
         UIHandlers.ToggleAutoJump = ToggleAutoJump
 
-        -- Long Jump
-        local BtnLongJump = Instance.new("TextButton", CardJump)
-        BtnLongJump.Text = "LONG JUMP: OFF"
-        BtnLongJump.Size = UDim2.new(0.45, 0, 0, 35)
-        BtnLongJump.Position = UDim2.new(0.52, 0, 0, 35)
-        StyleBtn(BtnLongJump, C_TEXT_DIM)
-
-        -- Power Slider
-        local LblPower = Instance.new("TextLabel", CardJump)
-        LblPower.Text = "POWER: " .. (Config.LongJumpPower or 50)
-        LblPower.Size = UDim2.new(1, -20, 0, 20)
-        LblPower.Position = UDim2.new(0, 15, 0, 80)
-        LblPower.BackgroundTransparency = 1
-        LblPower.TextColor3 = C_TEXT_DIM
-        LblPower.Font = Enum.Font.GothamBold
-        LblPower.TextSize = 10
-        LblPower.TextXAlignment = Enum.TextXAlignment.Left
-
-        local SldPowerBg = Instance.new("TextButton", CardJump)
-        SldPowerBg.Text = ""
-        SldPowerBg.Size = UDim2.new(0.9, 0, 0, 6)
-        SldPowerBg.Position = UDim2.new(0.05, 0, 0, 100)
-        SldPowerBg.BackgroundColor3 = C_SIDE
-        SldPowerBg.AutoButtonColor = false
-        Instance.new("UICorner", SldPowerBg).CornerRadius = UDim.new(0, 3)
-
-        local SldPowerFill = Instance.new("Frame", SldPowerBg)
-        SldPowerFill.Size = UDim2.new((Config.LongJumpPower or 50) / 200, 0, 1, 0)
-        SldPowerFill.BackgroundColor3 = C_ACCENT
-        Instance.new("UICorner", SldPowerFill).CornerRadius = UDim.new(0, 3)
-
-        local function UpdatePowerSlider(input)
-            local rx = input.Position.X - SldPowerBg.AbsolutePosition.X
-            local sc = math.clamp(rx / SldPowerBg.AbsoluteSize.X, 0, 1)
-            Config.LongJumpPower = math.floor(sc * 200) -- 0 to 200
-            SldPowerFill.Size = UDim2.new(sc, 0, 1, 0)
-            LblPower.Text = "POWER: " .. Config.LongJumpPower
-        end
-
-        local draggingPower = false
-        SldPowerBg.MouseButton1Down:Connect(function()
-            draggingPower = true
-        end)
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                draggingPower = false
-            end
-        end)
-        UserInputService.InputChanged:Connect(function(input)
-            if draggingPower and input.UserInputType == Enum.UserInputType.MouseMovement then
-                UpdatePowerSlider(input)
-            end
-        end)
-
-        local isLongJump, longJumpLoop = false, nil
-        local function ToggleLongJump(forceEnable)
-            if forceEnable ~= nil then
-                if forceEnable == isLongJump then
-                    return
-                end
-            end
-
-            isLongJump = not isLongJump
-            BtnLongJump.Text = "LONG JUMP: " .. (isLongJump and "ON" or "OFF")
-            BtnLongJump.TextColor3 = isLongJump and C_GREEN or C_TEXT_DIM
-            BtnLongJump.UIStroke.Color = isLongJump and C_GREEN or C_TEXT_DIM
-
-            if isLongJump then
-                local lastState = Enum.HumanoidStateType.None
-                longJumpLoop = RunService.Heartbeat:Connect(function()
-                    local c = LocalPlayer.Character
-                    local h = c and c:FindFirstChild("Humanoid")
-                    local r = c and c:FindFirstChild("HumanoidRootPart")
-
-                    if h and r then
-                        local state = h:GetState()
-                        if state == Enum.HumanoidStateType.Jumping and lastState ~= Enum.HumanoidStateType.Jumping then
-                            local dir = r.CFrame.LookVector
-                            if h.MoveDirection.Magnitude > 0 then
-                                dir = h.MoveDirection
-                            end
-                            r.AssemblyLinearVelocity = Vector3.new(
-                                dir.X * (Config.LongJumpPower or 50),
-                                r.AssemblyLinearVelocity.Y,
-                                dir.Z * (Config.LongJumpPower or 50)
-                            )
-                        end
-                        lastState = state
-                    end
-                end)
-                table.insert(Connections, longJumpLoop)
-            else
-                if longJumpLoop then
-                    longJumpLoop:Disconnect()
-                    longJumpLoop = nil
-                end
-            end
-        end
-
-        BtnLongJump.MouseButton1Click:Connect(function()
-            ToggleLongJump()
-        end)
-        UIHandlers.ToggleLongJump = ToggleLongJump
-
         -- Air Lock (Edge Assist + Velocity Boost for Obby)
         local BtnAirLock = Instance.new("TextButton", CardJump)
         BtnAirLock.Text = "AIR LOCK: OFF"
-        BtnAirLock.Size = UDim2.new(0.94, 0, 0, 35)
-        BtnAirLock.Position = UDim2.new(0.03, 0, 0, 120)
+        BtnAirLock.Size = UDim2.new(0.45, 0, 0, 35)
+        BtnAirLock.Position = UDim2.new(0.52, 0, 0, 35)
         StyleBtn(BtnAirLock, C_TEXT_DIM)
 
         local isAirLock, airLockLoop = false, nil
@@ -1053,6 +818,185 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
             ToggleAirLock()
         end)
         UIHandlers.ToggleAirLock = ToggleAirLock
+    end
+
+    -- 5. QUICK BOOST (L2/R2 or A/D Control)
+    -- Technique: Press L2/R2 or A/D in air to get vertical boost
+    do
+        local CardQuickBoost = CreateCard("QUICK BOOST", 120, 5)
+
+        -- Quick Boost Toggle
+        local BtnQuickBoost = Instance.new("TextButton", CardQuickBoost)
+        BtnQuickBoost.Text = "QUICK BOOST: OFF"
+        BtnQuickBoost.Size = UDim2.new(0.94, 0, 0, 35)
+        BtnQuickBoost.Position = UDim2.new(0.03, 0, 0, 35)
+        StyleBtn(BtnQuickBoost, C_TEXT_DIM)
+
+        -- Boost Power Slider
+        -- Clamp existing config value to new max of 20
+        Config.QuickBoostPower = math.clamp(Config.QuickBoostPower or 10, 0, 20)
+        local LblBoostPower = Instance.new("TextLabel", CardQuickBoost)
+        LblBoostPower.Text = "BOOST POWER: " .. Config.QuickBoostPower
+        LblBoostPower.Size = UDim2.new(1, -20, 0, 20)
+        LblBoostPower.Position = UDim2.new(0, 15, 0, 75)
+        LblBoostPower.BackgroundTransparency = 1
+        LblBoostPower.TextColor3 = C_TEXT_DIM
+        LblBoostPower.Font = Enum.Font.GothamBold
+        LblBoostPower.TextSize = 10
+        LblBoostPower.TextXAlignment = Enum.TextXAlignment.Left
+
+        local SldBoostBg = Instance.new("TextButton", CardQuickBoost)
+        SldBoostBg.Text = ""
+        SldBoostBg.Size = UDim2.new(0.9, 0, 0, 6)
+        SldBoostBg.Position = UDim2.new(0.05, 0, 0, 95)
+        SldBoostBg.BackgroundColor3 = C_SIDE
+        SldBoostBg.AutoButtonColor = false
+        Instance.new("UICorner", SldBoostBg).CornerRadius = UDim.new(0, 3)
+
+        local SldBoostFill = Instance.new("Frame", SldBoostBg)
+        SldBoostFill.Size = UDim2.new(Config.QuickBoostPower / 20, 0, 1, 0)
+        SldBoostFill.BackgroundColor3 = C_ACCENT
+        Instance.new("UICorner", SldBoostFill).CornerRadius = UDim.new(0, 3)
+
+        local function UpdateBoostSlider(input)
+            local rx = input.Position.X - SldBoostBg.AbsolutePosition.X
+            local sc = math.clamp(rx / SldBoostBg.AbsoluteSize.X, 0, 1)
+            Config.QuickBoostPower = math.floor(sc * 20) -- 0 to 20
+            SldBoostFill.Size = UDim2.new(sc, 0, 1, 0)
+            LblBoostPower.Text = "BOOST POWER: " .. Config.QuickBoostPower
+        end
+
+        local draggingBoost = false
+        SldBoostBg.MouseButton1Down:Connect(function()
+            draggingBoost = true
+        end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                draggingBoost = false
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if draggingBoost and input.UserInputType == Enum.UserInputType.MouseMovement then
+                UpdateBoostSlider(input)
+            end
+        end)
+
+        -- Quick Boost State - L2/R2 or A/D control
+        local isQuickBoost, quickBoostLoop = false, nil
+        local hasBoostedThisJump = false -- Track if already boosted this jump
+        -- BOOST_AMOUNT now uses Config.QuickBoostPower from slider (0-20)
+        -- MAX_TOTAL_Y_VEL now scales with boost power (base 50 + boost amount)
+        local wasOnGround = true
+        local lastMoveX = 0             -- Track last X movement for detecting direction change
+        local KEYBOARD_THRESHOLD = 0.3  -- Lower threshold for keyboard (more responsive)
+        local JOYSTICK_THRESHOLD = 0.85 -- Higher threshold for joystick (less sensitive)
+        local wasMovingLeft = false
+        local wasMovingRight = false
+        local lastAPressed = false
+        local lastDPressed = false
+
+        -- Gamepad Button State (LT = spin left, RT = spin right)
+        local lastLTPressed = false
+        local lastRTPressed = false
+
+        local function ToggleQuickBoost(forceEnable)
+            if forceEnable ~= nil then
+                if forceEnable == isQuickBoost then
+                    return
+                end
+            end
+
+            isQuickBoost = not isQuickBoost
+            BtnQuickBoost.Text = "QUICK BOOST: " .. (isQuickBoost and "ON" or "OFF")
+            BtnQuickBoost.TextColor3 = isQuickBoost and C_GREEN or C_TEXT_DIM
+            BtnQuickBoost.UIStroke.Color = isQuickBoost and C_GREEN or C_TEXT_DIM
+
+            if isQuickBoost then
+                quickBoostLoop = RunService.Heartbeat:Connect(function(dt)
+                    local c = LocalPlayer.Character
+                    local h = c and c:FindFirstChild("Humanoid")
+                    local r = c and c:FindFirstChild("HumanoidRootPart")
+
+                    if h and r then
+                        local state = h:GetState()
+                        local isOnGround = (state == Enum.HumanoidStateType.Running or
+                            state == Enum.HumanoidStateType.Landed or
+                            h.FloorMaterial ~= Enum.Material.Air)
+                        local isInAir = (state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall)
+
+                        -- Reset when landing
+                        if isOnGround then
+                            hasBoostedThisJump = false
+                        end
+
+                        -- Check keyboard A/D (separate detection - more reliable)
+                        local aPressed = UserInputService:IsKeyDown(Enum.KeyCode.A)
+                        local dPressed = UserInputService:IsKeyDown(Enum.KeyCode.D)
+
+                        -- Detect keyboard press (transition from not pressed to pressed)
+                        local aJustPressed = aPressed and not lastAPressed
+                        local dJustPressed = dPressed and not lastDPressed
+                        lastAPressed = aPressed
+                        lastDPressed = dPressed
+
+                        -- GAMEPAD LT/RT DETECTION
+                        local ltPressed = UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1,
+                            Enum.KeyCode.ButtonL2)
+                        local rtPressed = UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1,
+                            Enum.KeyCode.ButtonR2)
+
+                        -- Detect button press (transition from not pressed to pressed)
+                        local ltJustPressed = ltPressed and not lastLTPressed
+                        local rtJustPressed = rtPressed and not lastRTPressed
+                        lastLTPressed = ltPressed
+                        lastRTPressed = rtPressed
+
+                        -- Combine keyboard and gamepad triggers
+                        local justMovedLeft = aJustPressed or ltJustPressed
+                        local justMovedRight = dJustPressed or rtJustPressed
+
+                        -- Apply boost when L2/R2 or A/D pressed in air (once per jump)
+                        if isInAir and not hasBoostedThisJump then
+                            if justMovedLeft or justMovedRight then
+                                -- BOOST ONLY - no rotation
+                                local currentVel = r.AssemblyLinearVelocity
+                                local boostAmount = Config.QuickBoostPower or 10
+                                local maxYVel = 50 + boostAmount -- Cap scales with boost power
+                                -- Only add small boost, cap total velocity
+                                local newYVel = math.min(currentVel.Y + boostAmount, maxYVel)
+                                -- Don't boost if already going up fast
+                                if currentVel.Y < maxYVel then
+                                    r.AssemblyLinearVelocity = Vector3.new(
+                                        currentVel.X,
+                                        newYVel,
+                                        currentVel.Z
+                                    )
+                                end
+                                hasBoostedThisJump = true -- Mark as boosted
+                            end
+                        end
+
+
+
+                        wasOnGround = isOnGround
+                    end
+                end)
+                table.insert(Connections, quickBoostLoop)
+            else
+                if quickBoostLoop then
+                    quickBoostLoop:Disconnect()
+                    quickBoostLoop = nil
+                end
+                hasBoostedThisJump = false
+                lastLTPressed = false
+                lastRTPressed = false
+            end
+        end
+
+        BtnQuickBoost.MouseButton1Click:Connect(function()
+            ToggleQuickBoost()
+        end)
+        UIHandlers.ToggleQuickBoost = ToggleQuickBoost
     end
 
     -- 1. ALWAYS MOMENTUM
@@ -2299,6 +2243,46 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
         end
         RestorePlatforms()
     end
+
+    -- Keybind Handler for Helper Features
+    local helperKeybindConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if not input.KeyCode then return end
+
+        -- Skip if currently binding a keybind in ConfigTab (check global state)
+        if _G.StarshipIsBindingKeybind then
+            return
+        end
+
+        -- ToggleAutoJump
+        if Config.Keybinds and Config.Keybinds.ToggleAutoJump and input.KeyCode == Config.Keybinds.ToggleAutoJump then
+            if UIHandlers.ToggleAutoJump then
+                UIHandlers.ToggleAutoJump()
+            end
+        end
+
+        -- ToggleQuickBoost
+        if Config.Keybinds and Config.Keybinds.ToggleQuickBoost and input.KeyCode == Config.Keybinds.ToggleQuickBoost then
+            if UIHandlers.ToggleQuickBoost then
+                UIHandlers.ToggleQuickBoost()
+            end
+        end
+
+        -- ToggleAntiSlip
+        if Config.Keybinds and Config.Keybinds.ToggleAntiSlip and input.KeyCode == Config.Keybinds.ToggleAntiSlip then
+            if UIHandlers.ToggleAntiSlip then
+                UIHandlers.ToggleAntiSlip()
+            end
+        end
+
+        -- ToggleRealESP
+        if Config.Keybinds and Config.Keybinds.ToggleRealESP and input.KeyCode == Config.Keybinds.ToggleRealESP then
+            if UIHandlers.ToggleRealESP then
+                UIHandlers.ToggleRealESP()
+            end
+        end
+    end)
+    table.insert(Connections, helperKeybindConnection)
 end
 
 return SetupHelperUI

@@ -355,7 +355,6 @@ local function SaveConfig(name, Config, UI)
         local data = HttpService:JSONEncode({
             Theme = Config.Theme,
             AccentColor = Config.AccentColor,
-            LongJumpPower = Config.LongJumpPower,
             Keybinds = kbData
         })
 
@@ -378,7 +377,6 @@ local function SaveProfile(name, Config, UI, UIHandlers)
         local data = HttpService:JSONEncode({
             Theme = Config.Theme,
             AccentColor = Config.AccentColor,
-            LongJumpPower = Config.LongJumpPower,
             Keybinds = kbData,
             AutoEnable = AutoEnableList,
             IsAutoLoadProfile = (AutoExecSettings.AutoLoadProfile == name)
@@ -405,7 +403,6 @@ local function LoadProfile(name, Config, Themes, UI, UIHandlers)
         if success and result then
             if result.Theme and Themes[result.Theme] then Config.Theme = result.Theme end
             if result.AccentColor then Config.AccentColor = result.AccentColor end
-            if result.LongJumpPower then Config.LongJumpPower = result.LongJumpPower end
             if result.Keybinds then
                 if not Config.Keybinds then Config.Keybinds = {} end
                 for k, v in pairs(result.Keybinds) do
@@ -434,6 +431,12 @@ local function LoadProfile(name, Config, Themes, UI, UIHandlers)
                     or "Loaded: " .. fileName
                 UI.ShowToast("Profile Loaded", msg, "success", 3)
             end
+
+            -- Refresh keybind UI after loading
+            if UI and UI.RefreshKeybindUI then
+                UI.RefreshKeybindUI()
+            end
+
             return true, result
         end
     end
@@ -452,7 +455,6 @@ local function LoadConfig(name, Config, Themes)
         if success and result then
             if result.Theme and Themes[result.Theme] then Config.Theme = result.Theme end
             if result.AccentColor then Config.AccentColor = result.AccentColor end
-            if result.LongJumpPower then Config.LongJumpPower = result.LongJumpPower end
             if result.Keybinds then
                 if not Config.Keybinds then Config.Keybinds = {} end
                 for k, v in pairs(result.Keybinds) do
@@ -581,6 +583,29 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
 
     local isBinding = false
 
+    -- Use _G for global binding state so all modules can check
+    _G.StarshipIsBindingKeybind = false
+
+    -- Expose isBinding state to UI so other modules can check
+    if UI then
+        UI.IsBindingKeybind = function()
+            return isBinding or _G.StarshipIsBindingKeybind
+        end
+    end
+
+    -- Store keybind buttons for refreshing after profile load
+    local keybindButtons = {}
+
+    local function RefreshKeybindUI()
+        for keyKey, btn in pairs(keybindButtons) do
+            if Config.Keybinds and Config.Keybinds[keyKey] then
+                btn.Text = Config.Keybinds[keyKey].Name
+            else
+                btn.Text = "None"
+            end
+        end
+    end
+
     local function CreateBindRow(keyKey, labelText)
         local row = Instance.new("Frame", KBList)
         row.Size = UDim2.new(0.95, 0, 0, 30)
@@ -604,6 +629,9 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
             keyName = Config.Keybinds[keyKey].Name
         end
         btn.Text = keyName
+
+        -- Store button reference for refresh
+        keybindButtons[keyKey] = btn
         btn.Size = UDim2.new(0.35, 0, 1, 0)
         btn.Position = UDim2.new(0.65, 0, 0, 0)
         btn.BackgroundColor3 = C_ITEM
@@ -617,19 +645,57 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
         btn.MouseButton1Click:Connect(function()
             if isBinding then return end
             isBinding = true
+            _G.StarshipIsBindingKeybind = true
             btn.Text = "..."
             btn.TextColor3 = C_YELLOW
 
+            -- Small delay to ensure global state is set before listening
+            local bindingReady = false
+            task.delay(0.1, function()
+                bindingReady = true
+            end)
+
             local con
             con = UserInputService.InputBegan:Connect(function(input)
+                -- Ignore inputs until binding is ready
+                if not bindingReady then return end
                 if input.UserInputType == Enum.UserInputType.Keyboard or input.UserInputType.Name:find("Gamepad") then
                     if input.KeyCode ~= Enum.KeyCode.Unknown then
-                        Config.Keybinds[keyKey] = input.KeyCode
-                        btn.Text = input.KeyCode.Name
-                        btn.TextColor3 = C_ACCENT
-                        isBinding = false
-                        con:Disconnect()
-                        SaveConfig(nil, Config, UI)
+                        -- Check for duplicate keybind
+                        local duplicateKey = nil
+                        for otherKey, otherKeyCode in pairs(Config.Keybinds) do
+                            if otherKey ~= keyKey and otherKeyCode == input.KeyCode then
+                                duplicateKey = otherKey
+                                break
+                            end
+                        end
+
+                        if duplicateKey then
+                            -- Show warning and reject duplicate
+                            btn.Text = Config.Keybinds[keyKey] and Config.Keybinds[keyKey].Name or "None"
+                            btn.TextColor3 = C_ACCENT
+                            con:Disconnect()
+                            -- Keep binding state true a bit longer to prevent triggering
+                            task.delay(0.2, function()
+                                isBinding = false
+                                _G.StarshipIsBindingKeybind = false
+                            end)
+                            if UI and UI.ShowToast then
+                                UI.ShowToast("Duplicate Keybind",
+                                    "'" .. input.KeyCode.Name .. "' is already used by another action!", "error", 3)
+                            end
+                        else
+                            -- Valid keybind, apply it (no auto save - user must save profile manually)
+                            Config.Keybinds[keyKey] = input.KeyCode
+                            btn.Text = input.KeyCode.Name
+                            btn.TextColor3 = C_ACCENT
+                            con:Disconnect()
+                            -- Keep binding state true a bit longer to prevent triggering
+                            task.delay(0.2, function()
+                                isBinding = false
+                                _G.StarshipIsBindingKeybind = false
+                            end)
+                        end
                     end
                 end
             end)
@@ -643,18 +709,16 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     CreateBindRow("StopPlayback", "Stop Playback")
     CreateBindRow("FollowPlayer", "Follow Player")
     CreateBindRow("ToggleShiftLock", "Toggle Shift Lock")
-    CreateBindRow("ToggleSpeed", "Toggle Speed")
-    CreateBindRow("ToggleJump", "Toggle Jump Power")
-    CreateBindRow("ToggleInfJump", "Toggle Infinite Jump")
-    CreateBindRow("ToggleFly", "Toggle Fly")
-    CreateBindRow("ToggleMomentum", "Toggle Always Momentum")
     CreateBindRow("ToggleAntiSlip", "Toggle Anti-Slip")
     CreateBindRow("ToggleAutoJump", "Toggle Auto Jump")
-    CreateBindRow("ToggleLongJump", "Toggle Long Jump")
-    CreateBindRow("ToggleAirLock", "Toggle Air Lock")
+    CreateBindRow("ToggleQuickBoost", "Toggle Quick Boost")
     CreateBindRow("ToggleRealESP", "Toggle Real Path ESP")
-    CreateBindRow("ToggleFullbright", "Toggle Fullbright")
     CreateBindRow("ToggleMinimize", "Minimize UI")
+
+    -- Expose RefreshKeybindUI to UI for profile loading
+    if UI then
+        UI.RefreshKeybindUI = RefreshKeybindUI
+    end
 
     -- THEME CARD
     local ThemeCard = CreateCard("THEME SETTINGS", 0, 2)
@@ -1349,14 +1413,8 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     local autoFeatures = {
         { id = "AntiAFK",     name = "Anti-AFK" },
         { id = "ShiftLock",   name = "Shift Lock" },
-        { id = "Speed",       name = "Speed Modifier" },
-        { id = "Jump",        name = "Jump Modifier" },
-        { id = "InfJump",     name = "Infinite Jump" },
-        { id = "Fly",         name = "Fly" },
         { id = "Momentum",    name = "Always Momentum" },
-        { id = "AntiSlip",    name = "Anti-Slip" },
-        { id = "AutoJump",    name = "Auto Jump" },
-        { id = "LongJump",    name = "Long Jump" },
+        { id = "QuickBoost",  name = "Quick Boost" },
         { id = "AirLock",     name = "Air Lock" },
         { id = "RealESP",     name = "Real Path ESP" },
         { id = "Fullbright",  name = "Fullbright" },

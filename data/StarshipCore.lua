@@ -3404,7 +3404,7 @@ CloseBtn.MouseButton1Click:Connect(function()
             "ToggleAntiSlip",
             "ToggleAntiRagdoll",
             "ToggleAutoJump",
-            "ToggleLongJump",
+
             "ToggleAirLock",
             "ToggleRealESP",
             "ToggleFullbright",
@@ -3971,6 +3971,7 @@ end)
 ToggleMinConnection = UserInputService.InputBegan:Connect(function(input)
     if
         not isBinding
+        and not _G.StarshipIsBindingKeybind
         and not UserInputService:GetFocusedTextBox()
         and input.KeyCode == Config.Keybinds.ToggleMinimize
     then
@@ -7841,7 +7842,7 @@ Connections.MainKeybind = UserInputService.InputBegan:Connect(function(input, ga
         return
     end
 
-    if not gameProcessed and not isBinding then
+    if not gameProcessed and not isBinding and not _G.StarshipIsBindingKeybind then
         if input.KeyCode == Enum.KeyCode.F2 then
             if not UIHandlers.ToggleIndicator() then
                 UIHandlers.ToggleMainUI()
