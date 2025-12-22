@@ -1633,6 +1633,20 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         InpSpoofDisplay.Text = spoofDisplayName or ""
     end
 
+    -- Toggle spoof name for auto-enable feature
+    UIHandlers.ToggleSpoofName = function(state)
+        if state == nil then
+            -- Toggle
+            if not isSpoofing then
+                ToggleSpoof()
+            end
+        elseif state == true and not isSpoofing then
+            ToggleSpoof()
+        elseif state == false and isSpoofing then
+            ToggleSpoof()
+        end
+    end
+
     -- Quick presets
     local BtnRandom = Instance.new("TextButton", CardPrivacy)
     BtnRandom.Text = L("random_name")
