@@ -7,97 +7,6 @@ local TABS_FOLDER = MODULES_FOLDER .. "/Tabs"
 local MODULES = { "Config.lua", "UI.lua", "Intro.lua", "Animations.lua", "Locale.lua" }
 local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua", "Emotes.lua", "ConfigTab.lua" }
 
--- ---------------------------------------------------------------------
--- LOADER LOCALE SYSTEM (Inline - runs before Locale.lua is downloaded)
--- ---------------------------------------------------------------------
-local LoaderCurrentLanguage = "en"
-
--- Try to load saved language preference
-pcall(function()
-    if isfile and isfile(FOLDER_NAME .. "/language.txt") then
-        LoaderCurrentLanguage = readfile(FOLDER_NAME .. "/language.txt") or "en"
-    end
-end)
-
-local LoaderTranslations = {
-    en = {
-        welcome_back = "Welcome back, %s!",
-        initializing = "INITIALIZING...",
-        setting_up = "Setting up environment...",
-        updating_modules = "Updating modules...",
-        downloading_asset = "Downloading Asset #%d",
-        updating_assets = "Updating Assets...",
-        authenticating = "Authenticating with Secure Server...",
-        decrypting = "Decrypting Secure Payload...",
-        launching = "Launching Starship...",
-        close = "Close",
-        -- Error messages
-        access_denied = "[!] ACCESS DENIED",
-        auth_required = "[!] AUTHENTICATION REQUIRED",
-        account_suspended = "[!] ACCOUNT SUSPENDED",
-        vip_expired = "[!] VIP ACCESS EXPIRED",
-        connection_error = "[!] CONNECTION ERROR",
-        not_whitelisted_msg =
-        "Your account is not authorized to use Starship.\n\nTo get VIP access, contact the administrator.\n\nYour User ID: %s",
-        suspended_msg =
-        "Your VIP access has been suspended.\n\nContact administrator for more information.\n\nYour User ID: %s",
-        expired_msg =
-        "Your VIP subscription has expired.\n\nRenew your access to continue using Starship.\n\nYour User ID: %s",
-        connection_msg = "Cannot connect to Starship server.\n\nPlease check your internet connection and try again.",
-        connection_failed = "Connection Failed: Server Unreachable",
-        server_error_invalid = "Server Error: Invalid Response",
-        access_denied_short = "ACCESS DENIED",
-        not_whitelisted = "Not Whitelisted",
-        server_error = "Server Error: %s",
-        security_error = "Security Error: Missing Key/Blob",
-        execution_error = "Execution Error: %s",
-        authentication_failed = "Authentication Failed",
-    },
-    id = {
-        welcome_back = "Selamat datang, %s!",
-        initializing = "MEMULAI...",
-        setting_up = "Menyiapkan environment...",
-        updating_modules = "Memperbarui modul...",
-        downloading_asset = "Mengunduh Aset #%d",
-        updating_assets = "Memperbarui Aset...",
-        authenticating = "Autentikasi ke Server Aman...",
-        decrypting = "Mendekripsi Payload Aman...",
-        launching = "Meluncurkan Starship...",
-        close = "Tutup",
-        -- Error messages
-        access_denied = "[!] AKSES DITOLAK",
-        auth_required = "[!] AUTENTIKASI DIPERLUKAN",
-        account_suspended = "[!] AKUN DITANGGUHKAN",
-        vip_expired = "[!] AKSES VIP KEDALUWARSA",
-        connection_error = "[!] KESALAHAN KONEKSI",
-        not_whitelisted_msg =
-        "Akun Anda tidak memiliki izin untuk menggunakan Starship.\n\nUntuk mendapatkan akses VIP, hubungi administrator.\n\nUser ID Anda: %s",
-        suspended_msg =
-        "Akses VIP Anda telah ditangguhkan.\n\nHubungi administrator untuk informasi lebih lanjut.\n\nUser ID Anda: %s",
-        expired_msg =
-        "Langganan VIP Anda telah kedaluwarsa.\n\nPerpanjang akses Anda untuk terus menggunakan Starship.\n\nUser ID Anda: %s",
-        connection_msg = "Tidak dapat terhubung ke server Starship.\n\nPeriksa koneksi internet Anda dan coba lagi.",
-        connection_failed = "Koneksi Gagal: Server Tidak Dapat Dijangkau",
-        server_error_invalid = "Kesalahan Server: Respons Tidak Valid",
-        access_denied_short = "AKSES DITOLAK",
-        not_whitelisted = "Tidak Masuk Whitelist",
-        server_error = "Kesalahan Server: %s",
-        security_error = "Kesalahan Keamanan: Key/Blob Tidak Ditemukan",
-        execution_error = "Kesalahan Eksekusi: %s",
-        authentication_failed = "Autentikasi Gagal",
-    },
-}
-
--- Get localized text for loader
-local function L(key, arg1)
-    local lang = LoaderTranslations[LoaderCurrentLanguage] or LoaderTranslations["en"]
-    local text = lang[key] or LoaderTranslations["en"][key] or key
-    if arg1 ~= nil then
-        return string.format(text, arg1)
-    end
-    return text
-end
-
 local function xorEncrypt(text, key)
     local result = {}
     for i = 1, #text do
@@ -393,7 +302,7 @@ local function createLoadingUI()
 
     -- Subtitle / Status Text
     local Sub = Instance.new("TextLabel", MainFrame)
-    Sub.Text = L("initializing")
+    Sub.Text = "INITIALIZING..."
     Sub.Size = UDim2.new(1, 0, 0, 25)
     Sub.Position = UDim2.new(0, 0, 0.55, 0)
     Sub.BackgroundTransparency = 1
@@ -428,7 +337,7 @@ local function createLoadingUI()
 
     -- Welcome Message
     local WelcomeMsg = Instance.new("TextLabel", MainFrame)
-    WelcomeMsg.Text = L("welcome_back", game:GetService("Players").LocalPlayer.Name)
+    WelcomeMsg.Text = "Welcome back, " .. game:GetService("Players").LocalPlayer.Name .. "!"
     WelcomeMsg.Size = UDim2.new(1, 0, 0, 20)
     WelcomeMsg.Position = UDim2.new(0, 0, 0.28, 0)
     WelcomeMsg.BackgroundTransparency = 1
@@ -455,9 +364,9 @@ local function createLoadingUI()
         function(text, progress)
             -- Obfuscate specific module names
             if string.find(text, "Downloading:") then
-                text = L("downloading_asset", math.random(1000, 9999))
+                text = "Downloading Asset #" .. math.random(1000, 9999)
             elseif string.find(text, "Updating modules") then
-                text = L("updating_assets")
+                text = "Updating Assets..."
             end
 
             Sub.Text = text
@@ -473,35 +382,41 @@ local function showError(message)
 
     -- Detect error type from message
     local errorType = "denied" -- default
-    local titleText = L("access_denied")
+    local titleText = "ACCESS DENIED"
     local titleColor = Color3.fromRGB(255, 80, 80)
     local frameColor = Color3.fromRGB(30, 30, 35)
     local accentColor = Color3.fromRGB(255, 80, 80)
 
     if message:lower():find("not whitelisted") or message:lower():find("authentication required") then
         errorType = "auth_required"
-        titleText = L("auth_required")
+        titleText = "AUTHENTICATION REQUIRED"
         titleColor = Color3.fromRGB(255, 165, 0) -- Orange
         accentColor = Color3.fromRGB(255, 165, 0)
-        message = L("not_whitelisted_msg", tostring(Players.LocalPlayer.UserId))
+        message =
+            "Your account is not authorized to use Starship.\n\nTo get VIP access, contact the administrator.\n\nYour User ID: "
+            .. tostring(Players.LocalPlayer.UserId)
     elseif message:lower():find("suspended") or message:lower():find("banned") then
         errorType = "banned"
-        titleText = L("account_suspended")
+        titleText = "ACCOUNT SUSPENDED"
         titleColor = Color3.fromRGB(200, 0, 0) -- Dark Red
         accentColor = Color3.fromRGB(200, 0, 0)
-        message = L("suspended_msg", tostring(Players.LocalPlayer.UserId))
+        message =
+            "Your VIP access has been suspended.\n\nContact administrator for more information.\n\nYour User ID: "
+            .. tostring(Players.LocalPlayer.UserId)
     elseif message:lower():find("expired") then
         errorType = "expired"
-        titleText = L("vip_expired")
+        titleText = "VIP ACCESS EXPIRED"
         titleColor = Color3.fromRGB(255, 200, 0) -- Yellow
         accentColor = Color3.fromRGB(255, 200, 0)
-        message = L("expired_msg", tostring(Players.LocalPlayer.UserId))
+        message =
+            "Your VIP subscription has expired.\n\nRenew your access to continue using Starship.\n\nYour User ID: "
+            .. tostring(Players.LocalPlayer.UserId)
     elseif message:lower():find("connection") or message:lower():find("unreachable") then
         errorType = "connection"
-        titleText = L("connection_error")
+        titleText = "CONNECTION ERROR"
         titleColor = Color3.fromRGB(100, 100, 255) -- Blue
         accentColor = Color3.fromRGB(100, 100, 255)
-        message = L("connection_msg")
+        message = "Cannot connect to Starship server.\n\nPlease check your internet connection and try again."
     end
 
     -- Create enhanced error UI
@@ -574,7 +489,7 @@ local function showError(message)
     CloseButton.Size = UDim2.new(0, 100, 0, 30)
     CloseButton.Position = UDim2.new(0.5, -50, 1, -40)
     CloseButton.BackgroundColor3 = accentColor
-    CloseButton.Text = L("close")
+    CloseButton.Text = "Close"
     CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     CloseButton.Font = Enum.Font.GothamBold
     CloseButton.TextSize = 14
@@ -622,19 +537,19 @@ local function main()
     local loaderGui, updateStatus = createLoadingUI()
 
     -- 1. Setup Environment
-    updateStatus(L("setting_up"), 0.1)
+    updateStatus("Setting up environment...", 0.1)
     setupFolders()
     task.wait(0.2)
 
     -- 2. Download Modules (Tetap dari host lama atau bisa dipindah nanti)
-    updateStatus(L("updating_modules"), 0.2)
+    updateStatus("Updating modules...", 0.2)
     downloadModules(function(text, progress)
         updateStatus(text, 0.2 + (progress * 0.3))
     end)
 
     -- 3. Secure Login & Download Script
-    -- 🔒 Auto-detect User ID (cannot be hardcoded by users!)
-    updateStatus(L("authenticating"), 0.6)
+    -- Auto-detect User ID (cannot be hardcoded by users!)
+    updateStatus("Authenticating with Secure Server...", 0.6)
     task.wait(0.5)
 
     -- Auto-detect userId from current logged-in player
@@ -650,7 +565,7 @@ local function main()
         if loaderGui then
             loaderGui:Destroy()
         end
-        showError(L("connection_failed"))
+        showError("Connection Failed: Server Unreachable")
         return
     end
 
@@ -661,7 +576,7 @@ local function main()
         end
         -- Extract error message from Lua error string
         local errorMsg = authResponse:match('error%("(.-)"%)')
-        showError(errorMsg or L("authentication_failed"))
+        showError(errorMsg or "Authentication Failed")
         return
     end
 
@@ -676,7 +591,7 @@ local function main()
         if loaderGui then
             loaderGui:Destroy()
         end
-        showError(L("connection_failed"))
+        showError("Connection Failed: Server Unreachable")
         return
     end
 
@@ -690,7 +605,7 @@ local function main()
         if loaderGui then
             loaderGui:Destroy()
         end
-        showError(L("server_error_invalid"))
+        showError("Server Error: Invalid Response")
         return
     end
 
@@ -698,18 +613,18 @@ local function main()
         if loaderGui then
             loaderGui:Destroy()
         end
-        showError(L("access_denied_short") .. "\n" .. (data.message or L("not_whitelisted")))
+        showError("ACCESS DENIED\n" .. (data.message or "Not Whitelisted"))
         return
     elseif data.status ~= "success" then
         if loaderGui then
             loaderGui:Destroy()
         end
-        showError(L("server_error", tostring(data.error or "Unknown")))
+        showError("Server Error: " .. tostring(data.error or "Unknown"))
         return
     end
 
     -- 5. Decrypt Dynamic Payload
-    updateStatus(L("decrypting"), 0.8)
+    updateStatus("Decrypting Secure Payload...", 0.8)
 
     local dynamicKey = data.key
     local encryptedBlob = data.blob
@@ -718,7 +633,7 @@ local function main()
         if loaderGui then
             loaderGui:Destroy()
         end
-        showError(L("security_error"))
+        showError("Security Error: Missing Key/Blob")
         return
     end
 
@@ -739,7 +654,7 @@ local function main()
     }
 
     -- 6. Execute with Smooth Transition
-    updateStatus(L("launching"), 1.0)
+    updateStatus("Launching Starship...", 1.0)
     task.wait(0.3)
 
     local func, err = loadstring(decryptedCode)
@@ -747,7 +662,7 @@ local function main()
         if loaderGui then
             loaderGui:Destroy()
         end
-        showError(L("execution_error", tostring(err)))
+        showError("Execution Error: " .. tostring(err))
         return
     end
 
