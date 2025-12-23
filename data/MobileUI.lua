@@ -2796,15 +2796,77 @@ ListMapTab:Paragraph({
 	Desc = "Recordings uploaded by PC users",
 })
 
+-- Refresh Button
+ListMapTab:Button({
+	Title = "🔄 Refresh Cloud List",
+	Desc = "Reload recordings from cloud",
+	Callback = function()
+		WindUI:Notify({
+			Title = "🔄 Refreshing...",
+			Content = "Reloading cloud recordings...",
+			Duration = 2,
+		})
+
+		-- Clear existing cache
+		CloudDropdownValues = {}
+		CloudRecordingsCache = {}
+
+		local apiUrl = "https://starship-core.my.id/api/recordings?list=all"
+
+		local success, response = pcall(function()
+			return game:HttpGet(apiUrl)
+		end)
+
+		if success and response then
+			local parseSuccess, data = pcall(function()
+				return HttpService:JSONDecode(response)
+			end)
+
+			if parseSuccess and data and data.success and data.recordings then
+				for _, rec in ipairs(data.recordings) do
+					local displayName = "☁️ " .. rec.name
+					table.insert(CloudDropdownValues, displayName)
+					CloudRecordingsCache[displayName] = {
+						name = rec.name,
+						shareCode = rec.shareCode,
+						gistId = rec.gistId,
+					}
+				end
+
+				WindUI:Notify({
+					Title = "✅ Refreshed",
+					Content = #data.recordings .. " cloud recordings found",
+					Duration = 2,
+				})
+			else
+				WindUI:Notify({
+					Title = "❌ Error",
+					Content = "Failed to parse cloud data",
+					Duration = 2,
+				})
+			end
+		else
+			WindUI:Notify({
+				Title = "❌ Error",
+				Content = "Failed to connect to cloud",
+				Duration = 2,
+			})
+		end
+	end,
+})
+
+ListMapTab:Space()
+
 -- Cloud Recordings Dropdown
 local selectedCloudRecording = nil
+local CloudRecordingLoaded = false -- Flag to show playback controls
 
 ListMapTab:Dropdown({
 	Title = "Select Cloud Recording",
 	Desc = "Choose a recording from cloud",
 	Values = CloudDropdownValues,
 	Callback = function(selected)
-		if selected == "☁️ Loading cloud recordings..." or selected == "No cloud recordings available" then
+		if selected == "☁️ Loading cloud recordings..." or selected == "No cloud recordings" then
 			return
 		end
 
@@ -2819,6 +2881,7 @@ ListMapTab:Dropdown({
 		end
 
 		selectedCloudRecording = recInfo
+		CloudRecordingLoaded = false -- Reset until loaded
 
 		WindUI:Notify({
 			Title = "☁️ Loading...",
@@ -2869,6 +2932,7 @@ ListMapTab:Dropdown({
 				-- Store in memory
 				CloudRecordingData = data.recording
 				CloudRecordingName = data.name or recInfo.name
+				CloudRecordingLoaded = true -- Mark as loaded!
 
 				-- Update selected file display
 				selectedFile = "CLOUD:" .. recInfo.shareCode
