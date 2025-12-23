@@ -13,10 +13,20 @@ local C_RED = Color3.fromRGB(255, 80, 80);
 local C_YELLOW = Color3.fromRGB(255, 220, 60);
 local C_GREEN = Color3.fromRGB(60, 255, 160)
 
-local CONFIG_FOLDER = "StarshipCore/StarshipConfigs"
-local PROFILE_FOLDER = "StarshipCore/StarshipProfiles"
-if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
-if not isfolder(PROFILE_FOLDER) then makefolder(PROFILE_FOLDER) end
+local STARSHIP_ROOT = "StarshipCore"
+local CONFIG_FOLDER = STARSHIP_ROOT .. "/StarshipConfigs"
+local PROFILE_FOLDER = STARSHIP_ROOT .. "/StarshipProfiles"
+
+-- Ensure parent folder exists first (some executors require this)
+if not isfolder(STARSHIP_ROOT) then
+    pcall(function() makefolder(STARSHIP_ROOT) end)
+end
+if not isfolder(CONFIG_FOLDER) then
+    pcall(function() makefolder(CONFIG_FOLDER) end)
+end
+if not isfolder(PROFILE_FOLDER) then
+    pcall(function() makefolder(PROFILE_FOLDER) end)
+end
 
 -- Multi-Executor Autoexec Support
 -- Get Windows username for absolute paths
@@ -205,7 +215,11 @@ local AutoExecSettings = {
 
 -- Load Auto Exec Settings on startup
 local function LoadAutoExecSettings()
+    -- Always print for debugging auto-load profile issues
+    print("[StarshipCore] LoadAutoExecSettings called, file:", AUTO_EXEC_FILE)
+
     if isfile and isfile(AUTO_EXEC_FILE) then
+        print("[StarshipCore] AutoExecSettings.json found, loading...")
         local success, result = pcall(function()
             return HttpService:JSONDecode(readfile(AUTO_EXEC_FILE))
         end)
@@ -215,7 +229,15 @@ local function LoadAutoExecSettings()
             if result.DelaySeconds then AutoExecSettings.DelaySeconds = result.DelaySeconds end
             if result.SelectedExecutor then AutoExecSettings.SelectedExecutor = result.SelectedExecutor end
             if result.CustomPath then AutoExecSettings.CustomPath = result.CustomPath end
+
+            print("[StarshipCore] AutoExecSettings loaded - Enabled:", AutoExecSettings.Enabled,
+                "| Profile:", AutoExecSettings.AutoLoadProfile,
+                "| Delay:", AutoExecSettings.DelaySeconds)
+        else
+            warn("[StarshipCore] Failed to parse AutoExecSettings.json")
         end
+    else
+        print("[StarshipCore] AutoExecSettings.json NOT FOUND, using defaults")
     end
 
     -- Update AUTOEXEC_FOLDER based on settings
@@ -259,14 +281,29 @@ end
 
 local function SaveAutoExecSettings()
     if writefile then
-        writefile(AUTO_EXEC_FILE, HttpService:JSONEncode(AutoExecSettings))
+        -- Ensure folder exists before saving
+        if not isfolder(CONFIG_FOLDER) then
+            pcall(function() makefolder(CONFIG_FOLDER) end)
+        end
+        local success, err = pcall(function()
+            writefile(AUTO_EXEC_FILE, HttpService:JSONEncode(AutoExecSettings))
+        end)
+        if not success then
+            warn("[StarshipCore] Failed to save AutoExecSettings:", err)
+        end
+        return success
     end
+    return false
 end
 
 -- Create autoexec script file for executor
 local function CreateAutoExecScript()
     local currentExecutor = GetCurrentExecutorName()
     local delayTime = AutoExecSettings.DelaySeconds or 2
+
+    if _G.StarshipDebug then
+        print("[StarshipCore] CreateAutoExecScript - Executor:", currentExecutor, "Folder:", AUTOEXEC_FOLDER)
+    end
 
     local scriptContent = string.format([[
 -- StarshipCore Auto Execute Script
@@ -296,9 +333,17 @@ end)
         if not success then
             -- Try alternative path format for Windows
             filePath = AUTOEXEC_FOLDER:gsub("/", "\\") .. "\\StarshipCore_AutoExec.lua"
-            success = pcall(function()
+            success, err = pcall(function()
                 writefile(filePath, scriptContent)
             end)
+        end
+
+        if _G.StarshipDebug then
+            if success then
+                print("[StarshipCore] AutoExec script created at:", filePath)
+            else
+                warn("[StarshipCore] Failed to create AutoExec script:", err)
+            end
         end
 
         return success, filePath
@@ -308,18 +353,40 @@ end
 
 local function RemoveAutoExecScript()
     local path = AUTOEXEC_FOLDER .. "/StarshipCore_AutoExec.lua"
+    local removed = false
+
+    -- Try forward slash path first
     if isfile and isfile(path) then
         pcall(function() delfile(path) end)
-        return true
+        removed = true
     end
-    return false
+
+    -- Also try Windows backslash path
+    local windowsPath = AUTOEXEC_FOLDER:gsub("/", "\\") .. "\\StarshipCore_AutoExec.lua"
+    if isfile and isfile(windowsPath) then
+        pcall(function() delfile(windowsPath) end)
+        removed = true
+    end
+
+    if _G.StarshipDebug then
+        print("[StarshipCore] RemoveAutoExecScript - Removed:", removed)
+    end
+
+    return removed
 end
 
 -- Check if autoexec script exists
 local function AutoExecScriptExists()
     local path = AUTOEXEC_FOLDER .. "/StarshipCore_AutoExec.lua"
     if isfile then
-        return isfile(path)
+        if isfile(path) then
+            return true
+        end
+        -- Also check Windows backslash path
+        local windowsPath = AUTOEXEC_FOLDER:gsub("/", "\\") .. "\\StarshipCore_AutoExec.lua"
+        if isfile(windowsPath) then
+            return true
+        end
     end
     return false
 end
@@ -337,6 +404,11 @@ local function GetAutoExecStatus()
 end
 
 LoadAutoExecSettings()
+
+-- Local flag to track if auto-load has run this session (not using getgenv)
+-- This variable is created fresh each time the module loads
+local AutoLoadProfileCompleted = false
+print("[StarshipCore] Module loaded, AutoLoadProfileCompleted = false")
 
 -- Feature State Tracking
 local FeatureStates = {}
@@ -438,8 +510,20 @@ local function LoadProfile(name, Config, Themes, UI, UIHandlers, suppressToast)
             -- Load Auto-Enable List
             local hasAutoEnable = false
             if result.AutoEnable and #result.AutoEnable > 0 then
-                AutoEnableList = result.AutoEnable
+                -- Clear existing AutoEnableList while keeping the same table reference
+                for i = #AutoEnableList, 1, -1 do
+                    table.remove(AutoEnableList, i)
+                end
+                -- Populate with new values
+                for _, id in ipairs(result.AutoEnable) do
+                    table.insert(AutoEnableList, id)
+                end
                 hasAutoEnable = true
+
+                -- Update UIHandlers reference to ensure it's synced
+                if UIHandlers then
+                    UIHandlers.AutoEnableList = AutoEnableList
+                end
 
                 -- Immediately run auto-enable features
                 if RunAutoEnable and UIHandlers then
@@ -517,7 +601,7 @@ local function PreloadSpoofName(UIHandlers, Config, Themes, UI)
     -- Load the profile data to check if it has SpoofName in auto-enable
     local fileName = AutoExecSettings.AutoLoadProfile
     if not fileName:match("%.json$") then fileName = fileName .. ".json" end
-    local path = "Starship/Profiles/" .. fileName
+    local path = PROFILE_FOLDER .. "/" .. fileName
 
     if not isfile or not isfile(path) then
         if getgenv then
@@ -1776,7 +1860,14 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
             return HttpService:JSONDecode(readfile(CONFIG_FOLDER .. "/AutoEnable.json"))
         end)
         if s and r then
-            AutoEnableList = r
+            -- Clear existing AutoEnableList while keeping the same table reference
+            for i = #AutoEnableList, 1, -1 do
+                table.remove(AutoEnableList, i)
+            end
+            -- Populate with loaded values
+            for _, id in ipairs(r) do
+                table.insert(AutoEnableList, id)
+            end
             -- Refresh toggle states
             for _, child in pairs(AutoList:GetChildren()) do
                 if child:IsA("Frame") then
@@ -1813,24 +1904,56 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     if Config.Theme then ApplyTheme(Config.Theme) end
 
     -- Auto-load profile if enabled (skip spoof since it was preloaded, but load rest of profile)
-    -- Only run once - prevent spam when language changes and tabs are rebuilt
-    local alreadyAutoLoaded = getgenv and getgenv().StarshipAutoLoadCompleted
-    if AutoExecSettings.Enabled and AutoExecSettings.AutoLoadProfile ~= "" and not alreadyAutoLoaded then
-        -- Mark as completed immediately to prevent duplicate runs
-        if getgenv then
-            getgenv().StarshipAutoLoadCompleted = true
-        end
+    -- Using local module variable to track - fresh for each script execution
+
+    -- Always print for debugging
+    print("[StarshipCore] === AUTO-LOAD PROFILE CHECK ===")
+    print("[StarshipCore] Enabled:", AutoExecSettings.Enabled)
+    print("[StarshipCore] Profile:", AutoExecSettings.AutoLoadProfile)
+    print("[StarshipCore] AutoLoadProfileCompleted:", AutoLoadProfileCompleted)
+    print("[StarshipCore] Profile empty?:", AutoExecSettings.AutoLoadProfile == "")
+
+    if AutoExecSettings.Enabled and AutoExecSettings.AutoLoadProfile ~= "" and not AutoLoadProfileCompleted then
+        print("[StarshipCore] >>> WILL AUTO-LOAD PROFILE:", AutoExecSettings.AutoLoadProfile)
+    else
+        print("[StarshipCore] >>> SKIPPING auto-load (conditions not met)")
+    end
+
+    if AutoExecSettings.Enabled and AutoExecSettings.AutoLoadProfile ~= "" and not AutoLoadProfileCompleted then
+        -- Mark as completed immediately using local variable
+        AutoLoadProfileCompleted = true
+        print("[StarshipCore] Set AutoLoadProfileCompleted = true")
 
         task.spawn(function()
             -- Wait for Welcome toast to appear first (1.5s base), then add user-configured delay
-            task.wait(1.5 + (AutoExecSettings.DelaySeconds or 0))
+            local delayTime = 1.5 + (AutoExecSettings.DelaySeconds or 0)
+            print("[StarshipCore] Auto-loading profile after delay:", delayTime, "seconds")
+            task.wait(delayTime)
+
+            -- Check if profile file exists
+            local profilePath = PROFILE_FOLDER .. "/" .. AutoExecSettings.AutoLoadProfile
+            if not profilePath:match("%.json$") then profilePath = profilePath .. ".json" end
+            print("[StarshipCore] Looking for profile at:", profilePath)
+            if isfile and isfile(profilePath) then
+                print("[StarshipCore] Profile file EXISTS")
+            else
+                print("[StarshipCore] Profile file NOT FOUND!")
+            end
 
             -- Check if profile was already preloaded for spoof
             local wasPreloaded = getgenv and getgenv().StarshipProfilePreloaded and
                 getgenv().StarshipPreloadedProfile == AutoExecSettings.AutoLoadProfile
 
             -- Pass true for suppressToast to avoid duplicate, show combined toast instead
+            print("[StarshipCore] Calling LoadProfile with name:", AutoExecSettings.AutoLoadProfile)
             local success, result = LoadProfile(AutoExecSettings.AutoLoadProfile, Config, Themes, UI, UIHandlers, true)
+
+            print("[StarshipCore] LoadProfile result - Success:", success)
+            if result then
+                print("[StarshipCore] Profile has keybinds:", result.Keybinds ~= nil)
+                print("[StarshipCore] Profile has AutoEnable:", result.AutoEnable ~= nil)
+            end
+
             if success and UI and UI.ShowToast then
                 local featureCount = UIHandlers.AutoEnableList and #UIHandlers.AutoEnableList or 0
                 local msg = featureCount > 0
@@ -1838,6 +1961,9 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
                     AutoExecSettings.AutoLoadProfile .. "\n" .. L("auto_enabling", featureCount)
                     or L("profile") .. ": " .. AutoExecSettings.AutoLoadProfile
                 UI.ShowToast(L("auto_loaded"), msg, "success", 3)
+            elseif not success and UI and UI.ShowToast then
+                UI.ShowToast("Auto-Load Failed", "Could not load profile: " .. AutoExecSettings.AutoLoadProfile, "error",
+                    3)
             end
         end)
     end
