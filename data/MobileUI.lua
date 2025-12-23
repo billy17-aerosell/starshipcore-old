@@ -158,6 +158,12 @@ local Config = {
 	FlySpeed = 50,
 }
 
+-- Cloud recording storage (in memory for mobile) - declared early for PlayRecording access
+local CloudRecordingData = nil
+local CloudRecordingName = nil
+local CloudRecordingsCache = {} -- Cache: displayName -> {name, shareCode, gistId}
+local CloudDropdownValues = {}
+
 -- ══════════════════════════════════════════════════════════════════
 -- UTILITY FUNCTIONS
 -- ══════════════════════════════════════════════════════════════════
@@ -2753,12 +2759,6 @@ end
 -- CLOUD RECORDINGS (Main file source for mobile)
 -- ══════════════════════════════════════════════════════════════════
 ListMapTab:Space()
-
--- Cloud recording storage (in memory for mobile)
-local CloudRecordingData = nil
-local CloudRecordingName = nil
-local CloudRecordingsCache = {} -- Cache: displayName -> {name, shareCode, gistId}
-local CloudDropdownValues = {}
 
 -- Fetch cloud recordings list BEFORE creating dropdown
 do
