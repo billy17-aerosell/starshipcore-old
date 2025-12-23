@@ -200,6 +200,60 @@ export default async function handler(req, res) {
       });
     }
 
+    // LIST ALL public recordings (for mobile dropdown)
+    if (list === "all") {
+      try {
+        // Fetch all StarshipCore gists (public recordings)
+        const response = await fetch(`${GIST_API}?per_page=100`, {
+          headers: {
+            Authorization: `token ${GITHUB_TOKEN}`,
+            "User-Agent": "StarshipCore-Recording-API",
+          },
+        });
+
+        if (!response.ok) {
+          return res.status(500).json({
+            error: "Failed to fetch recordings list",
+          });
+        }
+
+        const gists = await response.json();
+        
+        // Filter only StarshipCore recordings
+        const recordings = [];
+        for (const gist of gists) {
+          if (gist.description && gist.description.includes("[StarshipCore]")) {
+            // Extract name from description: "[StarshipCore] RecordingName"
+            const nameMatch = gist.description.match(/\[StarshipCore\]\s*(.+)/);
+            const name = nameMatch ? nameMatch[1].trim() : "Unknown";
+            
+            recordings.push({
+              shareCode: gist.id.substring(0, 8).toUpperCase(),
+              gistId: gist.id,
+              name: name,
+              createdAt: gist.created_at,
+              updatedAt: gist.updated_at,
+            });
+          }
+        }
+
+        // Sort by most recent first
+        recordings.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+        return res.status(200).json({
+          success: true,
+          recordings: recordings,
+          count: recordings.length,
+        });
+      } catch (error) {
+        console.error("List all recordings error:", error);
+        return res.status(500).json({
+          error: "Failed to list recordings",
+          message: error.message,
+        });
+      }
+    }
+
     // GET specific recording
     const targetGistId = gistId || shareCode; // shareCode is partial gistId
 
