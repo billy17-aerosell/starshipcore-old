@@ -73,6 +73,8 @@ const ALLOWED_MODULES = [
   "Intro.lua",
   "Animations.lua",
   "Locale.lua",
+  "CloudRecording.lua",
+  "Modules/CloudRecording.lua",
   "Tabs/Dashboard.lua",
   "Tabs/Tools.lua",
   "Tabs/Warp.lua",
@@ -119,15 +121,18 @@ export default async function handler(req, res) {
     console.log(`[${timestamp}] 🔧 [DEV] Module requested: ${name}`);
 
     try {
-      const modulePath = path.join(
-        process.cwd(),
-        "data",
-        "Modules",
-        normalizedName,
-      );
+      // Handle path: if name starts with "Modules/", load from data/ directly
+      // Otherwise, load from data/Modules/
+      let modulePath;
+      if (normalizedName.startsWith("Modules/")) {
+        modulePath = path.join(process.cwd(), "data", normalizedName);
+      } else {
+        modulePath = path.join(process.cwd(), "data", "Modules", normalizedName);
+      }
 
       if (!fs.existsSync(modulePath)) {
-        return res.status(404).json({ error: "Module file not found" });
+        console.log(`[${timestamp}] ❌ [DEV] Module not found at: ${modulePath}`);
+        return res.status(404).json({ error: "Module file not found", path: modulePath });
       }
 
       const content = fs.readFileSync(modulePath, "utf8");
@@ -158,12 +163,13 @@ export default async function handler(req, res) {
     if (user === OWNER_ID) {
       console.log(`[${timestamp}] 👑 [OWNER] Module requested: ${name}`);
 
-      const modulePath = path.join(
-        process.cwd(),
-        "data",
-        "Modules",
-        normalizedName,
-      );
+      // Handle path: if name starts with "Modules/", load from data/ directly
+      let modulePath;
+      if (normalizedName.startsWith("Modules/")) {
+        modulePath = path.join(process.cwd(), "data", normalizedName);
+      } else {
+        modulePath = path.join(process.cwd(), "data", "Modules", normalizedName);
+      }
 
       if (!fs.existsSync(modulePath)) {
         return res.status(404).json({ error: "Module file not found" });
@@ -253,13 +259,13 @@ export default async function handler(req, res) {
       });
     }
 
-    // Read module file
-    const modulePath = path.join(
-      process.cwd(),
-      "data",
-      "Modules",
-      normalizedName,
-    );
+    // Read module file - handle Modules/ prefix
+    let modulePath;
+    if (normalizedName.startsWith("Modules/")) {
+      modulePath = path.join(process.cwd(), "data", normalizedName);
+    } else {
+      modulePath = path.join(process.cwd(), "data", "Modules", normalizedName);
+    }
 
     if (!fs.existsSync(modulePath)) {
       return res.status(404).json({ error: "Module file not found" });
