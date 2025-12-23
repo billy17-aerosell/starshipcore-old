@@ -212,8 +212,12 @@ export default async function handler(req, res) {
         });
 
         if (!response.ok) {
+          const errorText = await response.text();
+          console.error("GitHub API error:", response.status, errorText);
           return res.status(500).json({
             error: "Failed to fetch recordings list",
+            status: response.status,
+            details: errorText.substring(0, 200)
           });
         }
 
