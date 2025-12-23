@@ -6366,6 +6366,48 @@ UIHandlers.InitMergerUI()
 
 -- --- FUN UI ---
 function UIHandlers.SetupListMapUI()
+	-- Cloud Codes Storage (maps filename -> shareCode)
+	local CLOUD_CODES_FILE = MERGER_FOLDER .. "/CloudCodes.json"
+	local CloudCodes = {}
+
+	-- Load existing cloud codes
+	local function LoadCloudCodes()
+		local success, content = pcall(readfile, CLOUD_CODES_FILE)
+		if success and content then
+			local parsed = pcall(function()
+				CloudCodes = HttpService:JSONDecode(content)
+			end)
+			if not parsed then
+				CloudCodes = {}
+			end
+		end
+	end
+
+	-- Save cloud codes
+	local function SaveCloudCodes()
+		pcall(function()
+			writefile(CLOUD_CODES_FILE, HttpService:JSONEncode(CloudCodes))
+		end)
+	end
+
+	-- Get cloud code for a file
+	local function GetCloudCode(fileName)
+		return CloudCodes[fileName]
+	end
+
+	-- Set cloud code for a file
+	local function SetCloudCode(fileName, shareCode)
+		CloudCodes[fileName] = shareCode
+		SaveCloudCodes()
+	end
+
+	-- Expose functions for use outside
+	UIHandlers.SetCloudCode = SetCloudCode
+	UIHandlers.GetCloudCode = GetCloudCode
+
+	-- Load cloud codes on init
+	LoadCloudCodes()
+
 	local MapContainer = Instance.new("Frame", PageListMap)
 	MapContainer.Size = UDim2.new(1, 0, 1, 0)
 	MapContainer.BackgroundTransparency = 1
@@ -7463,17 +7505,26 @@ function UIHandlers.SetupListMapUI()
 						BtnCloud.BackgroundColor3 = C_GREEN
 						ShowToast("☁️ Uploaded!", "Share Code: " .. result.shareCode, "success", 5)
 
+						-- Save share code for later viewing
+						if UIHandlers.SetCloudCode then
+							UIHandlers.SetCloudCode(fileName, result.shareCode)
+						end
+
 						-- Copy to clipboard if available
 						if setclipboard then
 							setclipboard(result.shareCode)
 							ShowToast("📋 Copied!", "Share code copied to clipboard", "info", 2)
 						end
 
-						-- Reset button after delay
-						task.delay(3, function()
+						-- Reset button after delay and refresh to show 🔗 button
+						task.delay(2, function()
 							if BtnCloud and BtnCloud.Parent then
 								BtnCloud.Text = "☁️"
 								BtnCloud.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
+							end
+							-- Refresh list to show the 🔗 view code button
+							if UIHandlers.RefreshListMap then
+								UIHandlers.RefreshListMap()
 							end
 						end)
 					else
@@ -7489,6 +7540,32 @@ function UIHandlers.SetupListMapUI()
 						end)
 					end
 				end)
+			end)
+		end
+
+		-- View Share Code Button (only if file has cloud code)
+		local existingCode = GetCloudCode(fileName)
+		if isCloudEnabled and existingCode then
+			local BtnViewCode = Instance.new("TextButton", FileCard)
+			BtnViewCode.Text = "🔗"
+			BtnViewCode.Size = UDim2.new(0, 24, 0, 24)
+			BtnViewCode.Position = UDim2.new(1, -104, 0.5, -12) -- Left of cloud button
+			BtnViewCode.BackgroundColor3 = Color3.fromRGB(139, 92, 246) -- Purple
+			BtnViewCode.TextColor3 = Color3.new(1, 1, 1)
+			BtnViewCode.Font = Enum.Font.GothamBold
+			BtnViewCode.TextSize = 12
+			BtnViewCode.AutoButtonColor = true
+			Instance.new("UICorner", BtnViewCode).CornerRadius = UDim.new(0, 6)
+
+			BtnViewCode.MouseButton1Click:Connect(function()
+				local code = GetCloudCode(fileName)
+				if code then
+					ShowToast("🔗 Share Code", code, "info", 5)
+					if setclipboard then
+						setclipboard(code)
+						ShowToast("📋 Copied!", "Share code copied to clipboard", "success", 2)
+					end
+				end
 			end)
 		end
 
@@ -7653,12 +7730,13 @@ function UIHandlers.SetupListMapUI()
 			makefolder(MERGER_FOLDER)
 		end
 
-		-- Get files dan filter hanya .json
+		-- Get files dan filter hanya .json (exclude CloudCodes.json)
 		local allFiles = listfiles(MERGER_FOLDER)
 		local jsonFiles = {}
 		for i = 1, #allFiles do
 			local f = allFiles[i]
-			if string.sub(f, -5) == ".json" then
+			local fileName = string.match(f, "([^/\\]+)$") or f
+			if string.sub(f, -5) == ".json" and fileName ~= "CloudCodes.json" then
 				table.insert(jsonFiles, f)
 			end
 		end

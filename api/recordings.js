@@ -341,7 +341,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         success: true,
         message: "Recording deleted",
-      });
+      });   
     } catch (error) {
       console.error("Delete recording error:", error);
       return res.status(500).json({
