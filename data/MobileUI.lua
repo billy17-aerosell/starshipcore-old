@@ -2750,54 +2750,8 @@ local function SelectFile(fileName)
 end
 
 -- ══════════════════════════════════════════════════════════════════
--- 1. FILE LIST (Top)
+-- CLOUD RECORDINGS (Main file source for mobile)
 -- ══════════════════════════════════════════════════════════════════
-
--- Get files immediately
-local initialFiles = RefreshFileList()
-
--- Info
-ListMapTab:Paragraph({
-	Title = "Auto Walk: " .. #initialFiles .. " Files",
-})
-
-ListMapTab:Space()
-
-if #initialFiles == 0 then
-	ListMapTab:Button({
-		Title = "📭 No recordings found",
-		Desc = "Create merged recordings on PC first",
-		Callback = function()
-			WindUI:Notify({
-				Title = "How to Use",
-				Content = "1. Record di PC dengan Starship\n2. Merge recordings di tab Merger\n3. File akan muncul di: "
-					.. MERGER_FOLDER,
-				Duration = 6,
-			})
-		end,
-	})
-else
-	-- Prepare dropdown values (remove extension for display)
-	local dropdownValues = {}
-	for _, file in ipairs(initialFiles) do
-		table.insert(dropdownValues, (file:gsub("%.json$", "")))
-	end
-
-	ListMapTab:Dropdown({
-		Title = "Select File",
-		Desc = "Choose a recording to load",
-		Values = dropdownValues,
-		Callback = function(selected)
-			SelectFile(selected .. ".json")
-		end,
-	})
-end
-
--- ══════════════════════════════════════════════════════════════════
--- CLOUD LOAD SECTION
--- ══════════════════════════════════════════════════════════════════
-ListMapTab:Space()
-ListMapTab:Divider()
 ListMapTab:Space()
 
 -- Cloud recording storage (in memory for mobile)
