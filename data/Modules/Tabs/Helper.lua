@@ -879,42 +879,47 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
     -- 5. QUICK BOOST (L2/R2 or A/D Control)
     -- Technique: Press L2/R2 or A/D in air to get vertical boost
     do
-        local CardBoost = CreateCard("QUICK BOOST", 100, 5)
+        local CardBoost = CreateCard("QUICK BOOST", 130, 5)
 
         local BtnQuickBoost, QuickBoostContainer = CreateFeatureButton(
             CardBoost,
             L("quick_boost") .. ": " .. L("off"),
             L("quick_boost_desc"),
-            UDim2.new(0.94, 0, 0, 55),
+            UDim2.new(0.94, 0, 0, 35),
             UDim2.new(0.03, 0, 0, 35),
             C_TEXT_DIM
         )
 
-        -- Boost Power Slider
+        -- Boost Power Slider Row (below the button)
+        local SliderRow = Instance.new("Frame", CardBoost)
+        SliderRow.Size = UDim2.new(0.94, 0, 0, 30)
+        SliderRow.Position = UDim2.new(0.03, 0, 0, 95)
+        SliderRow.BackgroundTransparency = 1
+
         -- Clamp existing config value to new max of 20
         Config.QuickBoostPower = math.clamp(Config.QuickBoostPower or 10, 0, 20)
-        local LblBoostPower = Instance.new("TextLabel", CardBoost)
-        LblBoostPower.Text = "BOOST: " .. Config.QuickBoostPower
+        local LblBoostPower = Instance.new("TextLabel", SliderRow)
+        LblBoostPower.Text = "BOOST POWER: " .. Config.QuickBoostPower
         LblBoostPower.Size = UDim2.new(0.35, 0, 0, 20)
-        LblBoostPower.Position = UDim2.new(0.6, 0, 0, 35)
+        LblBoostPower.Position = UDim2.new(0, 0, 0.5, -10)
         LblBoostPower.BackgroundTransparency = 1
         LblBoostPower.TextColor3 = C_TEXT_DIM
         LblBoostPower.Font = Enum.Font.GothamBold
         LblBoostPower.TextSize = 10
         LblBoostPower.TextXAlignment = Enum.TextXAlignment.Left
 
-        local SldBoostBg = Instance.new("TextButton", CardBoost)
+        local SldBoostBg = Instance.new("TextButton", SliderRow)
         SldBoostBg.Text = ""
-        SldBoostBg.Size = UDim2.new(0.35, 0, 0, 6)
-        SldBoostBg.Position = UDim2.new(0.6, 0, 0, 55)
+        SldBoostBg.Size = UDim2.new(0.6, 0, 0, 8)
+        SldBoostBg.Position = UDim2.new(0.38, 0, 0.5, -4)
         SldBoostBg.BackgroundColor3 = C_SIDE
         SldBoostBg.AutoButtonColor = false
-        Instance.new("UICorner", SldBoostBg).CornerRadius = UDim.new(0, 3)
+        Instance.new("UICorner", SldBoostBg).CornerRadius = UDim.new(0, 4)
 
         local SldBoostFill = Instance.new("Frame", SldBoostBg)
         SldBoostFill.Size = UDim2.new(Config.QuickBoostPower / 20, 0, 1, 0)
         SldBoostFill.BackgroundColor3 = C_ACCENT
-        Instance.new("UICorner", SldBoostFill).CornerRadius = UDim.new(0, 3)
+        Instance.new("UICorner", SldBoostFill).CornerRadius = UDim.new(0, 4)
 
         local function UpdateBoostSlider(input)
             local rx = input.Position.X - SldBoostBg.AbsolutePosition.X
