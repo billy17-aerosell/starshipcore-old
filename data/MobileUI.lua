@@ -2793,7 +2793,7 @@ end
 
 ListMapTab:Paragraph({
 	Title = "☁️ Cloud Recordings (" .. #CloudDropdownValues .. ")",
-	Desc = "Recordings uploaded by PC users",
+	Desc = "Recordings uploaded by Dev/Owner",
 })
 
 -- Refresh Button

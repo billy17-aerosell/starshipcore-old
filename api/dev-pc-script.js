@@ -1,5 +1,6 @@
 // Development endpoint to serve StarshipCore.lua for local testing
-// Usage: loadstring(game:HttpGet("http://localhost:3000/api/dev-pc-script"))()
+// Usage: loadstring(game:HttpGet("http://localhost:3000/api/dev-pc-script?t=" .. os.time()))()
+// The ?t=timestamp parameter helps bypass executor caching
 
 import fs from "fs";
 import path from "path";
@@ -65,6 +66,15 @@ export default async function handler(req, res) {
 -- AUTO-INJECTED BY DEV SERVER --
 _G.StarshipServerMode = true
 _G.StarshipServerURL = "http://localhost:3000"
+_G.StarshipBaseURL = "http://localhost:3000"
+
+-- Set session for dev mode (enables cloud features)
+if not getgenv then getgenv = function() return _G end end
+getgenv().StarshipSession = {
+    Role = "OWNER",
+    UserId = "DEV_USER",
+    DevMode = true
+}
 -- END AUTO-INJECTION --
 
 `;
