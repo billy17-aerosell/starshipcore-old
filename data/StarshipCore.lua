@@ -1469,7 +1469,35 @@ local function StartRecording()
 
 	isRecording = true
 	isPaused = false
-	recordedData = { FPS = 60, Frames = {} }
+
+	-- CROSS-RIG SUPPORT: Detect and save RigType & height metadata
+	local h = c:FindFirstChild("Humanoid")
+	local r = c:FindFirstChild("HumanoidRootPart")
+	local isR6 = (c:FindFirstChild("Torso") ~= nil)
+	local rigType = isR6 and "R6" or "R15"
+
+	-- Calculate recorded avatar's ground height (for cross-rig offset)
+	local recordedRootHeight = 0
+	if isR6 then
+		local leftLeg = c:FindFirstChild("Left Leg")
+		local rightLeg = c:FindFirstChild("Right Leg")
+		local torso = c:FindFirstChild("Torso")
+		local legLength = (leftLeg and leftLeg.Size.Y) or (rightLeg and rightLeg.Size.Y) or 2
+		local torsoHalfHeight = (torso and torso.Size.Y / 2) or 1
+		recordedRootHeight = legLength + torsoHalfHeight
+	else
+		-- R15: HipHeight + RootPart half height
+		recordedRootHeight = (h and h.HipHeight or 2) + (r and r.Size.Y / 2 or 1)
+	end
+
+	recordedData = {
+		FPS = 60,
+		Frames = {},
+		-- Cross-rig metadata
+		RigType = rigType,
+		HipHeight = h and h.HipHeight or 0,
+		RootHeight = recordedRootHeight,
+	}
 	startTime = os.clock()
 	local joints = GetJoints(c)
 	CreateStartBaseplate(c.HumanoidRootPart.Position)
@@ -1867,7 +1895,15 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 			ShowToast(L("live_smoothing"), L("applied_smoothing", liveSmoothingStrength), "info", 2)
 		end
 
+		-- CROSS-RIG SUPPORT: Preserve metadata from recording alongside frames
 		currentFrameData = framesToPlay
+		-- Transfer metadata from original recording data
+		currentFrameData.Mode = d.Mode
+		currentFrameData.RigType = d.RigType -- Cross-rig: R6 or R15
+		currentFrameData.RootHeight = d.RootHeight -- Cross-rig: ground height at recording
+		currentFrameData.HipHeight = d.HipHeight -- Recorded HipHeight
+		currentFrameData.FPS = d.FPS
+
 		currentPlaybackFile = fn
 		currentPlaybackTime = 0
 
@@ -2065,11 +2101,126 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		-- FLEXIBLE MODE: Physics & Input Replay
 		r.Anchored = false
 
-		-- Restart Animate script to ensure it picks up
+		-- ========================================
+		-- CROSS-RIG HEIGHT OFFSET SYSTEM
+		-- Handles: R6→R15, R15→R6, and same-rig playback
+		-- ========================================
+		local playbackIsR6 = (c:FindFirstChild("Torso") ~= nil)
+		local playbackRigType = playbackIsR6 and "R6" or "R15"
+
+		-- Auto-detect RigType from recording data (for old recordings without metadata)
+		local recordedRigType = currentFrameData.RigType
+		if not recordedRigType then
+			-- Try to detect from joint names in Strict mode recordings
+			local firstFrame = currentFrameData[1]
+			if firstFrame and firstFrame.j then
+				-- Check for R6-specific joints
+				if firstFrame.j["Left Leg"] or firstFrame.j["Right Leg"] or firstFrame.j["Torso"] then
+					recordedRigType = "R6"
+				-- Check for R15-specific joints
+				elseif firstFrame.j["LeftUpperLeg"] or firstFrame.j["RightUpperLeg"] or firstFrame.j["UpperTorso"] then
+					recordedRigType = "R15"
+				else
+					recordedRigType = "R15" -- Default fallback
+				end
+			else
+				-- Flexible mode: Try to detect from recorded HipHeight
+				-- R6 HipHeight is typically 0, R15 is ~2.0
+				if firstFrame and firstFrame.hh ~= nil then
+					if firstFrame.hh < 0.5 then
+						recordedRigType = "R6"
+					else
+						recordedRigType = "R15"
+					end
+				else
+					-- Default to R15 (most common)
+					recordedRigType = "R15"
+				end
+			end
+		end
+		local recordedRootHeight = currentFrameData.RootHeight or 0
+
+		-- Calculate PLAYBACK avatar's root height
+		local playbackRootHeight = 0
+		if playbackIsR6 then
+			local leftLeg = c:FindFirstChild("Left Leg")
+			local rightLeg = c:FindFirstChild("Right Leg")
+			local torso = c:FindFirstChild("Torso")
+			local legLength = (leftLeg and leftLeg.Size.Y) or (rightLeg and rightLeg.Size.Y) or 2
+			local torsoHalfHeight = (torso and torso.Size.Y / 2) or 1
+			playbackRootHeight = legLength + torsoHalfHeight
+		else
+			-- R15: HipHeight + RootPart half height
+			playbackRootHeight = h.HipHeight + (r.Size.Y / 2)
+		end
+
+		-- Calculate Cross-Rig Height Offset based on HipHeight difference
+		-- The key insight: R15 HipHeight (~2.0) creates a "floating" effect that R6 (HipHeight=0) doesn't have
+		-- When R15 recording is played on R6, the character appears to float because R6 doesn't have that offset
+		local crossRigHeightOffset = 0
+
+		-- Get recorded HipHeight (either from metadata or from first frame)
+		local recordedHipHeight = currentFrameData.HipHeight
+		if not recordedHipHeight then
+			-- Try to get from first frame
+			local firstFrame = currentFrameData[1]
+			if firstFrame and firstFrame.hh then
+				recordedHipHeight = firstFrame.hh
+			else
+				-- Estimate based on detected rig type
+				recordedHipHeight = (recordedRigType == "R15") and 2.0 or 0
+			end
+		end
+
+		-- Get playback HipHeight
+		local playbackHipHeight = h.HipHeight or 0
+
+		-- Calculate offset based on HipHeight difference
+		-- If recorded with higher HipHeight and playing with lower → need to LOWER position
+		-- If recorded with lower HipHeight and playing with higher → need to RAISE position
+		crossRigHeightOffset = playbackHipHeight - recordedHipHeight
+
+		-- Debug log
+		if recordedRigType ~= playbackRigType then
+			print(
+				string.format(
+					"[CrossRig] Recorded: %s (HH=%.2f) → Playback: %s (HH=%.2f) | Offset: %.2f",
+					recordedRigType,
+					recordedHipHeight,
+					playbackRigType,
+					playbackHipHeight,
+					crossRigHeightOffset
+				)
+			)
+		end
+
+		-- Log Cross-Rig info (once)
+		if recordedRigType ~= playbackRigType then
+			ShowToast(
+				L("cross_rig_playback") or "Cross-Rig Playback",
+				string.format(
+					"Recorded: %s → Playing: %s (Offset: %.2f)",
+					recordedRigType,
+					playbackRigType,
+					crossRigHeightOffset
+				),
+				"info",
+				3
+			)
+		end
+
+		-- Restart Animate script to ensure it picks up (with R6 compatibility)
 		if a then
 			a.Disabled = true
-			task.wait() -- Small yield to ensure reset
+			task.wait(0.05) -- Slightly longer yield for R6 compatibility
 			a.Disabled = false
+			-- R6 may need additional nudge to restart animations
+			if playbackIsR6 then
+				task.spawn(function()
+					task.wait(0.1)
+					h:Move(Vector3.new(0, 0, 0)) -- Trigger idle state
+				end)
+			end
 		end
 
 		h.AutoRotate = true -- Enable auto-rotate so character looks in movement direction naturally or can be controlled
@@ -2081,6 +2232,10 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		local frameCounter = 0 -- For throttling expensive operations
 		local cachedLastState = nil -- Cache last humanoid state to avoid redundant changes
 		local cachedUserInputService = game:GetService("UserInputService")
+
+		-- CROSS-RIG: Cache values for playback loop
+		local cachedPlaybackIsR6 = playbackIsR6
+		local cachedCrossRigHeightOffset = crossRigHeightOffset
 
 		-- PERFORMANCE: Cached key state for throttled checking
 		local cachedKeys = {}
@@ -2278,6 +2433,14 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 					-- IMPROVED: Use Catmull-Rom spline for ALL states (not just air)
 					local smoothPos, smoothVel = SmoothInterpolateFrames(currentFrameData, frameIdx, alpha)
+
+					-- CROSS-RIG HEIGHT OFFSET CORRECTION: Apply height adjustment for cross-rig playback
+					if cachedCrossRigHeightOffset ~= 0 and smoothPos then
+						-- Offset is (playback_height - recorded_height)
+						-- If positive (playback is taller), we need to ADD to Y to prevent character from sinking
+						-- If negative (playback is shorter), we need to SUBTRACT from Y to prevent floating
+						smoothPos = Vector3.new(smoothPos.X, smoothPos.Y + cachedCrossRigHeightOffset, smoothPos.Z)
+					end
 
 					if isInAir and smoothPos then
 						-- Follow recorded position for smooth jump arc (like recording)
@@ -2615,10 +2778,16 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 								local targetState = velY > 0 and "jump" or "fall"
 
 								-- Only change state if it's different from last air state (prevent stuttering)
-								if targetState ~= lastAirState then
+								-- For spam jumps: Force state change if velocity is significant
+								local forceStateChange = math.abs(velY) > 8
+								if targetState ~= lastAirState or forceStateChange then
 									lastAirState = targetState
 									if targetState == "jump" then
 										h:ChangeState(Enum.HumanoidStateType.Jumping)
+										-- R6: Also set h.Jump for proper animation
+										if cachedPlaybackIsR6 then
+											h.Jump = true
+										end
 									else
 										h:ChangeState(Enum.HumanoidStateType.Freefall)
 									end

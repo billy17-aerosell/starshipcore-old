@@ -1882,7 +1882,14 @@ local function PlayRecording(fileName, force)
 			framesToPlay = GetSmoothedFrames(framesToPlay, SMOOTH_SETTINGS.LiveSmoothingStrength, isFlexible)
 		end
 
+		-- CROSS-RIG SUPPORT: Preserve metadata from recording alongside frames
 		PlaybackState.frameData = framesToPlay
+		PlaybackState.frameData.Mode = data.Mode
+		PlaybackState.frameData.RigType = data.RigType -- Cross-rig: R6 or R15
+		PlaybackState.frameData.RootHeight = data.RootHeight -- Cross-rig: ground height at recording
+		PlaybackState.frameData.HipHeight = data.HipHeight -- Recorded HipHeight
+		PlaybackState.frameData.FPS = data.FPS
+
 		PlaybackState.currentFile = fileName
 		PlaybackState.currentTime = 0
 		PlaybackState.lastFrameIndex = 1
@@ -2108,6 +2115,112 @@ local function PlayRecording(fileName, force)
 		-- Don't set AutoRotate here, handle it per-frame like PC
 		hum.AutoRotate = false
 
+		-- ========================================
+		-- CROSS-RIG HEIGHT OFFSET SYSTEM
+		-- Handles: R6→R15, R15→R6, and same-rig playback
+		-- ========================================
+		local playbackIsR6 = (char:FindFirstChild("Torso") ~= nil)
+		local playbackRigType = playbackIsR6 and "R6" or "R15"
+
+		-- Auto-detect RigType from recording data (for old recordings without metadata)
+		local recordedRigType = PlaybackState.frameData.RigType
+		if not recordedRigType then
+			-- Try to detect from joint names in Strict mode recordings
+			local firstFrame = PlaybackState.frameData[1]
+			if firstFrame and firstFrame.j then
+				-- Check for R6-specific joints
+				if firstFrame.j["Left Leg"] or firstFrame.j["Right Leg"] or firstFrame.j["Torso"] then
+					recordedRigType = "R6"
+				-- Check for R15-specific joints
+				elseif firstFrame.j["LeftUpperLeg"] or firstFrame.j["RightUpperLeg"] or firstFrame.j["UpperTorso"] then
+					recordedRigType = "R15"
+				else
+					recordedRigType = "R15" -- Default fallback
+				end
+			else
+				-- Flexible mode: Try to detect from recorded HipHeight
+				-- R6 HipHeight is typically 0, R15 is ~2.0
+				if firstFrame and firstFrame.hh ~= nil then
+					if firstFrame.hh < 0.5 then
+						recordedRigType = "R6"
+					else
+						recordedRigType = "R15"
+					end
+				else
+					-- Default to R15 (most common)
+					recordedRigType = "R15"
+				end
+			end
+		end
+		local recordedRootHeight = PlaybackState.frameData.RootHeight or 0
+
+		-- Calculate PLAYBACK avatar's root height
+		local playbackRootHeight = 0
+		if playbackIsR6 then
+			local leftLeg = char:FindFirstChild("Left Leg")
+			local rightLeg = char:FindFirstChild("Right Leg")
+			local torso = char:FindFirstChild("Torso")
+			local legLength = (leftLeg and leftLeg.Size.Y) or (rightLeg and rightLeg.Size.Y) or 2
+			local torsoHalfHeight = (torso and torso.Size.Y / 2) or 1
+			playbackRootHeight = legLength + torsoHalfHeight
+		else
+			-- R15: HipHeight + RootPart half height
+			playbackRootHeight = hum.HipHeight + (hrp.Size.Y / 2)
+		end
+
+		-- Calculate Cross-Rig Height Offset based on HipHeight difference
+		-- The key insight: R15 HipHeight (~2.0) creates a "floating" effect that R6 (HipHeight=0) doesn't have
+		local crossRigHeightOffset = 0
+
+		-- Get recorded HipHeight (either from metadata or from first frame)
+		local recordedHipHeight = PlaybackState.frameData.HipHeight
+		if not recordedHipHeight then
+			-- Try to get from first frame
+			local firstFrame = PlaybackState.frameData[1]
+			if firstFrame and firstFrame.hh then
+				recordedHipHeight = firstFrame.hh
+			else
+				-- Estimate based on detected rig type
+				recordedHipHeight = (recordedRigType == "R15") and 2.0 or 0
+			end
+		end
+
+		-- Get playback HipHeight
+		local playbackHipHeight = hum.HipHeight or 0
+
+		-- Calculate offset based on HipHeight difference
+		-- If recorded with higher HipHeight and playing with lower → need to LOWER position
+		-- If recorded with lower HipHeight and playing with higher → need to RAISE position
+		crossRigHeightOffset = playbackHipHeight - recordedHipHeight
+
+		-- Debug log
+		if recordedRigType ~= playbackRigType then
+			print(
+				string.format(
+					"[CrossRig Mobile] Recorded: %s (HH=%.2f) → Playback: %s (HH=%.2f) | Offset: %.2f",
+					recordedRigType,
+					recordedHipHeight,
+					playbackRigType,
+					playbackHipHeight,
+					crossRigHeightOffset
+				)
+			)
+		end
+
+		-- Log Cross-Rig info (once)
+		if recordedRigType ~= playbackRigType then
+			WindUI:Notify({
+				Title = "Cross-Rig Playback",
+				Content = string.format(
+					"Recorded: %s → Playing: %s (Offset: %.2f)",
+					recordedRigType,
+					playbackRigType,
+					crossRigHeightOffset
+				),
+				Duration = 3,
+			})
+		end
+
 		PlaybackState.connection = RunService.Stepped:Connect(function(_, dt)
 			frameCounter = frameCounter + 1
 			if not PlaybackState.isPlaying or PlaybackState.isPaused then
@@ -2275,6 +2388,11 @@ local function PlayRecording(fileName, force)
 
 						-- IMPROVED: Use Catmull-Rom spline for smoother interpolation
 						local smoothPos, smoothVel = SmoothInterpolateFrames(PlaybackState.frameData, frameIdx, alpha)
+
+						-- CROSS-RIG HEIGHT OFFSET CORRECTION: Apply height adjustment for cross-rig playback
+						if crossRigHeightOffset ~= 0 and smoothPos then
+							smoothPos = Vector3.new(smoothPos.X, smoothPos.Y + crossRigHeightOffset, smoothPos.Z)
+						end
 
 						if isInAir and smoothPos then
 							-- Follow recorded position for smooth jump arc (like recording)
@@ -2480,6 +2598,10 @@ local function PlayRecording(fileName, force)
 								lastAirState = targetState
 								if targetState == "jump" then
 									hum:ChangeState(Enum.HumanoidStateType.Jumping)
+									-- R6 SPECIAL: Also set hum.Jump for proper animation
+									if playbackIsR6 then
+										hum.Jump = true
+									end
 								else
 									hum:ChangeState(Enum.HumanoidStateType.Freefall)
 								end
