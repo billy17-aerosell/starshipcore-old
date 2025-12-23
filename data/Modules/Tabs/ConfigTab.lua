@@ -1813,7 +1813,14 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
     if Config.Theme then ApplyTheme(Config.Theme) end
 
     -- Auto-load profile if enabled (skip spoof since it was preloaded, but load rest of profile)
-    if AutoExecSettings.Enabled and AutoExecSettings.AutoLoadProfile ~= "" then
+    -- Only run once - prevent spam when language changes and tabs are rebuilt
+    local alreadyAutoLoaded = getgenv and getgenv().StarshipAutoLoadCompleted
+    if AutoExecSettings.Enabled and AutoExecSettings.AutoLoadProfile ~= "" and not alreadyAutoLoaded then
+        -- Mark as completed immediately to prevent duplicate runs
+        if getgenv then
+            getgenv().StarshipAutoLoadCompleted = true
+        end
+
         task.spawn(function()
             -- Wait for Welcome toast to appear first (1.5s base), then add user-configured delay
             task.wait(1.5 + (AutoExecSettings.DelaySeconds or 0))

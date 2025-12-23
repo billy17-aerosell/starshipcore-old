@@ -520,117 +520,142 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 
     BtnInvis.MouseButton1Click:Connect(UIHandlers.ToggleRealInvisible)
 
-    -- 4. TELEPORT TO PLAYER
-    local CardTeleport = CreateCard(L("teleport_to_player"), 150, 4)
+    -- 4. TELEPORT TO PLAYER - Window Based
+    local CardTeleport = CreateCard(L("teleport_to_player"), 70, 4)
 
-    local BtnPlayerDropdown2 = Instance.new("TextButton", CardTeleport)
-    BtnPlayerDropdown2.Text = "Select Player ▼"
-    BtnPlayerDropdown2.Size = UDim2.new(0.94, 0, 0, 35)
-    BtnPlayerDropdown2.Position = UDim2.new(0.03, 0, 0, 35)
-    StyleBtn(BtnPlayerDropdown2, C_TEXT)
+    local BtnOpenTeleport = Instance.new("TextButton", CardTeleport)
+    BtnOpenTeleport.Text = "📍 OPEN TELEPORT"
+    BtnOpenTeleport.Size = UDim2.new(0.94, 0, 0, 35)
+    BtnOpenTeleport.Position = UDim2.new(0.03, 0, 0, 35)
+    StyleBtn(BtnOpenTeleport, C_ACCENT)
 
-    -- Dropdown list for teleport
-    local DropdownList2 = Instance.new("Frame", CardTeleport)
-    DropdownList2.Size = UDim2.new(0.94, 0, 0, 0)
-    DropdownList2.Position = UDim2.new(0.03, 0, 0, 75)
-    DropdownList2.BackgroundColor3 = C_SIDE
-    DropdownList2.Visible = false
-    DropdownList2.ZIndex = 10
-    DropdownList2.ClipsDescendants = false
-    Instance.new("UICorner", DropdownList2).CornerRadius = UDim.new(0, 6)
-    local dls2 = Instance.new("UIStroke", DropdownList2)
-    dls2.Color = C_ACCENT
-    dls2.Transparency = 0.6
-
-    local DropdownScroll2 = Instance.new("ScrollingFrame", DropdownList2)
-    DropdownScroll2.Size = UDim2.new(1, 0, 1, 0)
-    DropdownScroll2.BackgroundTransparency = 1
-    DropdownScroll2.BorderSizePixel = 0
-    DropdownScroll2.ScrollBarThickness = 4
-    DropdownScroll2.ScrollBarImageColor3 = C_ACCENT
-    DropdownScroll2.CanvasSize = UDim2.new(0, 0, 0, 0)
-    DropdownScroll2.ClipsDescendants = true
-
-    local DropdownLayout2 = Instance.new("UIListLayout", DropdownScroll2)
-    DropdownLayout2.Padding = UDim.new(0, 2)
+    -- Create Teleport Window
+    local TeleportWindow, TeleportContent = CreateWindow("TELEPORT TO PLAYER", 290)
+    TeleportContent.ScrollBarThickness = 0
+    TeleportContent.ScrollingEnabled = false
 
     local selectedPlayer2 = nil
-    local isDropdownOpen2 = false
 
+    -- Target Selection Label
+    local TpTargetLabel = Instance.new("TextLabel", TeleportContent)
+    TpTargetLabel.Text = "SELECT TARGET"
+    TpTargetLabel.Size = UDim2.new(0.94, 0, 0, 20)
+    TpTargetLabel.BackgroundTransparency = 1
+    TpTargetLabel.TextColor3 = C_TEXT
+    TpTargetLabel.Font = Enum.Font.GothamBold
+    TpTargetLabel.TextSize = 11
+    TpTargetLabel.ZIndex = 205
+
+    -- Player List Frame
+    local TpPlayerListFrame = Instance.new("Frame", TeleportContent)
+    TpPlayerListFrame.Size = UDim2.new(0.94, 0, 0, 120)
+    TpPlayerListFrame.BackgroundColor3 = C_ITEM
+    TpPlayerListFrame.BorderSizePixel = 0
+    TpPlayerListFrame.ZIndex = 205
+    Instance.new("UICorner", TpPlayerListFrame).CornerRadius = UDim.new(0, 6)
+
+    local TpPlayerListScroll = Instance.new("ScrollingFrame", TpPlayerListFrame)
+    TpPlayerListScroll.Size = UDim2.new(1, -4, 1, -4)
+    TpPlayerListScroll.Position = UDim2.new(0, 2, 0, 2)
+    TpPlayerListScroll.BackgroundTransparency = 1
+    TpPlayerListScroll.BorderSizePixel = 0
+    TpPlayerListScroll.ScrollBarThickness = 4
+    TpPlayerListScroll.ScrollBarImageColor3 = C_ACCENT
+    TpPlayerListScroll.ZIndex = 206
+    TpPlayerListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    TpPlayerListScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+    local TpPlayerListLayout = Instance.new("UIListLayout", TpPlayerListScroll)
+    TpPlayerListLayout.Padding = UDim.new(0, 3)
+    TpPlayerListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    -- Selected Target Display
+    local TpSelectedDisplay = Instance.new("TextLabel", TeleportContent)
+    TpSelectedDisplay.Text = "Target: None"
+    TpSelectedDisplay.Size = UDim2.new(0.94, 0, 0, 25)
+    TpSelectedDisplay.BackgroundColor3 = C_SIDE
+    TpSelectedDisplay.TextColor3 = C_TEXT_DIM
+    TpSelectedDisplay.Font = Enum.Font.GothamBold
+    TpSelectedDisplay.TextSize = 11
+    TpSelectedDisplay.ZIndex = 205
+    Instance.new("UICorner", TpSelectedDisplay).CornerRadius = UDim.new(0, 6)
+
+    -- Function to update player list
     local function UpdatePlayerList2()
-        DropdownScroll2:ClearAllChildren()
-        DropdownLayout2 = Instance.new("UIListLayout", DropdownScroll2)
-        DropdownLayout2.Padding = UDim.new(0, 2)
-
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                local btn = Instance.new("TextButton", DropdownScroll2)
-                btn.Text = player.Name
-                btn.Size = UDim2.new(1, -8, 0, 25)
-                btn.BackgroundColor3 = C_ITEM
-                btn.TextColor3 = C_TEXT_DIM
-                btn.Font = Enum.Font.Gotham
-                btn.TextSize = 10
-                btn.TextXAlignment = Enum.TextXAlignment.Left
-                btn.TextTruncate = Enum.TextTruncate.AtEnd
-                btn.BorderSizePixel = 0
-                btn.ZIndex = 11
-                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-
-                local padding = Instance.new("UIPadding", btn)
-                padding.PaddingLeft = UDim.new(0, 5)
-
-                btn.MouseButton1Click:Connect(function()
-                    selectedPlayer2 = player
-                    BtnPlayerDropdown2.Text = player.Name
-                    DropdownList2.Visible = false
-                    isDropdownOpen2 = false
-                end)
-
-                btn.MouseEnter:Connect(function()
-                    btn.BackgroundColor3 = C_ACCENT
-                    btn.TextColor3 = C_TEXT
-                end)
-
-                btn.MouseLeave:Connect(function()
-                    btn.BackgroundColor3 = C_ITEM
-                    btn.TextColor3 = C_TEXT_DIM
-                end)
+        for _, child in pairs(TpPlayerListScroll:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
             end
         end
 
-        -- Update scroll canvas size
-        local count = #Players:GetPlayers() - 1
-        DropdownScroll2.CanvasSize = UDim2.new(0, 0, 0, count * 27)
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local btn = Instance.new("TextButton", TpPlayerListScroll)
+                btn.Text = player.Name
+                btn.Size = UDim2.new(1, -8, 0, 28)
+                btn.BackgroundColor3 = (selectedPlayer2 == player) and C_ACCENT or C_SIDE
+                btn.TextColor3 = (selectedPlayer2 == player) and C_TEXT or C_TEXT_DIM
+                btn.Font = Enum.Font.Gotham
+                btn.TextSize = 11
+                btn.BorderSizePixel = 0
+                btn.ZIndex = 207
+                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+                btn.MouseButton1Click:Connect(function()
+                    selectedPlayer2 = player
+                    TpSelectedDisplay.Text = "Target: " .. player.Name
+                    TpSelectedDisplay.TextColor3 = C_GREEN
+                    UpdatePlayerList2()
+                end)
+
+                btn.MouseEnter:Connect(function()
+                    if selectedPlayer2 ~= player then
+                        btn.BackgroundColor3 = C_ACCENT
+                        btn.TextColor3 = C_TEXT
+                    end
+                end)
+
+                btn.MouseLeave:Connect(function()
+                    if selectedPlayer2 ~= player then
+                        btn.BackgroundColor3 = C_SIDE
+                        btn.TextColor3 = C_TEXT_DIM
+                    end
+                end)
+            end
+        end
     end
 
-    BtnPlayerDropdown2.MouseButton1Click:Connect(function()
-        isDropdownOpen2 = not isDropdownOpen2
-        if isDropdownOpen2 then
-            UpdatePlayerList2()
-            local playerCount = #Players:GetPlayers() - 1
-            local maxHeight = math.min(playerCount * 27, 100)
-            DropdownList2.Size = UDim2.new(0.94, 0, 0, maxHeight)
-            DropdownList2.Visible = true
-        else
-            DropdownList2.Visible = false
-        end
-    end)
-
-    local BtnTeleport = Instance.new("TextButton", CardTeleport)
+    -- Teleport Button
+    local BtnTeleport = Instance.new("TextButton", TeleportContent)
     BtnTeleport.Text = L("teleport")
-    BtnTeleport.Size = UDim2.new(0.94, 0, 0, 30)
-    BtnTeleport.Position = UDim2.new(0.03, 0, 0, 80)
-    StyleBtn(BtnTeleport, C_ACCENT)
+    BtnTeleport.Size = UDim2.new(0.94, 0, 0, 35)
+    BtnTeleport.BackgroundColor3 = C_ACCENT
+    BtnTeleport.TextColor3 = C_TEXT
+    BtnTeleport.Font = Enum.Font.GothamBold
+    BtnTeleport.TextSize = 12
+    BtnTeleport.BorderSizePixel = 0
+    BtnTeleport.ZIndex = 205
+    Instance.new("UICorner", BtnTeleport).CornerRadius = UDim.new(0, 6)
+    local tpStroke = Instance.new("UIStroke", BtnTeleport)
+    tpStroke.Color = C_ACCENT
+    tpStroke.Thickness = 1
+    RegisterTheme(tpStroke, "Color")
 
-    local TeleportStatus = Instance.new("TextLabel", CardTeleport)
+    -- Status Label
+    local TeleportStatus = Instance.new("TextLabel", TeleportContent)
     TeleportStatus.Text = "Select player and click TELEPORT"
-    TeleportStatus.Size = UDim2.new(1, 0, 0, 20)
-    TeleportStatus.Position = UDim2.new(0, 0, 0, 115)
+    TeleportStatus.Size = UDim2.new(0.94, 0, 0, 20)
     TeleportStatus.BackgroundTransparency = 1
     TeleportStatus.TextColor3 = C_TEXT_DIM
     TeleportStatus.Font = Enum.Font.Code
-    TeleportStatus.TextSize = 9
+    TeleportStatus.TextSize = 10
+    TeleportStatus.ZIndex = 205
+
+    -- Open Window Button Click
+    BtnOpenTeleport.MouseButton1Click:Connect(function()
+        UpdatePlayerList2()
+        TeleportWindow.Visible = true
+    end)
 
     BtnTeleport.MouseButton1Click:Connect(function()
         if not selectedPlayer2 then
@@ -644,7 +669,9 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
             TeleportStatus.Text = "Player left the game!"
             TeleportStatus.TextColor3 = C_RED
             selectedPlayer2 = nil
-            BtnPlayerDropdown2.Text = "Select Player ▼"
+            TpSelectedDisplay.Text = "Target: None"
+            TpSelectedDisplay.TextColor3 = C_TEXT_DIM
+            UpdatePlayerList2()
             return
         end
 
@@ -726,121 +753,145 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
         end)
     end)
 
-    -- 5. SPECTATE PLAYER
-    local CardSpectate = CreateCard(L("spectate_player"), 150, 5)
+    -- 5. SPECTATE PLAYER - Window Based
+    local CardSpectate = CreateCard(L("spectate_player"), 70, 5)
 
-    local BtnPlayerDropdown3 = Instance.new("TextButton", CardSpectate)
-    BtnPlayerDropdown3.Text = "Select Player ▼"
-    BtnPlayerDropdown3.Size = UDim2.new(0.94, 0, 0, 35)
-    BtnPlayerDropdown3.Position = UDim2.new(0.03, 0, 0, 35)
-    StyleBtn(BtnPlayerDropdown3, C_TEXT)
+    local BtnOpenSpectate = Instance.new("TextButton", CardSpectate)
+    BtnOpenSpectate.Text = "👁 OPEN SPECTATE"
+    BtnOpenSpectate.Size = UDim2.new(0.94, 0, 0, 35)
+    BtnOpenSpectate.Position = UDim2.new(0.03, 0, 0, 35)
+    StyleBtn(BtnOpenSpectate, C_ACCENT)
 
-    -- Dropdown list for spectate
-    local DropdownList3 = Instance.new("Frame", CardSpectate)
-    DropdownList3.Size = UDim2.new(0.94, 0, 0, 0)
-    DropdownList3.Position = UDim2.new(0.03, 0, 0, 75)
-    DropdownList3.BackgroundColor3 = C_SIDE
-    DropdownList3.Visible = false
-    DropdownList3.ZIndex = 10
-    DropdownList3.ClipsDescendants = false
-    Instance.new("UICorner", DropdownList3).CornerRadius = UDim.new(0, 6)
-    local dls3 = Instance.new("UIStroke", DropdownList3)
-    dls3.Color = C_ACCENT
-    dls3.Transparency = 0.6
-
-    local DropdownScroll3 = Instance.new("ScrollingFrame", DropdownList3)
-    DropdownScroll3.Size = UDim2.new(1, 0, 1, 0)
-    DropdownScroll3.BackgroundTransparency = 1
-    DropdownScroll3.BorderSizePixel = 0
-    DropdownScroll3.ScrollBarThickness = 4
-    DropdownScroll3.ScrollBarImageColor3 = C_ACCENT
-    DropdownScroll3.CanvasSize = UDim2.new(0, 0, 0, 0)
-    DropdownScroll3.ClipsDescendants = true
-
-    local DropdownLayout3 = Instance.new("UIListLayout", DropdownScroll3)
-    DropdownLayout3.Padding = UDim.new(0, 2)
+    -- Create Spectate Window
+    local SpectateWindow, SpectateContent = CreateWindow("SPECTATE PLAYER", 290)
+    SpectateContent.ScrollBarThickness = 0
+    SpectateContent.ScrollingEnabled = false
 
     local selectedPlayer3 = nil
-    local isDropdownOpen3 = false
     local isSpectating = false
     local spectateLoop = nil
+    local lastKnownPosition = nil
 
+    -- Target Selection Label
+    local SpTargetLabel = Instance.new("TextLabel", SpectateContent)
+    SpTargetLabel.Text = "SELECT TARGET"
+    SpTargetLabel.Size = UDim2.new(0.94, 0, 0, 20)
+    SpTargetLabel.BackgroundTransparency = 1
+    SpTargetLabel.TextColor3 = C_TEXT
+    SpTargetLabel.Font = Enum.Font.GothamBold
+    SpTargetLabel.TextSize = 11
+    SpTargetLabel.ZIndex = 205
+
+    -- Player List Frame
+    local SpPlayerListFrame = Instance.new("Frame", SpectateContent)
+    SpPlayerListFrame.Size = UDim2.new(0.94, 0, 0, 120)
+    SpPlayerListFrame.BackgroundColor3 = C_ITEM
+    SpPlayerListFrame.BorderSizePixel = 0
+    SpPlayerListFrame.ZIndex = 205
+    Instance.new("UICorner", SpPlayerListFrame).CornerRadius = UDim.new(0, 6)
+
+    local SpPlayerListScroll = Instance.new("ScrollingFrame", SpPlayerListFrame)
+    SpPlayerListScroll.Size = UDim2.new(1, -4, 1, -4)
+    SpPlayerListScroll.Position = UDim2.new(0, 2, 0, 2)
+    SpPlayerListScroll.BackgroundTransparency = 1
+    SpPlayerListScroll.BorderSizePixel = 0
+    SpPlayerListScroll.ScrollBarThickness = 4
+    SpPlayerListScroll.ScrollBarImageColor3 = C_ACCENT
+    SpPlayerListScroll.ZIndex = 206
+    SpPlayerListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    SpPlayerListScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+    local SpPlayerListLayout = Instance.new("UIListLayout", SpPlayerListScroll)
+    SpPlayerListLayout.Padding = UDim.new(0, 3)
+    SpPlayerListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    -- Selected Target Display
+    local SpSelectedDisplay = Instance.new("TextLabel", SpectateContent)
+    SpSelectedDisplay.Text = "Target: None"
+    SpSelectedDisplay.Size = UDim2.new(0.94, 0, 0, 25)
+    SpSelectedDisplay.BackgroundColor3 = C_SIDE
+    SpSelectedDisplay.TextColor3 = C_TEXT_DIM
+    SpSelectedDisplay.Font = Enum.Font.GothamBold
+    SpSelectedDisplay.TextSize = 11
+    SpSelectedDisplay.ZIndex = 205
+    Instance.new("UICorner", SpSelectedDisplay).CornerRadius = UDim.new(0, 6)
+
+    -- Function to update player list
     local function UpdatePlayerList3()
-        DropdownScroll3:ClearAllChildren()
-        DropdownLayout3 = Instance.new("UIListLayout", DropdownScroll3)
-        DropdownLayout3.Padding = UDim.new(0, 2)
-
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                local btn = Instance.new("TextButton", DropdownScroll3)
-                btn.Text = player.Name
-                btn.Size = UDim2.new(1, -8, 0, 25)
-                btn.BackgroundColor3 = C_ITEM
-                btn.TextColor3 = C_TEXT_DIM
-                btn.Font = Enum.Font.Gotham
-                btn.TextSize = 10
-                btn.TextXAlignment = Enum.TextXAlignment.Left
-                btn.TextTruncate = Enum.TextTruncate.AtEnd
-                btn.BorderSizePixel = 0
-                btn.ZIndex = 11
-                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-
-                local padding = Instance.new("UIPadding", btn)
-                padding.PaddingLeft = UDim.new(0, 5)
-
-                btn.MouseButton1Click:Connect(function()
-                    selectedPlayer3 = player
-                    BtnPlayerDropdown3.Text = player.Name
-                    DropdownList3.Visible = false
-                    isDropdownOpen3 = false
-                end)
-
-                btn.MouseEnter:Connect(function()
-                    btn.BackgroundColor3 = C_ACCENT
-                    btn.TextColor3 = C_TEXT
-                end)
-
-                btn.MouseLeave:Connect(function()
-                    btn.BackgroundColor3 = C_ITEM
-                    btn.TextColor3 = C_TEXT_DIM
-                end)
+        for _, child in pairs(SpPlayerListScroll:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
             end
         end
 
-        local count = #Players:GetPlayers() - 1
-        DropdownScroll3.CanvasSize = UDim2.new(0, 0, 0, count * 27)
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local btn = Instance.new("TextButton", SpPlayerListScroll)
+                btn.Text = player.Name
+                btn.Size = UDim2.new(1, -8, 0, 28)
+                btn.BackgroundColor3 = (selectedPlayer3 == player) and C_ACCENT or C_SIDE
+                btn.TextColor3 = (selectedPlayer3 == player) and C_TEXT or C_TEXT_DIM
+                btn.Font = Enum.Font.Gotham
+                btn.TextSize = 11
+                btn.BorderSizePixel = 0
+                btn.ZIndex = 207
+                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+                btn.MouseButton1Click:Connect(function()
+                    selectedPlayer3 = player
+                    SpSelectedDisplay.Text = "Target: " .. player.Name
+                    SpSelectedDisplay.TextColor3 = C_GREEN
+                    UpdatePlayerList3()
+                end)
+
+                btn.MouseEnter:Connect(function()
+                    if selectedPlayer3 ~= player then
+                        btn.BackgroundColor3 = C_ACCENT
+                        btn.TextColor3 = C_TEXT
+                    end
+                end)
+
+                btn.MouseLeave:Connect(function()
+                    if selectedPlayer3 ~= player then
+                        btn.BackgroundColor3 = C_SIDE
+                        btn.TextColor3 = C_TEXT_DIM
+                    end
+                end)
+            end
+        end
     end
 
-    BtnPlayerDropdown3.MouseButton1Click:Connect(function()
-        isDropdownOpen3 = not isDropdownOpen3
-        if isDropdownOpen3 then
-            UpdatePlayerList3()
-            local playerCount = #Players:GetPlayers() - 1
-            local maxHeight = math.min(playerCount * 27, 100)
-            DropdownList3.Size = UDim2.new(0.94, 0, 0, maxHeight)
-            DropdownList3.Visible = true
-        else
-            DropdownList3.Visible = false
-        end
-    end)
-
-    local BtnSpectate = Instance.new("TextButton", CardSpectate)
+    -- Spectate Button
+    local BtnSpectate = Instance.new("TextButton", SpectateContent)
     BtnSpectate.Text = "START SPECTATE"
-    BtnSpectate.Size = UDim2.new(0.94, 0, 0, 30)
-    BtnSpectate.Position = UDim2.new(0.03, 0, 0, 80)
-    StyleBtn(BtnSpectate, C_ACCENT)
+    BtnSpectate.Size = UDim2.new(0.94, 0, 0, 35)
+    BtnSpectate.BackgroundColor3 = C_ACCENT
+    BtnSpectate.TextColor3 = C_TEXT
+    BtnSpectate.Font = Enum.Font.GothamBold
+    BtnSpectate.TextSize = 12
+    BtnSpectate.BorderSizePixel = 0
+    BtnSpectate.ZIndex = 205
+    Instance.new("UICorner", BtnSpectate).CornerRadius = UDim.new(0, 6)
+    local spStroke = Instance.new("UIStroke", BtnSpectate)
+    spStroke.Color = C_ACCENT
+    spStroke.Thickness = 1
+    RegisterTheme(spStroke, "Color")
 
-    local SpectateStatus = Instance.new("TextLabel", CardSpectate)
+    -- Status Label
+    local SpectateStatus = Instance.new("TextLabel", SpectateContent)
     SpectateStatus.Text = "Select player and click START"
-    SpectateStatus.Size = UDim2.new(1, 0, 0, 20)
-    SpectateStatus.Position = UDim2.new(0, 0, 0, 115)
+    SpectateStatus.Size = UDim2.new(0.94, 0, 0, 20)
     SpectateStatus.BackgroundTransparency = 1
     SpectateStatus.TextColor3 = C_TEXT_DIM
     SpectateStatus.Font = Enum.Font.Code
-    SpectateStatus.TextSize = 9
+    SpectateStatus.TextSize = 10
+    SpectateStatus.ZIndex = 205
 
-    -- Store last known position for far players
-    local lastKnownPosition = nil
+    -- Open Window Button Click
+    BtnOpenSpectate.MouseButton1Click:Connect(function()
+        UpdatePlayerList3()
+        SpectateWindow.Visible = true
+    end)
 
     BtnSpectate.MouseButton1Click:Connect(function()
         if not isSpectating then
@@ -855,13 +906,16 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
                 SpectateStatus.Text = "Player left the game!"
                 SpectateStatus.TextColor3 = C_RED
                 selectedPlayer3 = nil
-                BtnPlayerDropdown3.Text = "Select Player ▼"
+                SpSelectedDisplay.Text = "Target: None"
+                SpSelectedDisplay.TextColor3 = C_TEXT_DIM
+                UpdatePlayerList3()
                 return
             end
 
             isSpectating = true
             BtnSpectate.Text = "STOP SPECTATE"
             BtnSpectate.BackgroundColor3 = C_RED
+            spStroke.Color = C_RED
             SpectateStatus.Text = "Spectating " .. selectedPlayer3.Name
             SpectateStatus.TextColor3 = C_GREEN
 
@@ -884,6 +938,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
                     isSpectating = false
                     BtnSpectate.Text = "START SPECTATE"
                     BtnSpectate.BackgroundColor3 = C_ACCENT
+                    spStroke.Color = C_ACCENT
                     SpectateStatus.Text = "Player left the game!"
                     SpectateStatus.TextColor3 = C_RED
                     if spectateLoop then
@@ -923,7 +978,6 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
                     end
                 else
                     -- Character not loaded at all (very far with Streaming Enabled)
-                    -- Try to get position from ReplicatedStorage or other means
                     if lastKnownPosition then
                         camera.CameraType = Enum.CameraType.Custom
                         camera.CFrame = CFrame.new(lastKnownPosition + Vector3.new(0, 10, 15), lastKnownPosition)
@@ -941,6 +995,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
             isSpectating = false
             BtnSpectate.Text = "START SPECTATE"
             BtnSpectate.BackgroundColor3 = C_ACCENT
+            spStroke.Color = C_ACCENT
             SpectateStatus.Text = "Spectate stopped"
             SpectateStatus.TextColor3 = C_TEXT_DIM
             lastKnownPosition = nil
@@ -1292,154 +1347,187 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
         FriendsStatus.TextColor3 = C_GREEN
     end)
 
-    -- 7. OBJECT AURA (Trash Thrower)
-    local CardAura = CreateCard(L("object_aura"), 310, 7); if CardAura:FindFirstChild("UIStroke") then CardAura.UIStroke.Transparency = 0 end
+    -- 7. OBJECT AURA (Trash Thrower) - Window Based
+    local CardAura = CreateCard(L("object_aura"), 70, 7); if CardAura:FindFirstChild("UIStroke") then CardAura.UIStroke.Transparency = 0 end
 
-    local BtnPlayerDropdown4 = Instance.new("TextButton", CardAura)
-    BtnPlayerDropdown4.Text = "Select Target ▼"
-    BtnPlayerDropdown4.Size = UDim2.new(0.94, 0, 0, 35)
-    BtnPlayerDropdown4.Position = UDim2.new(0.03, 0, 0, 35)
-    StyleBtn(BtnPlayerDropdown4, C_TEXT)
+    local BtnOpenAura = Instance.new("TextButton", CardAura)
+    BtnOpenAura.Text = "🎯 OPEN OBJECT AURA"
+    BtnOpenAura.Size = UDim2.new(0.94, 0, 0, 35)
+    BtnOpenAura.Position = UDim2.new(0.03, 0, 0, 35)
+    StyleBtn(BtnOpenAura, C_ACCENT)
 
-    local DropdownList4 = Instance.new("Frame", CardAura)
-    DropdownList4.Size = UDim2.new(0.94, 0, 0, 0)
-    DropdownList4.Position = UDim2.new(0.03, 0, 0, 75)
-    DropdownList4.BackgroundColor3 = C_SIDE; DropdownList4.BackgroundTransparency = 0
-    DropdownList4.Visible = false
-    DropdownList4.ZIndex = 50
-    DropdownList4.ClipsDescendants = false
-    Instance.new("UICorner", DropdownList4).CornerRadius = UDim.new(0, 6)
-    local dls4 = Instance.new("UIStroke", DropdownList4)
-    dls4.Color = C_ACCENT
-    dls4.Transparency = 0
+    -- Create Object Aura Window
+    local AuraWindow, AuraContent = CreateWindow("OBJECT AURA", 410)
+    AuraContent.ScrollBarThickness = 0
+    AuraContent.ScrollingEnabled = false
 
-    local DropdownScroll4 = Instance.new("ScrollingFrame", DropdownList4)
-    DropdownScroll4.Size = UDim2.new(1, 0, 1, 0)
-    DropdownScroll4.BackgroundTransparency = 1
-    DropdownScroll4.BorderSizePixel = 0
-    DropdownScroll4.ScrollBarThickness = 4
-    DropdownScroll4.ScrollBarImageColor3 = C_ACCENT
-    DropdownScroll4.CanvasSize = UDim2.new(0, 0, 0, 0)
-    DropdownScroll4.ClipsDescendants = true
-
-    local DropdownLayout4 = Instance.new("UIListLayout", DropdownScroll4)
-    DropdownLayout4.Padding = UDim.new(0, 2)
-
+    -- State variables
     local selectedPlayer4 = nil
-    local isDropdownOpen4 = false
+    local auraCollectionRange = 100
+    local auraLaunchPower = 1000
+    local auraInstantTeleport = true
+    local isAuraActive = false
+    local auraLoop = nil
+    local collectedParts = {}
+    local launchQueue = {}
 
+    -- Target Selection Label
+    local TargetLabel = Instance.new("TextLabel", AuraContent)
+    TargetLabel.Text = "SELECT TARGET"
+    TargetLabel.Size = UDim2.new(0.94, 0, 0, 20)
+    TargetLabel.BackgroundTransparency = 1
+    TargetLabel.TextColor3 = C_TEXT
+    TargetLabel.Font = Enum.Font.GothamBold
+    TargetLabel.TextSize = 11
+    TargetLabel.ZIndex = 205
+
+    -- Player List Frame
+    local PlayerListFrame = Instance.new("Frame", AuraContent)
+    PlayerListFrame.Size = UDim2.new(0.94, 0, 0, 120)
+    PlayerListFrame.BackgroundColor3 = C_ITEM
+    PlayerListFrame.BorderSizePixel = 0
+    PlayerListFrame.ZIndex = 205
+    Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 6)
+
+    local PlayerListScroll = Instance.new("ScrollingFrame", PlayerListFrame)
+    PlayerListScroll.Size = UDim2.new(1, -4, 1, -4)
+    PlayerListScroll.Position = UDim2.new(0, 2, 0, 2)
+    PlayerListScroll.BackgroundTransparency = 1
+    PlayerListScroll.BorderSizePixel = 0
+    PlayerListScroll.ScrollBarThickness = 4
+    PlayerListScroll.ScrollBarImageColor3 = C_ACCENT
+    PlayerListScroll.ZIndex = 206
+    PlayerListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    PlayerListScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+    local PlayerListLayout = Instance.new("UIListLayout", PlayerListScroll)
+    PlayerListLayout.Padding = UDim.new(0, 3)
+    PlayerListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    -- Selected Target Display
+    local SelectedDisplay = Instance.new("TextLabel", AuraContent)
+    SelectedDisplay.Text = "Target: None"
+    SelectedDisplay.Size = UDim2.new(0.94, 0, 0, 25)
+    SelectedDisplay.BackgroundColor3 = C_SIDE
+    SelectedDisplay.TextColor3 = C_TEXT_DIM
+    SelectedDisplay.Font = Enum.Font.GothamBold
+    SelectedDisplay.TextSize = 11
+    SelectedDisplay.ZIndex = 205
+    Instance.new("UICorner", SelectedDisplay).CornerRadius = UDim.new(0, 6)
+
+    -- Function to update player list
     local function UpdatePlayerList4()
-        DropdownScroll4:ClearAllChildren()
-        DropdownLayout4 = Instance.new("UIListLayout", DropdownScroll4)
-        DropdownLayout4.Padding = UDim.new(0, 2)
-
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                local btn = Instance.new("TextButton", DropdownScroll4)
-                btn.Text = player.Name
-                btn.Size = UDim2.new(1, -8, 0, 25)
-                btn.BackgroundColor3 = C_ITEM
-                btn.TextColor3 = C_TEXT_DIM
-                btn.Font = Enum.Font.Gotham
-                btn.TextSize = 10
-                btn.TextXAlignment = Enum.TextXAlignment.Left
-                btn.TextTruncate = Enum.TextTruncate.AtEnd
-                btn.BorderSizePixel = 0
-                btn.ZIndex = 11
-                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-
-                local padding = Instance.new("UIPadding", btn)
-                padding.PaddingLeft = UDim.new(0, 5)
-
-                btn.MouseButton1Click:Connect(function()
-                    selectedPlayer4 = player
-                    BtnPlayerDropdown4.Text = player.Name
-                    DropdownList4.Visible = false
-                    isDropdownOpen4 = false
-                end)
-
-                btn.MouseEnter:Connect(function()
-                    btn.BackgroundColor3 = C_ACCENT
-                    btn.TextColor3 = C_TEXT
-                end)
-
-                btn.MouseLeave:Connect(function()
-                    btn.BackgroundColor3 = C_ITEM
-                    btn.TextColor3 = C_TEXT_DIM
-                end)
+        for _, child in pairs(PlayerListScroll:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
             end
         end
 
-        local count = #Players:GetPlayers() - 1
-        DropdownScroll4.CanvasSize = UDim2.new(0, 0, 0, count * 27)
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local btn = Instance.new("TextButton", PlayerListScroll)
+                btn.Text = player.Name
+                btn.Size = UDim2.new(1, -8, 0, 28)
+                btn.BackgroundColor3 = (selectedPlayer4 == player) and C_ACCENT or C_SIDE
+                btn.TextColor3 = (selectedPlayer4 == player) and C_TEXT or C_TEXT_DIM
+                btn.Font = Enum.Font.Gotham
+                btn.TextSize = 11
+                btn.BorderSizePixel = 0
+                btn.ZIndex = 207
+                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+                btn.MouseButton1Click:Connect(function()
+                    selectedPlayer4 = player
+                    SelectedDisplay.Text = "Target: " .. player.Name
+                    SelectedDisplay.TextColor3 = C_GREEN
+                    UpdatePlayerList4()
+                end)
+
+                btn.MouseEnter:Connect(function()
+                    if selectedPlayer4 ~= player then
+                        btn.BackgroundColor3 = C_ACCENT
+                        btn.TextColor3 = C_TEXT
+                    end
+                end)
+
+                btn.MouseLeave:Connect(function()
+                    if selectedPlayer4 ~= player then
+                        btn.BackgroundColor3 = C_SIDE
+                        btn.TextColor3 = C_TEXT_DIM
+                    end
+                end)
+            end
+        end
     end
 
-    BtnPlayerDropdown4.MouseButton1Click:Connect(function()
-        isDropdownOpen4 = not isDropdownOpen4
-        if isDropdownOpen4 then
-            UpdatePlayerList4()
-            local playerCount = #Players:GetPlayers() - 1
-            local maxHeight = math.min(playerCount * 27, 100)
-            DropdownList4.Size = UDim2.new(0.94, 0, 0, maxHeight)
-            DropdownList4.Visible = true
-        else
-            DropdownList4.Visible = false
-        end
-    end)
-
-    local auraCollectionRange = 100  -- Range to scan around TARGET
-    local auraLaunchPower = 1000     -- Launch velocity power (higher default)
-    local auraInstantTeleport = true -- Teleport directly to target instead of launching
-
-    local SliderCollection = CreateSlider(CardAura, "Scan Range", 20, 200, 100, function(val)
+    -- Sliders in window
+    local SliderCollection = CreateSlider(AuraContent, "Scan Range", 20, 200, 100, function(val)
         auraCollectionRange = val
     end)
-    SliderCollection.Position = UDim2.new(0.03, 0, 0, 115)
 
-    local SliderPower = CreateSlider(CardAura, "Launch Power", 200, 3000, 1000, function(val)
+    local SliderPower = CreateSlider(AuraContent, "Launch Power", 200, 3000, 1000, function(val)
         auraLaunchPower = val
     end)
-    SliderPower.Position = UDim2.new(0.03, 0, 0, 160)
 
-    -- Toggle for instant teleport mode
-    local BtnInstantMode = Instance.new("TextButton", CardAura)
+    -- Mode Toggle Button
+    local BtnInstantMode = Instance.new("TextButton", AuraContent)
     BtnInstantMode.Text = "MODE: INSTANT TP ✓"
-    BtnInstantMode.Size = UDim2.new(0.94, 0, 0, 25)
-    BtnInstantMode.Position = UDim2.new(0.03, 0, 0, 205)
-    StyleBtn(BtnInstantMode, C_GREEN)
+    BtnInstantMode.Size = UDim2.new(0.94, 0, 0, 30)
+    BtnInstantMode.BackgroundColor3 = C_ITEM
+    BtnInstantMode.TextColor3 = C_GREEN
+    BtnInstantMode.Font = Enum.Font.GothamBold
+    BtnInstantMode.TextSize = 11
+    BtnInstantMode.BorderSizePixel = 0
+    BtnInstantMode.ZIndex = 205
+    Instance.new("UICorner", BtnInstantMode).CornerRadius = UDim.new(0, 6)
+    local modeStroke = Instance.new("UIStroke", BtnInstantMode)
+    modeStroke.Color = C_GREEN
+    modeStroke.Thickness = 1
 
     BtnInstantMode.MouseButton1Click:Connect(function()
         auraInstantTeleport = not auraInstantTeleport
         if auraInstantTeleport then
             BtnInstantMode.Text = "MODE: INSTANT TP ✓"
             BtnInstantMode.TextColor3 = C_GREEN
-            BtnInstantMode.UIStroke.Color = C_GREEN
+            modeStroke.Color = C_GREEN
         else
             BtnInstantMode.Text = "MODE: LAUNCH 🚀"
             BtnInstantMode.TextColor3 = C_YELLOW
-            BtnInstantMode.UIStroke.Color = C_YELLOW
+            modeStroke.Color = C_YELLOW
         end
     end)
 
-    local BtnAura = Instance.new("TextButton", CardAura)
-    BtnAura.Text = "START FLING"
-    BtnAura.Size = UDim2.new(0.94, 0, 0, 30)
-    BtnAura.Position = UDim2.new(0.03, 0, 0, 235)
-    StyleBtn(BtnAura, C_ACCENT)
+    -- Start/Stop Button
+    local BtnAura = Instance.new("TextButton", AuraContent)
+    BtnAura.Text = L("start_fling")
+    BtnAura.Size = UDim2.new(0.94, 0, 0, 35)
+    BtnAura.BackgroundColor3 = C_ACCENT
+    BtnAura.TextColor3 = C_TEXT
+    BtnAura.Font = Enum.Font.GothamBold
+    BtnAura.TextSize = 12
+    BtnAura.BorderSizePixel = 0
+    BtnAura.ZIndex = 205
+    Instance.new("UICorner", BtnAura).CornerRadius = UDim.new(0, 6)
+    local auraStroke = Instance.new("UIStroke", BtnAura)
+    auraStroke.Color = C_ACCENT
+    auraStroke.Thickness = 1
+    RegisterTheme(auraStroke, "Color")
 
-    local AuraStatus = Instance.new("TextLabel", CardAura)
+    -- Status Label
+    local AuraStatus = Instance.new("TextLabel", AuraContent)
     AuraStatus.Text = "Select player and click START"
-    AuraStatus.Size = UDim2.new(1, 0, 0, 20)
-    AuraStatus.Position = UDim2.new(0, 0, 0, 270)
+    AuraStatus.Size = UDim2.new(0.94, 0, 0, 20)
     AuraStatus.BackgroundTransparency = 1
     AuraStatus.TextColor3 = C_TEXT_DIM
     AuraStatus.Font = Enum.Font.Code
-    AuraStatus.TextSize = 9
+    AuraStatus.TextSize = 10
+    AuraStatus.ZIndex = 205
 
-    local isAuraActive = false
-    local auraLoop = nil
-    local collectedParts = {} -- {part = part, originalCFrame = CFrame, state = "collecting/launching/resetting"}
-    local launchQueue = {}    -- Parts ready to launch
+    -- Open Window Button Click
+    BtnOpenAura.MouseButton1Click:Connect(function()
+        UpdatePlayerList4()
+        AuraWindow.Visible = true
+    end)
 
     BtnAura.MouseButton1Click:Connect(function()
         if isAuraActive then
@@ -1487,7 +1575,9 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
             AuraStatus.Text = "Player left the game!"
             AuraStatus.TextColor3 = C_RED
             selectedPlayer4 = nil
-            BtnPlayerDropdown4.Text = "Select Target ▼"
+            SelectedDisplay.Text = "Target: None"
+            SelectedDisplay.TextColor3 = C_TEXT_DIM
+            UpdatePlayerList4()
             return
         end
 
@@ -2410,8 +2500,19 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
         loadstring(game:HttpGet("https://raw.githubusercontent.com/igfrx/tpmorPpoT/refs/heads/main/aL", true))()
     end)
 
-    -- AUTO FOLLOW
-    local CardFollow = CreateCard(L("auto_follow"), 140, 10)
+    -- AUTO FOLLOW - Window Based
+    local CardFollow = CreateCard(L("auto_follow"), 70, 10)
+
+    local BtnOpenFollow = Instance.new("TextButton", CardFollow)
+    BtnOpenFollow.Text = "🚶 OPEN AUTO FOLLOW"
+    BtnOpenFollow.Size = UDim2.new(0.94, 0, 0, 35)
+    BtnOpenFollow.Position = UDim2.new(0.03, 0, 0, 35)
+    StyleBtn(BtnOpenFollow, C_ACCENT)
+
+    -- Create Auto Follow Window
+    local FollowWindow, FollowContent = CreateWindow("AUTO FOLLOW", 290)
+    FollowContent.ScrollBarThickness = 0
+    FollowContent.ScrollingEnabled = false
 
     local followTarget = nil
     local isFollowing = false
@@ -2465,17 +2566,133 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
         end
     end
 
-    local BtnFollow = Instance.new("TextButton", CardFollow)
+    -- Target Selection Label
+    local FwTargetLabel = Instance.new("TextLabel", FollowContent)
+    FwTargetLabel.Text = "SELECT TARGET"
+    FwTargetLabel.Size = UDim2.new(0.94, 0, 0, 20)
+    FwTargetLabel.BackgroundTransparency = 1
+    FwTargetLabel.TextColor3 = C_TEXT
+    FwTargetLabel.Font = Enum.Font.GothamBold
+    FwTargetLabel.TextSize = 11
+    FwTargetLabel.ZIndex = 205
+
+    -- Player List Frame
+    local FwPlayerListFrame = Instance.new("Frame", FollowContent)
+    FwPlayerListFrame.Size = UDim2.new(0.94, 0, 0, 120)
+    FwPlayerListFrame.BackgroundColor3 = C_ITEM
+    FwPlayerListFrame.BorderSizePixel = 0
+    FwPlayerListFrame.ZIndex = 205
+    Instance.new("UICorner", FwPlayerListFrame).CornerRadius = UDim.new(0, 6)
+
+    local FwPlayerListScroll = Instance.new("ScrollingFrame", FwPlayerListFrame)
+    FwPlayerListScroll.Size = UDim2.new(1, -4, 1, -4)
+    FwPlayerListScroll.Position = UDim2.new(0, 2, 0, 2)
+    FwPlayerListScroll.BackgroundTransparency = 1
+    FwPlayerListScroll.BorderSizePixel = 0
+    FwPlayerListScroll.ScrollBarThickness = 4
+    FwPlayerListScroll.ScrollBarImageColor3 = C_ACCENT
+    FwPlayerListScroll.ZIndex = 206
+    FwPlayerListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    FwPlayerListScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+    local FwPlayerListLayout = Instance.new("UIListLayout", FwPlayerListScroll)
+    FwPlayerListLayout.Padding = UDim.new(0, 3)
+    FwPlayerListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    -- Selected Target Display
+    local FwSelectedDisplay = Instance.new("TextLabel", FollowContent)
+    FwSelectedDisplay.Text = "Target: None"
+    FwSelectedDisplay.Size = UDim2.new(0.94, 0, 0, 25)
+    FwSelectedDisplay.BackgroundColor3 = C_SIDE
+    FwSelectedDisplay.TextColor3 = C_TEXT_DIM
+    FwSelectedDisplay.Font = Enum.Font.GothamBold
+    FwSelectedDisplay.TextSize = 11
+    FwSelectedDisplay.ZIndex = 205
+    Instance.new("UICorner", FwSelectedDisplay).CornerRadius = UDim.new(0, 6)
+
+    -- Function to update player list
+    local function UpdateFollowPlayerList()
+        for _, child in pairs(FwPlayerListScroll:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
+
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local btn = Instance.new("TextButton", FwPlayerListScroll)
+                btn.Text = player.DisplayName .. " (@" .. player.Name .. ")"
+                btn.Size = UDim2.new(1, -8, 0, 28)
+                btn.BackgroundColor3 = (followTarget == player) and C_ACCENT or C_SIDE
+                btn.TextColor3 = (followTarget == player) and C_TEXT or C_TEXT_DIM
+                btn.Font = Enum.Font.Gotham
+                btn.TextSize = 11
+                btn.BorderSizePixel = 0
+                btn.ZIndex = 207
+                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+                btn.MouseButton1Click:Connect(function()
+                    followTarget = player
+                    FwSelectedDisplay.Text = "Target: " .. player.DisplayName
+                    FwSelectedDisplay.TextColor3 = C_GREEN
+                    UpdateFollowPlayerList()
+                end)
+
+                btn.MouseEnter:Connect(function()
+                    if followTarget ~= player then
+                        btn.BackgroundColor3 = C_ACCENT
+                        btn.TextColor3 = C_TEXT
+                    end
+                end)
+
+                btn.MouseLeave:Connect(function()
+                    if followTarget ~= player then
+                        btn.BackgroundColor3 = C_SIDE
+                        btn.TextColor3 = C_TEXT_DIM
+                    end
+                end)
+            end
+        end
+    end
+
+    -- Follow Button
+    local BtnFollow = Instance.new("TextButton", FollowContent)
     BtnFollow.Text = "START FOLLOW (G)"
-    BtnFollow.Size = UDim2.new(0.9, 0, 0, 35)
-    BtnFollow.Position = UDim2.new(0.05, 0, 0, 85)
-    StyleBtn(BtnFollow, C_GREEN)
+    BtnFollow.Size = UDim2.new(0.94, 0, 0, 35)
+    BtnFollow.BackgroundColor3 = C_GREEN
+    BtnFollow.TextColor3 = C_TEXT
+    BtnFollow.Font = Enum.Font.GothamBold
+    BtnFollow.TextSize = 12
+    BtnFollow.BorderSizePixel = 0
+    BtnFollow.ZIndex = 205
+    Instance.new("UICorner", BtnFollow).CornerRadius = UDim.new(0, 6)
+    local fwStroke = Instance.new("UIStroke", BtnFollow)
+    fwStroke.Color = C_GREEN
+    fwStroke.Thickness = 1
+
+    -- Status Label
+    local FollowStatus = Instance.new("TextLabel", FollowContent)
+    FollowStatus.Text = "Select player and click START"
+    FollowStatus.Size = UDim2.new(0.94, 0, 0, 20)
+    FollowStatus.BackgroundTransparency = 1
+    FollowStatus.TextColor3 = C_TEXT_DIM
+    FollowStatus.Font = Enum.Font.Code
+    FollowStatus.TextSize = 10
+    FollowStatus.ZIndex = 205
+
+    -- Open Window Button Click
+    BtnOpenFollow.MouseButton1Click:Connect(function()
+        UpdateFollowPlayerList()
+        FollowWindow.Visible = true
+    end)
 
     local function StopFollow()
         isFollowing = false
         BtnFollow.Text = "START FOLLOW (G)"
-        BtnFollow.TextColor3 = C_GREEN
-        BtnFollow.UIStroke.Color = C_GREEN
+        BtnFollow.BackgroundColor3 = C_GREEN
+        fwStroke.Color = C_GREEN
+        FollowStatus.Text = "Follow stopped"
+        FollowStatus.TextColor3 = C_TEXT_DIM
         if followLoop then
             followLoop:Disconnect()
             followLoop = nil
@@ -2497,12 +2714,27 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 
     local function StartFollow()
         if not followTarget then
+            FollowStatus.Text = "Please select a player first!"
+            FollowStatus.TextColor3 = C_RED
             return
         end
+
+        if not followTarget.Parent then
+            FollowStatus.Text = "Player left the game!"
+            FollowStatus.TextColor3 = C_RED
+            followTarget = nil
+            FwSelectedDisplay.Text = "Target: None"
+            FwSelectedDisplay.TextColor3 = C_TEXT_DIM
+            UpdateFollowPlayerList()
+            return
+        end
+
         isFollowing = true
         BtnFollow.Text = "STOP FOLLOW (G)"
-        BtnFollow.TextColor3 = C_RED
-        BtnFollow.UIStroke.Color = C_RED
+        BtnFollow.BackgroundColor3 = C_RED
+        fwStroke.Color = C_RED
+        FollowStatus.Text = "Following " .. followTarget.DisplayName
+        FollowStatus.TextColor3 = C_GREEN
 
         local lastTpTick = 0
         followLoop = RunService.Heartbeat:Connect(function(dt)
@@ -2527,7 +2759,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
             if lastTpTick >= 0.01 then
                 lastTpTick = 0
                 pcall(function()
-                    myHum.PlatformStand = false -- Keep false to allow animations if wanted, or true for pure tween
+                    myHum.PlatformStand = false
                     tweenPlaceBehind(myHRP, tHRP)
                 end)
             end
@@ -2587,57 +2819,6 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
             else
                 StartFollow()
             end
-        end
-    end)
-
-    -- Player Dropdown for Follow
-    local BtnSelP = Instance.new("TextButton", CardFollow)
-    BtnSelP.Text = "Select Target..."
-    BtnSelP.Size = UDim2.new(0.9, 0, 0, 35)
-    BtnSelP.Position = UDim2.new(0.05, 0, 0, 40)
-    StyleBtn(BtnSelP, C_TEXT)
-
-    local DropP = Instance.new("ScrollingFrame", CardFollow)
-    DropP.Size = UDim2.new(0.9, 0, 0, 120)
-    DropP.Position = UDim2.new(0.05, 0, 0, 80) -- Overlap
-    DropP.BackgroundColor3 = C_SIDE
-    DropP.Visible = false
-    DropP.ZIndex = 20
-    Instance.new("UICorner", DropP).CornerRadius = UDim.new(0, 6)
-    local dlsf = Instance.new("UIStroke", DropP)
-    dlsf.Color = C_ACCENT
-    dlsf.Transparency = 0.6
-    local DropLayout = Instance.new("UIListLayout", DropP)
-    DropLayout.SortOrder = Enum.SortOrder.LayoutOrder
-
-    BtnSelP.MouseButton1Click:Connect(function()
-        DropP.Visible = not DropP.Visible
-        if DropP.Visible then
-            for _, c in pairs(DropP:GetChildren()) do
-                if c:IsA("TextButton") then
-                    c:Destroy()
-                end
-            end
-            for _, p in pairs(game:GetService("Players"):GetPlayers()) do
-                if p ~= LocalPlayer then
-                    local b = Instance.new("TextButton", DropP)
-                    b.Text = p.DisplayName .. " (@" .. p.Name .. ")"
-                    b.Size = UDim2.new(1, 0, 0, 25)
-                    b.BackgroundColor3 = C_ITEM
-                    b.TextColor3 = C_TEXT_DIM
-                    b.Font = Enum.Font.Gotham
-                    b.TextSize = 11
-                    b.ZIndex = 21
-                    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
-
-                    b.MouseButton1Click:Connect(function()
-                        followTarget = p
-                        BtnSelP.Text = "Target: " .. p.DisplayName
-                        DropP.Visible = false
-                    end)
-                end
-            end
-            DropP.CanvasSize = UDim2.new(0, 0, 0, #DropP:GetChildren() * 25)
         end
     end)
 

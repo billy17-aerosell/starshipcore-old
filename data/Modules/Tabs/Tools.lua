@@ -1418,19 +1418,47 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     InpSpoofDisplay.TextSize = 11
     Instance.new("UICorner", InpSpoofDisplay).CornerRadius = UDim.new(0, 6)
 
+    -- Use global state to persist spoof settings across language changes/tab rebuilds
+    if not getgenv().StarshipSpoofState then
+        getgenv().StarshipSpoofState = {
+            isSpoofing = false,
+            spoofName = "",
+            spoofDisplayName = "",
+            spoofConnections = {},
+            originalTexts = {}
+        }
+    end
+    local spoofState = getgenv().StarshipSpoofState
+    local isSpoofing = spoofState.isSpoofing
+    local spoofConnections = spoofState.spoofConnections
+    local originalTexts = spoofState.originalTexts
+
+    -- Restore saved spoof name values to text boxes
+    if spoofState.spoofName ~= "" then
+        InpSpoofName.Text = spoofState.spoofName
+    end
+    if spoofState.spoofDisplayName ~= "" then
+        InpSpoofDisplay.Text = spoofState.spoofDisplayName
+    end
+
     local BtnSpoof = Instance.new("TextButton", CardPrivacy)
-    BtnSpoof.Text = L("spoof") .. ": " .. L("off")
     BtnSpoof.Size = UDim2.new(0.94, 0, 0, 35)
     BtnSpoof.Position = UDim2.new(0.03, 0, 0, 90)
-    StyleBtn(BtnSpoof, C_RED)
-
-    local isSpoofing = false
-    local spoofConnections = {}
-    local originalTexts = {}
+    StyleBtn(BtnSpoof, isSpoofing and C_GREEN or C_RED)
+    -- Set initial button state based on global state
+    BtnSpoof.Text = L("spoof") .. ": " .. (isSpoofing and L("on") or L("off"))
+    BtnSpoof.TextColor3 = isSpoofing and C_GREEN or C_RED
+    if BtnSpoof:FindFirstChild("UIStroke") then
+        BtnSpoof.UIStroke.Color = isSpoofing and C_GREEN or C_RED
+    end
 
     local function SpoofAllNames()
         local fakeName = InpSpoofName.Text ~= "" and InpSpoofName.Text or "Player"
         local fakeDisplay = InpSpoofDisplay.Text ~= "" and InpSpoofDisplay.Text or fakeName
+
+        -- Save to global state
+        spoofState.spoofName = InpSpoofName.Text
+        spoofState.spoofDisplayName = InpSpoofDisplay.Text
         local realName = LocalPlayer.Name
         local realDisplay = LocalPlayer.DisplayName
 
@@ -1477,10 +1505,11 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
                                 if not child:GetAttribute("SpoofListener") then
                                     child:SetAttribute("SpoofListener", true)
                                     local con = child:GetPropertyChangedSignal("Text"):Connect(function()
-                                        if isSpoofing then
+                                        if spoofState.isSpoofing then
                                             local newText = child.Text
                                             if newText and (newText:find(realName) or newText:find(realDisplay)) then
-                                                child.Text = newText:gsub(realName, fakeName):gsub(realDisplay, fakeDisplay)
+                                                child.Text = newText:gsub(realName, fakeName):gsub(realDisplay,
+                                                    fakeDisplay)
                                             end
                                         end
                                     end)
@@ -1527,7 +1556,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
                             if not child:GetAttribute("SpoofListener") then
                                 child:SetAttribute("SpoofListener", true)
                                 local con = child:GetPropertyChangedSignal("Text"):Connect(function()
-                                    if isSpoofing then
+                                    if spoofState.isSpoofing then
                                         local newText = child.Text
                                         if newText and (newText:find(realName) or newText:find(realDisplay)) then
                                             child.Text = newText:gsub(realName, fakeName):gsub(realDisplay, fakeDisplay)
@@ -1555,7 +1584,9 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
                 end)
             end
         end
+        -- Clear both local reference and global state
         originalTexts = {}
+        spoofState.originalTexts = {}
 
         -- Restore StarshipCore Main UI to real name
         if UIHandlers.UpdateSpoofedName then
@@ -1565,6 +1596,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 
     local function ToggleSpoof()
         isSpoofing = not isSpoofing
+        spoofState.isSpoofing = isSpoofing -- Save to global state
         BtnSpoof.Text = L("spoof") .. ": " .. (isSpoofing and L("on") or L("off"))
         BtnSpoof.TextColor3 = isSpoofing and C_GREEN or C_RED
         BtnSpoof.UIStroke.Color = isSpoofing and C_GREEN or C_RED
@@ -1576,7 +1608,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             -- Keep spoofing on changes (Faster: every 0.2 seconds for nametags)
             local lastSpoof = 0
             local spoofLoop = RunService.Heartbeat:Connect(function()
-                if isSpoofing and tick() - lastSpoof > 0.2 then
+                if spoofState.isSpoofing and tick() - lastSpoof > 0.2 then
                     lastSpoof = tick()
                     SpoofAllNames()
                 end
@@ -1587,7 +1619,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
             -- Spoof on character added
             local charCon = LocalPlayer.CharacterAdded:Connect(function(char)
                 task.wait(1)
-                if isSpoofing then
+                if spoofState.isSpoofing then
                     SpoofAllNames()
                 end
             end)
@@ -1631,10 +1663,15 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     UIHandlers.SetSpoofName = function(spoofName, spoofDisplayName)
         InpSpoofName.Text = spoofName or ""
         InpSpoofDisplay.Text = spoofDisplayName or ""
+        -- Also save to global state
+        spoofState.spoofName = spoofName or ""
+        spoofState.spoofDisplayName = spoofDisplayName or ""
     end
 
     -- Toggle spoof name for auto-enable feature
     UIHandlers.ToggleSpoofName = function(state)
+        -- Re-read current state from global
+        isSpoofing = spoofState.isSpoofing
         if state == nil then
             -- Toggle
             if not isSpoofing then
