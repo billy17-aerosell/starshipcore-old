@@ -1786,6 +1786,116 @@ ToolsTab:Toggle({
 ToolsTab:Divider()
 
 -- ══════════════════════════════════════════════════════════════════
+-- 👥 HIDE PLAYERS
+-- ══════════════════════════════════════════════════════════════════
+ToolsTab:Section({ Title = "👥 Hide Players", TextSize = 20 })
+
+local isHidePlayers = false
+local hiddenPlayersData = {}
+local playerAddedConnection = nil
+
+local function HidePlayer(player)
+    if player == LocalPlayer then
+        return
+    end
+    local character = player.Character
+    if character then
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") or part:IsA("Decal") then
+                if not hiddenPlayersData[part] then
+                    hiddenPlayersData[part] = part.Transparency
+                end
+                part.Transparency = 1
+            elseif part:IsA("BillboardGui") or part:IsA("SurfaceGui") then
+                if not hiddenPlayersData[part] then
+                    hiddenPlayersData[part] = part.Enabled
+                end
+                part.Enabled = false
+            end
+        end
+    end
+end
+
+local function ShowPlayer(player)
+    if player == LocalPlayer then
+        return
+    end
+    local character = player.Character
+    if character then
+        for _, part in pairs(character:GetDescendants()) do
+            if hiddenPlayersData[part] ~= nil then
+                if part:IsA("BasePart") or part:IsA("Decal") then
+                    part.Transparency = hiddenPlayersData[part]
+                elseif part:IsA("BillboardGui") or part:IsA("SurfaceGui") then
+                    part.Enabled = hiddenPlayersData[part]
+                end
+                hiddenPlayersData[part] = nil
+            end
+        end
+    end
+end
+
+ToolsTab:Toggle({
+    Title = "Hide All Players",
+    Desc = "Make other players invisible",
+    Value = false,
+    Callback = function(state)
+        isHidePlayers = state
+
+        if isHidePlayers then
+            -- Hide all current players
+            for _, player in pairs(Players:GetPlayers()) do
+                HidePlayer(player)
+
+                -- Also listen for character respawns
+                player.CharacterAdded:Connect(function()
+                    if isHidePlayers then
+                        task.wait(0.5) -- Wait for character to fully load
+                        HidePlayer(player)
+                    end
+                end)
+            end
+
+            -- Listen for new players joining
+            playerAddedConnection = Players.PlayerAdded:Connect(function(player)
+                player.CharacterAdded:Connect(function()
+                    if isHidePlayers then
+                        task.wait(0.5)
+                        HidePlayer(player)
+                    end
+                end)
+            end)
+            table.insert(Connections, playerAddedConnection)
+
+            WindUI:Notify({
+                Title = "Hide Players",
+                Content = "All players are now invisible",
+                Duration = 2,
+            })
+        else
+            -- Show all players
+            for _, player in pairs(Players:GetPlayers()) do
+                ShowPlayer(player)
+            end
+            hiddenPlayersData = {}
+
+            if playerAddedConnection then
+                playerAddedConnection:Disconnect()
+                playerAddedConnection = nil
+            end
+
+            WindUI:Notify({
+                Title = "Hide Players",
+                Content = "All players are now visible",
+                Duration = 2,
+            })
+        end
+    end,
+})
+
+ToolsTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
 -- 🚶 AUTO WALK TAB CONTENT
 -- ══════════════════════════════════════════════════════════════════
 
