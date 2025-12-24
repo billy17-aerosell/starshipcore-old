@@ -661,15 +661,38 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
     UIHandlers.ToggleFullbright = ToggleFullbright
 
     -- 4. CUSTOM ANIMATIONS
-    -- Note: Loading the AnimDB from Module here or passing it would be cleaner,
-    -- but for now we will rely on the file existing or pass it in Config if needed.
-    -- For this refactor, I'll load the module locally to ensure access.
-
-    local FOLDER_NAME = "StarshipCore" -- Need this for module path
-    local ModulesPath = FOLDER_NAME .. "/Modules"
+    -- Load AnimDB from StarshipModules global (set by Loader.lua)
     local AnimDB = {}
-    if isfile(ModulesPath .. "/Animations.lua") then
-        AnimDB = loadstring(readfile(ModulesPath .. "/Animations.lua"))()
+    if getgenv and getgenv().StarshipModules and getgenv().StarshipModules["Animations.lua"] then
+        AnimDB = getgenv().StarshipModules["Animations.lua"]
+    elseif _G.StarshipAnimDB then
+        AnimDB = _G.StarshipAnimDB
+    else
+        -- Fallback: try to load from file if available
+        local FOLDER_NAME = "StarshipCore"
+        local ModulesPath = FOLDER_NAME .. "/Modules"
+        if isfile and isfile(ModulesPath .. "/Animations.lua") then
+            local success, result = pcall(function()
+                return loadstring(readfile(ModulesPath .. "/Animations.lua"))()
+            end)
+            if success and result then
+                AnimDB = result
+            end
+        end
+    end
+
+    -- If AnimDB is still empty, create default structure
+    if not AnimDB or not next(AnimDB) then
+        AnimDB = {
+            ["Idle"] = {},
+            ["Walk"] = {},
+            ["Run"] = {},
+            ["Jump"] = {},
+            ["Fall"] = {},
+            ["Swim"] = {},
+            ["SwimIdle"] = {},
+            ["Climb"] = {}
+        }
     end
 
     local CardAnim = CreateCard(L("custom_animations"), 400, 4)
