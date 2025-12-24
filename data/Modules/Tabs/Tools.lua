@@ -732,7 +732,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
         end)
         if ok and obj and #obj > 0 then
             local anim = obj[1]
-            if anim:IsA("Animation") and anim.AnimationId ~= "" then
+            if typeof(anim) == "Instance" and anim:IsA("Animation") and anim.AnimationId ~= "" then
                 return tonumber(anim.AnimationId:match("%d+")) or id
             end
         end

@@ -435,7 +435,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
         end
     end)
 
-    -- 3. INVISIBLE (FE Bypass)
+    -- 3. INVISIBLE (FE Bypass - Seat Method)
     local CardInvis = CreateCard(L("invisible"), 85, 3)
 
     local BtnInvis = Instance.new("TextButton", CardInvis)
@@ -454,62 +454,73 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
     InvisInfo.TextSize = 8
 
     local isInvis = false
-    local invisLoop = nil
+    local invisConnection = nil
+    local savedOffsets = {}
 
     UIHandlers.ToggleRealInvisible = function()
+        local character = LocalPlayer.Character
+        if not character then return end
+
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character:FindFirstChild("Humanoid")
+        if not hrp or not humanoid then return end
+
         isInvis = not isInvis
         BtnInvis.Text = "INVISIBLE: " .. (isInvis and "ON" or "OFF")
         BtnInvis.TextColor3 = isInvis and C_GREEN or C_RED
         BtnInvis.UIStroke.Color = isInvis and C_GREEN or C_RED
 
         if isInvis then
-            -- Start FE invisible loop
-            invisLoop = RunService.Heartbeat:Connect(function()
-                local c = LocalPlayer.Character
-                if not c then
-                    return
-                end
+            -- FE Invisible using Viewpoint method
+            -- This works by offsetting character position every frame
+            -- Server sees you at offset position, but camera stays at real position
 
-                local r = c:FindFirstChild("HumanoidRootPart")
-                local h = c:FindFirstChild("Humanoid")
-                if not r or not h then
-                    return
-                end
+            local offset = Vector3.new(0, -500, 0)
 
-                -- Save current state
-                local currentCF = r.CFrame
-                local currentCamOffset = h.CameraOffset
+            invisConnection = RunService.Heartbeat:Connect(function()
+                if not isInvis then return end
 
-                -- Teleport far down (this prevents replication to other clients)
-                local hiddenCF = currentCF * CFrame.new(0, -200000, 0)
-                r.CFrame = hiddenCF
+                local char = LocalPlayer.Character
+                if not char then return end
 
-                -- Fix camera so you don't see yourself far down
-                h.CameraOffset = hiddenCF:ToObjectSpace(CFrame.new(currentCF.Position)).Position
+                local root = char:FindFirstChild("HumanoidRootPart")
+                local hum = char:FindFirstChild("Humanoid")
+                if not root or not hum then return end
 
-                -- Wait 1 frame
+                -- Save current position
+                local currentCF = root.CFrame
+
+                -- Teleport down (this is what server/other players see)
+                root.CFrame = currentCF * CFrame.new(offset)
+
+                -- Adjust camera offset so you see yourself at original position
+                hum.CameraOffset = Vector3.new(0, 500, 0)
+
+                -- Wait one render frame
                 RunService.RenderStepped:Wait()
 
-                -- Restore position
-                r.CFrame = currentCF
-                h.CameraOffset = currentCamOffset
+                -- Teleport back (only you see this)
+                root.CFrame = currentCF
+                hum.CameraOffset = Vector3.new(0, 0, 0)
             end)
-            table.insert(Connections, invisLoop)
+
+            table.insert(Connections, invisConnection)
 
             InvisInfo.Text = "You are invisible to others!"
             InvisInfo.TextColor3 = C_GREEN
         else
-            if invisLoop then
-                invisLoop:Disconnect()
-                invisLoop = nil
+            -- Disable invisible
+            if invisConnection then
+                invisConnection:Disconnect()
+                invisConnection = nil
             end
 
-            -- Reset camera offset just in case
-            local c = LocalPlayer.Character
-            if c then
-                local h = c:FindFirstChild("Humanoid")
-                if h then
-                    h.CameraOffset = Vector3.new(0, 0, 0)
+            -- Reset camera offset
+            local character = LocalPlayer.Character
+            if character then
+                local humanoid = character:FindFirstChild("Humanoid")
+                if humanoid then
+                    humanoid.CameraOffset = Vector3.new(0, 0, 0)
                 end
             end
 
