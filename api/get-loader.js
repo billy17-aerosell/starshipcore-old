@@ -440,11 +440,12 @@ export default async function handler(req, res) {
         timestamp: timestamp,
       });
 
-      return res
-        .status(403)
-        .send(
-          `error("You have a ${config.otherLabel.replace(/[📱💻]/g, "").trim()} license, not ${platform.toUpperCase()}. Purchase ${platform.toUpperCase()} VIP for ${platform} access.")`,
-        );
+      // Instead of blocking, serve loader to allow event code input
+      // The loader will handle showing the event code UI
+      console.log(
+        `[${timestamp}] 🎟️ Serving loader for event code access - ${config.otherLabel} user - UserID: ${userId}`,
+      );
+      return serveLoaderScript(res, config, "event_code", "EVENT");
     }
 
     // Check file-based other platform whitelist
@@ -472,11 +473,12 @@ export default async function handler(req, res) {
             timestamp: timestamp,
           });
 
-          return res
-            .status(403)
-            .send(
-              `error("You have a ${config.otherLabel.replace(/[📱💻]/g, "").trim()} license, not ${platform.toUpperCase()}. Purchase ${platform.toUpperCase()} VIP for ${platform} access.")`,
-            );
+          // Instead of blocking, serve loader to allow event code input
+          // The loader will handle showing the event code UI
+          console.log(
+            `[${timestamp}] 🎟️ Serving loader for event code access (File) - ${config.otherLabel} user - UserID: ${userId}`,
+          );
+          return serveLoaderScript(res, config, "event_code", "EVENT");
         }
       } catch (err) {
         console.error("Error checking other keys file:", err);
@@ -536,27 +538,14 @@ export default async function handler(req, res) {
       );
   }
 
-  // === NOT WHITELISTED ===
+  // === NOT WHITELISTED - Allow Event Code Access ===
   console.log(
-    `[${timestamp}] ❌ NOT ${platform.toUpperCase()} WHITELISTED - UserID: ${userId} | IP: ${clientIP}`,
+    `[${timestamp}] 🎟️ NOT ${platform.toUpperCase()} WHITELISTED - Serving loader for event code - UserID: ${userId} | IP: ${clientIP}`,
   );
 
-  await sendDiscordLog({
-    title: `${platformLabel} Loader Access Denied`,
-    status: "blocked",
-    owner: `UserID: ${userId}`,
-    authType: "None",
-    ip: clientIP,
-    platform: `${platformLabel} (Denied)`,
-    timestamp: timestamp,
-    message: `❌ User not in ${platform} whitelist\nUserID: ${userId}`,
-  });
-
-  return res
-    .status(403)
-    .send(
-      `error("Not whitelisted for ${platform.toUpperCase()} access. Purchase ${platform.toUpperCase()} VIP to get access.")`,
-    );
+  // Instead of blocking, serve loader to allow event code input
+  // The loader will handle showing the event code UI for non-whitelisted users
+  return serveLoaderScript(res, config, "event_code", "EVENT");
 }
 
 // Helper function to serve loader script

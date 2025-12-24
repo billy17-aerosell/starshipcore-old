@@ -1,8 +1,36 @@
 // Get Mobile UI API - Serves protected MobileUI.lua after authentication
 // Only accessible after user passes mobile-loader authentication
+// + Event Code System Integration
 
 import fs from "fs";
 import path from "path";
+
+// Event Code System API (Google Sheets)
+const EVENT_CODE_API =
+  "https://script.google.com/macros/s/AKfycbw3oc1fHMRpGMkr67f8UQ6jbIXvfxDgI_fZCZSOsNZmnf8htHVnLJFnraGekLitgR7Q/exec";
+
+// Check if user has active event access from Google Sheets
+async function checkEventAccess(userId) {
+  try {
+    const apiUrl = `${EVENT_CODE_API}?action=status&userId=${userId}`;
+    const response = await fetch(apiUrl);
+    const data = await response.json();
+
+    if (data.success && data.hasAccess) {
+      return {
+        hasAccess: true,
+        codeUsed: data.codeUsed,
+        expiresAt: data.expiresAt,
+        remainingDays: data.remainingDays,
+        remainingHours: data.remainingHours,
+      };
+    }
+    return { hasAccess: false };
+  } catch (error) {
+    console.error("Event code check error:", error.message);
+    return { hasAccess: false };
+  }
+}
 
 // Redis client
 let redis = null;
@@ -314,9 +342,48 @@ export default async function handler(req, res) {
       }
     }
 
-    // === NOT WHITELISTED ===
+    // === CHECK EVENT CODE ACCESS (Google Sheets) ===
     console.log(
-      `[${timestamp}] ❌ MOBILE UI DENIED - Not whitelisted - UserID: ${userId} | IP: ${clientIP}`,
+      `[${timestamp}] 🎟️ Checking event access for UserID: ${userId}`,
+    );
+
+    const eventAccess = await checkEventAccess(userId);
+
+    if (eventAccess.hasAccess) {
+      console.log(
+        `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - UserID: ${userId} | Code: ${eventAccess.codeUsed} | Expires: ${eventAccess.expiresAt}`,
+      );
+
+      await sendDiscordLog({
+        title: "🎟️ Mobile UI Event Access Granted",
+        status: "success",
+        owner: `UserID: ${userId}`,
+        authType: `Event Code (${eventAccess.codeUsed})`,
+        ip: clientIP,
+        timestamp: timestamp,
+        message: `✅ Event code access granted\nCode: ${eventAccess.codeUsed}\nRemaining: ${eventAccess.remainingDays} days`,
+      });
+
+      // Read MobileUI.lua from data folder
+      const uiPath = path.join(process.cwd(), "data", "MobileUI.lua");
+
+      if (!fs.existsSync(uiPath)) {
+        return res.status(500).send('error("Mobile UI not available")');
+      }
+
+      const uiScript = fs.readFileSync(uiPath, "utf8");
+
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("X-Platform", "mobile");
+      res.setHeader("X-Auth", "event-code");
+      res.setHeader("X-Event-Code", eventAccess.codeUsed);
+      return res.status(200).send(uiScript);
+    }
+
+    // === NOT WHITELISTED AND NO EVENT ACCESS ===
+    console.log(
+      `[${timestamp}] ❌ MOBILE UI DENIED - Not whitelisted and no event access - UserID: ${userId} | IP: ${clientIP}`,
     );
 
     await sendDiscordLog({
@@ -332,7 +399,7 @@ export default async function handler(req, res) {
     return res
       .status(403)
       .send(
-        'error("Not whitelisted for Mobile access. Purchase Mobile VIP to get access.")',
+        'error("Not whitelisted for Mobile access. Purchase Mobile VIP or use an Event Code to get access.")',
       );
   } catch (error) {
     console.error("Get Mobile UI Error:", error);
