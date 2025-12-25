@@ -156,10 +156,10 @@ export default async function handler(req, res) {
   if (method === "GET") {
     const { recordingId, list } = req.query;
 
-    // LIST all recordings
+    // LIST all recordings (OPTIMIZED: Use metadata only, don't read full files)
     if (list === "all") {
       try {
-        console.log("[R2] Listing all recordings...");
+        console.log("[R2] Listing all recordings (optimized)...");
 
         const listResult = await r2Client.send(
           new ListObjectsV2Command({
@@ -171,48 +171,48 @@ export default async function handler(req, res) {
         const recordings = [];
 
         if (listResult.Contents) {
-          for (const item of listResult.Contents) {
+          // Process in parallel with Promise.all for speed
+          const promises = listResult.Contents.map(async (item) => {
             try {
-              // Get object to read metadata
-              const getResult = await r2Client.send(
-                new GetObjectCommand({
-                  Bucket: R2_BUCKET_NAME,
-                  Key: item.Key,
-                }),
-              );
-
-              const content = await streamToString(getResult.Body);
-              const data = JSON.parse(content);
-
               // Extract filename from key for display
               const fileName = item.Key.replace("recordings/", "").replace(
                 ".json",
                 "",
               );
 
-              recordings.push({
-                recordingId: data.id || fileName,
-                name: data.name || fileName,
-                userId: data.userId,
-                frameCount: data.frameCount,
-                duration: data.duration,
-                mode: data.mode,
-                createdAt: data.createdAt,
-                updatedAt: data.updatedAt,
+              // Return basic info from listing (no file read needed!)
+              return {
+                recordingId: fileName,
+                name: fileName.replace(/_/g, " "), // Convert underscores to spaces for display
                 size: item.Size,
-              });
+                lastModified: item.LastModified,
+                // Estimate duration/frameCount from file size (rough approximation)
+                // Average frame is ~4KB, so frameCount ≈ size / 4000
+                estimatedFrameCount: Math.round(item.Size / 4000),
+                estimatedDuration: Math.round(item.Size / 4000 / 60), // Assuming 60 FPS
+              };
             } catch (parseError) {
               console.error(
-                `[R2] Error parsing ${item.Key}:`,
+                `[R2] Error processing ${item.Key}:`,
                 parseError.message,
               );
+              return null;
+            }
+          });
+
+          const results = await Promise.all(promises);
+          
+          // Filter out nulls and add to recordings
+          for (const rec of results) {
+            if (rec) {
+              recordings.push(rec);
             }
           }
         }
 
-        // Sort by most recent first
+        // Sort by most recent first (using lastModified from R2)
         recordings.sort(
-          (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
+          (a, b) => new Date(b.lastModified) - new Date(a.lastModified),
         );
 
         console.log(`[R2] Found ${recordings.length} recordings`);
