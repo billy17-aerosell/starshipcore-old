@@ -6651,90 +6651,85 @@ function UIHandlers.SetupListMapUI()
 	SettingsRow.BackgroundTransparency = 1
 	SettingsRow.LayoutOrder = 2
 
-	-- Check if user has cloud access for showing Cloud Sync toggle
-	local hasCloudAccess = false
-	if getgenv and getgenv().StarshipSession then
-		local sess = getgenv().StarshipSession
-		local role = sess.Role or ""
-		hasCloudAccess = (role:upper() == "OWNER" or role:upper() == "DEVELOPER")
-	end
+	-- Check cloud access inline (avoid extra local)
+	do
+		local cloudOK = getgenv
+				and getgenv().StarshipSession
+				and (getgenv().StarshipSession.Role or ""):upper() == "OWNER"
+			or (getgenv and getgenv().StarshipSession and (getgenv().StarshipSession.Role or ""):upper() == "DEVELOPER")
+		local bw = cloudOK and 0.32 or 0.48
 
-	-- Calculate button widths based on cloud access
-	local buttonWidth = hasCloudAccess and 0.32 or 0.48
+		local BtnStrict = Instance.new("TextButton", SettingsRow)
+		BtnStrict.Text = L("strict_retarget") .. ": " .. L("off")
+		RegisterDynamicUI(BtnStrict, function(el)
+			el.Text = L("strict_retarget") .. ": " .. (isStrictRetarget and L("on") or L("off"))
+		end)
+		BtnStrict.Size = UDim2.new(bw, -3, 1, 0)
+		BtnStrict.Position = UDim2.new(0, 0, 0, 0)
+		BtnStrict.BackgroundColor3 = C_ITEM
+		BtnStrict.TextColor3 = C_TEXT_DIM
+		BtnStrict.Font = Enum.Font.GothamBold
+		BtnStrict.TextSize = 8
+		Instance.new("UICorner", BtnStrict).CornerRadius = UDim.new(0, 6)
+		RegisterTheme(BtnStrict, "BackgroundColor3", "Item")
 
-	local BtnStrictRetarget = Instance.new("TextButton", SettingsRow)
-	BtnStrictRetarget.Text = L("strict_retarget") .. ": " .. L("off")
-	-- Register for language refresh (dynamic based on isStrictRetarget state)
-	RegisterDynamicUI(BtnStrictRetarget, function(el)
-		el.Text = L("strict_retarget") .. ": " .. (isStrictRetarget and L("on") or L("off"))
-	end)
-	BtnStrictRetarget.Size = UDim2.new(buttonWidth, -3, 1, 0)
-	BtnStrictRetarget.Position = UDim2.new(0, 0, 0, 0)
-	BtnStrictRetarget.BackgroundColor3 = C_ITEM
-	BtnStrictRetarget.TextColor3 = C_TEXT_DIM
-	BtnStrictRetarget.Font = Enum.Font.GothamBold
-	BtnStrictRetarget.TextSize = 8
-	Instance.new("UICorner", BtnStrictRetarget).CornerRadius = UDim.new(0, 6)
-	RegisterTheme(BtnStrictRetarget, "BackgroundColor3", "Item")
+		local BtnNative = Instance.new("TextButton", SettingsRow)
+		BtnNative.Text = L("native_anim") .. ": " .. L("off")
+		RegisterDynamicUI(BtnNative, function(el)
+			el.Text = L("native_anim") .. ": " .. (isNativeAnim and L("on") or L("off"))
+		end)
+		BtnNative.Size = UDim2.new(bw, -3, 1, 0)
+		BtnNative.Position = UDim2.new(cloudOK and 0.34 or 0.52, 0, 0, 0)
+		BtnNative.BackgroundColor3 = C_ITEM
+		BtnNative.TextColor3 = C_TEXT_DIM
+		BtnNative.Font = Enum.Font.GothamBold
+		BtnNative.TextSize = 8
+		Instance.new("UICorner", BtnNative).CornerRadius = UDim.new(0, 6)
+		RegisterTheme(BtnNative, "BackgroundColor3", "Item")
 
-	local BtnNativeAnim = Instance.new("TextButton", SettingsRow)
-	BtnNativeAnim.Text = L("native_anim") .. ": " .. L("off")
-	-- Register for language refresh (dynamic based on isNativeAnim state)
-	RegisterDynamicUI(BtnNativeAnim, function(el)
-		el.Text = L("native_anim") .. ": " .. (isNativeAnim and L("on") or L("off"))
-	end)
-	BtnNativeAnim.Size = UDim2.new(buttonWidth, -3, 1, 0)
-	BtnNativeAnim.Position = UDim2.new(hasCloudAccess and 0.34 or 0.52, 0, 0, 0)
-	BtnNativeAnim.BackgroundColor3 = C_ITEM
-	BtnNativeAnim.TextColor3 = C_TEXT_DIM
-	BtnNativeAnim.Font = Enum.Font.GothamBold
-	BtnNativeAnim.TextSize = 8
-	Instance.new("UICorner", BtnNativeAnim).CornerRadius = UDim.new(0, 6)
-	RegisterTheme(BtnNativeAnim, "BackgroundColor3", "Item")
+		-- Cloud Sync Toggle (Only for Owner/Developer)
+		if cloudOK then
+			local BtnCloud = Instance.new("TextButton", SettingsRow)
+			BtnCloud.Text = "☁️ Sync: " .. (isAutoCloudSync and "ON" or "OFF")
+			BtnCloud.Size = UDim2.new(0.32, -3, 1, 0)
+			BtnCloud.Position = UDim2.new(0.68, 0, 0, 0)
+			BtnCloud.BackgroundColor3 = isAutoCloudSync and C_ACCENT or C_ITEM
+			BtnCloud.TextColor3 = isAutoCloudSync and Color3.new(1, 1, 1) or C_TEXT_DIM
+			BtnCloud.Font = Enum.Font.GothamBold
+			BtnCloud.TextSize = 8
+			Instance.new("UICorner", BtnCloud).CornerRadius = UDim.new(0, 6)
+			if not isAutoCloudSync then
+				RegisterTheme(BtnCloud, "BackgroundColor3", "Item")
+			end
 
-	-- Cloud Sync Toggle (Only for Owner/Developer)
-	local BtnCloudSync
-	if hasCloudAccess then
-		BtnCloudSync = Instance.new("TextButton", SettingsRow)
-		BtnCloudSync.Text = "☁️ Sync: " .. (isAutoCloudSync and "ON" or "OFF")
-		BtnCloudSync.Size = UDim2.new(0.32, -3, 1, 0)
-		BtnCloudSync.Position = UDim2.new(0.68, 0, 0, 0)
-		BtnCloudSync.BackgroundColor3 = isAutoCloudSync and C_ACCENT or C_ITEM
-		BtnCloudSync.TextColor3 = isAutoCloudSync and Color3.new(1, 1, 1) or C_TEXT_DIM
-		BtnCloudSync.Font = Enum.Font.GothamBold
-		BtnCloudSync.TextSize = 8
-		Instance.new("UICorner", BtnCloudSync).CornerRadius = UDim.new(0, 6)
-		if not isAutoCloudSync then
-			RegisterTheme(BtnCloudSync, "BackgroundColor3", "Item")
+			BtnCloud.MouseButton1Click:Connect(function()
+				isAutoCloudSync = not isAutoCloudSync
+				S.isAutoCloudSync = isAutoCloudSync
+				BtnCloud.Text = "☁️ Sync: " .. (isAutoCloudSync and "ON" or "OFF")
+				BtnCloud.BackgroundColor3 = isAutoCloudSync and C_ACCENT or C_ITEM
+				BtnCloud.TextColor3 = isAutoCloudSync and Color3.new(1, 1, 1) or C_TEXT_DIM
+				ShowToast(
+					"☁️ Auto Sync",
+					isAutoCloudSync and "Auto-upload enabled" or "Disabled",
+					isAutoCloudSync and "success" or "info",
+					2
+				)
+			end)
 		end
 
-		BtnCloudSync.MouseButton1Click:Connect(function()
-			isAutoCloudSync = not isAutoCloudSync
-			S.isAutoCloudSync = isAutoCloudSync -- Update state table too
-			BtnCloudSync.Text = "☁️ Sync: " .. (isAutoCloudSync and "ON" or "OFF")
-			BtnCloudSync.BackgroundColor3 = isAutoCloudSync and C_ACCENT or C_ITEM
-			BtnCloudSync.TextColor3 = isAutoCloudSync and Color3.new(1, 1, 1) or C_TEXT_DIM
+		-- Button click handlers
+		BtnStrict.MouseButton1Click:Connect(function()
+			isStrictRetarget = not isStrictRetarget
+			BtnStrict.Text = L("strict_retarget") .. ": " .. (isStrictRetarget and L("on") or L("off"))
+			BtnStrict.TextColor3 = isStrictRetarget and C_GREEN or C_TEXT_DIM
+		end)
 
-			if isAutoCloudSync then
-				ShowToast("☁️ Auto Sync", "Merged files will auto-upload to cloud", "success", 2)
-			else
-				ShowToast("☁️ Auto Sync", "Auto-upload disabled", "info", 2)
-			end
+		BtnNative.MouseButton1Click:Connect(function()
+			isNativeAnim = not isNativeAnim
+			BtnNative.Text = L("native_anim") .. ": " .. (isNativeAnim and L("on") or L("off"))
+			BtnNative.TextColor3 = isNativeAnim and C_GREEN or C_TEXT_DIM
 		end)
 	end
-
-	-- Logic for Buttons
-	BtnStrictRetarget.MouseButton1Click:Connect(function()
-		isStrictRetarget = not isStrictRetarget
-		BtnStrictRetarget.Text = L("strict_retarget") .. ": " .. (isStrictRetarget and L("on") or L("off"))
-		BtnStrictRetarget.TextColor3 = isStrictRetarget and C_GREEN or C_TEXT_DIM
-	end)
-
-	BtnNativeAnim.MouseButton1Click:Connect(function()
-		isNativeAnim = not isNativeAnim
-		BtnNativeAnim.Text = L("native_anim") .. ": " .. (isNativeAnim and L("on") or L("off"))
-		BtnNativeAnim.TextColor3 = isNativeAnim and C_GREEN or C_TEXT_DIM
-	end)
 
 	local SearchIcon = Instance.new("ImageLabel", SearchFrame)
 	SearchIcon.Size = UDim2.new(0, 16, 0, 16)
