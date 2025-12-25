@@ -3683,6 +3683,11 @@ do
 					recordingId = rec.recordingId,
 				}
 			end
+
+			-- Sort alphabetically (A-Z)
+			table.sort(CloudDropdownValues, function(a, b)
+				return string.lower(a) < string.lower(b)
+			end)
 		else
 			print("[StarshipMobile] Parse failed or no recordings. parseSuccess=" .. tostring(parseSuccess))
 			if data then
@@ -3740,6 +3745,11 @@ ListMapTab:Button({
 						recordingId = rec.recordingId,
 					}
 				end
+
+				-- Sort alphabetically (A-Z)
+				table.sort(CloudDropdownValues, function(a, b)
+					return string.lower(a) < string.lower(b)
+				end)
 
 				WindUI:Notify({
 					Title = "✅ Refreshed",
