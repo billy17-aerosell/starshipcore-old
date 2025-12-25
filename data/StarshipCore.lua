@@ -690,7 +690,7 @@ local isReversing, isZoomPunch, lastAirState, isRespawnOnEnd =
 	S.isReversing, S.isZoomPunch, S.lastAirState, S.isRespawnOnEnd
 local isFlexibleRecording, isStrictRetarget, isNativeAnim, isWarpLoop =
 	S.isFlexibleRecording, S.isStrictRetarget, S.isNativeAnim, S.isWarpLoop
-local isAutoCloudSync = S.isAutoCloudSync
+-- isAutoCloudSync accessed via S.isAutoCloudSync to save local registers
 local recordedData = { FPS = 60, Frames = {} }
 local startTime = S.startTime
 local RefreshPlayerList, ShowConfirm, MainTitle
@@ -6515,7 +6515,7 @@ function UIHandlers.InitMergerUI()
 				ShowToast(L("merge_complete"), L("merged_files", totalFiles, name), "success", 3)
 
 				-- AUTO CLOUD SYNC (if enabled and user has cloud access)
-				if isAutoCloudSync then
+				if S.isAutoCloudSync then
 					-- Check if user is Owner/Developer for cloud features
 					local cloudEnabled = false
 					if getgenv and getgenv().StarshipSession then
@@ -6690,28 +6690,27 @@ function UIHandlers.SetupListMapUI()
 		-- Cloud Sync Toggle (Only for Owner/Developer)
 		if cloudOK then
 			local BtnCloud = Instance.new("TextButton", SettingsRow)
-			BtnCloud.Text = "☁️ Sync: " .. (isAutoCloudSync and "ON" or "OFF")
+			BtnCloud.Text = "☁️ Sync: " .. (S.isAutoCloudSync and "ON" or "OFF")
 			BtnCloud.Size = UDim2.new(0.32, -3, 1, 0)
 			BtnCloud.Position = UDim2.new(0.68, 0, 0, 0)
-			BtnCloud.BackgroundColor3 = isAutoCloudSync and C_ACCENT or C_ITEM
-			BtnCloud.TextColor3 = isAutoCloudSync and Color3.new(1, 1, 1) or C_TEXT_DIM
+			BtnCloud.BackgroundColor3 = S.isAutoCloudSync and C_ACCENT or C_ITEM
+			BtnCloud.TextColor3 = S.isAutoCloudSync and Color3.new(1, 1, 1) or C_TEXT_DIM
 			BtnCloud.Font = Enum.Font.GothamBold
 			BtnCloud.TextSize = 8
 			Instance.new("UICorner", BtnCloud).CornerRadius = UDim.new(0, 6)
-			if not isAutoCloudSync then
+			if not S.isAutoCloudSync then
 				RegisterTheme(BtnCloud, "BackgroundColor3", "Item")
 			end
 
 			BtnCloud.MouseButton1Click:Connect(function()
-				isAutoCloudSync = not isAutoCloudSync
-				S.isAutoCloudSync = isAutoCloudSync
-				BtnCloud.Text = "☁️ Sync: " .. (isAutoCloudSync and "ON" or "OFF")
-				BtnCloud.BackgroundColor3 = isAutoCloudSync and C_ACCENT or C_ITEM
-				BtnCloud.TextColor3 = isAutoCloudSync and Color3.new(1, 1, 1) or C_TEXT_DIM
+				S.isAutoCloudSync = not S.isAutoCloudSync
+				BtnCloud.Text = "☁️ Sync: " .. (S.isAutoCloudSync and "ON" or "OFF")
+				BtnCloud.BackgroundColor3 = S.isAutoCloudSync and C_ACCENT or C_ITEM
+				BtnCloud.TextColor3 = S.isAutoCloudSync and Color3.new(1, 1, 1) or C_TEXT_DIM
 				ShowToast(
 					"☁️ Auto Sync",
-					isAutoCloudSync and "Auto-upload enabled" or "Disabled",
-					isAutoCloudSync and "success" or "info",
+					S.isAutoCloudSync and "Auto-upload enabled" or "Disabled",
+					S.isAutoCloudSync and "success" or "info",
 					2
 				)
 			end)

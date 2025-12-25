@@ -3675,9 +3675,13 @@ do
 
 		if parseSuccess and data and data.success and data.recordings then
 			print("[StarshipMobile] Found " .. #data.recordings .. " cloud recordings!")
+
+			-- Store as simple strings for dropdown (supports search)
 			for _, rec in ipairs(data.recordings) do
-				local displayName = "☁️ " .. rec.name
+				local displayName = rec.name
 				table.insert(CloudDropdownValues, displayName)
+
+				-- Cache full info for lookup
 				CloudRecordingsCache[displayName] = {
 					name = rec.name,
 					recordingId = rec.recordingId,
@@ -3779,97 +3783,117 @@ ListMapTab:Space()
 local selectedCloudRecording = nil
 local CloudRecordingLoaded = false -- Flag to show playback controls
 
+-- Helper function to load a cloud recording
+local function LoadCloudRecording(recInfo)
+	if not recInfo or not recInfo.recordingId then
+		WindUI:Notify({
+			Title = "Error",
+			Content = "Invalid recording info",
+			Duration = 2,
+		})
+		return
+	end
+
+	selectedCloudRecording = recInfo
+	CloudRecordingLoaded = false -- Reset until loaded
+
+	WindUI:Notify({
+		Title = "☁️ Loading...",
+		Content = "Fetching " .. recInfo.name .. "...",
+		Duration = 2,
+	})
+
+	-- Fetch the actual recording data
+	task.spawn(function()
+		local apiUrl = "https://starship-core.my.id/api/r2-recordings?recordingId=" .. recInfo.recordingId
+
+		local success, response = pcall(function()
+			return game:HttpGet(apiUrl)
+		end)
+
+		if not success then
+			WindUI:Notify({
+				Title = "Error",
+				Content = "Failed to connect to cloud",
+				Duration = 3,
+			})
+			return
+		end
+
+		local parseSuccess, data = pcall(function()
+			return HttpService:JSONDecode(response)
+		end)
+
+		if not parseSuccess or not data then
+			WindUI:Notify({
+				Title = "Error",
+				Content = "Invalid response from server",
+				Duration = 3,
+			})
+			return
+		end
+
+		if data.error then
+			WindUI:Notify({
+				Title = "Error",
+				Content = data.error or "Recording not found",
+				Duration = 3,
+			})
+			return
+		end
+
+		if data.success and data.recording then
+			-- Store in memory
+			CloudRecordingData = data.recording
+			CloudRecordingName = data.name or recInfo.name
+			CloudRecordingLoaded = true -- Mark as loaded!
+
+			-- Update selected file display
+			selectedFile = "CLOUD:" .. recInfo.recordingId
+			if selectedFileDisplay then
+				pcall(function()
+					selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
+					selectedFileDisplay:SetDesc("Cloud Recording • Ready to play")
+				end)
+			end
+
+			WindUI:Notify({
+				Title = "☁️ Ready!",
+				Content = CloudRecordingName .. " loaded - tap Play to start",
+				Duration = 3,
+			})
+		else
+			WindUI:Notify({
+				Title = "Error",
+				Content = "Recording data not found",
+				Duration = 3,
+			})
+		end
+	end)
+end
+
+-- Simple Dropdown with Search (supports SearchBarEnabled)
 ListMapTab:Dropdown({
 	Title = "Select Cloud Recording",
-	Desc = "Choose a recording from cloud",
+	Desc = "Sorted A-Z • Use search to find",
 	Values = CloudDropdownValues,
 	SearchBarEnabled = true,
 	Callback = function(selected)
-		if selected == "☁️ Loading cloud recordings..." or selected == "No cloud recordings" then
+		if selected == "No cloud recordings" then
 			return
 		end
 
 		local recInfo = CloudRecordingsCache[selected]
 		if not recInfo then
+			WindUI:Notify({
+				Title = "Error",
+				Content = "Recording not found in cache",
+				Duration = 2,
+			})
 			return
 		end
 
-		selectedCloudRecording = recInfo
-		CloudRecordingLoaded = false -- Reset until loaded
-
-		WindUI:Notify({
-			Title = "☁️ Loading...",
-			Content = "Fetching " .. recInfo.name .. "...",
-			Duration = 2,
-		})
-
-		-- Fetch the actual recording data
-		task.spawn(function()
-			local apiUrl = "https://starship-core.my.id/api/r2-recordings?recordingId=" .. recInfo.recordingId
-
-			local success, response = pcall(function()
-				return game:HttpGet(apiUrl)
-			end)
-
-			if not success then
-				WindUI:Notify({
-					Title = "Error",
-					Content = "Failed to connect to cloud",
-					Duration = 3,
-				})
-				return
-			end
-
-			local parseSuccess, data = pcall(function()
-				return HttpService:JSONDecode(response)
-			end)
-
-			if not parseSuccess or not data then
-				WindUI:Notify({
-					Title = "Error",
-					Content = "Invalid response from server",
-					Duration = 3,
-				})
-				return
-			end
-
-			if data.error then
-				WindUI:Notify({
-					Title = "Error",
-					Content = data.error or "Recording not found",
-					Duration = 3,
-				})
-				return
-			end
-
-			if data.success and data.recording then
-				-- Store in memory
-				CloudRecordingData = data.recording
-				CloudRecordingName = data.name or recInfo.name
-				CloudRecordingLoaded = true -- Mark as loaded!
-
-				-- Update selected file display
-				selectedFile = "CLOUD:" .. recInfo.recordingId
-				if selectedFileDisplay then
-					pcall(function()
-						selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
-						selectedFileDisplay:SetDesc("Cloud Recording • Ready to play")
-					end)
-				end
-
-				WindUI:Notify({
-					Title = "☁️ Ready!",
-					Content = CloudRecordingName .. " loaded - tap Play to start",
-					Duration = 3,
-				})
-			else
-				WindUI:Notify({
-					Title = "Error",
-					Content = "Recording data not found",
-					Duration = 3,
-				})
-			end
-		end)
+		LoadCloudRecording(recInfo)
 	end,
 })
 
@@ -4033,7 +4057,7 @@ local function ToggleMiniPlayer(state)
 			end
 		end)
 
-		-- ═══════════════════════════════════════════════════════════
+		-- ═══��═══════════════════════════════════════════════════════
 		-- BUTTONS CONTAINER - 3 Buttons: Play, Moonwalk, Loop
 		-- ═══════════════════════════════════════════════════════════
 		local buttonsFrame = Instance.new("Frame")
