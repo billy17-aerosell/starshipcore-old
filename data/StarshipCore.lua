@@ -6535,48 +6535,6 @@ UIHandlers.InitMergerUI()
 
 -- --- FUN UI ---
 function UIHandlers.SetupListMapUI()
-    -- Cloud Codes Storage (maps filename -> shareCode)
-    local CLOUD_CODES_FILE = MERGER_FOLDER .. "/CloudCodes.json"
-    local CloudCodes = {}
-
-    -- Load existing cloud codes
-    local function LoadCloudCodes()
-        local success, content = pcall(readfile, CLOUD_CODES_FILE)
-        if success and content then
-            local parsed = pcall(function()
-                CloudCodes = HttpService:JSONDecode(content)
-            end)
-            if not parsed then
-                CloudCodes = {}
-            end
-        end
-    end
-
-    -- Save cloud codes
-    local function SaveCloudCodes()
-        pcall(function()
-            writefile(CLOUD_CODES_FILE, HttpService:JSONEncode(CloudCodes))
-        end)
-    end
-
-    -- Get cloud code for a file
-    local function GetCloudCode(fileName)
-        return CloudCodes[fileName]
-    end
-
-    -- Set cloud code for a file
-    local function SetCloudCode(fileName, shareCode)
-        CloudCodes[fileName] = shareCode
-        SaveCloudCodes()
-    end
-
-    -- Expose functions for use outside
-    UIHandlers.SetCloudCode = SetCloudCode
-    UIHandlers.GetCloudCode = GetCloudCode
-
-    -- Load cloud codes on init
-    LoadCloudCodes()
-
     local MapContainer = Instance.new("Frame", PageListMap)
     MapContainer.Size = UDim2.new(1, 0, 1, 0)
     MapContainer.BackgroundTransparency = 1
@@ -6627,18 +6585,6 @@ function UIHandlers.SetupListMapUI()
     RegisterTheme(BtnRefresh, "BackgroundColor3", "Main")
     RegisterTheme(BtnRefresh, "TextColor3", "Text")
 
-    -- Cloud Download Button (Only visible for Owner/Developer)
-    local BtnCloudDownload = Instance.new("TextButton", HeaderCard)
-    BtnCloudDownload.Text = "☁️📥"
-    BtnCloudDownload.Size = UDim2.new(0, 40, 0, 24)
-    BtnCloudDownload.AnchorPoint = Vector2.new(1, 0.5)
-    BtnCloudDownload.Position = UDim2.new(1, -75, 0.5, 0)
-    BtnCloudDownload.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
-    BtnCloudDownload.TextColor3 = Color3.new(1, 1, 1)
-    BtnCloudDownload.Font = Enum.Font.GothamBold
-    BtnCloudDownload.TextSize = 11
-    Instance.new("UICorner", BtnCloudDownload).CornerRadius = UDim.new(0, 4)
-
     -- Check if user is Owner/Developer for cloud features
     local isCloudEnabled = false
     if getgenv and getgenv().StarshipSession then
@@ -6649,161 +6595,8 @@ function UIHandlers.SetupListMapUI()
     else
         warn("[Starship] Cloud check - StarshipSession not found!")
     end
-    BtnCloudDownload.Visible = isCloudEnabled
 
-    -- Cloud Download Modal
-    local CloudDownloadModal = Instance.new("Frame", ScreenGui)
-    CloudDownloadModal.Size = UDim2.new(1, 0, 1, 0)
-    CloudDownloadModal.BackgroundColor3 = Color3.new(0, 0, 0)
-    CloudDownloadModal.BackgroundTransparency = 0.5
-    CloudDownloadModal.Visible = false
-    CloudDownloadModal.ZIndex = 2000
 
-    local CDCard = Instance.new("Frame", CloudDownloadModal)
-    CDCard.Size = UDim2.new(0, 300, 0, 200)
-    CDCard.Position = UDim2.new(0.5, -150, 0.5, -100)
-    CDCard.BackgroundColor3 = C_ITEM
-    CDCard.ZIndex = 2001
-    Instance.new("UICorner", CDCard).CornerRadius = UDim.new(0, 12)
-    local cdStroke = Instance.new("UIStroke", CDCard)
-    cdStroke.Color = Color3.fromRGB(59, 130, 246)
-    cdStroke.Thickness = 2
-
-    local CDTitle = Instance.new("TextLabel", CDCard)
-    CDTitle.Text = "☁️ Download from Cloud"
-    CDTitle.Size = UDim2.new(1, 0, 0, 45)
-    CDTitle.BackgroundTransparency = 1
-    CDTitle.TextColor3 = C_TEXT
-    CDTitle.Font = Enum.Font.GothamBold
-    CDTitle.TextSize = 14
-    CDTitle.ZIndex = 2002
-
-    local CDInput = Instance.new("TextBox", CDCard)
-    CDInput.PlaceholderText = "Enter Share Code (e.g. ABC12345)"
-    CDInput.Text = ""
-    CDInput.Size = UDim2.new(0.85, 0, 0, 40)
-    CDInput.Position = UDim2.new(0.075, 0, 0, 50)
-    CDInput.BackgroundColor3 = C_MAIN
-    CDInput.TextColor3 = C_TEXT
-    CDInput.Font = Enum.Font.GothamBold
-    CDInput.TextSize = 14
-    CDInput.ZIndex = 2002
-    Instance.new("UICorner", CDInput).CornerRadius = UDim.new(0, 8)
-
-    local CDDownloadBtn = Instance.new("TextButton", CDCard)
-    CDDownloadBtn.Text = "📥 Download"
-    CDDownloadBtn.Size = UDim2.new(0.4, 0, 0, 38)
-    CDDownloadBtn.Position = UDim2.new(0.075, 0, 0, 105)
-    CDDownloadBtn.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
-    CDDownloadBtn.TextColor3 = Color3.new(1, 1, 1)
-    CDDownloadBtn.Font = Enum.Font.GothamBold
-    CDDownloadBtn.TextSize = 12
-    CDDownloadBtn.ZIndex = 2002
-    Instance.new("UICorner", CDDownloadBtn).CornerRadius = UDim.new(0, 6)
-
-    local CDCancelBtn = Instance.new("TextButton", CDCard)
-    CDCancelBtn.Text = "Cancel"
-    CDCancelBtn.Size = UDim2.new(0.35, 0, 0, 38)
-    CDCancelBtn.Position = UDim2.new(0.525, 0, 0, 105)
-    CDCancelBtn.BackgroundColor3 = C_RED
-    CDCancelBtn.TextColor3 = Color3.new(1, 1, 1)
-    CDCancelBtn.Font = Enum.Font.GothamBold
-    CDCancelBtn.TextSize = 12
-    CDCancelBtn.ZIndex = 2002
-    Instance.new("UICorner", CDCancelBtn).CornerRadius = UDim.new(0, 6)
-
-    local CDStatus = Instance.new("TextLabel", CDCard)
-    CDStatus.Text = ""
-    CDStatus.Size = UDim2.new(1, 0, 0, 30)
-    CDStatus.Position = UDim2.new(0, 0, 0, 155)
-    CDStatus.BackgroundTransparency = 1
-    CDStatus.TextColor3 = C_TEXT_DIM
-    CDStatus.Font = Enum.Font.Gotham
-    CDStatus.TextSize = 11
-    CDStatus.ZIndex = 2002
-
-    BtnCloudDownload.MouseButton1Click:Connect(function()
-        CloudDownloadModal.Visible = true
-        CDInput.Text = ""
-        CDStatus.Text = ""
-        CDDownloadBtn.Text = "📥 Download"
-        CDDownloadBtn.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
-    end)
-
-    CDCancelBtn.MouseButton1Click:Connect(function()
-        CloudDownloadModal.Visible = false
-    end)
-
-    CDDownloadBtn.MouseButton1Click:Connect(function()
-        local code = CDInput.Text
-        if code == "" then
-            CDStatus.Text = "❌ Please enter a share code"
-            CDStatus.TextColor3 = C_RED
-            return
-        end
-
-        CDDownloadBtn.Text = "⏳ Loading..."
-        CDDownloadBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-        CDStatus.Text = "Fetching from cloud..."
-        CDStatus.TextColor3 = C_TEXT_DIM
-
-        -- Load CloudRecording module
-        local CloudRecording = nil
-        pcall(function()
-            CloudRecording = LoadModule("Modules/CloudRecording")
-        end)
-
-        if not CloudRecording then
-            CDStatus.Text = "❌ Cloud module not available"
-            CDStatus.TextColor3 = C_RED
-            CDDownloadBtn.Text = "📥 Download"
-            CDDownloadBtn.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
-            return
-        end
-
-        CloudRecording.Load(code, function(result)
-            if result.success then
-                CDStatus.Text = "✅ Recording downloaded!"
-                CDStatus.TextColor3 = C_GREEN
-                CDDownloadBtn.Text = "✅ Success!"
-                CDDownloadBtn.BackgroundColor3 = C_GREEN
-
-                -- Save to local file
-                local recordingData = result.recording
-                local fileName = result.name or ("Cloud_" .. code)
-
-                -- Remove invalid characters from filename
-                fileName = fileName:gsub("[^%w%s_-]", "")
-
-                local savePath = MERGER_FOLDER .. "/" .. fileName .. ".json"
-                local saveSuccess = pcall(function()
-                    writefile(savePath, HttpService:JSONEncode(recordingData))
-                end)
-
-                if saveSuccess then
-                    ShowToast("☁️ Downloaded!", fileName .. " saved to List Map", "success", 3)
-
-                    -- Refresh the file list
-                    task.delay(0.5, function()
-                        if UIHandlers.RefreshListMap then
-                            UIHandlers.RefreshListMap()
-                        end
-                    end)
-                else
-                    ShowToast("Error", "Failed to save file locally", "error", 2)
-                end
-
-                task.delay(1.5, function()
-                    CloudDownloadModal.Visible = false
-                end)
-            else
-                CDStatus.Text = "❌ " .. (result.error or "Not found")
-                CDStatus.TextColor3 = C_RED
-                CDDownloadBtn.Text = "📥 Download"
-                CDDownloadBtn.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
-            end
-        end)
-    end)
 
     -- Search Bar
     local SearchFrame = Instance.new("Frame", HeaderArea)
@@ -7701,28 +7494,13 @@ function UIHandlers.SetupListMapUI()
                         BtnCloud.BackgroundColor3 = C_GREEN
 
                         local actionText = result.action == "updated" and "Updated!" or "Uploaded!"
-                        ShowToast("☁️ " .. actionText, "Share Code: " .. result.shareCode, "success", 5)
+                        ShowToast("☁️ " .. actionText, "Recording saved to cloud!", "success", 3)
 
-                        -- Save share code for later viewing
-                        if UIHandlers.SetCloudCode then
-                            UIHandlers.SetCloudCode(fileName, result.shareCode)
-                        end
-
-                        -- Copy to clipboard if available
-                        if setclipboard then
-                            setclipboard(result.shareCode)
-                            ShowToast("📋 Copied!", "Share code copied to clipboard", "info", 2)
-                        end
-
-                        -- Reset button after delay and refresh to show 🔗 button
+                        -- Reset button after delay
                         task.delay(2, function()
                             if BtnCloud and BtnCloud.Parent then
                                 BtnCloud.Text = "☁️"
                                 BtnCloud.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
-                            end
-                            -- Refresh list to show the 🔗 view code button
-                            if UIHandlers.RefreshListMap then
-                                UIHandlers.RefreshListMap()
                             end
                         end)
                     end,
@@ -7743,31 +7521,7 @@ function UIHandlers.SetupListMapUI()
             end)
         end
 
-        -- View Share Code Button (only if file has cloud code)
-        local existingCode = GetCloudCode(fileName)
-        if isCloudEnabled and existingCode then
-            local BtnViewCode = Instance.new("TextButton", FileCard)
-            BtnViewCode.Text = "🔗"
-            BtnViewCode.Size = UDim2.new(0, 24, 0, 24)
-            BtnViewCode.Position = UDim2.new(1, -104, 0.5, -12) -- Left of cloud button
-            BtnViewCode.BackgroundColor3 = Color3.fromRGB(139, 92, 246) -- Purple
-            BtnViewCode.TextColor3 = Color3.new(1, 1, 1)
-            BtnViewCode.Font = Enum.Font.GothamBold
-            BtnViewCode.TextSize = 12
-            BtnViewCode.AutoButtonColor = true
-            Instance.new("UICorner", BtnViewCode).CornerRadius = UDim.new(0, 6)
 
-            BtnViewCode.MouseButton1Click:Connect(function()
-                local code = GetCloudCode(fileName)
-                if code then
-                    ShowToast("🔗 Share Code", code, "info", 5)
-                    if setclipboard then
-                        setclipboard(code)
-                        ShowToast("📋 Copied!", "Share code copied to clipboard", "success", 2)
-                    end
-                end
-            end)
-        end
 
         -- Delete Button
         local BtnDelete = Instance.new("TextButton", FileCard)
@@ -7930,13 +7684,12 @@ function UIHandlers.SetupListMapUI()
             makefolder(MERGER_FOLDER)
         end
 
-        -- Get files dan filter hanya .json (exclude CloudCodes.json)
+        -- Get files dan filter hanya .json
         local allFiles = listfiles(MERGER_FOLDER)
         local jsonFiles = {}
         for i = 1, #allFiles do
             local f = allFiles[i]
-            local fileName = string.match(f, "([^/\\]+)$") or f
-            if string.sub(f, -5) == ".json" and fileName ~= "CloudCodes.json" then
+            if string.sub(f, -5) == ".json" then
                 table.insert(jsonFiles, f)
             end
         end

@@ -10,7 +10,7 @@
         -- Save to cloud
         CloudRecording.Save(recordingData, "MyRecording", function(result)
             if result.success then
-                print("Share Code:", result.shareCode)
+                print("Recording ID:", result.recordingId)
             end
         end)
 
@@ -109,7 +109,7 @@ local function SafeRequest(url, method, body, callback)
                     warn("[CloudRecording] Decoded successfully!")
                     -- DEBUG: Print response content for troubleshooting
                     if decoded.success then
-                        warn("[CloudRecording] ✅ Response SUCCESS - shareCode: " .. tostring(decoded.shareCode or "N/A"))
+                        warn("[CloudRecording] ✅ Response SUCCESS - recordingId: " .. tostring(decoded.recordingId or "N/A"))
                     else
                         warn("[CloudRecording] ❌ Response ERROR: " .. tostring(decoded.error or "Unknown error"))
                         if decoded.message then
@@ -170,7 +170,7 @@ end
     Returns (via callback):
         {
             success = true,
-            shareCode = "ABC12345",
+            recordingId = "ABC12345",
             recordingId = "XXXXX-XXXXX",
             size = 1234 -- size in KB
         }
@@ -204,12 +204,12 @@ function CloudRecording.Save(recordingData, name, callback)
     SafeRequest(GetAPIUrl(), "POST", body, function(result)
         if result and result.success then
             -- Cache the recording locally too
-            LoadedCache[result.shareCode] = recordingData
+            LoadedCache[result.recordingId] = recordingData
 
             if callback then
                 callback({
                     success = true,
-                    shareCode = result.shareCode,
+                    recordingId = result.recordingId,
                     recordingId = result.recordingId,
                     size = result.size,
                     message = "Recording saved to cloud!",
@@ -230,55 +230,55 @@ end
 --[[
     CloudRecording.Load()
     =====================
-    Memuat recording dari cloud menggunakan share code atau recording ID
+    Memuat recording dari cloud menggunakan recording ID atau recording ID
 
     Parameters:
-        - shareCode: string (8 karakter) atau full recording ID
+        - recordingId: string (8 karakter) atau full recording ID
         - callback: function(result)
 
     Returns (via callback):
         {
             success = true,
             recording = { Frames = {...}, FPS = 60, Mode = "Flexible" },
-            shareCode = "ABC12345"
+            recordingId = "ABC12345"
         }
 ]]
-function CloudRecording.Load(shareCode, callback)
-    if not shareCode or shareCode == "" then
+function CloudRecording.Load(recordingId, callback)
+    if not recordingId or recordingId == "" then
         if callback then
             callback({
                 success = false,
-                error = "Share code required",
+                error = "Recording ID required",
             })
         end
         return
     end
 
     -- Check cache first
-    if LoadedCache[shareCode] then
+    if LoadedCache[recordingId] then
         if callback then
             callback({
                 success = true,
-                recording = LoadedCache[shareCode],
+                recording = LoadedCache[recordingId],
                 fromCache = true,
             })
         end
         return
     end
 
-    local url = GetAPIUrl() .. "?shareCode=" .. shareCode
+    local url = GetAPIUrl() .. "?recordingId=" .. recordingId
 
     SafeRequest(url, "GET", nil, function(result)
         if result and result.success then
             -- Cache the recording
-            LoadedCache[shareCode] = result.recording
+            LoadedCache[recordingId] = result.recording
 
             if callback then
                 callback({
                     success = true,
                     recording = result.recording,
                     name = result.name,
-                    shareCode = result.shareCode,
+                    recordingId = result.recordingId,
                 })
             end
         else
@@ -286,7 +286,7 @@ function CloudRecording.Load(shareCode, callback)
                 callback({
                     success = false,
                     error = result and result.error or "Recording not found",
-                    shareCode = shareCode,
+                    recordingId = recordingId,
                 })
             end
         end
@@ -304,7 +304,7 @@ end
     Returns (via callback):
         {
             success = true,
-            recordings = { {name, shareCode, frameCount, ...}, ... },
+            recordings = { {name, recordingId, frameCount, ...}, ... },
             count = 5
         }
 ]]
@@ -370,11 +370,11 @@ end
 --[[
     CloudRecording.CopyToClipboard()
     ================================
-    Fallback: Copy share code to clipboard
+    Fallback: Copy recording ID to clipboard
 ]]
-function CloudRecording.CopyToClipboard(shareCode)
+function CloudRecording.CopyToClipboard(recordingId)
     if setclipboard then
-        setclipboard(shareCode)
+        setclipboard(recordingId)
         return true
     end
     return false
@@ -426,7 +426,7 @@ end
     Returns (via callback):
         {
             success = true,
-            recordings = { {name, shareCode, recordingId, createdAt, updatedAt}, ... },
+            recordings = { {name, recordingId, recordingId, createdAt, updatedAt}, ... },
             count = 10
         }
 ]]
@@ -466,7 +466,7 @@ end
     Returns (via callback):
         {
             exists = true/false,
-            recording = { recordingId, shareCode, name, ... } -- jika exists=true
+            recording = { recordingId, recordingId, name, ... } -- jika exists=true
         }
 ]]
 function CloudRecording.CheckDuplicate(name, callback)
@@ -528,7 +528,7 @@ end
         {
             success = true,
             recordingId = "xxx",
-            shareCode = "ABC12345",
+            recordingId = "ABC12345",
             message = "Recording updated!"
         }
 ]]
@@ -582,15 +582,15 @@ function CloudRecording.Update(recordingId, recordingData, name, callback)
     SafeRequest(GetAPIUrl(), "PATCH", body, function(result)
         if result and result.success then
             -- Update cache if we have new data
-            if recordingData and result.shareCode then
-                LoadedCache[result.shareCode] = recordingData
+            if recordingData and result.recordingId then
+                LoadedCache[result.recordingId] = recordingData
             end
 
             if callback then
                 callback({
                     success = true,
                     recordingId = result.recordingId,
-                    shareCode = result.shareCode,
+                    recordingId = result.recordingId,
                     size = result.size,
                     updatedAt = result.updatedAt,
                     message = "Recording updated successfully!",
@@ -651,7 +651,7 @@ function CloudRecording.SaveOrUpdate(recordingData, name, callbacks)
                         if callbacks.onSuccess then
                             callbacks.onSuccess({
                                 action = "created",
-                                shareCode = result.shareCode,
+                                recordingId = result.recordingId,
                                 recordingId = result.recordingId,
                                 message = "New recording created!",
                             })
@@ -665,12 +665,12 @@ function CloudRecording.SaveOrUpdate(recordingData, name, callbacks)
             end
 
             local function updateExisting()
-                CloudRecording.Update(existingRec.recordingId or existingRec.shareCode, recordingData, name, function(result)
+                CloudRecording.Update(existingRec.recordingId or existingRec.recordingId, recordingData, name, function(result)
                     if result.success then
                         if callbacks.onSuccess then
                             callbacks.onSuccess({
                                 action = "updated",
-                                shareCode = result.shareCode,
+                                recordingId = result.recordingId,
                                 recordingId = result.recordingId,
                                 message = "Recording updated!",
                             })
@@ -697,7 +697,7 @@ function CloudRecording.SaveOrUpdate(recordingData, name, callbacks)
                     if callbacks.onSuccess then
                         callbacks.onSuccess({
                             action = "created",
-                            shareCode = result.shareCode,
+                            recordingId = result.recordingId,
                             recordingId = result.recordingId,
                             message = "Recording saved to cloud!",
                         })

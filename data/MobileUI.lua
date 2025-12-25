@@ -242,7 +242,7 @@ local Config = {
 -- Cloud recording storage (in memory for mobile) - declared early for PlayRecording access
 local CloudRecordingData = nil
 local CloudRecordingName = nil
-local CloudRecordingsCache = {} -- Cache: displayName -> {name, shareCode, gistId}
+local CloudRecordingsCache = {} -- Cache: displayName -> {name, recordingId}
 local CloudDropdownValues = {}
 
 -- ══════════════════════════════════════════════════════════════════
@@ -3667,7 +3667,6 @@ do
                 table.insert(CloudDropdownValues, displayName)
                 CloudRecordingsCache[displayName] = {
                     name = rec.name,
-                    shareCode = rec.shareCode,
                     recordingId = rec.recordingId,
                 }
             end
@@ -3716,7 +3715,6 @@ ListMapTab:Button({
                     table.insert(CloudDropdownValues, displayName)
                     CloudRecordingsCache[displayName] = {
                         name = rec.name,
-                        shareCode = rec.shareCode,
                         recordingId = rec.recordingId,
                     }
                 end
@@ -3775,7 +3773,7 @@ ListMapTab:Dropdown({
 
         -- Fetch the actual recording data
         task.spawn(function()
-            local apiUrl = "https://starship-core.my.id/api/r2-recordings?shareCode=" .. recInfo.shareCode
+            local apiUrl = "https://starship-core.my.id/api/r2-recordings?recordingId=" .. recInfo.recordingId
 
             local success, response = pcall(function()
                 return game:HttpGet(apiUrl)
@@ -3819,7 +3817,7 @@ ListMapTab:Dropdown({
                 CloudRecordingLoaded = true -- Mark as loaded!
 
                 -- Update selected file display
-                selectedFile = "CLOUD:" .. recInfo.shareCode
+                selectedFile = "CLOUD:" .. recInfo.recordingId
                 if selectedFileDisplay then
                     pcall(function()
                         selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)

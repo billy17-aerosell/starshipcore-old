@@ -37,17 +37,6 @@ function sanitizeName(name) {
     .substring(0, 100); // Limit length
 }
 
-// Helper: Generate short share code from name
-function generateShareCode(name) {
-  // Create 8 character code from name hash
-  const sanitized = sanitizeName(name).toUpperCase();
-  const hash = sanitized.split("").reduce((acc, char) => {
-    return (acc << 5) - acc + char.charCodeAt(0);
-  }, 0);
-  const hashStr = Math.abs(hash).toString(36).toUpperCase();
-  return (sanitized.substring(0, 4) + hashStr).substring(0, 8).padEnd(8, "X");
-}
-
 // Helper: Convert stream to string
 async function streamToString(stream) {
   const chunks = [];
@@ -100,12 +89,10 @@ export default async function handler(req, res) {
       const duration = data.Frames[data.Frames.length - 1]?.t || 0;
       const mode = data.Mode || "Standard";
       const sanitizedName = sanitizeName(name);
-      const shareCode = generateShareCode(name);
 
       // Prepare recording object
       const recordingObject = {
         id: sanitizedName,
-        shareCode: shareCode,
         name: name,
         userId: userId,
         gameId: gameId || null,
@@ -139,7 +126,6 @@ export default async function handler(req, res) {
           Metadata: {
             name: name,
             userId: userId,
-            shareCode: shareCode,
             frameCount: frameCount.toString(),
             createdAt: timestamp,
           },
@@ -152,7 +138,6 @@ export default async function handler(req, res) {
         success: true,
         message: "Recording saved to cloud!",
         recordingId: sanitizedName,
-        shareCode: shareCode,
         size: contentSizeKB,
         sizeMB: contentSizeMB,
       });
@@ -166,10 +151,10 @@ export default async function handler(req, res) {
   }
 
   // ============================================
-  // GET - Load recording by share code or ID
+  // GET - Load recording by ID
   // ============================================
   if (method === "GET") {
-    const { shareCode, recordingId, list } = req.query;
+    const { recordingId, list } = req.query;
 
     // LIST all recordings
     if (list === "all") {
@@ -207,7 +192,6 @@ export default async function handler(req, res) {
 
               recordings.push({
                 recordingId: data.id || fileName,
-                shareCode: data.shareCode,
                 name: data.name || fileName,
                 userId: data.userId,
                 frameCount: data.frameCount,
@@ -248,57 +232,15 @@ export default async function handler(req, res) {
     }
 
     // GET specific recording
-    const targetId = recordingId || shareCode;
-
-    if (!targetId) {
+    if (!recordingId) {
       return res.status(400).json({
-        error: "Missing recordingId or shareCode",
-        usage: "/api/r2-recordings?recordingId=xxx or ?shareCode=xxx",
+        error: "Missing recordingId",
+        usage: "/api/r2-recordings?recordingId=xxx",
       });
     }
 
     try {
-      let key = null;
-
-      // If it's a share code (8 chars) or short name, we need to search
-      if (targetId.length <= 8) {
-        console.log(`[R2] Searching for shareCode: ${targetId}`);
-
-        const listResult = await r2Client.send(
-          new ListObjectsV2Command({
-            Bucket: R2_BUCKET_NAME,
-            Prefix: "recordings/",
-          }),
-        );
-
-        if (listResult.Contents) {
-          for (const item of listResult.Contents) {
-            // Extract ID from key: recordings/XXXXX-XXXXX.json
-            const fileName = item.Key.replace("recordings/", "").replace(
-              ".json",
-              "",
-            );
-            // Match by shareCode prefix OR by filename
-            if (
-              fileName.toUpperCase().startsWith(targetId.toUpperCase()) ||
-              fileName.toUpperCase().includes(targetId.toUpperCase())
-            ) {
-              key = item.Key;
-              break;
-            }
-          }
-        }
-
-        if (!key) {
-          return res.status(404).json({
-            error: "Recording not found",
-            shareCode: targetId,
-          });
-        }
-      } else {
-        // Full recording ID provided
-        key = `recordings/${targetId}.json`;
-      }
+      const key = `recordings/${recordingId}.json`;
 
       console.log(`[R2] Loading recording: ${key}`);
 
@@ -316,7 +258,6 @@ export default async function handler(req, res) {
         success: true,
         recording: recordingData.data,
         name: recordingData.name,
-        shareCode: recordingData.shareCode,
         recordingId: recordingData.id,
         frameCount: recordingData.frameCount,
         duration: recordingData.duration,
@@ -328,7 +269,7 @@ export default async function handler(req, res) {
       if (error.name === "NoSuchKey") {
         return res.status(404).json({
           error: "Recording not found",
-          recordingId: targetId,
+          recordingId: recordingId,
         });
       }
 
@@ -344,14 +285,13 @@ export default async function handler(req, res) {
   // ============================================
   if (method === "PATCH") {
     try {
-      const { recordingId, shareCode, name, data } = req.body;
-      const targetId = recordingId || shareCode;
+      const { recordingId, name, data } = req.body;
 
-      if (!targetId) {
+      if (!recordingId) {
         return res.status(400).json({
-          error: "Missing recordingId or shareCode",
+          error: "Missing recordingId",
           message:
-            "You must provide the recordingId or shareCode of the recording to update",
+            "You must provide the recordingId of the recording to update",
         });
       }
 
@@ -362,41 +302,8 @@ export default async function handler(req, res) {
         });
       }
 
-      // Find the recording
-      let key = null;
+      const key = `recordings/${recordingId}.json`;
       let existingData = null;
-
-      if (targetId.length === 8) {
-        // Search by share code
-        const listResult = await r2Client.send(
-          new ListObjectsV2Command({
-            Bucket: R2_BUCKET_NAME,
-            Prefix: "recordings/",
-          }),
-        );
-
-        if (listResult.Contents) {
-          for (const item of listResult.Contents) {
-            const fileName = item.Key.replace("recordings/", "").replace(
-              ".json",
-              "",
-            );
-            if (fileName.toUpperCase().startsWith(targetId.toUpperCase())) {
-              key = item.Key;
-              break;
-            }
-          }
-        }
-      } else {
-        key = `recordings/${targetId}.json`;
-      }
-
-      if (!key) {
-        return res.status(404).json({
-          error: "Recording not found",
-          targetId: targetId,
-        });
-      }
 
       // Get existing recording
       try {
@@ -411,7 +318,7 @@ export default async function handler(req, res) {
       } catch (getError) {
         return res.status(404).json({
           error: "Recording not found",
-          targetId: targetId,
+          recordingId: recordingId,
         });
       }
 
@@ -470,7 +377,6 @@ export default async function handler(req, res) {
         success: true,
         message: "Recording updated successfully!",
         recordingId: existingData.id,
-        shareCode: existingData.shareCode,
         updatedAt: timestamp,
         size: contentSizeKB,
       });
@@ -487,49 +393,16 @@ export default async function handler(req, res) {
   // DELETE - Delete recording
   // ============================================
   if (method === "DELETE") {
-    const { recordingId, shareCode } = req.query;
-    const targetId = recordingId || shareCode;
+    const { recordingId } = req.query;
 
-    if (!targetId) {
+    if (!recordingId) {
       return res.status(400).json({
-        error: "Missing recordingId or shareCode",
+        error: "Missing recordingId",
       });
     }
 
     try {
-      let key = null;
-
-      if (targetId.length === 8) {
-        // Search by share code
-        const listResult = await r2Client.send(
-          new ListObjectsV2Command({
-            Bucket: R2_BUCKET_NAME,
-            Prefix: "recordings/",
-          }),
-        );
-
-        if (listResult.Contents) {
-          for (const item of listResult.Contents) {
-            const fileName = item.Key.replace("recordings/", "").replace(
-              ".json",
-              "",
-            );
-            if (fileName.toUpperCase().startsWith(targetId.toUpperCase())) {
-              key = item.Key;
-              break;
-            }
-          }
-        }
-      } else {
-        key = `recordings/${targetId}.json`;
-      }
-
-      if (!key) {
-        return res.status(404).json({
-          error: "Recording not found",
-          targetId: targetId,
-        });
-      }
+      const key = `recordings/${recordingId}.json`;
 
       console.log(`[R2] Deleting recording: ${key}`);
 
