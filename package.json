@@ -5,6 +5,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.958.0",
     "ioredis": "^5.3.2"
   }
 }

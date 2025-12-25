@@ -3650,7 +3650,7 @@ ListMapTab:Space()
 
 -- Fetch cloud recordings list BEFORE creating dropdown
 do
-    local apiUrl = "https://starship-core.my.id/api/recordings?list=all"
+    local apiUrl = "https://starship-core.my.id/api/r2-recordings?list=all"
 
     local success, response = pcall(function()
         return game:HttpGet(apiUrl)
@@ -3668,7 +3668,7 @@ do
                 CloudRecordingsCache[displayName] = {
                     name = rec.name,
                     shareCode = rec.shareCode,
-                    gistId = rec.gistId,
+                    recordingId = rec.recordingId,
                 }
             end
         end
@@ -3699,7 +3699,7 @@ ListMapTab:Button({
         CloudDropdownValues = {}
         CloudRecordingsCache = {}
 
-        local apiUrl = "https://starship-core.my.id/api/recordings?list=all"
+        local apiUrl = "https://starship-core.my.id/api/r2-recordings?list=all"
 
         local success, response = pcall(function()
             return game:HttpGet(apiUrl)
@@ -3717,7 +3717,7 @@ ListMapTab:Button({
                     CloudRecordingsCache[displayName] = {
                         name = rec.name,
                         shareCode = rec.shareCode,
-                        gistId = rec.gistId,
+                        recordingId = rec.recordingId,
                     }
                 end
 
@@ -3775,7 +3775,7 @@ ListMapTab:Dropdown({
 
         -- Fetch the actual recording data
         task.spawn(function()
-            local apiUrl = "https://starship-core.my.id/api/recordings?shareCode=" .. recInfo.shareCode
+            local apiUrl = "https://starship-core.my.id/api/r2-recordings?shareCode=" .. recInfo.shareCode
 
             local success, response = pcall(function()
                 return game:HttpGet(apiUrl)
