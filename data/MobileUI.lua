@@ -4124,85 +4124,110 @@ local function LoadCloudRecording(recInfo)
 			end)
 		end
 
-		-- Load ALL chunks sequentially before allowing playback
+		-- Load ALL chunks using PARALLEL batch loading (5 chunks at a time for 5x speed)
 		local allFrames = {}
 		local loadedCount = 0
 		local loadFailed = false
+		local chunkDataCache = {} -- Store loaded chunks by index
 
-		for chunkIdx = 0, totalChunks - 1 do
+		local PARALLEL_BATCH_SIZE = 5 -- Load 5 chunks simultaneously
+		local totalBatches = math.ceil(totalChunks / PARALLEL_BATCH_SIZE)
+
+		for batchIdx = 0, totalBatches - 1 do
 			if loadFailed then
 				break
 			end
 
-			-- Show progress every chunk
+			local batchStart = batchIdx * PARALLEL_BATCH_SIZE
+			local batchEnd = math.min(batchStart + PARALLEL_BATCH_SIZE - 1, totalChunks - 1)
+			local batchSize = batchEnd - batchStart + 1
+
+			-- Show progress
+			local progress = math.floor((batchStart / totalChunks) * 100)
 			if selectedFileDisplay then
 				pcall(function()
-					selectedFileDisplay:SetDesc(string.format("Loading %d/%d chunks...", chunkIdx + 1, totalChunks))
+					selectedFileDisplay:SetDesc(
+						string.format(
+							"Loading %d-%d/%d chunks (%d%%)...",
+							batchStart + 1,
+							batchEnd + 1,
+							totalChunks,
+							progress
+						)
+					)
 				end)
 			end
 
-			-- Notify every 10 chunks or at start/end
-			if chunkIdx % 10 == 0 or chunkIdx == 0 then
+			-- Notify every few batches
+			if batchIdx % 3 == 0 then
 				WindUI:Notify({
 					Title = "☁️ Downloading...",
-					Content = string.format(
-						"Chunk %d/%d (%d%%)",
-						chunkIdx + 1,
-						totalChunks,
-						math.floor((chunkIdx / totalChunks) * 100)
-					),
+					Content = string.format("Batch %d/%d (%d%%)", batchIdx + 1, totalBatches, progress),
 					Duration = 2,
 				})
 			end
 
-			-- Load chunk synchronously using a flag
-			local chunkLoaded = false
-			local chunkData = nil
+			-- Load this batch of chunks IN PARALLEL
+			local batchLoaded = 0
+			local batchTargetCount = batchSize
 
-			LoadChunk(recInfo.recordingId, chunkIdx, function(success, data)
-				if success and data and data.frames then
-					chunkData = data
-					loadedCount = loadedCount + 1
-				else
-					warn("[Cloud] Failed to load chunk " .. chunkIdx .. ", retrying...")
-					-- Retry once
-					task.wait(1)
-					LoadChunk(recInfo.recordingId, chunkIdx, function(retrySuccess, retryData)
-						if retrySuccess and retryData and retryData.frames then
-							chunkData = retryData
-							loadedCount = loadedCount + 1
-						else
-							loadFailed = true
-						end
-						chunkLoaded = true
-					end)
-					return
-				end
-				chunkLoaded = true
-			end)
+			for chunkIdx = batchStart, batchEnd do
+				-- Fire off parallel load (don't wait)
+				LoadChunk(recInfo.recordingId, chunkIdx, function(success, data)
+					if success and data and data.frames then
+						chunkDataCache[chunkIdx] = data
+						loadedCount = loadedCount + 1
+					else
+						-- Retry once on failure
+						task.wait(0.5)
+						LoadChunk(recInfo.recordingId, chunkIdx, function(retrySuccess, retryData)
+							if retrySuccess and retryData and retryData.frames then
+								chunkDataCache[chunkIdx] = retryData
+								loadedCount = loadedCount + 1
+							else
+								warn("[Cloud] Failed to load chunk " .. chunkIdx .. " after retry")
+								loadFailed = true
+							end
+							batchLoaded = batchLoaded + 1
+						end)
+						return
+					end
+					batchLoaded = batchLoaded + 1
+				end)
+			end
 
-			-- Wait for this chunk to finish loading
+			-- Wait for ALL chunks in this batch to complete (with timeout)
 			local waitTime = 0
-			while not chunkLoaded and waitTime < 60 do
+			local maxWaitPerBatch = 30 -- 30 seconds max per batch
+			while batchLoaded < batchTargetCount and waitTime < maxWaitPerBatch and not loadFailed do
 				task.wait(0.1)
 				waitTime = waitTime + 0.1
 			end
 
-			if waitTime >= 60 then
-				warn("[Cloud] Chunk " .. chunkIdx .. " timed out")
+			if waitTime >= maxWaitPerBatch then
+				warn("[Cloud] Batch " .. batchIdx .. " timed out")
 				loadFailed = true
 				break
 			end
 
-			-- Append frames from this chunk
-			if chunkData and chunkData.frames then
-				for _, frame in ipairs(chunkData.frames) do
-					table.insert(allFrames, frame)
+			-- Small delay before next batch
+			task.wait(0.1)
+		end
+
+		-- Assemble all frames IN ORDER from cache
+		if not loadFailed then
+			for chunkIdx = 0, totalChunks - 1 do
+				local chunkData = chunkDataCache[chunkIdx]
+				if chunkData and chunkData.frames then
+					for _, frame in ipairs(chunkData.frames) do
+						table.insert(allFrames, frame)
+					end
+				else
+					warn("[Cloud] Missing chunk " .. chunkIdx .. " in cache")
+					loadFailed = true
+					break
 				end
 			end
-
-			-- Small delay between chunks to avoid overwhelming
-			task.wait(0.2)
 		end
 
 		if loadFailed or loadedCount < totalChunks then
