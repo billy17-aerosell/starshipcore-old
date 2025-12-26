@@ -548,7 +548,7 @@ DashboardTab:Button({
 	Desc = "Get Starship Discord link",
 	Callback = function()
 		if setclipboard then
-			setclipboard("https://discord.gg/starship")
+			setclipboard("https://discord.gg/BUJuXA8Z")
 			WindUI:Notify({ Title = "Copied!", Content = "Discord link copied!", Duration = 2 })
 		end
 	end,
@@ -2581,6 +2581,65 @@ local function StopPlayback()
 	ResetCharacter()
 end
 
+-- ═══════════════════════════════════════════════════════════════════
+-- PATH VISUALIZATION
+-- ═══════════════════════════════════════════════════════════════════
+local isPathVisualsEnabled = false
+local pathVisualsFolder = nil
+
+local function ClearPath()
+	if pathVisualsFolder then
+		pathVisualsFolder:Destroy()
+		pathVisualsFolder = nil
+	end
+end
+
+local function DrawPath(frames)
+	ClearPath()
+	if not frames or #frames < 2 then
+		return
+	end
+
+	pathVisualsFolder = Instance.new("Folder")
+	pathVisualsFolder.Name = "StarshipPathVisuals"
+	pathVisualsFolder.Parent = workspace
+
+	local lastPos = nil
+	-- Optimization: Skip frames to reduce part count
+	local step = math.max(1, math.floor(#frames / 500)) -- Limit to ~500 points max
+
+	for i = 1, #frames, step do
+		local f = frames[i]
+		local pos = nil
+		if f.pos then
+			pos = Vector3.new(f.pos.x, f.pos.y, f.pos.z)
+		elseif f.r then
+			pos = TblToCF(f.r).Position
+		end
+
+		if pos then
+			-- Only draw if distance from last point is significant (> 2 studs)
+			if not lastPos or (pos - lastPos).Magnitude > 2 then
+				local p = Instance.new("Part")
+				p.Name = "PathNode"
+				p.Size = Vector3.new(0.4, 0.4, 0.4)
+				p.Shape = Enum.PartType.Ball
+				p.Color = Color3.fromRGB(59, 130, 246) -- Blue/Cyan
+				p.Material = Enum.Material.Neon
+				p.Transparency = 0.3
+				p.Anchored = true
+				p.CanCollide = false
+				p.CastShadow = false
+				p.Position = pos
+				p.Parent = pathVisualsFolder
+				lastPos = pos
+			end
+		end
+	end
+
+	WindUI:Notify({ Title = "Path Visuals", Content = "Path generated!", Duration = 1 })
+end
+
 -- Play recording (main function)
 local function PlayRecording(fileName, force)
 	if not fileName or fileName == "No files found" then
@@ -2664,6 +2723,11 @@ local function PlayRecording(fileName, force)
 		if #PlaybackState.frameData > 0 then
 			PlaybackState.totalDuration = PlaybackState.frameData[#PlaybackState.frameData].t or 0
 		end
+
+		-- Draw path if enabled
+		if isPathVisualsEnabled then
+			DrawPath(PlaybackState.frameData)
+		end
 	elseif PlaybackState.currentTime >= (PlaybackState.totalDuration - 0.1) then
 		-- Reset if at end (replay)
 		PlaybackState.currentTime = 0
@@ -2732,6 +2796,17 @@ local function PlayRecording(fileName, force)
 			minDist = dist
 			bestT = lastF.t
 		end
+	end
+
+	-- DISTANCE VALIDATION (Prevent playing on wrong map)
+	local MAP_DISTANCE_THRESHOLD = 500
+	if minDist > MAP_DISTANCE_THRESHOLD then
+		WindUI:Notify({
+			Title = "Wrong Map Detected",
+			Content = string.format("Path is too far (%.0f studs)!", minDist),
+			Duration = 4,
+		})
+		return
 	end
 
 	-- Smart position logic (SAME AS PC)
@@ -4257,6 +4332,24 @@ MiniPlayerToggle = PlaybackSection:Toggle({
 	Callback = ToggleMiniPlayer,
 })
 
+PlaybackSection:Toggle({
+	Title = "Path Visualization",
+	Desc = "Show playback path (Neon Dots)",
+	Value = false,
+	Callback = function(state)
+		isPathVisualsEnabled = state
+		if state then
+			if PlaybackState.frameData then
+				DrawPath(PlaybackState.frameData)
+			else
+				WindUI:Notify({ Title = "Path Visuals", Content = "Select a recording first", Duration = 1.5 })
+			end
+		else
+			ClearPath()
+		end
+	end,
+})
+
 PlaybackSection:Slider({
 	Title = "Playback Speed",
 	Desc = "Speed multiplier (Default: 1)",
@@ -4919,10 +5012,10 @@ SocialTab:Button({
 	Desc = "Get updates, support & community",
 	Callback = function()
 		if setclipboard then
-			setclipboard("https://discord.gg/starship")
+			setclipboard("https://discord.gg/BUJuXA8Z")
 			WindUI:Notify({ Title = "✅ Copied!", Content = "Discord invite link copied to clipboard!", Duration = 3 })
 		else
-			WindUI:Notify({ Title = "Discord", Content = "https://discord.gg/qbPcSMg8", Duration = 5 })
+			WindUI:Notify({ Title = "Discord", Content = "https://discord.gg/BUJuXA8Z", Duration = 5 })
 		end
 	end,
 })
@@ -4940,7 +5033,7 @@ SocialTab:Button({
 	Desc = "Copy loadstring to clipboard",
 	Callback = function()
 		if setclipboard then
-			setclipboard('loadstring(game:HttpGet("https://your-url.com/Mobile/Loader.lua"))()')
+			setclipboard('loadstring(game:HttpGet("https://starship-core.my.id/api/mobile-bootstrap"))()')
 			WindUI:Notify({ Title = "✅ Copied!", Content = "Loadstring copied to clipboard!", Duration = 3 })
 		end
 	end,
