@@ -44,6 +44,9 @@ local GuiService = game:GetService("GuiService")
 local ControllerService = game:GetService("ControllerService")
 
 local LocalPlayer = Players.LocalPlayer
+
+-- NoClip system disabled - causing errors in some executors
+-- If you need NoClip, enable it manually through game settings or other scripts
 local FOLDER_NAME = "StarshipCore"
 local ModulesPath = "Modules"
 if not isfolder(FOLDER_NAME) then
