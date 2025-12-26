@@ -379,7 +379,7 @@ export default async function handler(req, res) {
 
             // Mark as sent (expires when event code expires)
             const ttl = eventAccess.remainingDays * 24 * 60 * 60; // Convert days to seconds
-            await redisClient.set(webhookKey, "true", { EX: ttl });
+            await redisClient.setEx(webhookKey, ttl, "true");
             console.log(
               `[${timestamp}] 📨 Event webhook sent for UserID: ${userId}`,
             );
