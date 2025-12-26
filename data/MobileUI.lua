@@ -2684,35 +2684,13 @@ local function PlayRecording(fileName, force)
 		end
 		data = CloudRecordingData
 
-		-- Check if this is a chunked recording
-		if ChunkedState.isChunked and ChunkedState.totalChunks > 1 then
-			local loadedCount = 0
-			for _ in pairs(ChunkedState.loadedChunks) do
-				loadedCount = loadedCount + 1
-			end
-
-			if loadedCount < ChunkedState.totalChunks then
-				WindUI:Notify({
-					Title = "☁️ Streaming",
-					Content = string.format(
-						"Playing with %d/%d chunks loaded...",
-						loadedCount,
-						ChunkedState.totalChunks
-					),
-					Duration = 2,
-				})
-
-				-- Start background preloading if not already running
-				if not ChunkedState.isPreloading then
-					local currentChunk = loadedCount - 1
-					PreloadNextChunks(ChunkedState.recordingId, currentChunk, ChunkedState.totalChunks - loadedCount)
-				end
-			else
-				WindUI:Notify({ Title = "☁️ Ready", Content = "All chunks loaded!", Duration = 1.5 })
-			end
-		else
-			WindUI:Notify({ Title = "Loading", Content = "Preparing cloud recording...", Duration = 1.5 })
-		end
+		-- Simple notification - all data is already loaded
+		local frameCount = CloudRecordingData.Frames and #CloudRecordingData.Frames or 0
+		WindUI:Notify({
+			Title = "☁️ Playing",
+			Content = string.format("Starting playback (%d frames)", frameCount),
+			Duration = 1.5,
+		})
 	else
 		-- Load from file (original behavior)
 		local filePath = MERGER_FOLDER .. "/" .. fileName
@@ -4123,66 +4101,143 @@ local function LoadCloudRecording(recInfo)
 			return
 		end
 
-		-- Large file - use chunked loading
+		-- Large file - use chunked loading (WAIT FOR ALL CHUNKS)
 		ChunkedState.isChunked = true
 		ChunkedState.totalChunks = metaData.totalChunks or metaData.suggestedChunks or 1
 		ChunkedState.totalFrames = metaData.totalFrames or 0
 		ChunkedState.framesPerChunk = metaData.framesPerChunk or 3000
 
 		local sizeMB = metaData.sizeMB or "?"
+		local totalChunks = ChunkedState.totalChunks
 
 		WindUI:Notify({
-			Title = "☁️ Streaming...",
-			Content = string.format("%s chunks (%s MB) - Loading first segment...", ChunkedState.totalChunks, sizeMB),
-			Duration = 3,
+			Title = "☁️ Loading Large File...",
+			Content = string.format("%s MB (%d chunks) - Please wait...", sizeMB, totalChunks),
+			Duration = 5,
 		})
 
-		-- Step 2: Load first chunk (for immediate playback)
-		LoadChunk(recInfo.recordingId, 0, function(chunkSuccess, chunkData)
-			if not chunkSuccess or not chunkData then
-				WindUI:Notify({
-					Title = "Error",
-					Content = "Failed to load first chunk",
-					Duration = 3,
-				})
-				return
+		-- Update display to show loading status
+		if selectedFileDisplay then
+			pcall(function()
+				selectedFileDisplay:SetTitle("☁️ " .. recInfo.name)
+				selectedFileDisplay:SetDesc("Loading 0/" .. totalChunks .. " chunks...")
+			end)
+		end
+
+		-- Load ALL chunks sequentially before allowing playback
+		local allFrames = {}
+		local loadedCount = 0
+		local loadFailed = false
+
+		for chunkIdx = 0, totalChunks - 1 do
+			if loadFailed then
+				break
 			end
 
-			-- Prepare recording data with first chunk
-			local initialFrames = chunkData.frames or {}
-
-			-- Create a wrapper that can request more chunks during playback
-			CloudRecordingData = {
-				Frames = initialFrames,
-				Mode = metaData.mode or "Flexible",
-				_isChunked = true,
-				_recordingId = recInfo.recordingId,
-			}
-			CloudRecordingName = metaData.name or recInfo.name
-			CloudRecordingLoaded = true
-
-			-- Update selected file display
-			selectedFile = "CLOUD:" .. recInfo.recordingId
+			-- Show progress every chunk
 			if selectedFileDisplay then
 				pcall(function()
-					selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
-					selectedFileDisplay:SetDesc(
-						string.format("Streaming • Chunk 1/%d loaded", ChunkedState.totalChunks)
-					)
+					selectedFileDisplay:SetDesc(string.format("Loading %d/%d chunks...", chunkIdx + 1, totalChunks))
 				end)
 			end
 
-			WindUI:Notify({
-				Title = "☁️ Ready!",
-				Content = string.format("%s loaded (1/%d) - Press Play!", CloudRecordingName, ChunkedState.totalChunks),
-				Duration = 3,
-			})
-
-			-- Step 3: Start preloading remaining chunks in background
-			if ChunkedState.totalChunks > 1 then
-				PreloadNextChunks(recInfo.recordingId, 0, math.min(3, ChunkedState.totalChunks - 1))
+			-- Notify every 10 chunks or at start/end
+			if chunkIdx % 10 == 0 or chunkIdx == 0 then
+				WindUI:Notify({
+					Title = "☁️ Downloading...",
+					Content = string.format(
+						"Chunk %d/%d (%d%%)",
+						chunkIdx + 1,
+						totalChunks,
+						math.floor((chunkIdx / totalChunks) * 100)
+					),
+					Duration = 2,
+				})
 			end
-		end)
+
+			-- Load chunk synchronously using a flag
+			local chunkLoaded = false
+			local chunkData = nil
+
+			LoadChunk(recInfo.recordingId, chunkIdx, function(success, data)
+				if success and data and data.frames then
+					chunkData = data
+					loadedCount = loadedCount + 1
+				else
+					warn("[Cloud] Failed to load chunk " .. chunkIdx .. ", retrying...")
+					-- Retry once
+					task.wait(1)
+					LoadChunk(recInfo.recordingId, chunkIdx, function(retrySuccess, retryData)
+						if retrySuccess and retryData and retryData.frames then
+							chunkData = retryData
+							loadedCount = loadedCount + 1
+						else
+							loadFailed = true
+						end
+						chunkLoaded = true
+					end)
+					return
+				end
+				chunkLoaded = true
+			end)
+
+			-- Wait for this chunk to finish loading
+			local waitTime = 0
+			while not chunkLoaded and waitTime < 60 do
+				task.wait(0.1)
+				waitTime = waitTime + 0.1
+			end
+
+			if waitTime >= 60 then
+				warn("[Cloud] Chunk " .. chunkIdx .. " timed out")
+				loadFailed = true
+				break
+			end
+
+			-- Append frames from this chunk
+			if chunkData and chunkData.frames then
+				for _, frame in ipairs(chunkData.frames) do
+					table.insert(allFrames, frame)
+				end
+			end
+
+			-- Small delay between chunks to avoid overwhelming
+			task.wait(0.2)
+		end
+
+		if loadFailed or loadedCount < totalChunks then
+			WindUI:Notify({
+				Title = "❌ Error",
+				Content = string.format("Failed to load all chunks (%d/%d loaded)", loadedCount, totalChunks),
+				Duration = 5,
+			})
+			return
+		end
+
+		-- ALL CHUNKS LOADED! Now prepare the recording
+		CloudRecordingData = {
+			Frames = allFrames,
+			Mode = metaData.mode or "Flexible",
+			_isChunked = false, -- Not streaming anymore, all data loaded
+			_recordingId = recInfo.recordingId,
+		}
+		CloudRecordingName = metaData.name or recInfo.name
+		CloudRecordingLoaded = true
+
+		-- Update selected file display
+		selectedFile = "CLOUD:" .. recInfo.recordingId
+		if selectedFileDisplay then
+			pcall(function()
+				selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
+				selectedFileDisplay:SetDesc(string.format("Ready! • %d frames loaded", #allFrames))
+			end)
+		end
+
+		WindUI:Notify({
+			Title = "☁️ Ready!",
+			Content = string.format("%s fully loaded (%d frames) - Press Play!", CloudRecordingName, #allFrames),
+			Duration = 4,
+		})
 	end)
 end
 
