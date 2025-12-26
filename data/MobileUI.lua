@@ -265,6 +265,9 @@ local ChunkedState = {
 -- API Base URL
 local CLOUD_API_BASE = "https://starship-core.my.id"
 
+-- Forward declarations for chunked loading functions (defined later in file)
+local PreloadNextChunks
+
 -- ══════════════════════════════════════════════════════════════════
 -- UTILITY FUNCTIONS
 -- ══════════════════════════════════════════════════════════════════
@@ -3941,16 +3944,35 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 				callback(true, ChunkedState.loadedChunks[chunkIndex])
 			end
 		else
-			warn("[Chunked] Failed to parse chunk " .. chunkIndex)
-			if callback then
-				callback(false, nil)
+			-- More detailed error for debugging
+			local errMsg = "[Chunked] Failed to parse chunk " .. chunkIndex
+			if not parseSuccess then
+				errMsg = errMsg .. " (JSON parse error)"
+			elseif not data then
+				errMsg = errMsg .. " (nil data)"
+			elseif not data.success then
+				errMsg = errMsg .. " (API error: " .. tostring(data.error or "unknown") .. ")"
+			elseif not data.frames then
+				errMsg = errMsg .. " (no frames in response)"
+			end
+			warn(errMsg)
+
+			-- Try again after a delay (single retry)
+			if not ChunkedState.loadedChunks[chunkIndex] then
+				task.delay(2, function()
+					LoadChunk(recordingId, chunkIndex, callback)
+				end)
+			else
+				if callback then
+					callback(false, nil)
+				end
 			end
 		end
 	end)
 end
 
 -- Helper function to preload next chunks in background
-local function PreloadNextChunks(recordingId, currentChunkIndex, numToPreload)
+PreloadNextChunks = function(recordingId, currentChunkIndex, numToPreload)
 	if ChunkedState.isPreloading then
 		return
 	end
@@ -4009,7 +4031,7 @@ local function PreloadNextChunks(recordingId, currentChunkIndex, numToPreload)
 						end
 					end
 				end)
-				task.wait(0.3) -- Small delay between preloads
+				task.wait(1.0) -- Delay between preloads to avoid network congestion
 			end
 		end
 		ChunkedState.isPreloading = false
