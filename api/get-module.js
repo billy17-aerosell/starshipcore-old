@@ -75,6 +75,8 @@ const ALLOWED_MODULES = [
   "Locale.lua",
   "CloudRecording.lua",
   "Modules/CloudRecording.lua",
+  "PathEditor.lua",
+  "PathEditorUI.lua",
   "Tabs/Dashboard.lua",
   "Tabs/Tools.lua",
   "Tabs/Warp.lua",

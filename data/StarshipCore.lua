@@ -2466,7 +2466,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					else
 						-- IMPROVED: Position-based playback option for ground too (smoother)
 						if isTimeJump or playbackSpeed >= 2 then
-						-- IMPROVED: Position-based playback option for ground too (smoother)
+							-- IMPROVED: Position-based playback option for ground too (smoother)
 							-- Use smooth velocity from Catmull-Rom if available
 							r.AssemblyLinearVelocity = smoothVel or vel
 							-- Also snap position to prevent drift at high speeds
@@ -7455,7 +7455,7 @@ function UIHandlers.SetupListMapUI()
 		local BtnRename = Instance.new("TextButton", FileCard)
 		BtnRename.Text = "✏️"
 		BtnRename.Size = UDim2.new(0, 24, 0, 24)
-		BtnRename.Position = UDim2.new(1, -52, 0.5, -12)
+		BtnRename.Position = UDim2.new(1, -78, 0.5, -12)
 		BtnRename.BackgroundColor3 = colors.MAIN
 		BtnRename.TextColor3 = colors.YELLOW or Color3.fromRGB(255, 200, 0)
 		BtnRename.Font = Enum.Font.GothamBold
@@ -7490,7 +7490,7 @@ function UIHandlers.SetupListMapUI()
 			local BtnCloud = Instance.new("TextButton", FileCard)
 			BtnCloud.Text = "☁️"
 			BtnCloud.Size = UDim2.new(0, 24, 0, 24)
-			BtnCloud.Position = UDim2.new(1, -78, 0.5, -12) -- Position left of Rename button
+			BtnCloud.Position = UDim2.new(1, -104, 0.5, -12) -- Left of Rename
 			BtnCloud.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
 			BtnCloud.TextColor3 = Color3.new(1, 1, 1)
 			BtnCloud.Font = Enum.Font.GothamBold
@@ -7594,6 +7594,128 @@ function UIHandlers.SetupListMapUI()
 						end)
 					end,
 				})
+			end)
+		end
+
+		-- Path Editor Button (🛤️) - Edit keypoints in recording
+		do
+			local BtnEditPath = Instance.new("TextButton", FileCard)
+			BtnEditPath.Text = "🛤️"
+			BtnEditPath.Size = UDim2.new(0, 24, 0, 24)
+			BtnEditPath.Position = UDim2.new(1, -52, 0.5, -12)
+			BtnEditPath.BackgroundColor3 = colors.MAIN
+			BtnEditPath.TextColor3 = colors.ACCENT or Color3.fromRGB(90, 110, 245)
+			BtnEditPath.Font = Enum.Font.GothamBold
+			BtnEditPath.TextSize = 12
+			BtnEditPath.AutoButtonColor = true
+			Instance.new("UICorner", BtnEditPath).CornerRadius = UDim.new(0, 6)
+			RegisterTheme(BtnEditPath, "BackgroundColor3", "Main")
+
+			BtnEditPath.MouseButton1Click:Connect(function()
+				-- Lazy load PathEditor modules
+				if not _G.StarshipPathEditor or not _G.StarshipPathEditor.loaded then
+					_G.StarshipPathEditor = { Editor = nil, EditorUI = nil, loaded = false }
+					local baseUrl = _G.StarshipServerURL or "https://starship-core.my.id"
+					warn("[PathEditor] Loading from: " .. baseUrl)
+
+					-- Load PathEditor module
+					local s1, r1 = pcall(function()
+						local url = baseUrl .. "/api/get-module?name=PathEditor.lua"
+						local resp = game:HttpGet(url)
+						if resp:sub(1, 1) == "{" then
+							-- Encrypted (production) - handled by existing decrypt system
+							return nil -- Skip for now, will implement later
+						end
+						return loadstring(resp)()
+					end)
+					if s1 and r1 then
+						_G.StarshipPathEditor.Editor = r1
+						warn("[PathEditor] PathEditor loaded!")
+					else
+						warn("[PathEditor] Failed: " .. tostring(r1))
+					end
+
+					-- Load PathEditorUI module
+					local s2, r2 = pcall(function()
+						local url = baseUrl .. "/api/get-module?name=PathEditorUI.lua"
+						local resp = game:HttpGet(url)
+						if resp:sub(1, 1) == "{" then
+							return nil
+						end
+						return loadstring(resp)()
+					end)
+					if s2 and r2 then
+						_G.StarshipPathEditor.EditorUI = r2
+						warn("[PathEditorUI] PathEditorUI loaded!")
+					else
+						warn("[PathEditorUI] Failed: " .. tostring(r2))
+					end
+
+					-- Setup if both loaded
+					if _G.StarshipPathEditor.Editor and _G.StarshipPathEditor.EditorUI then
+						_G.StarshipPathEditor.EditorUI.SetPathEditor(_G.StarshipPathEditor.Editor)
+						local clrs = _G.StarshipColors or CurrentColors
+						if clrs then
+							_G.StarshipPathEditor.EditorUI.SetTheme({
+								Main = clrs.MAIN,
+								Side = clrs.SIDE,
+								Accent = clrs.ACCENT,
+								Text = clrs.TEXT,
+								TextDim = clrs.TEXT_DIM,
+								Item = clrs.ITEM,
+								Red = clrs.RED,
+								Yellow = clrs.YELLOW,
+								Green = clrs.GREEN,
+							})
+						end
+						_G.StarshipPathEditor.loaded = true
+						warn("[PathEditor] Integration complete!")
+					end
+				end
+
+				-- Check if loaded
+				local PE = _G.StarshipPathEditor and _G.StarshipPathEditor.Editor
+				local PEU = _G.StarshipPathEditor and _G.StarshipPathEditor.EditorUI
+				if not PE or not PEU then
+					ShowToast("Error", "Path Editor modules not available", "error", 3)
+					return
+				end
+
+				-- Read recording file
+				local fPath = MERGER_FOLDER .. "/" .. fileName
+				local ok, content = pcall(readfile, fPath)
+				if not ok then
+					ShowToast("Error", "Failed to read file", "error", 3)
+					return
+				end
+
+				local dok, rData = pcall(function()
+					return HttpService:JSONDecode(content)
+				end)
+				if not dok or not rData then
+					ShowToast("Error", "Invalid recording data", "error", 3)
+					return
+				end
+
+				-- Open editor
+				local frms = rData.Frames or rData
+				if PEU.Create then
+					PEU.Create(CoreGui)
+				end
+
+				PEU.Open(fileName:gsub(".json", ""), frms, function(modFrames)
+					rData.Frames = modFrames
+					local sok = pcall(function()
+						writefile(fPath, HttpService:JSONEncode(rData))
+					end)
+					if sok then
+						ShowToast("Path Editor", "Recording saved!", "success", 3)
+					else
+						ShowToast("Error", "Failed to save", "error", 3)
+					end
+				end, function()
+					ShowToast("Path Editor", "Editor closed", "info", 2)
+				end)
 			end)
 		end
 
