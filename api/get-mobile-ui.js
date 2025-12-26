@@ -354,15 +354,55 @@ export default async function handler(req, res) {
         `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - UserID: ${userId} | Code: ${eventAccess.codeUsed} | Expires: ${eventAccess.expiresAt}`,
       );
 
-      await sendDiscordLog({
-        title: "🎟️ Mobile UI Event Access Granted",
-        status: "success",
-        owner: `UserID: ${userId}`,
-        authType: `Event Code (${eventAccess.codeUsed})`,
-        ip: clientIP,
-        timestamp: timestamp,
-        message: `✅ Event code access granted\nCode: ${eventAccess.codeUsed}\nRemaining: ${eventAccess.remainingDays} days`,
-      });
+      // === SEND DISCORD WEBHOOK (ONLY ONCE PER USER) ===
+      // Track webhook notifications in Redis to prevent duplicates
+      const webhookKey = `starship:event_webhook_sent:${userId}`;
+      let webhookAlreadySent = false;
+
+      try {
+        const redisClient = await getRedis();
+        if (redisClient) {
+          const alreadySent = await redisClient.get(webhookKey);
+          webhookAlreadySent = alreadySent === "true";
+
+          // If not sent yet, send webhook and mark as sent
+          if (!webhookAlreadySent) {
+            await sendDiscordLog({
+              title: "🎟️ Mobile UI Event Access - First Time",
+              status: "success",
+              owner: `UserID: ${userId}`,
+              authType: `Event Code (${eventAccess.codeUsed})`,
+              ip: clientIP,
+              timestamp: timestamp,
+              message: `✅ First-time event code access\nCode: ${eventAccess.codeUsed}\nRemaining: ${eventAccess.remainingDays} days`,
+            });
+
+            // Mark as sent (expires when event code expires)
+            const ttl = eventAccess.remainingDays * 24 * 60 * 60; // Convert days to seconds
+            await redisClient.set(webhookKey, "true", { EX: ttl });
+            console.log(
+              `[${timestamp}] 📨 Event webhook sent for UserID: ${userId}`,
+            );
+          } else {
+            console.log(
+              `[${timestamp}] ⏭️ Event webhook skipped (already sent) for UserID: ${userId}`,
+            );
+          }
+        } else {
+          // Fallback: Send webhook if Redis unavailable
+          await sendDiscordLog({
+            title: "🎟️ Mobile UI Event Access Granted",
+            status: "success",
+            owner: `UserID: ${userId}`,
+            authType: `Event Code (${eventAccess.codeUsed})`,
+            ip: clientIP,
+            timestamp: timestamp,
+            message: `✅ Event code access granted\nCode: ${eventAccess.codeUsed}\nRemaining: ${eventAccess.remainingDays} days`,
+          });
+        }
+      } catch (webhookError) {
+        console.error("Event webhook tracking error:", webhookError.message);
+      }
 
       // Read MobileUI.lua from data folder
       const uiPath = path.join(process.cwd(), "data", "MobileUI.lua");
