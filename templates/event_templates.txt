@@ -1,0 +1,209 @@
+════════════════════════════════════════════════════════════════════════════════
+                      STARSHIP CORE - EVENT TEMPLATES
+                      Discord Message Templates Collection
+════════════════════════════════════════════════════════════════════════════════
+
+
+================================================================================
+                    TEMPLATE 1: EVENT 3D UNTUK MOBILE SCRIPT
+================================================================================
+
+╔══════════════════════════════════════════════════════════════╗
+║                    🌟 STARSHIP CORE 3D EVENT 🌟              ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║   🎮 EVENT: [NAMA EVENT]                                     ║
+║   📅 PERIODE: [TANGGAL MULAI] - [TANGGAL SELESAI]           ║
+║   ⏰ DURASI: [X] Hari                                        ║
+║                                                              ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║   📱 CARA AKSES:                                             ║
+║   1. Buka Roblox di Mobile                                   ║
+║   2. Execute loader script                                   ║
+║   3. Masukkan Event Code: [KODE EVENT]                       ║
+║   4. Nikmati fitur premium selama event!                     ║
+║                                                              ║
+║   ✨ FITUR YANG TERSEDIA:                                    ║
+║   • Auto Walk Recording & Playback                          ║
+║   • Cloud Recordings Access                                  ║
+║   • All Premium Features                                     ║
+║                                                              ║
+╠══════════════════════════════════════════════════════════════╣
+║   📌 EVENT CODE: [KODE]                                      ║
+║   🔒 Jangan share code ini ke orang lain!                   ║
+╚══════════════════════════════════════════════════════════════╝
+
+
+================================================================================
+                    TEMPLATE 2: EVENT ANNOUNCEMENT (PANJANG)
+================================================================================
+
+═══════════════════════════════════════
+🚀 **STARSHIP CORE - NEW EVENT** 🚀
+═══════════════════════════════════════
+
+🎉 **[NAMA EVENT]**
+
+📅 **Periode:** `[DD/MM/YYYY]` - `[DD/MM/YYYY]`
+⏰ **Durasi:** [X] Hari
+
+📱 **Untuk Mobile Users:**
+> Gunakan Event Code berikut untuk akses premium tanpa whitelist!
+> 
+> 🎫 **CODE:** `[EVENT_CODE]`
+
+✨ **Fitur yang Bisa Diakses:**
+• ✅ Auto Walk Recording
+• ✅ Cloud Recordings
+• ✅ All Premium Features
+• ✅ Anti-AFK
+
+⚠️ **Perhatian:**
+• Code hanya berlaku selama periode event
+• Jangan share code ke orang yang tidak terdaftar
+• Satu code bisa dipakai unlimited users
+
+💬 Pertanyaan? Hubungi admin di channel <#support>
+
+═══════════════════════════════════════
+
+
+================================================================================
+                    TEMPLATE 3: REPORT TEMPLATE (UNTUK CHANNEL REPORT)
+================================================================================
+
+═══════════════════════════════════════
+📋 **STARSHIP CORE - USAGE REPORT**
+═══════════════════════════════════════
+
+📆 **Tanggal:** [DD/MM/YYYY]
+🎫 **Event Code:** `[KODE]`
+👤 **Total Users:** [X] users
+
+📊 **Statistik Penggunaan:**
+┌─────────────────────────────────────┐
+│ 📱 Mobile Users    : [X]            │
+│ 💻 PC Users        : [X]            │
+│ 🆕 New Users       : [X]            │
+│ 🔄 Returning Users : [X]            │
+└─────────────────────────────────────┘
+
+⏱️ **Peak Usage Time:** [HH:MM WIB]
+🎮 **Top Games Played:**
+1. [Game Name] - [X] users
+2. [Game Name] - [X] users
+3. [Game Name] - [X] users
+
+📝 **Notes:**
+> [Tambahkan catatan jika ada]
+
+═══════════════════════════════════════
+
+
+================================================================================
+                    TEMPLATE 4: QUICK ANNOUNCEMENT (SINGKAT)
+================================================================================
+
+📢 **EVENT ALERT** 📢
+
+🎫 Event Code: `[KODE]`
+📅 Berlaku: [X] Hari
+📱 Untuk: Mobile Users
+
+Cara pakai:
+1. Execute mobile loader
+2. Enter code di popup
+3. Enjoy! 🎉
+
+⚠️ Code bersifat rahasia!
+
+
+================================================================================
+                    TEMPLATE 5: EVENT ENDED ANNOUNCEMENT
+================================================================================
+
+═══════════════════════════════════════
+⏰ **EVENT TELAH BERAKHIR**
+═══════════════════════════════════════
+
+🎫 Event Code `[KODE]` sudah tidak berlaku.
+
+📊 **Final Statistics:**
+• Total Participants: [X] users
+• Active During Event: [X] users
+• New Registrations: [X] users
+
+🙏 Terima kasih kepada semua yang berpartisipasi!
+
+📢 Nantikan event berikutnya!
+Follow channel ini untuk update.
+
+═══════════════════════════════════════
+
+
+================================================================================
+                    TEMPLATE 6: NEW USER WELCOME (UNTUK REPORT)
+================================================================================
+
+═══════════════════════════════════════
+👋 **NEW USER JOINED VIA EVENT**
+═══════════════════════════════════════
+
+🆔 **User ID:** [USER_ID]
+📱 **Platform:** Mobile
+🎫 **Event Code Used:** [KODE]
+📅 **Join Date:** [DD/MM/YYYY HH:MM WIB]
+🌐 **IP Region:** [REGION]
+
+═══════════════════════════════════════
+
+
+================================================================================
+                    TEMPLATE 7: DAILY SUMMARY REPORT
+================================================================================
+
+═══════════════════════════════════════
+📊 **DAILY SUMMARY - [DD/MM/YYYY]**
+═══════════════════════════════════════
+
+📈 **Today's Stats:**
+┌─────────────────────────────────────┐
+│ Total Executions  : [X]             │
+│ Unique Users      : [X]             │
+│ Mobile Users      : [X]             │
+│ PC Users          : [X]             │
+│ Event Code Users  : [X]             │
+│ VIP Users         : [X]             │
+└─────────────────────────────────────┘
+
+🕐 **Peak Hours:** [HH:MM] - [HH:MM] WIB
+🎮 **Most Active Game:** [Game Name]
+
+📝 **Issues Reported:** [X] issues
+✅ **Issues Resolved:** [X] resolved
+
+═══════════════════════════════════════
+
+
+================================================================================
+                    PLACEHOLDER GUIDE
+================================================================================
+
+Ganti placeholder berikut dengan data yang sesuai:
+
+[NAMA EVENT]        → Nama event, contoh: "New Year 2025 Event"
+[TANGGAL MULAI]     → Tanggal mulai, contoh: "25/12/2024"
+[TANGGAL SELESAI]   → Tanggal selesai, contoh: "01/01/2025"
+[X]                 → Angka/jumlah
+[KODE]              → Event code, contoh: "NEWYEAR2025"
+[EVENT_CODE]        → Event code (sama dengan [KODE])
+[DD/MM/YYYY]        → Format tanggal
+[HH:MM WIB]         → Format waktu
+[USER_ID]           → Roblox User ID
+[REGION]            → Region/lokasi
+[Game Name]         → Nama game Roblox
+
+════════════════════════════════════════════════════════════════════════════════
+                              END OF TEMPLATES
+════════════════════════════════════════════════════════════════════════════════

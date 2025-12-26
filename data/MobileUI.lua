@@ -249,6 +249,22 @@ local CloudRecordingName = nil
 local CloudRecordingsCache = {} -- Cache: displayName -> {name, recordingId}
 local CloudDropdownValues = {}
 
+-- Chunked Loading State (for streaming large recordings)
+local ChunkedState = {
+	isChunked = false, -- Whether current recording uses chunked loading
+	recordingId = nil, -- Current recording ID for chunk fetching
+	totalChunks = 0, -- Total number of chunks
+	loadedChunks = {}, -- Cached chunk data: [chunkIndex] = {frames}
+	currentLoadingChunk = -1, -- Chunk currently being loaded (-1 = none)
+	framesPerChunk = 3000, -- Frames per chunk (from server)
+	totalFrames = 0, -- Total frame count
+	isPreloading = false, -- Whether preloading is in progress
+	loadProgress = 0, -- Loading progress (0-100)
+}
+
+-- API Base URL
+local CLOUD_API_BASE = "https://starship-core.my.id"
+
 -- ══════════════════════════════════════════════════════════════════
 -- UTILITY FUNCTIONS
 -- ══════════════════════════════════════════════════════════════════
@@ -2112,7 +2128,7 @@ ToolsTab:Toggle({
 
 ToolsTab:Divider()
 
--- ══════════════════════════════════════════════════════════════════
+-- ══════════════════════════════════════════════════════════�������������═══════
 -- 🚶 AUTO WALK TAB CONTENT
 -- ══════════════════════════════════════════════════════════════════
 
@@ -2664,7 +2680,36 @@ local function PlayRecording(fileName, force)
 			return
 		end
 		data = CloudRecordingData
-		WindUI:Notify({ Title = "Loading", Content = "Preparing cloud recording...", Duration = 1.5 })
+
+		-- Check if this is a chunked recording
+		if ChunkedState.isChunked and ChunkedState.totalChunks > 1 then
+			local loadedCount = 0
+			for _ in pairs(ChunkedState.loadedChunks) do
+				loadedCount = loadedCount + 1
+			end
+
+			if loadedCount < ChunkedState.totalChunks then
+				WindUI:Notify({
+					Title = "☁️ Streaming",
+					Content = string.format(
+						"Playing with %d/%d chunks loaded...",
+						loadedCount,
+						ChunkedState.totalChunks
+					),
+					Duration = 2,
+				})
+
+				-- Start background preloading if not already running
+				if not ChunkedState.isPreloading then
+					local currentChunk = loadedCount - 1
+					PreloadNextChunks(ChunkedState.recordingId, currentChunk, ChunkedState.totalChunks - loadedCount)
+				end
+			else
+				WindUI:Notify({ Title = "☁️ Ready", Content = "All chunks loaded!", Duration = 1.5 })
+			end
+		else
+			WindUI:Notify({ Title = "Loading", Content = "Preparing cloud recording...", Duration = 1.5 })
+		end
 	else
 		-- Load from file (original behavior)
 		local filePath = MERGER_FOLDER .. "/" .. fileName
@@ -3832,7 +3877,166 @@ ListMapTab:Space()
 local selectedCloudRecording = nil
 local CloudRecordingLoaded = false -- Flag to show playback controls
 
--- Helper function to load a cloud recording
+-- Helper function to load a single chunk
+local function LoadChunk(recordingId, chunkIndex, callback)
+	if ChunkedState.loadedChunks[chunkIndex] then
+		-- Already loaded
+		if callback then
+			callback(true, ChunkedState.loadedChunks[chunkIndex])
+		end
+		return
+	end
+
+	if ChunkedState.currentLoadingChunk == chunkIndex then
+		-- Already loading this chunk
+		return
+	end
+
+	ChunkedState.currentLoadingChunk = chunkIndex
+
+	task.spawn(function()
+		local apiUrl = CLOUD_API_BASE .. "/api/r2-chunked?recordingId=" .. recordingId .. "&chunk=" .. chunkIndex
+
+		local success, response = pcall(function()
+			return game:HttpGet(apiUrl)
+		end)
+
+		ChunkedState.currentLoadingChunk = -1
+
+		if not success then
+			warn("[Chunked] Failed to load chunk " .. chunkIndex)
+			if callback then
+				callback(false, nil)
+			end
+			return
+		end
+
+		local parseSuccess, data = pcall(function()
+			return HttpService:JSONDecode(response)
+		end)
+
+		if parseSuccess and data and data.success and data.frames then
+			-- Cache the chunk
+			ChunkedState.loadedChunks[chunkIndex] = {
+				frames = data.frames,
+				startFrame = data.startFrame,
+				endFrame = data.endFrame,
+			}
+
+			-- Update metadata from first chunk if available
+			if chunkIndex == 0 and data.totalFrames then
+				ChunkedState.totalFrames = data.totalFrames
+				ChunkedState.framesPerChunk = data.framesPerChunk or 3000
+				ChunkedState.totalChunks = data.totalChunks or 1
+			end
+
+			-- Calculate progress
+			local loadedCount = 0
+			for _ in pairs(ChunkedState.loadedChunks) do
+				loadedCount = loadedCount + 1
+			end
+			ChunkedState.loadProgress = math.floor((loadedCount / ChunkedState.totalChunks) * 100)
+
+			if callback then
+				callback(true, ChunkedState.loadedChunks[chunkIndex])
+			end
+		else
+			warn("[Chunked] Failed to parse chunk " .. chunkIndex)
+			if callback then
+				callback(false, nil)
+			end
+		end
+	end)
+end
+
+-- Helper function to preload next chunks in background
+local function PreloadNextChunks(recordingId, currentChunkIndex, numToPreload)
+	if ChunkedState.isPreloading then
+		return
+	end
+	ChunkedState.isPreloading = true
+
+	task.spawn(function()
+		for i = 1, numToPreload do
+			local nextChunk = currentChunkIndex + i
+			if nextChunk < ChunkedState.totalChunks and not ChunkedState.loadedChunks[nextChunk] then
+				-- Load next chunk
+				LoadChunk(recordingId, nextChunk, function(success)
+					if success then
+						-- Update CloudRecordingData with new frames
+						if CloudRecordingData and CloudRecordingData._isChunked then
+							local newChunk = ChunkedState.loadedChunks[nextChunk]
+							if newChunk and newChunk.frames then
+								-- Append new frames to existing data
+								for _, frame in ipairs(newChunk.frames) do
+									table.insert(CloudRecordingData.Frames, frame)
+								end
+
+								-- Also update PlaybackState.frameData if it's the same recording
+								if PlaybackState.frameData and PlaybackState.currentFile then
+									local isCurrentRecording = string.find(PlaybackState.currentFile, recordingId)
+									if isCurrentRecording then
+										for _, frame in ipairs(newChunk.frames) do
+											table.insert(PlaybackState.frameData, frame)
+										end
+										-- Update total duration
+										if #PlaybackState.frameData > 0 then
+											PlaybackState.totalDuration = PlaybackState.frameData[#PlaybackState.frameData].t
+												or 0
+										end
+									end
+								end
+
+								-- Count loaded chunks
+								local loadedCount = 0
+								for _ in pairs(ChunkedState.loadedChunks) do
+									loadedCount = loadedCount + 1
+								end
+
+								-- Notify every few chunks
+								if loadedCount % 5 == 0 or loadedCount == ChunkedState.totalChunks then
+									WindUI:Notify({
+										Title = "☁️ Streaming",
+										Content = string.format(
+											"Loaded %d/%d chunks",
+											loadedCount,
+											ChunkedState.totalChunks
+										),
+										Duration = 1.5,
+									})
+								end
+							end
+						end
+					end
+				end)
+				task.wait(0.3) -- Small delay between preloads
+			end
+		end
+		ChunkedState.isPreloading = false
+	end)
+end
+
+-- Helper function to assemble all loaded chunks into frame data
+local function AssembleFrameData()
+	local allFrames = {}
+
+	-- Assemble chunks in order
+	for chunkIdx = 0, ChunkedState.totalChunks - 1 do
+		local chunkData = ChunkedState.loadedChunks[chunkIdx]
+		if chunkData and chunkData.frames then
+			for _, frame in ipairs(chunkData.frames) do
+				table.insert(allFrames, frame)
+			end
+		end
+	end
+
+	return allFrames
+end
+
+-- Forward declaration for direct loading function (used as fallback)
+local LoadCloudRecordingDirect
+
+-- Helper function to load a cloud recording (with chunked streaming support)
 local function LoadCloudRecording(recInfo)
 	if not recInfo or not recInfo.recordingId then
 		WindUI:Notify({
@@ -3846,15 +4050,124 @@ local function LoadCloudRecording(recInfo)
 	selectedCloudRecording = recInfo
 	CloudRecordingLoaded = false -- Reset until loaded
 
+	-- Reset chunked state
+	ChunkedState.isChunked = false
+	ChunkedState.loadedChunks = {}
+	ChunkedState.recordingId = recInfo.recordingId
+	ChunkedState.currentLoadingChunk = -1
+	ChunkedState.loadProgress = 0
+
 	WindUI:Notify({
-		Title = "☁️ Loading...",
-		Content = "Fetching " .. recInfo.name .. "...",
+		Title = "☁️ Checking...",
+		Content = "Analyzing " .. recInfo.name .. "...",
 		Duration = 2,
 	})
 
-	-- Fetch the actual recording data
+	-- Step 1: Fetch metadata first (fast - only a few KB)
 	task.spawn(function()
-		local apiUrl = "https://starship-core.my.id/api/r2-recordings?recordingId=" .. recInfo.recordingId
+		local metaUrl = CLOUD_API_BASE .. "/api/r2-chunked?recordingId=" .. recInfo.recordingId .. "&action=info"
+
+		local success, response = pcall(function()
+			return game:HttpGet(metaUrl)
+		end)
+
+		if not success then
+			-- Fallback to old API if chunked API not available
+			warn("[Cloud] Chunked API failed, falling back to direct load")
+			LoadCloudRecordingDirect(recInfo)
+			return
+		end
+
+		local parseSuccess, metaData = pcall(function()
+			return HttpService:JSONDecode(response)
+		end)
+
+		if not parseSuccess or not metaData or not metaData.success then
+			-- Fallback to direct load
+			warn("[Cloud] Metadata parse failed, falling back to direct load")
+			LoadCloudRecordingDirect(recInfo)
+			return
+		end
+
+		-- Check if file is small enough for direct load (< 10MB)
+		if metaData.needsChunking == false then
+			-- Small file, use direct load
+			WindUI:Notify({
+				Title = "☁️ Loading...",
+				Content = "Small file, loading directly...",
+				Duration = 2,
+			})
+			LoadCloudRecordingDirect(recInfo)
+			return
+		end
+
+		-- Large file - use chunked loading
+		ChunkedState.isChunked = true
+		ChunkedState.totalChunks = metaData.totalChunks or metaData.suggestedChunks or 1
+		ChunkedState.totalFrames = metaData.totalFrames or 0
+		ChunkedState.framesPerChunk = metaData.framesPerChunk or 3000
+
+		local sizeMB = metaData.sizeMB or "?"
+
+		WindUI:Notify({
+			Title = "☁️ Streaming...",
+			Content = string.format("%s chunks (%s MB) - Loading first segment...", ChunkedState.totalChunks, sizeMB),
+			Duration = 3,
+		})
+
+		-- Step 2: Load first chunk (for immediate playback)
+		LoadChunk(recInfo.recordingId, 0, function(chunkSuccess, chunkData)
+			if not chunkSuccess or not chunkData then
+				WindUI:Notify({
+					Title = "Error",
+					Content = "Failed to load first chunk",
+					Duration = 3,
+				})
+				return
+			end
+
+			-- Prepare recording data with first chunk
+			local initialFrames = chunkData.frames or {}
+
+			-- Create a wrapper that can request more chunks during playback
+			CloudRecordingData = {
+				Frames = initialFrames,
+				Mode = metaData.mode or "Flexible",
+				_isChunked = true,
+				_recordingId = recInfo.recordingId,
+			}
+			CloudRecordingName = metaData.name or recInfo.name
+			CloudRecordingLoaded = true
+
+			-- Update selected file display
+			selectedFile = "CLOUD:" .. recInfo.recordingId
+			if selectedFileDisplay then
+				pcall(function()
+					selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
+					selectedFileDisplay:SetDesc(
+						string.format("Streaming • Chunk 1/%d loaded", ChunkedState.totalChunks)
+					)
+				end)
+			end
+
+			WindUI:Notify({
+				Title = "☁️ Ready!",
+				Content = string.format("%s loaded (1/%d) - Press Play!", CloudRecordingName, ChunkedState.totalChunks),
+				Duration = 3,
+			})
+
+			-- Step 3: Start preloading remaining chunks in background
+			if ChunkedState.totalChunks > 1 then
+				PreloadNextChunks(recInfo.recordingId, 0, math.min(3, ChunkedState.totalChunks - 1))
+			end
+		end)
+	end)
+end
+
+-- Fallback: Direct load for small files or when chunked API fails
+LoadCloudRecordingDirect = function(recInfo)
+	task.spawn(function()
+		local apiUrl = CLOUD_API_BASE .. "/api/r2-recordings?recordingId=" .. recInfo.recordingId
 
 		local success, response = pcall(function()
 			return game:HttpGet(apiUrl)
@@ -3896,6 +4209,7 @@ local function LoadCloudRecording(recInfo)
 			CloudRecordingData = data.recording
 			CloudRecordingName = data.name or recInfo.name
 			CloudRecordingLoaded = true -- Mark as loaded!
+			ChunkedState.isChunked = false
 
 			-- Update selected file display
 			selectedFile = "CLOUD:" .. recInfo.recordingId
