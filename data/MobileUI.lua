@@ -3736,21 +3736,16 @@ ListMapTab:Space()
 do
 	local apiUrl = "https://starship-core.my.id/api/r2-recordings?list=all"
 
-	print("[StarshipMobile] Fetching cloud recordings from: " .. apiUrl)
-
 	local success, response = pcall(function()
 		return game:HttpGet(apiUrl)
 	end)
 
 	if success and response then
-		print("[StarshipMobile] Got response, parsing JSON...")
 		local parseSuccess, data = pcall(function()
 			return HttpService:JSONDecode(response)
 		end)
 
 		if parseSuccess and data and data.success and data.recordings then
-			print("[StarshipMobile] Found " .. #data.recordings .. " cloud recordings!")
-
 			-- Store as simple strings for dropdown (supports search)
 			for _, rec in ipairs(data.recordings) do
 				local displayName = rec.name
@@ -3767,17 +3762,8 @@ do
 			table.sort(CloudDropdownValues, function(a, b)
 				return string.lower(a) < string.lower(b)
 			end)
-		else
-			print("[StarshipMobile] Parse failed or no recordings. parseSuccess=" .. tostring(parseSuccess))
-			if data then
-				print("[StarshipMobile] data.success=" .. tostring(data.success))
-			end
 		end
-	else
-		print("[StarshipMobile] HTTP request failed: " .. tostring(response))
 	end
-
-	print("[StarshipMobile] CloudDropdownValues count: " .. #CloudDropdownValues)
 
 	if #CloudDropdownValues == 0 then
 		table.insert(CloudDropdownValues, "No cloud recordings")
