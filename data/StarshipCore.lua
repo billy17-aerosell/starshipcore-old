@@ -672,6 +672,7 @@ local S = {
 	isZoomPunch = false,
 	lastAirState = nil,
 	isRespawnOnEnd = false,
+	isAdaptiveGround = false, -- NEW: Adaptive Ground Detection (allows falling when obstacles are moved)
 	isLiveSmoothing = false,
 	liveSmoothingStrength = 4,
 	isPositionBasedPlayback = true, -- New: smoother position-following mode (default ON)
@@ -688,6 +689,7 @@ local isRecording, isPaused, isPlaying, isPlayPaused = S.isRecording, S.isPaused
 local isLooping, isGodMode, playbackSpeed, isMoonwalk = S.isLooping, S.isGodMode, S.playbackSpeed, S.isMoonwalk
 local isReversing, isZoomPunch, lastAirState, isRespawnOnEnd =
 	S.isReversing, S.isZoomPunch, S.lastAirState, S.isRespawnOnEnd
+local isAdaptiveGround = S.isAdaptiveGround
 local isFlexibleRecording, isStrictRetarget, isNativeAnim, isWarpLoop =
 	S.isFlexibleRecording, S.isStrictRetarget, S.isNativeAnim, S.isWarpLoop
 -- isAutoCloudSync accessed via S.isAutoCloudSync to save local registers
@@ -2445,27 +2447,108 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					end
 
 					if isInAir and smoothPos then
-						-- Follow recorded position for smooth jump arc (like recording)
-						local targetPos = smoothPos -- Use Catmull-Rom interpolated position
-						-- On time jump or high speed, snap directly to target position
-						if isTimeJump or playbackSpeed >= 2 then
-							r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
-							r.AssemblyLinearVelocity = vel
-						else
-							-- Smoothly move to target position
-							local currentPos = r.Position
-							local posBlend = math.clamp(0.5 * playbackSpeed, 0.3, 0.9)
-							local newPos = currentPos:Lerp(targetPos, posBlend)
-							r.CFrame = CFrame.new(newPos) * r.CFrame.Rotation
+						-- ADAPTIVE GROUND DETECTION for Air States
+						local shouldAllowFall = false
+						if isAdaptiveGround and stName == "Freefall" then
+							-- Raycast down from target position to check if ground exists
+							local rayOrigin = smoothPos
+							local rayDirection = Vector3.new(0, -5, 0) -- 5 studs down
+							local rayParams = RaycastParams.new()
+							rayParams.FilterType = Enum.RaycastFilterType.Exclude
+							rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+							local rayResult = workspace:Raycast(rayOrigin, rayDirection, rayParams)
+							if not rayResult then
+								-- No ground detected below target position - allow natural falling
+								shouldAllowFall = true
+							end
+						end
 
-							-- Use RECORDED velocity for animation (not calculated)
-							local recordedVelY = fA.vel and fA.vel.y or 0
-							local horizVel = (targetPos - currentPos) * 10 * playbackSpeed
-							r.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY * playbackSpeed, horizVel.Z)
+						if shouldAllowFall then
+							-- Adaptive Ground: No ground below - allow gravity to take over
+							-- Only control X/Z (horizontal), let Y be controlled by physics/gravity
+							local currentPos = r.Position
+							local targetPos = smoothPos
+							-- Apply horizontal movement only
+							local horizVel = Vector3.new(
+								(targetPos.X - currentPos.X) * 10 * playbackSpeed,
+								r.AssemblyLinearVelocity.Y, -- Keep current Y velocity (gravity)
+								(targetPos.Z - currentPos.Z) * 10 * playbackSpeed
+							)
+							r.AssemblyLinearVelocity = horizVel
+							-- Only update X/Z position, keep Y from physics
+							r.CFrame = CFrame.new(currentPos.X + (targetPos.X - currentPos.X) * 0.3, currentPos.Y, currentPos.Z + (targetPos.Z - currentPos.Z) * 0.3) * r.CFrame.Rotation
+							-- Ensure freefall state for proper animation
+							h:ChangeState(Enum.HumanoidStateType.Freefall)
+						else
+							-- Follow recorded position for smooth jump arc (like recording)
+							local targetPos = smoothPos -- Use Catmull-Rom interpolated position
+							-- On time jump or high speed, snap directly to target position
+							if isTimeJump or playbackSpeed >= 2 then
+								r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
+								r.AssemblyLinearVelocity = vel
+							else
+								-- Smoothly move to target position
+								local currentPos = r.Position
+								local posBlend = math.clamp(0.5 * playbackSpeed, 0.3, 0.9)
+								local newPos = currentPos:Lerp(targetPos, posBlend)
+								r.CFrame = CFrame.new(newPos) * r.CFrame.Rotation
+
+								-- Use RECORDED velocity for animation (not calculated)
+								local recordedVelY = fA.vel and fA.vel.y or 0
+								local horizVel = (targetPos - currentPos) * 10 * playbackSpeed
+								r.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY * playbackSpeed, horizVel.Z)
+							end
 						end
 					else
+						-- ADAPTIVE GROUND DETECTION for Ground States
+						local groundMissing = false
+						if isAdaptiveGround and smoothPos then
+							-- Raycast down from current position to check if ground exists
+							local rayOrigin = r.Position
+							local rayDirection = Vector3.new(0, -10, 0) -- 10 studs down (more range for ground states)
+							local rayParams = RaycastParams.new()
+							rayParams.FilterType = Enum.RaycastFilterType.Exclude
+							rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+							local rayResult = workspace:Raycast(rayOrigin, rayDirection, rayParams)
+							if not rayResult then
+								-- No ground detected - obstacle was moved
+								groundMissing = true
+							end
+						end
+
+						if groundMissing then
+							-- Adaptive Ground: No ground below - allow natural falling
+							-- Only control X/Z from recording, Y controlled by gravity
+							local currentPos = r.Position
+							local targetPos = smoothPos
+							-- Apply horizontal velocity only, keep Y velocity from physics
+							local horizPosDiff = Vector3.new(targetPos.X - currentPos.X, 0, targetPos.Z - currentPos.Z)
+							local correctionStrength = math.clamp(horizPosDiff.Magnitude * 8, 0, 50)
+							local horizCorrection = horizPosDiff.Magnitude > 0.01 and (horizPosDiff.Unit * correctionStrength) or Vector3.new(0, 0, 0)
+
+							-- Apply velocity: X/Z from recording correction, Y from gravity
+							local newVel = Vector3.new(
+								horizCorrection.X,
+								r.AssemblyLinearVelocity.Y, -- Keep Y velocity (gravity)
+								horizCorrection.Z
+							)
+							r.AssemblyLinearVelocity = newVel
+
+							-- Trigger freefall for proper animation
+							local currentState = h:GetState()
+							if currentState ~= Enum.HumanoidStateType.Freefall then
+								h:ChangeState(Enum.HumanoidStateType.Freefall)
+							end
+
+							-- Handle move direction for animation
+							if fA.md then
+								local moveDir = Vector3.new(fA.md.x, 0, fA.md.z)
+								if moveDir.Magnitude > 0.01 then
+									h:Move(moveDir, false)
+								end
+							end
+						elseif isTimeJump or playbackSpeed >= 2 then
 						-- IMPROVED: Position-based playback option for ground too (smoother)
-						if isTimeJump or playbackSpeed >= 2 then
 							-- Use smooth velocity from Catmull-Rom if available
 							r.AssemblyLinearVelocity = smoothVel or vel
 							-- Also snap position to prevent drift at high speeds
@@ -3144,6 +3227,29 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 									finalPosition = Vector3.new(finalPosition.X, snappedY, finalPosition.Z)
 								end
 							end
+						end
+					end
+				end
+
+				-- ADAPTIVE GROUND DETECTION for Strict Mode
+				if isAdaptiveGround then
+					-- Raycast down from target position to check if ground exists
+					local rayOrigin = finalPosition
+					local rayDirection = Vector3.new(0, -10, 0) -- 10 studs down
+					local rayParams = RaycastParams.new()
+					rayParams.FilterType = Enum.RaycastFilterType.Exclude
+					rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+					local rayResult = workspace:Raycast(rayOrigin, rayDirection, rayParams)
+					if not rayResult then
+						-- No ground detected below target position - allow natural falling
+						-- Disable AlignPosition Y control, let gravity work
+						-- Only control X/Z from recording
+						local currentPos = r.Position
+						finalPosition = Vector3.new(finalPosition.X, currentPos.Y, finalPosition.Z)
+						-- Trigger freefall for proper animation
+						local currentState = h:GetState()
+						if currentState ~= Enum.HumanoidStateType.Freefall then
+							h:ChangeState(Enum.HumanoidStateType.Freefall)
 						end
 					end
 				end
@@ -7194,6 +7300,7 @@ function UIHandlers.SetupListMapUI()
 
 		BtnSpinbot = CreateToggle(Row3, "SPIN", "💫", "spin") -- SPIN restored
 		BtnRespawn = CreateToggle(Row3, "RESPAWN", "💀", "respawn")
+		local BtnAdaptive = CreateToggle(Row3, "ADAPT", "🌍", "adaptive") -- Adaptive Ground Detection
 
 		-- Respawn click handler
 		BtnRespawn.MouseButton1Click:Connect(function()
@@ -7201,6 +7308,17 @@ function UIHandlers.SetupListMapUI()
 			UpdateToggleVisual("respawn", isRespawnOnEnd)
 			if isRespawnOnEnd then
 				ShowToast("Respawn On End", "Character will respawn when playback ends", "info", 2)
+			end
+		end)
+
+		-- Adaptive Ground Detection click handler
+		BtnAdaptive.MouseButton1Click:Connect(function()
+			isAdaptiveGround = not isAdaptiveGround
+			UpdateToggleVisual("adaptive", isAdaptiveGround)
+			if isAdaptiveGround then
+				ShowToast("Adaptive Ground", "Fall when obstacle is moved (prevent floating)", "info", 2)
+			else
+				ShowToast("Adaptive Ground", "Disabled - follow exact recorded path", "info", 2)
 			end
 		end)
 	end
@@ -7356,6 +7474,7 @@ function UIHandlers.SetupListMapUI()
 		isRespawnOnEnd = false
 		isZoomPunch = false
 		isPathEnabled = false
+		isAdaptiveGround = false
 		ClearPath()
 
 		-- Reset toggle visuals
@@ -7367,6 +7486,7 @@ function UIHandlers.SetupListMapUI()
 		UpdateToggleVisual("path", false)
 		UpdateToggleVisual("spin", false)
 		UpdateToggleVisual("god", false)
+		UpdateToggleVisual("adaptive", false)
 
 		-- Reset God Mode
 		if isGodMode then
