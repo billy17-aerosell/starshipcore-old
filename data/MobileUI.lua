@@ -3032,19 +3032,7 @@ local function PlayRecording(fileName, force)
 		-- If recorded with lower HipHeight and playing with higher → need to RAISE position
 		crossRigHeightOffset = playbackHipHeight - recordedHipHeight
 
-		-- Debug log
-		if recordedRigType ~= playbackRigType then
-			print(
-				string.format(
-					"[CrossRig Mobile] Recorded: %s (HH=%.2f) → Playback: %s (HH=%.2f) | Offset: %.2f",
-					recordedRigType,
-					recordedHipHeight,
-					playbackRigType,
-					playbackHipHeight,
-					crossRigHeightOffset
-				)
-			)
-		end
+		-- Toast notification will be shown below, no need for print
 
 		-- Log Cross-Rig info (once)
 		if recordedRigType ~= playbackRigType then
@@ -4118,7 +4106,7 @@ local function ToggleMiniPlayer(state)
 			end
 		end)
 
-		-- ═══��═══════════════════════════════════════════════════════
+		-- ═══��═════���═════════════════════════════════════════════════
 		-- BUTTONS CONTAINER - 3 Buttons: Play, Moonwalk, Loop
 		-- ═══════════════════════════════════════════════════════════
 		local buttonsFrame = Instance.new("Frame")
