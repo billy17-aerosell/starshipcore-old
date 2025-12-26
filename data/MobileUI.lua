@@ -4380,13 +4380,16 @@ local isAntiAfkOn = Settings.AutoAntiAFK
 
 local function setAfkState(state)
 	isAntiAfkOn = state
+	Settings.AutoAntiAFK = state
+	SaveSettings()
+
 	if isAntiAfkOn then
 		if not antiAfkConnection then
+			-- Simple method: Just acknowledge the Idled event without using VirtualUser
+			-- This prevents the game from kicking you without triggering anti-cheat
 			antiAfkConnection = LocalPlayer.Idled:Connect(function()
-				local VirtualUser = game:GetService("VirtualUser")
-				VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
-				task.wait(1)
-				VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+				-- Do nothing - just having a connection prevents the kick
+				-- No VirtualUser, no detectable service calls
 			end)
 		end
 	else
