@@ -11,6 +11,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local VERSION = "1.0.0-mobile"
+local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 
 -- ══════════════════════════════════════════════════════════════════
 -- LOAD WINDUI
@@ -3891,7 +3892,7 @@ ListMapTab:Space()
 
 -- Fetch cloud recordings list BEFORE creating dropdown
 do
-	local apiUrl = "https://starship-core.my.id/api/r2-recordings?list=all"
+	local apiUrl = CLOUD_API_BASE .. "/api/r2-recordings?list=all"
 
 	local success, response = pcall(function()
 		return game:HttpGet(apiUrl)
@@ -3947,7 +3948,7 @@ ListMapTab:Button({
 		CloudDropdownValues = {}
 		CloudRecordingsCache = {}
 
-		local apiUrl = "https://starship-core.my.id/api/r2-recordings?list=all"
+		local apiUrl = CLOUD_API_BASE .. "/api/r2-recordings?list=all"
 
 		local success, response = pcall(function()
 			return game:HttpGet(apiUrl)
@@ -4321,6 +4322,60 @@ LoadCloudRecordingDirect = function(recInfo)
 				Content = data.error or "Recording not found",
 				Duration = 3,
 			})
+			return
+		end
+
+		-- Handle Large File Download (Presigned URL)
+		if data.downloadUrl then
+			if selectedFileDisplay then
+				pcall(function()
+					selectedFileDisplay:SetDesc("📥 Downloading large file...")
+				end)
+			end
+
+			local dlSuccess, dlResponse = pcall(function()
+				return game:HttpGet(data.downloadUrl)
+			end)
+
+			if not dlSuccess then
+				WindUI:Notify({
+					Title = "Error",
+					Content = "Failed to download large file",
+					Duration = 3,
+				})
+				return
+			end
+
+			local fileData = HttpService:JSONDecode(dlResponse)
+
+			-- Normalize data structure
+			if fileData.data then
+				CloudRecordingData = fileData.data
+			else
+				CloudRecordingData = fileData
+			end
+
+			CloudRecordingName = data.name or fileData.name or recInfo.name
+			CloudRecordingLoaded = true
+			ChunkedState.isChunked = false
+
+			-- Update selected file display
+			selectedFile = "CLOUD:" .. recInfo.recordingId
+			if selectedFileDisplay then
+				pcall(function()
+					selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
+					selectedFileDisplay:SetDesc("Cloud Recording • Ready to play")
+				end)
+			end
+
+			WindUI:Notify({
+				Title = "☁️ Ready!",
+				Content = CloudRecordingName .. " loaded - tap Play to start",
+				Duration = 3,
+			})
+
+			-- Show Playback Controls & Enable Mini Player
+			CreatePlaybackControls()
 			return
 		end
 

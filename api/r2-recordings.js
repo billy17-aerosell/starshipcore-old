@@ -8,7 +8,9 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
+  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import zlib from "zlib";
 import { promisify } from "util";
 
@@ -317,6 +319,25 @@ export default async function handler(req, res) {
       const key = `recordings/${recordingId}.json`;
 
       console.log(`[R2] Loading recording: ${key}`);
+
+      // Check size first
+      const head = await r2Client.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }));
+      const size = head.ContentLength;
+
+      // If large (> 3.5MB to be safe), return Presigned URL
+      if (size > 3.5 * 1024 * 1024) {
+          console.log(`[R2] File is large (${(size/1024/1024).toFixed(2)}MB). Generating Presigned URL...`);
+          const url = await getSignedUrl(r2Client, new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }), { expiresIn: 3600 });
+          
+          return res.status(200).json({
+              success: true,
+              downloadUrl: url,
+              recordingId: recordingId,
+              size: size,
+              name: head.Metadata?.name || recordingId,
+              frameCount: parseInt(head.Metadata?.framecount || "0"),
+          });
+      }
 
       const getResult = await r2Client.send(
         new GetObjectCommand({
