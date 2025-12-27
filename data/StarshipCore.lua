@@ -7,8 +7,6 @@
       dengan Animation Pack karakter Anda (Ninja/Zombie/dll).
 ]]
 
-warn("[Starship] Script Initialization Started...") -- DEBUG START
-
 -- SERVER-BASED LOADING MODE
 -- Automatically detects environment and loads modules from appropriate server
 -- No manual configuration needed!
@@ -26,8 +24,18 @@ end
 
 -- Local Upload Server URL (for unlimited cloud uploads from PC)
 -- When running in dev mode (localhost:3000), also set local upload server
+local DEV_MODE = false
 if _G.StarshipServerURL:find("localhost:3000") then
 	_G.StarshipLocalServer = "http://localhost:4000"
+	DEV_MODE = true
+end
+_G.StarshipDevMode = DEV_MODE -- Expose for other modules
+
+-- Dev-only logging helper (only shows in dev mode)
+local function DevLog(...)
+	if DEV_MODE then
+		warn("[Starship]", ...)
+	end
 end
 
 -- Store the base URL for reference
@@ -97,53 +105,55 @@ _G.StarshipColors = CurrentColors
 
 -- Mobile Detection & Responsive System (consolidated to reduce local count)
 
-local TAGS_API_URL = "https://starship-core.my.id/api/tags"
-_G.StarshipTags = {} -- Store tags here: { [UserId] = {role="VIP", tag="VIP"} }
+do
+	local TAGS_API_URL = "https://starship-core.my.id/api/tags"
+	_G.StarshipTags = {} -- Store tags here: { [UserId] = {role="VIP", tag="VIP"} }
 
-local function FetchServerTags()
-	task.spawn(function()
-		local players = Players:GetPlayers()
-		local ids = {}
-		for _, p in ipairs(players) do
-			table.insert(ids, p.UserId)
-		end
-
-		if #ids == 0 then
-			return
-		end
-
-		local success, response = pcall(function()
-			return request({
-				Url = TAGS_API_URL,
-				Method = "POST",
-				Headers = { ["Content-Type"] = "application/json" },
-				Body = HttpService:JSONEncode({ userIds = ids }),
-			})
-		end)
-
-		if success and response.Success then
-			local data = HttpService:JSONDecode(response.Body)
-			if data.status == "success" and data.tags then
-				for uid, info in pairs(data.tags) do
-					_G.StarshipTags[tonumber(uid)] = info
-				end
-				-- Trigger update event if you have one, or just let UI loop handle it
+	local function FetchServerTags()
+		task.spawn(function()
+			local players = Players:GetPlayers()
+			local ids = {}
+			for _, p in ipairs(players) do
+				table.insert(ids, p.UserId)
 			end
+
+			if #ids == 0 then
+				return
+			end
+
+			local success, response = pcall(function()
+				return request({
+					Url = TAGS_API_URL,
+					Method = "POST",
+					Headers = { ["Content-Type"] = "application/json" },
+					Body = HttpService:JSONEncode({ userIds = ids }),
+				})
+			end)
+
+			if success and response.Success then
+				local data = HttpService:JSONDecode(response.Body)
+				if data.status == "success" and data.tags then
+					for uid, info in pairs(data.tags) do
+						_G.StarshipTags[tonumber(uid)] = info
+					end
+					-- Trigger update event if you have one, or just let UI loop handle it
+				end
+			end
+		end)
+	end
+
+	-- Auto-fetch tags when players join or every 60s
+	Players.PlayerAdded:Connect(function()
+		task.wait(2)
+		FetchServerTags()
+	end)
+	task.spawn(function()
+		while true do
+			FetchServerTags()
+			task.wait(60)
 		end
 	end)
 end
-
--- Auto-fetch tags when players join or every 60s
-Players.PlayerAdded:Connect(function()
-	task.wait(2)
-	FetchServerTags()
-end)
-task.spawn(function()
-	while true do
-		FetchServerTags()
-		task.wait(60)
-	end
-end)
 
 local function LoadModule(name)
 	-- 0. FIRST: Try loading from memory (modules pre-loaded by Loader.lua)
@@ -241,7 +251,9 @@ local function LoadModule(name)
 					if func then
 						return func()
 					else
-						warn("[Starship] Syntax Error in " .. name .. " (decrypted): " .. tostring(err))
+						if DEV_MODE then
+							warn("[Starship] Syntax Error in " .. name .. " (decrypted): " .. tostring(err))
+						end
 					end
 				else
 					if isDev then
@@ -257,7 +269,9 @@ local function LoadModule(name)
 					end
 					return func()
 				else
-					warn("[Starship] Syntax Error in " .. name .. " (HTTP): " .. tostring(err))
+					if DEV_MODE then
+						warn("[Starship] Syntax Error in " .. name .. " (HTTP): " .. tostring(err))
+					end
 				end
 			end
 		else
@@ -277,7 +291,9 @@ local function LoadModule(name)
 		local p = _G.StarshipModulePrefix .. name .. ".lua"
 		local func, err = loadstring(readfile(p))
 		if not func then
-			warn("[Starship] Syntax Error in " .. name .. ": " .. tostring(err))
+			if DEV_MODE then
+				warn("[Starship] Syntax Error in " .. name .. ": " .. tostring(err))
+			end
 			return nil
 		end
 		return func()
@@ -309,7 +325,9 @@ local function LoadModule(name)
 			local content = readfile(p)
 			local func, err = loadstring(content)
 			if not func then
-				warn("[Starship] Syntax Error in " .. name .. ": " .. tostring(err))
+				if DEV_MODE then
+					warn("[Starship] Syntax Error in " .. name .. ": " .. tostring(err))
+				end
 				return nil
 			end
 			return func()
@@ -318,13 +336,19 @@ local function LoadModule(name)
 
 	-- 3. Deep Search (Last Resort)
 	if name == "Config" or not _G.StarshipModulePrefix then
-		warn("[Starship] Searching for module: " .. name)
-		warn("[Starship] Current Directory Listing:") -- Added Debug
+		if DEV_MODE then
+			warn("[Starship] Searching for module: " .. name)
+		end
+		if DEV_MODE then
+			warn("[Starship] Current Directory Listing:")
+		end
 
 		local function scan(dir)
 			local s, files = pcall(listfiles, dir)
 			if not s then
-				warn(" - listfiles failed for: " .. tostring(dir))
+				if DEV_MODE then
+					warn(" - listfiles failed for: " .. tostring(dir))
+				end
 				return nil
 			end
 
@@ -335,7 +359,9 @@ local function LoadModule(name)
 			for _, file in ipairs(files) do
 				-- DEBUG PRINT (Only print top level to avoid spam)
 				if dir == "" then
-					warn(" - " .. file)
+					if DEV_MODE then
+						warn(" - " .. file)
+					end
 				end
 
 				-- Check file match (ignoring case/path separators)
@@ -364,7 +390,9 @@ local function LoadModule(name)
 
 		local foundPath = scan("")
 		if foundPath then
-			warn("[Starship] Deep Search found: " .. foundPath)
+			if DEV_MODE then
+				warn("[Starship] Deep Search found: " .. foundPath)
+			end
 			-- Calculate prefix from found path
 			-- foundPath usually includes the filename.
 			-- foundPath: "StarshipCore/Modules/Config.lua" -> prefix: "StarshipCore/Modules/"
@@ -378,18 +406,24 @@ local function LoadModule(name)
 			local prefix = foundPath:sub(1, #foundPath - nameLen)
 
 			_G.StarshipModulePrefix = prefix
-			warn("[Starship] Set Prefix: " .. prefix)
+			if DEV_MODE then
+				warn("[Starship] Set Prefix: " .. prefix)
+			end
 			local content = readfile(foundPath)
 			local func, err = loadstring(content)
 			if not func then
-				warn("[Starship] Syntax Error in " .. name .. " (Deep Search): " .. tostring(err))
+				if DEV_MODE then
+					warn("[Starship] Syntax Error in " .. name .. " (Deep Search): " .. tostring(err))
+				end
 				return nil
 			end
 			return func()
 		end
 	end
 
-	warn("[Starship] FAILED to load module: " .. name)
+	if DEV_MODE then
+		warn("[Starship] FAILED to load module: " .. name)
+	end
 	return nil
 end
 
@@ -433,15 +467,17 @@ local Config = ConfigData.DefaultConfig
 	}
 
 -- Load saved language preference from file
-local CONFIG_FOLDER = "StarshipCore/StarshipConfigs"
-pcall(function()
-	if isfile and isfile(CONFIG_FOLDER .. "/Language.json") then
-		local langData = HttpService:JSONDecode(readfile(CONFIG_FOLDER .. "/Language.json"))
-		if langData and langData.Language then
-			Config.Language = langData.Language
+do
+	local CONFIG_FOLDER = "StarshipCore/StarshipConfigs"
+	pcall(function()
+		if isfile and isfile(CONFIG_FOLDER .. "/Language.json") then
+			local langData = HttpService:JSONDecode(readfile(CONFIG_FOLDER .. "/Language.json"))
+			if langData and langData.Language then
+				Config.Language = langData.Language
+			end
 		end
-	end
-end)
+	end)
+end
 
 -- Initialize Locale with saved language
 if Config.Language and LocaleModule.SetLanguage then
@@ -1119,167 +1155,171 @@ local function CleanupConnections()
 	end
 end
 
--- INPUT SINK: Prevent Roblox keybinds (backpack 1-9, etc) when typing in TextBox
-local StarterGui = game:GetService("StarterGui")
+local SetupTextBoxInputSink
+do
+	-- INPUT SINK: Prevent Roblox keybinds (backpack 1-9, etc) when typing in TextBox
+	local StarterGui = game:GetService("StarterGui")
 
--- Global variable to track TextBox focus and tool state
-local isAnyTextBoxFocused = false
-local savedToolBeforeFocus = nil
-local toolMonitorConnection = nil
+	-- Global variable to track TextBox focus and tool state
+	local isAnyTextBoxFocused = false
+	local savedToolBeforeFocus = nil
+	local toolMonitorConnection = nil
 
--- Monitor and immediately unequip any new tools while typing
-local function StartToolMonitor()
-	if toolMonitorConnection then
-		return
-	end
-	toolMonitorConnection = RunService.Heartbeat:Connect(function()
-		if not isAnyTextBoxFocused then
+	-- Monitor and immediately unequip any new tools while typing
+	local function StartToolMonitor()
+		if toolMonitorConnection then
 			return
 		end
-
-		local character = LocalPlayer.Character
-		if not character then
-			return
-		end
-
-		local currentTool = character:FindFirstChildOfClass("Tool")
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-
-		-- If a tool is equipped that wasn't there before, unequip it immediately
-		if currentTool and currentTool ~= savedToolBeforeFocus and humanoid then
-			humanoid:UnequipTools()
-			-- Re-equip original tool if there was one
-			if savedToolBeforeFocus and savedToolBeforeFocus.Parent then
-				task.defer(function()
-					if humanoid and savedToolBeforeFocus and savedToolBeforeFocus.Parent then
-						humanoid:EquipTool(savedToolBeforeFocus)
-					end
-				end)
+		toolMonitorConnection = RunService.Heartbeat:Connect(function()
+			if not isAnyTextBoxFocused then
+				return
 			end
-		end
-	end)
-end
 
-local function StopToolMonitor()
-	if toolMonitorConnection then
-		toolMonitorConnection:Disconnect()
-		toolMonitorConnection = nil
+			local character = LocalPlayer.Character
+			if not character then
+				return
+			end
+
+			local currentTool = character:FindFirstChildOfClass("Tool")
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+			-- If a tool is equipped that wasn't there before, unequip it immediately
+			if currentTool and currentTool ~= savedToolBeforeFocus and humanoid then
+				humanoid:UnequipTools()
+				-- Re-equip original tool if there was one
+				if savedToolBeforeFocus and savedToolBeforeFocus.Parent then
+					task.defer(function()
+						if humanoid and savedToolBeforeFocus and savedToolBeforeFocus.Parent then
+							humanoid:EquipTool(savedToolBeforeFocus)
+						end
+					end)
+				end
+			end
+		end)
 	end
-end
 
-local function SetupTextBoxInputSink(textBox)
-	textBox.Focused:Connect(function()
-		-- Save current tool state
-		local character = LocalPlayer.Character
-		savedToolBeforeFocus = character and character:FindFirstChildOfClass("Tool")
-		isAnyTextBoxFocused = true
+	local function StopToolMonitor()
+		if toolMonitorConnection then
+			toolMonitorConnection:Disconnect()
+			toolMonitorConnection = nil
+		end
+	end
 
-		-- Start monitoring for accidental tool equips
-		StartToolMonitor()
+	SetupTextBoxInputSink = function(textBox)
+		textBox.Focused:Connect(function()
+			-- Save current tool state
+			local character = LocalPlayer.Character
+			savedToolBeforeFocus = character and character:FindFirstChildOfClass("Tool")
+			isAnyTextBoxFocused = true
 
-		-- Also try disabling backpack GUI
-		pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+			-- Start monitoring for accidental tool equips
+			StartToolMonitor()
+
+			-- Also try disabling backpack GUI
+			pcall(function()
+				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+			end)
 		end)
-	end)
 
-	textBox.FocusLost:Connect(function()
-		isAnyTextBoxFocused = false
-		savedToolBeforeFocus = nil
-		StopToolMonitor()
+		textBox.FocusLost:Connect(function()
+			isAnyTextBoxFocused = false
+			savedToolBeforeFocus = nil
+			StopToolMonitor()
 
-		-- Re-enable backpack
-		pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
+			-- Re-enable backpack
+			pcall(function()
+				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
+			end)
 		end)
-	end)
+	end
 end
 
 local function RegisterTheme(obj, prop, type)
 	table.insert(ThemeObjects, { Object = obj, Property = prop, Type = type })
 end
 
-local LoadingNotification = nil
-local LoadingLabel = nil
-local LoadingBar = nil
+local ShowLoadingModal
+do
+	local LoadingNotification = nil
+	local LoadingLabel = nil
+	local LoadingBar = nil
 
-local function ShowLoadingModal(visible, text, progress)
-	if not visible then
-		if LoadingNotification then
-			LoadingNotification:Destroy()
-			LoadingNotification = nil
-			LoadingLabel = nil
-			LoadingBar = nil
+	ShowLoadingModal = function(visible, text, progress)
+		if not visible then
+			if LoadingNotification then
+				LoadingNotification:Destroy()
+				LoadingNotification = nil
+				LoadingLabel = nil
+				LoadingBar = nil
+			end
+			return
 		end
-		return
-	end
 
-	if not LoadingNotification then
-		LoadingNotification = Instance.new("ScreenGui")
-		LoadingNotification.Name = "StarshipNotification"
-		LoadingNotification.Parent = CoreGui
-		LoadingNotification.IgnoreGuiInset = true
-		LoadingNotification.DisplayOrder = 10001
+		if not LoadingNotification then
+			LoadingNotification = Instance.new("ScreenGui")
+			LoadingNotification.Name = "StarshipNotification"
+			LoadingNotification.Parent = CoreGui
+			LoadingNotification.IgnoreGuiInset = true
+			LoadingNotification.DisplayOrder = 10001
 
-		local card = Instance.new("Frame", LoadingNotification)
-		card.Size = UDim2.new(0, 220, 0, 50)
-		card.Position = UDim2.new(1, 0, 1, -60) -- Start off-screen
-		card.BackgroundColor3 = C_MAIN
-		card.BackgroundTransparency = 0.1
-		Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
-		Instance.new("UIStroke", card).Color = C_ACCENT
+			local card = Instance.new("Frame", LoadingNotification)
+			card.Size = UDim2.new(0, 220, 0, 50)
+			card.Position = UDim2.new(1, 0, 1, -60) -- Start off-screen
+			card.BackgroundColor3 = C_MAIN
+			card.BackgroundTransparency = 0.1
+			Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+			Instance.new("UIStroke", card).Color = C_ACCENT
 
-		LoadingLabel = Instance.new("TextLabel", card)
-		LoadingLabel.Text = text or "LOADING..."
-		LoadingLabel.Size = UDim2.new(1, -40, 0.6, 0)
-		LoadingLabel.Position = UDim2.new(0, 40, 0, 0)
-		LoadingLabel.BackgroundTransparency = 1
-		LoadingLabel.TextColor3 = C_TEXT
-		LoadingLabel.Font = Enum.Font.GothamBold
-		LoadingLabel.TextSize = 12
-		LoadingLabel.TextXAlignment = Enum.TextXAlignment.Left
+			LoadingLabel = Instance.new("TextLabel", card)
+			LoadingLabel.Text = text or "LOADING..."
+			LoadingLabel.Size = UDim2.new(1, -40, 0.6, 0)
+			LoadingLabel.Position = UDim2.new(0, 40, 0, 0)
+			LoadingLabel.BackgroundTransparency = 1
+			LoadingLabel.TextColor3 = C_TEXT
+			LoadingLabel.Font = Enum.Font.GothamBold
+			LoadingLabel.TextSize = 12
+			LoadingLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-		-- Progress Bar Background
-		local barBg = Instance.new("Frame", card)
-		barBg.Size = UDim2.new(0.8, 0, 0, 4)
-		barBg.Position = UDim2.new(0, 40, 0.7, 0)
-		barBg.BackgroundColor3 = C_ITEM
-		Instance.new("UICorner", barBg).CornerRadius = UDim.new(1, 0)
+			-- Progress Bar Background
+			local barBg = Instance.new("Frame", card)
+			barBg.Size = UDim2.new(0.8, 0, 0, 4)
+			barBg.Position = UDim2.new(0, 40, 0.7, 0)
+			barBg.BackgroundColor3 = C_ITEM
+			Instance.new("UICorner", barBg).CornerRadius = UDim.new(1, 0)
 
-		-- Progress Bar Fill
-		LoadingBar = Instance.new("Frame", barBg)
-		LoadingBar.Size = UDim2.new(0, 0, 1, 0)
-		LoadingBar.BackgroundColor3 = C_ACCENT
-		Instance.new("UICorner", LoadingBar).CornerRadius = UDim.new(1, 0)
+			-- Progress Bar Fill
+			LoadingBar = Instance.new("Frame", barBg)
+			LoadingBar.Size = UDim2.new(0, 0, 1, 0)
+			LoadingBar.BackgroundColor3 = C_ACCENT
+			Instance.new("UICorner", LoadingBar).CornerRadius = UDim.new(1, 0)
 
-		local spinner = Instance.new("ImageLabel", card)
-		spinner.Size = UDim2.new(0, 20, 0, 20)
-		spinner.Position = UDim2.new(0, 10, 0.5, -10)
-		spinner.BackgroundTransparency = 1
-		spinner.Image = "rbxassetid://3570695787"
-		spinner.ImageColor3 = C_ACCENT
+			local spinner = Instance.new("ImageLabel", card)
+			spinner.Size = UDim2.new(0, 20, 0, 20)
+			spinner.Position = UDim2.new(0, 10, 0.5, -10)
+			spinner.BackgroundTransparency = 1
+			spinner.Image = "rbxassetid://3570695787"
+			spinner.ImageColor3 = C_ACCENT
 
-		local ts = game:GetService("TweenService")
-		ts
-			:Create(
+			local ts = game:GetService("TweenService")
+			ts:Create(
 				spinner,
 				TweenInfo.new(1, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1),
 				{ Rotation = 360 }
-			)
-			:Play()
-		ts:Create(
-			card,
-			TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ Position = UDim2.new(1, -230, 1, -60) }
-		):Play()
-	end
+			):Play()
+			ts:Create(
+				card,
+				TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Position = UDim2.new(1, -230, 1, -60) }
+			):Play()
+		end
 
-	if LoadingLabel then
-		LoadingLabel.Text = text or "LOADING..."
-	end
-	if LoadingBar then
-		local p = math.clamp(progress or 0, 0, 1)
-		LoadingBar.Size = UDim2.new(p, 0, 1, 0)
+		if LoadingLabel then
+			LoadingLabel.Text = text or "LOADING..."
+		end
+		if LoadingBar then
+			local p = math.clamp(progress or 0, 0, 1)
+			LoadingBar.Size = UDim2.new(p, 0, 1, 0)
+		end
 	end
 end
 
@@ -4160,15 +4200,33 @@ do
 	TagToggleMini.TextSize = 10
 	Instance.new("UICorner", TagToggleMini).CornerRadius = UDim.new(0, 4)
 
-	local miniTagsOn = true
+	-- Initialize from saved preference (set by Initial Setup popup)
+	_G.StarshipNametagToggle = _G.StarshipNametagToggle or {}
+	_G.StarshipNametagToggle.on = true
+	if getgenv and getgenv().StarshipShowNametags ~= nil then
+		_G.StarshipNametagToggle.on = getgenv().StarshipShowNametags
+	end
+	_G.StarshipNametagToggle.btn = TagToggleMini
+	TagToggleMini.Text = L("tags") .. ": " .. (_G.StarshipNametagToggle.on and L("on") or L("off"))
+	TagToggleMini.TextColor3 = _G.StarshipNametagToggle.on and C_GREEN or C_RED
+
 	TagToggleMini.MouseButton1Click:Connect(function()
-		miniTagsOn = not miniTagsOn
-		TagToggleMini.Text = L("tags") .. ": " .. (miniTagsOn and L("on") or L("off"))
-		TagToggleMini.TextColor3 = miniTagsOn and C_GREEN or C_RED
+		_G.StarshipNametagToggle.on = not _G.StarshipNametagToggle.on
+		TagToggleMini.Text = L("tags") .. ": " .. (_G.StarshipNametagToggle.on and L("on") or L("off"))
+		TagToggleMini.TextColor3 = _G.StarshipNametagToggle.on and C_GREEN or C_RED
 		if getgenv().ToggleNametags then
-			getgenv().ToggleNametags(miniTagsOn)
+			getgenv().ToggleNametags(_G.StarshipNametagToggle.on)
 		end
 	end)
+
+	-- UIHandler to sync nametag state from Initial Setup
+	UIHandlers.SetNametagToggleState = function(state)
+		if _G.StarshipNametagToggle and _G.StarshipNametagToggle.btn then
+			_G.StarshipNametagToggle.on = state
+			_G.StarshipNametagToggle.btn.Text = L("tags") .. ": " .. (state and L("on") or L("off"))
+			_G.StarshipNametagToggle.btn.TextColor3 = state and C_GREEN or C_RED
+		end
+	end
 end
 
 -- Adjust Tab Container Height (To account for Profile + Button)
@@ -6630,9 +6688,13 @@ function UIHandlers.SetupListMapUI()
 		local sess = getgenv().StarshipSession
 		local role = sess.Role or ""
 		isCloudEnabled = (role:upper() == "OWNER" or role:upper() == "DEVELOPER")
-		warn("[Starship] Cloud check - Role: " .. role .. ", isCloudEnabled: " .. tostring(isCloudEnabled))
+		if DEV_MODE then
+			warn("[Starship] Cloud check - Role: " .. role .. ", isCloudEnabled: " .. tostring(isCloudEnabled))
+		end
 	else
-		warn("[Starship] Cloud check - StarshipSession not found!")
+		if DEV_MODE then
+			warn("[Starship] Cloud check - StarshipSession not found!")
+		end
 	end
 
 	-- Search Bar
@@ -8189,10 +8251,20 @@ function UIHandlers.SetupNametags()
 		rank.TextXAlignment = Enum.TextXAlignment.Left
 		rank.ZIndex = 2
 
-		-- Username Text (Nickname)
+		-- Username Text (Nickname) - Use spoofed name for local player if active
+		local displayName = player.DisplayName
+		if
+			player == LocalPlayer
+			and getgenv
+			and getgenv().StarshipSpoofState
+			and getgenv().StarshipSpoofState.isSpoofing
+			and getgenv().StarshipSpoofState.spoofDisplayName ~= ""
+		then
+			displayName = getgenv().StarshipSpoofState.spoofDisplayName
+		end
 		local name = Instance.new("TextLabel", container)
 		name.Name = "Name"
-		name.Text = player.DisplayName
+		name.Text = displayName
 		name.Size = UDim2.new(1, -35, 0.4, 0)
 		name.Position = UDim2.new(0, 33, 0.5, 0)
 		name.BackgroundTransparency = 1
@@ -8680,9 +8752,14 @@ local function StartLoader()
 		game:GetService("Lighting").BlurEffect:Destroy()
 	end
 
-	-- Enable Nametags
-	if getgenv().ToggleNametags then
-		getgenv().ToggleNametags(true)
+	-- Enable Nametags based on user preference
+	if getgenv and getgenv().ToggleNametags then
+		_G.StarshipSetup = _G.StarshipSetup or {}
+		_G.StarshipSetup.showTagsPref = true
+		if getgenv().StarshipShowNametags ~= nil then
+			_G.StarshipSetup.showTagsPref = getgenv().StarshipShowNametags
+		end
+		getgenv().ToggleNametags(_G.StarshipSetup.showTagsPref)
 	end
 
 	-- Show ready toast immediately after UI animation completes
@@ -8691,14 +8768,327 @@ local function StartLoader()
 	end
 end
 
--- Preload spoof name BEFORE showing main UI
--- This ensures spoof is applied before the UI animation starts
-task.spawn(function()
-	-- Call PreloadSpoofName if available (from ConfigTab)
-	if UIHandlers and UIHandlers.PreloadSpoofName then
-		UIHandlers.PreloadSpoofName()
+-- ==========================================
+-- INITIAL SETUP POPUP (using _G to avoid local limit)
+-- ==========================================
+
+_G.StarshipSetup = {
+	cfg = { anonMode = false, showTags = true, skip = false, randomName = nil },
+	file = CONFIG_FOLDER .. "/InitialSetup.json",
+}
+
+-- Load saved config
+pcall(function()
+	if isfile and isfile(_G.StarshipSetup.file) then
+		_G.StarshipSetup.data = HttpService:JSONDecode(readfile(_G.StarshipSetup.file))
+		if _G.StarshipSetup.data then
+			_G.StarshipSetup.cfg.anonMode = _G.StarshipSetup.data.anonMode == true
+			_G.StarshipSetup.cfg.showTags = _G.StarshipSetup.data.showTags ~= false
+			_G.StarshipSetup.cfg.skip = _G.StarshipSetup.data.skip == true
+			_G.StarshipSetup.cfg.randomName = _G.StarshipSetup.data.randomName
+		end
+	end
+end)
+
+-- Save config
+_G.StarshipSetup.save = function()
+	pcall(function()
+		if not isfolder(CONFIG_FOLDER) then
+			makefolder(CONFIG_FOLDER)
+		end
+		writefile(_G.StarshipSetup.file, HttpService:JSONEncode(_G.StarshipSetup.cfg))
+	end)
+end
+
+-- Random name generator
+_G.StarshipSetup.makeName = function()
+	_G.StarshipSetup.prefixes = { "Shadow", "Ghost", "Phantom", "Ninja", "Anon", "Unknown", "Mystery", "Hidden" }
+	_G.StarshipSetup.suffixes = { "123", "456", "789", "XD", "Pro", "Master", "007", "000" }
+	return _G.StarshipSetup.prefixes[math.random(#_G.StarshipSetup.prefixes)]
+		.. _G.StarshipSetup.suffixes[math.random(#_G.StarshipSetup.suffixes)]
+end
+
+-- Show popup
+_G.StarshipSetup.show = function(onDone)
+	if _G.StarshipSetup.cfg.skip then
+		onDone(_G.StarshipSetup.cfg.anonMode, _G.StarshipSetup.cfg.showTags)
+		return
 	end
 
-	-- Now start the loader (UI animation)
-	StartLoader()
+	_G.StarshipSetup.ok, _G.StarshipSetup.err = pcall(function()
+		_G.StarshipSetup.gui = Instance.new("ScreenGui")
+		_G.StarshipSetup.gui.Name = "StarshipSetup"
+		_G.StarshipSetup.gui.Parent = CoreGui
+		_G.StarshipSetup.gui.IgnoreGuiInset = true
+		_G.StarshipSetup.gui.DisplayOrder = 10001
+
+		_G.StarshipSetup.overlay = Instance.new("Frame", _G.StarshipSetup.gui)
+		_G.StarshipSetup.overlay.Size = UDim2.new(1, 0, 1, 0)
+		_G.StarshipSetup.overlay.BackgroundColor3 = Color3.new(0, 0, 0)
+		_G.StarshipSetup.overlay.BackgroundTransparency = 0.5
+
+		_G.StarshipSetup.card = Instance.new("Frame", _G.StarshipSetup.gui)
+		_G.StarshipSetup.card.Size = UDim2.new(0, 360, 0, 300)
+		_G.StarshipSetup.card.Position = UDim2.new(0.5, -180, 0.5, -150)
+		_G.StarshipSetup.card.BackgroundColor3 = C_MAIN
+		Instance.new("UICorner", _G.StarshipSetup.card).CornerRadius = UDim.new(0, 12)
+		_G.StarshipSetup.stroke = Instance.new("UIStroke", _G.StarshipSetup.card)
+		_G.StarshipSetup.stroke.Color = C_ACCENT
+		_G.StarshipSetup.stroke.Thickness = 2
+
+		_G.StarshipSetup.title = Instance.new("TextLabel", _G.StarshipSetup.card)
+		_G.StarshipSetup.title.Text = "INITIAL SETUP"
+		_G.StarshipSetup.title.Size = UDim2.new(1, 0, 0, 40)
+		_G.StarshipSetup.title.BackgroundTransparency = 1
+		_G.StarshipSetup.title.TextColor3 = C_TEXT
+		_G.StarshipSetup.title.Font = Enum.Font.GothamBlack
+		_G.StarshipSetup.title.TextSize = 18
+
+		_G.StarshipSetup.sub = Instance.new("TextLabel", _G.StarshipSetup.card)
+		_G.StarshipSetup.sub.Text = "Configure your preferences"
+		_G.StarshipSetup.sub.Size = UDim2.new(1, 0, 0, 20)
+		_G.StarshipSetup.sub.Position = UDim2.new(0, 0, 0, 38)
+		_G.StarshipSetup.sub.BackgroundTransparency = 1
+		_G.StarshipSetup.sub.TextColor3 = C_TEXT_DIM
+		_G.StarshipSetup.sub.Font = Enum.Font.Gotham
+		_G.StarshipSetup.sub.TextSize = 11
+
+		_G.StarshipSetup.isAnon = _G.StarshipSetup.cfg.anonMode
+		_G.StarshipSetup.tags = _G.StarshipSetup.cfg.showTags
+		_G.StarshipSetup.dontShow = _G.StarshipSetup.cfg.skip
+
+		-- Anonymous Mode
+		_G.StarshipSetup.anonFrame = Instance.new("Frame", _G.StarshipSetup.card)
+		_G.StarshipSetup.anonFrame.Size = UDim2.new(0.9, 0, 0, 55)
+		_G.StarshipSetup.anonFrame.Position = UDim2.new(0.05, 0, 0, 70)
+		_G.StarshipSetup.anonFrame.BackgroundColor3 = C_ITEM
+		Instance.new("UICorner", _G.StarshipSetup.anonFrame).CornerRadius = UDim.new(0, 8)
+
+		_G.StarshipSetup.anonLbl = Instance.new("TextLabel", _G.StarshipSetup.anonFrame)
+		_G.StarshipSetup.anonLbl.Text = "Anonymous Mode"
+		_G.StarshipSetup.anonLbl.Size = UDim2.new(0.6, 0, 0, 25)
+		_G.StarshipSetup.anonLbl.Position = UDim2.new(0.05, 0, 0, 5)
+		_G.StarshipSetup.anonLbl.BackgroundTransparency = 1
+		_G.StarshipSetup.anonLbl.TextColor3 = C_TEXT
+		_G.StarshipSetup.anonLbl.Font = Enum.Font.GothamBold
+		_G.StarshipSetup.anonLbl.TextSize = 12
+		_G.StarshipSetup.anonLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+		_G.StarshipSetup.anonDesc = Instance.new("TextLabel", _G.StarshipSetup.anonFrame)
+		_G.StarshipSetup.anonDesc.Text = "Hide identity with random name"
+		_G.StarshipSetup.anonDesc.Size = UDim2.new(0.7, 0, 0, 15)
+		_G.StarshipSetup.anonDesc.Position = UDim2.new(0.05, 0, 0, 28)
+		_G.StarshipSetup.anonDesc.BackgroundTransparency = 1
+		_G.StarshipSetup.anonDesc.TextColor3 = C_TEXT_DIM
+		_G.StarshipSetup.anonDesc.Font = Enum.Font.Gotham
+		_G.StarshipSetup.anonDesc.TextSize = 10
+		_G.StarshipSetup.anonDesc.TextXAlignment = Enum.TextXAlignment.Left
+
+		_G.StarshipSetup.anonBtn = Instance.new("TextButton", _G.StarshipSetup.anonFrame)
+		_G.StarshipSetup.anonBtn.Text = _G.StarshipSetup.isAnon and "ON" or "OFF"
+		_G.StarshipSetup.anonBtn.Size = UDim2.new(0, 60, 0, 30)
+		_G.StarshipSetup.anonBtn.Position = UDim2.new(1, -70, 0.5, -15)
+		_G.StarshipSetup.anonBtn.BackgroundColor3 = _G.StarshipSetup.isAnon and C_GREEN or C_SIDE
+		_G.StarshipSetup.anonBtn.TextColor3 = _G.StarshipSetup.isAnon and C_MAIN or C_RED
+		_G.StarshipSetup.anonBtn.Font = Enum.Font.GothamBold
+		_G.StarshipSetup.anonBtn.TextSize = 11
+		Instance.new("UICorner", _G.StarshipSetup.anonBtn).CornerRadius = UDim.new(0, 6)
+
+		_G.StarshipSetup.anonBtn.MouseButton1Click:Connect(function()
+			_G.StarshipSetup.isAnon = not _G.StarshipSetup.isAnon
+			_G.StarshipSetup.anonBtn.Text = _G.StarshipSetup.isAnon and "ON" or "OFF"
+			_G.StarshipSetup.anonBtn.BackgroundColor3 = _G.StarshipSetup.isAnon and C_GREEN or C_SIDE
+			_G.StarshipSetup.anonBtn.TextColor3 = _G.StarshipSetup.isAnon and C_MAIN or C_RED
+		end)
+
+		-- Nametags
+		_G.StarshipSetup.tagFrame = Instance.new("Frame", _G.StarshipSetup.card)
+		_G.StarshipSetup.tagFrame.Size = UDim2.new(0.9, 0, 0, 55)
+		_G.StarshipSetup.tagFrame.Position = UDim2.new(0.05, 0, 0, 135)
+		_G.StarshipSetup.tagFrame.BackgroundColor3 = C_ITEM
+		Instance.new("UICorner", _G.StarshipSetup.tagFrame).CornerRadius = UDim.new(0, 8)
+
+		_G.StarshipSetup.tagLbl = Instance.new("TextLabel", _G.StarshipSetup.tagFrame)
+		_G.StarshipSetup.tagLbl.Text = "Show Nametags"
+		_G.StarshipSetup.tagLbl.Size = UDim2.new(0.6, 0, 0, 25)
+		_G.StarshipSetup.tagLbl.Position = UDim2.new(0.05, 0, 0, 5)
+		_G.StarshipSetup.tagLbl.BackgroundTransparency = 1
+		_G.StarshipSetup.tagLbl.TextColor3 = C_TEXT
+		_G.StarshipSetup.tagLbl.Font = Enum.Font.GothamBold
+		_G.StarshipSetup.tagLbl.TextSize = 12
+		_G.StarshipSetup.tagLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+		_G.StarshipSetup.tagDesc = Instance.new("TextLabel", _G.StarshipSetup.tagFrame)
+		_G.StarshipSetup.tagDesc.Text = "Display VIP/Script tags"
+		_G.StarshipSetup.tagDesc.Size = UDim2.new(0.7, 0, 0, 15)
+		_G.StarshipSetup.tagDesc.Position = UDim2.new(0.05, 0, 0, 28)
+		_G.StarshipSetup.tagDesc.BackgroundTransparency = 1
+		_G.StarshipSetup.tagDesc.TextColor3 = C_TEXT_DIM
+		_G.StarshipSetup.tagDesc.Font = Enum.Font.Gotham
+		_G.StarshipSetup.tagDesc.TextSize = 10
+		_G.StarshipSetup.tagDesc.TextXAlignment = Enum.TextXAlignment.Left
+
+		_G.StarshipSetup.tagBtn = Instance.new("TextButton", _G.StarshipSetup.tagFrame)
+		_G.StarshipSetup.tagBtn.Text = _G.StarshipSetup.tags and "ON" or "OFF"
+		_G.StarshipSetup.tagBtn.Size = UDim2.new(0, 60, 0, 30)
+		_G.StarshipSetup.tagBtn.Position = UDim2.new(1, -70, 0.5, -15)
+		_G.StarshipSetup.tagBtn.BackgroundColor3 = _G.StarshipSetup.tags and C_GREEN or C_SIDE
+		_G.StarshipSetup.tagBtn.TextColor3 = _G.StarshipSetup.tags and C_MAIN or C_RED
+		_G.StarshipSetup.tagBtn.Font = Enum.Font.GothamBold
+		_G.StarshipSetup.tagBtn.TextSize = 11
+		Instance.new("UICorner", _G.StarshipSetup.tagBtn).CornerRadius = UDim.new(0, 6)
+
+		_G.StarshipSetup.tagBtn.MouseButton1Click:Connect(function()
+			_G.StarshipSetup.tags = not _G.StarshipSetup.tags
+			_G.StarshipSetup.tagBtn.Text = _G.StarshipSetup.tags and "ON" or "OFF"
+			_G.StarshipSetup.tagBtn.BackgroundColor3 = _G.StarshipSetup.tags and C_GREEN or C_SIDE
+			_G.StarshipSetup.tagBtn.TextColor3 = _G.StarshipSetup.tags and C_MAIN or C_RED
+		end)
+
+		-- Dont show again
+		_G.StarshipSetup.skipBtn = Instance.new("TextButton", _G.StarshipSetup.card)
+		_G.StarshipSetup.skipBtn.Text = (_G.StarshipSetup.dontShow and "[X] " or "[ ] ") .. "Don't show again"
+		_G.StarshipSetup.skipBtn.Size = UDim2.new(0.9, 0, 0, 25)
+		_G.StarshipSetup.skipBtn.Position = UDim2.new(0.05, 0, 0, 200)
+		_G.StarshipSetup.skipBtn.BackgroundTransparency = 1
+		_G.StarshipSetup.skipBtn.TextColor3 = C_TEXT_DIM
+		_G.StarshipSetup.skipBtn.Font = Enum.Font.Gotham
+		_G.StarshipSetup.skipBtn.TextSize = 11
+		_G.StarshipSetup.skipBtn.TextXAlignment = Enum.TextXAlignment.Left
+
+		_G.StarshipSetup.skipBtn.MouseButton1Click:Connect(function()
+			_G.StarshipSetup.dontShow = not _G.StarshipSetup.dontShow
+			_G.StarshipSetup.skipBtn.Text = (_G.StarshipSetup.dontShow and "[X] " or "[ ] ") .. "Don't show again"
+		end)
+
+		-- Continue
+		_G.StarshipSetup.continueBtn = Instance.new("TextButton", _G.StarshipSetup.card)
+		_G.StarshipSetup.continueBtn.Text = "CONTINUE"
+		_G.StarshipSetup.continueBtn.Size = UDim2.new(0.9, 0, 0, 40)
+		_G.StarshipSetup.continueBtn.Position = UDim2.new(0.05, 0, 0, 235)
+		_G.StarshipSetup.continueBtn.BackgroundColor3 = C_ACCENT
+		_G.StarshipSetup.continueBtn.TextColor3 = C_TEXT
+		_G.StarshipSetup.continueBtn.Font = Enum.Font.GothamBlack
+		_G.StarshipSetup.continueBtn.TextSize = 14
+		Instance.new("UICorner", _G.StarshipSetup.continueBtn).CornerRadius = UDim.new(0, 8)
+
+		_G.StarshipSetup.continueBtn.MouseButton1Click:Connect(function()
+			_G.StarshipSetup.cfg.anonMode = _G.StarshipSetup.isAnon
+			_G.StarshipSetup.cfg.showTags = _G.StarshipSetup.tags
+			_G.StarshipSetup.cfg.skip = _G.StarshipSetup.dontShow
+			if _G.StarshipSetup.isAnon then
+				_G.StarshipSetup.cfg.randomName = _G.StarshipSetup.makeName()
+			end
+			_G.StarshipSetup.save()
+			_G.StarshipSetup.gui:Destroy()
+
+			if getgenv then
+				getgenv().StarshipShowNametags = _G.StarshipSetup.tags
+				if _G.StarshipSetup.isAnon and _G.StarshipSetup.cfg.randomName then
+					if not getgenv().StarshipSpoofState then
+						getgenv().StarshipSpoofState = {
+							isSpoofing = false,
+							spoofName = "",
+							spoofDisplayName = "",
+							spoofConnections = {},
+							originalTexts = {},
+						}
+					end
+					getgenv().StarshipSpoofState.spoofName = _G.StarshipSetup.cfg.randomName
+					getgenv().StarshipSpoofState.spoofDisplayName = _G.StarshipSetup.cfg.randomName
+					getgenv().StarshipInitialAnonymous = true
+				end
+			end
+
+			onDone(_G.StarshipSetup.isAnon, _G.StarshipSetup.tags)
+		end)
+	end)
+
+	if not _G.StarshipSetup.ok then
+		if DEV_MODE then
+			warn("[Starship] Setup error: " .. tostring(_G.StarshipSetup.err))
+		end
+		onDone(false, true)
+	end
+end
+
+-- Startup
+task.spawn(function()
+	_G.StarshipSetup.show(function(anonMode, showTags)
+		if UIHandlers and UIHandlers.PreloadSpoofName then
+			UIHandlers.PreloadSpoofName()
+		end
+
+		-- Apply anonymous mode with proper name setting - run in parallel with faster polling
+		if anonMode and getgenv and getgenv().StarshipInitialAnonymous then
+			task.spawn(function() -- Use spawn for parallel execution
+				-- Very fast polling to enable spoof ASAP
+				for _ = 1, 100 do -- Try up to 100 times
+					task.wait(0.05) -- Check every 50ms
+
+					if UIHandlers and UIHandlers.SetSpoofName and _G.StarshipSetup.cfg.randomName then
+						local spoofedName = _G.StarshipSetup.cfg.randomName
+
+						-- Set the name first
+						UIHandlers.SetSpoofName(spoofedName, spoofedName)
+						if DEV_MODE then
+							print("[Starship] Anonymous: Set name to " .. spoofedName)
+						end
+
+						-- Small delay to ensure text fields are updated
+						task.wait(0.1)
+
+						-- Enable spoofing
+						if UIHandlers.ToggleSpoofName then
+							UIHandlers.ToggleSpoofName(true)
+							if DEV_MODE then
+								print("[Starship] Anonymous: Spoof enabled")
+							end
+						end
+
+						-- Keep refreshing to catch UI elements that load late
+						task.spawn(function()
+							-- Wait for UI to fully load first
+							task.wait(2)
+
+							for i = 1, 5 do
+								-- Direct update of Starship UI elements
+								if UIHandlers.SidebarProfileName and UIHandlers.SidebarProfileName.Parent then
+									UIHandlers.SidebarProfileName.Text = string.upper(spoofedName)
+								end
+
+								-- Call the full spoof update for Dashboard
+								if UIHandlers.UpdateSpoofedName then
+									UIHandlers.UpdateSpoofedName(spoofedName, spoofedName)
+								end
+
+								-- Refresh spoof for nametags and leaderboard
+								if UIHandlers.RefreshSpoof then
+									UIHandlers.RefreshSpoof()
+								end
+
+								task.wait(2) -- Wait 2 seconds between updates
+							end
+						end)
+
+						break
+					end
+				end
+			end)
+		end
+
+		-- Sync nametag toggle UI state
+		task.defer(function()
+			task.wait(1.5) -- Wait for Sidebar to load
+			if UIHandlers and UIHandlers.SetNametagToggleState then
+				UIHandlers.SetNametagToggleState(showTags)
+			end
+			-- Also store the preference for later use
+			if getgenv then
+				getgenv().StarshipShowNametags = showTags
+			end
+		end)
+
+		StartLoader()
+	end)
 end)

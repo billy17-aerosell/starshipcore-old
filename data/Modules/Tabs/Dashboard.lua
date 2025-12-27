@@ -493,7 +493,6 @@ return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, Register
 	local PlayerCard = CreateCard(RightCol, L("your_account"), 100, 3)
 	local UsernameValue = CreateInfoRow(PlayerCard, L("username"), LocalPlayer.Name, 28)
 	local DisplayNameValue = CreateInfoRow(PlayerCard, L("display_name"), LocalPlayer.DisplayName, 50)
-	CreateInfoRow(PlayerCard, L("user_id"), tostring(LocalPlayer.UserId), 72)
 
 	-- Store references for spoof name updates
 	UIHandlers.DashboardUsernameLabel = UsernameValue

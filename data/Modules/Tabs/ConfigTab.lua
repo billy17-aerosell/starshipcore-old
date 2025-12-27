@@ -1866,7 +1866,6 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
 		{ id = "RealESP", name = "Real Path ESP" },
 		{ id = "Fullbright", name = "Fullbright" },
 		{ id = "BypassAdmin", name = "Bypass Admin" },
-		{ id = "SpoofName", name = "Spoof Name" },
 	}
 
 	local function IsInAutoEnable(id)

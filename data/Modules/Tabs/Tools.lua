@@ -1700,10 +1700,22 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 			if not isSpoofing then
 				ToggleSpoof()
 			end
-		elseif state == true and not isSpoofing then
-			ToggleSpoof()
+		elseif state == true then
+			if not isSpoofing then
+				ToggleSpoof()
+			else
+				-- Already on, refresh with new name
+				SpoofAllNames()
+			end
 		elseif state == false and isSpoofing then
 			ToggleSpoof()
+		end
+	end
+
+	-- Refresh spoof with current name values (for anonymous mode)
+	UIHandlers.RefreshSpoof = function()
+		if spoofState.isSpoofing then
+			SpoofAllNames()
 		end
 	end
 
