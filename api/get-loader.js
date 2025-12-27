@@ -440,12 +440,19 @@ export default async function handler(req, res) {
         timestamp: timestamp,
       });
 
-      // Instead of blocking, serve loader to allow event code input
-      // The loader will handle showing the event code UI
+      // SECURITY FIX: Block cross-platform access completely
       console.log(
-        `[${timestamp}] 🎟️ Serving loader for event code access - ${config.otherLabel} user - UserID: ${userId}`,
+        `[${timestamp}] ❌ BLOCKING cross-platform access - ${config.otherLabel} user trying ${platformLabel} - UserID: ${userId}`,
       );
-      return serveLoaderScript(res, config, "event_code", "EVENT");
+      
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return res.status(403).send(
+        `-- StarshipCore ${platform.toUpperCase()}\\n` +
+        `-- ❌ CROSS-PLATFORM ACCESS DENIED\\n` +
+        `-- You have a ${config.otherLabel.replace(/[📱💻]/g, "").trim()} license.\\n` +
+        `-- Purchase ${platform.toUpperCase()} VIP separately.\\n` +
+        `error("You have ${config.otherLabel.replace(/[📱💻]/g, "").trim()} license, not ${platform.toUpperCase()}")`
+      );
     }
 
     // Check file-based other platform whitelist
@@ -473,12 +480,19 @@ export default async function handler(req, res) {
             timestamp: timestamp,
           });
 
-          // Instead of blocking, serve loader to allow event code input
-          // The loader will handle showing the event code UI
+          // SECURITY FIX: Block cross-platform access completely (file-based)
           console.log(
-            `[${timestamp}] 🎟️ Serving loader for event code access (File) - ${config.otherLabel} user - UserID: ${userId}`,
+            `[${timestamp}] ❌ BLOCKING cross-platform access (File) - ${config.otherLabel} user trying ${platformLabel} - UserID: ${userId}`,
           );
-          return serveLoaderScript(res, config, "event_code", "EVENT");
+          
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          return res.status(403).send(
+            `-- StarshipCore ${platform.toUpperCase()}\\n` +
+            `-- ❌ CROSS-PLATFORM ACCESS DENIED\\n` +
+            `-- You have a ${config.otherLabel.replace(/[📱💻]/g, "").trim()} license.\\n` +
+            `-- Purchase ${platform.toUpperCase()} VIP separately.\\n` +
+            `error("You have ${config.otherLabel.replace(/[📱💻]/g, "").trim()} license, not ${platform.toUpperCase()}")`
+          );
         }
       } catch (err) {
         console.error("Error checking other keys file:", err);
@@ -538,14 +552,33 @@ export default async function handler(req, res) {
       );
   }
 
-  // === NOT WHITELISTED - Allow Event Code Access ===
+  // === NOT WHITELISTED - BLOCK ACCESS (Security Fix 2025-12-28) ===
   console.log(
-    `[${timestamp}] 🎟️ NOT ${platform.toUpperCase()} WHITELISTED - Serving loader for event code - UserID: ${userId} | IP: ${clientIP}`,
+    `[${timestamp}] ❌ NOT ${platform.toUpperCase()} WHITELISTED - ACCESS BLOCKED - UserID: ${userId} | IP: ${clientIP}`,
   );
 
-  // Instead of blocking, serve loader to allow event code input
-  // The loader will handle showing the event code UI for non-whitelisted users
-  return serveLoaderScript(res, config, "event_code", "EVENT");
+  await sendDiscordLog({
+    title: `🚫 ${platformLabel} Access Blocked - Not Whitelisted`,
+    status: "blocked",
+    statusMessage: "❌ Not Whitelisted",
+    authType: "None",
+    owner: `UserID: ${userId}`,
+    ip: clientIP,
+    platform: platformLabel,
+    deviceCount: "N/A",
+    timestamp: timestamp,
+    message: `❌ Unauthorized access attempt blocked\\nUserID: ${userId}\\nIP: ${clientIP}`,
+  });
+
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  return res.status(403).send(
+    `-- StarshipCore ${platform.toUpperCase()}\\n` +
+    `-- ❌ ACCESS DENIED\\n` +
+    `-- You are not whitelisted for ${platform.toUpperCase()} access.\\n` +
+    `-- Contact administrator to purchase VIP access.\\n` +
+    `-- Your User ID: ${userId}\\n` +
+    `error("Not authorized for ${platform.toUpperCase()} access. Purchase VIP to continue.")`
+  );
 }
 
 // Helper function to serve loader script

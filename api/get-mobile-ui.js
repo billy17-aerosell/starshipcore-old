@@ -342,89 +342,16 @@ export default async function handler(req, res) {
       }
     }
 
-    // === CHECK EVENT CODE ACCESS (Google Sheets) ===
+    // === EVENT CODE SYSTEM DISABLED (Security Fix 2025-12-28) ===
+    // Event Code system was exploited by hackers to bypass whitelist authentication
+    // This feature is temporarily disabled until a more secure implementation is ready
     console.log(
-      `[${timestamp}] 🎟️ Checking event access for UserID: ${userId}`,
+      `[${timestamp}] 🚫 EVENT CODE SYSTEM DISABLED - UserID: ${userId} | IP: ${clientIP}`,
     );
 
-    const eventAccess = await checkEventAccess(userId);
-
-    if (eventAccess.hasAccess) {
-      console.log(
-        `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - UserID: ${userId} | Code: ${eventAccess.codeUsed} | Expires: ${eventAccess.expiresAt}`,
-      );
-
-      // === SEND DISCORD WEBHOOK (ONLY ONCE PER USER) ===
-      // Track webhook notifications in Redis to prevent duplicates
-      const webhookKey = `starship:event_webhook_sent:${userId}`;
-      let webhookAlreadySent = false;
-
-      try {
-        const redisClient = await getRedis();
-        if (redisClient) {
-          const alreadySent = await redisClient.get(webhookKey);
-          webhookAlreadySent = alreadySent === "true";
-
-          // If not sent yet, send webhook and mark as sent
-          if (!webhookAlreadySent) {
-            await sendDiscordLog({
-              title: "🎟️ Mobile UI Event Access - First Time",
-              status: "success",
-              owner: `UserID: ${userId}`,
-              authType: `Event Code (${eventAccess.codeUsed})`,
-              ip: clientIP,
-              timestamp: timestamp,
-              message: `✅ First-time event code access\nCode: ${eventAccess.codeUsed}\nRemaining: ${eventAccess.remainingDays} days`,
-            });
-
-            // Mark as sent (expires when event code expires)
-            const ttl = eventAccess.remainingDays * 24 * 60 * 60; // Convert days to seconds
-            await redisClient.set(webhookKey, "true");
-            await redisClient.expire(webhookKey, ttl);
-            console.log(
-              `[${timestamp}] 📨 Event webhook sent and tracked (TTL: ${ttl}s) for UserID: ${userId}`,
-            );
-          } else {
-            console.log(
-              `[${timestamp}] ⏭️ Event webhook skipped (already sent) for UserID: ${userId}`,
-            );
-          }
-        } else {
-          // Fallback: Send webhook if Redis unavailable
-          await sendDiscordLog({
-            title: "🎟️ Mobile UI Event Access Granted",
-            status: "success",
-            owner: `UserID: ${userId}`,
-            authType: `Event Code (${eventAccess.codeUsed})`,
-            ip: clientIP,
-            timestamp: timestamp,
-            message: `✅ Event code access granted\nCode: ${eventAccess.codeUsed}\nRemaining: ${eventAccess.remainingDays} days`,
-          });
-        }
-      } catch (webhookError) {
-        console.error("Event webhook tracking error:", webhookError.message);
-      }
-
-      // Read MobileUI.lua from data folder
-      const uiPath = path.join(process.cwd(), "data", "MobileUI.lua");
-
-      if (!fs.existsSync(uiPath)) {
-        return res.status(500).send('error("Mobile UI not available")');
-      }
-
-      const uiScript = fs.readFileSync(uiPath, "utf8");
-
-      res.setHeader("Content-Type", "text/plain; charset=utf-8");
-      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-      res.setHeader("X-Platform", "mobile");
-      res.setHeader("X-Auth", "event-code");
-      res.setHeader("X-Event-Code", eventAccess.codeUsed);
-      return res.status(200).send(uiScript);
-    }
-
-    // === NOT WHITELISTED AND NO EVENT ACCESS ===
+    // === NOT WHITELISTED ===
     console.log(
-      `[${timestamp}] ❌ MOBILE UI DENIED - Not whitelisted and no event access - UserID: ${userId} | IP: ${clientIP}`,
+      `[${timestamp}] ❌ MOBILE UI DENIED - Not whitelisted - UserID: ${userId} | IP: ${clientIP}`,
     );
 
     await sendDiscordLog({
@@ -434,13 +361,13 @@ export default async function handler(req, res) {
       authType: "None",
       ip: clientIP,
       timestamp: timestamp,
-      message: `❌ Unauthorized Mobile UI access attempt\nUserID: ${userId}`,
+      message: `❌ Unauthorized Mobile UI access attempt\\nUserID: ${userId}\\nEvent Code System: DISABLED`,
     });
 
     return res
       .status(403)
       .send(
-        'error("Not whitelisted for Mobile access. Purchase Mobile VIP or use an Event Code to get access.")',
+        'error("Not whitelisted for Mobile access. Purchase Mobile VIP to get access.")',
       );
   } catch (error) {
     console.error("Get Mobile UI Error:", error);

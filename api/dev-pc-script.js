@@ -79,12 +79,9 @@ getgenv().StarshipSession = {
 
 `;
 
-    // Insert after the initial warn statement
-    scriptContent = scriptContent.replace(
-      'warn("[Starship] Script Initialization Started...")',
-      'warn("[Starship] Script Initialization Started...")\n' +
-        serverModeConfig,
-    );
+    // Insert at the beginning of the script (after the header comment)
+    // This ensures _G.StarshipServerURL is set before anything else runs
+    scriptContent = serverModeConfig + scriptContent;
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");

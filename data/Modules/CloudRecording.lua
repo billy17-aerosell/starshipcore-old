@@ -36,9 +36,18 @@ local function GetAPIUrl()
 end
 
 -- Local Upload Server URL (for unlimited uploads from PC)
--- Set _G.StarshipLocalServer = "http://localhost:4000" to enable
+-- Automatically uses localhost:4000 when in dev mode (localhost:3000)
 local function GetLocalServerUrl()
-	return _G.StarshipLocalServer
+	-- If explicitly set, use that
+	if _G.StarshipLocalServer then
+		return _G.StarshipLocalServer
+	end
+	-- Auto-detect: if running from localhost:3000, use localhost:4000 for uploads
+	local baseUrl = _G.StarshipServerURL or ""
+	if baseUrl:find("localhost:3000") then
+		return "http://localhost:4000"
+	end
+	return nil
 end
 
 local MAX_RETRY = 3
