@@ -2144,7 +2144,7 @@ ToolsTab:Toggle({
 
 ToolsTab:Divider()
 
--- ════════════════════════������═════════════════════════════════════════
+-- ════════════════════════�������═════════════════════════════════════════
 -- 👥 HIDE PLAYERS
 -- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "👥 Hide Players", TextSize = 20 })
@@ -4272,6 +4272,8 @@ local function LoadCloudRecording(recInfo)
 			WindUI:Notify({
 				Title = "❌ Error",
 				Content = "Failed to connect to cloud",
+				Duration = 3,
+			})
 			if selectedFileDisplay then
 				pcall(function()
 					selectedFileDisplay:SetDesc("Download failed")
@@ -4321,8 +4323,8 @@ local function LoadCloudRecording(recInfo)
 				pcall(function()
 					selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
 					selectedFileDisplay:SetDesc(string.format("Ready! • %d frames", frameCount))
-			end)
-		end
+				end)
+			end
 
 			WindUI:Notify({
 				Title = "☁️ Ready!",
@@ -4360,10 +4362,6 @@ local function LoadCloudRecordingDirect(recInfo)
 	-- Just call main function
 	LoadCloudRecording(recInfo)
 end
-
-
-
-
 
 -- Simple Dropdown with Search (supports SearchBarEnabled)
 ListMapTab:Dropdown({
