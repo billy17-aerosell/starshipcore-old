@@ -2144,7 +2144,7 @@ ToolsTab:Toggle({
 
 ToolsTab:Divider()
 
--- ════════════════════════�������═════════════════════════════════════════
+-- ════════════════════════��������═════════════════════════════════════════
 -- 👥 HIDE PLAYERS
 -- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "👥 Hide Players", TextSize = 20 })
@@ -4147,18 +4147,7 @@ PreloadNextChunks = function(recordingId, currentChunkIndex, numToPreload)
 									loadedCount = loadedCount + 1
 								end
 
-								-- Notify every few chunks
-								if loadedCount % 5 == 0 or loadedCount == ChunkedState.totalChunks then
-									WindUI:Notify({
-										Title = "☁️ Streaming",
-										Content = string.format(
-											"Loaded %d/%d chunks",
-											loadedCount,
-											ChunkedState.totalChunks
-										),
-										Duration = 1.5,
-									})
-								end
+								-- Progress tracked silently (no notification to avoid FPS drop)
 							end
 						end
 					end
