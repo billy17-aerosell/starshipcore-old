@@ -2144,7 +2144,7 @@ ToolsTab:Toggle({
 
 ToolsTab:Divider()
 
--- ════════════════════════���������������═════════════════════════════════════════
+-- ════════════════════════����������������═════════════════════════════════════════
 -- 👥 HIDE PLAYERS
 -- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "👥 Hide Players", TextSize = 20 })
@@ -4757,9 +4757,7 @@ function CreatePlaybackControls()
 	PlaybackSection:Slider({
 		Title = "Playback Speed",
 		Desc = "Speed multiplier (Default: 1)",
-		Value = 1,
-		Min = 0.1,
-		Max = 3,
+		Value = { Min = 0.1, Max = 3, Default = 1 },
 		Step = 0.1,
 		Callback = function(val)
 			PlaybackState.speedMultiplier = val
