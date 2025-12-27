@@ -2144,7 +2144,7 @@ ToolsTab:Toggle({
 
 ToolsTab:Divider()
 
--- ════════════════════════���������═════════════════════════════════════════
+-- ════════════════════════������������═════════════════════════════════════════
 -- 👥 HIDE PLAYERS
 -- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "👥 Hide Players", TextSize = 20 })
@@ -4229,6 +4229,14 @@ local function LoadCloudRecording(recInfo)
 				Duration = 2,
 			})
 
+			-- Show Playback Controls & Enable Mini Player
+			if PlaybackSection then
+				PlaybackSection:SetVisible(true)
+			end
+			if MiniPlayerToggle then
+				MiniPlayerToggle:SetValue(true)
+			end
+
 			return -- Done! No network needed
 		end
 	end
@@ -4317,6 +4325,14 @@ LoadCloudRecordingDirect = function(recInfo)
 				Content = CloudRecordingName .. " loaded - tap Play to start",
 				Duration = 3,
 			})
+
+			-- Show Playback Controls & Enable Mini Player
+			if PlaybackSection then
+				PlaybackSection:SetVisible(true)
+			end
+			if MiniPlayerToggle then
+				MiniPlayerToggle:SetValue(true)
+			end
 
 			-- Save to local cache for instant load next time
 			task.spawn(function()
@@ -4713,6 +4729,7 @@ ListMapTab:Space()
 local PlaybackSection = ListMapTab:Section({
 	Title = "🎮 Playback Controls",
 	Opened = true,
+	Visible = false, -- Hidden by default, shown when recording loaded
 })
 
 MiniPlayerToggle = PlaybackSection:Toggle({
