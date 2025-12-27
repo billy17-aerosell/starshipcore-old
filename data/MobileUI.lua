@@ -2144,7 +2144,7 @@ ToolsTab:Toggle({
 
 ToolsTab:Divider()
 
--- ════════════════════════��������═════════════════════════════════════════
+-- ════════════════════════���������═════════════════════════════════════════
 -- 👥 HIDE PLAYERS
 -- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "👥 Hide Players", TextSize = 20 })
@@ -2848,7 +2848,9 @@ local function PlayRecording(fileName, force)
 		local isFlexible = (data.Mode == "Flexible") or (framesToPlay[1] and framesToPlay[1].vel ~= nil)
 
 		-- LIVE SMOOTHING: Apply Gaussian smoothing on load (mobile default ON)
-		if SMOOTH_SETTINGS.LiveSmoothingEnabled and isFlexible and #framesToPlay > 3 then
+		-- LIVE SMOOTHING: Apply Gaussian smoothing on load (mobile default ON)
+		-- SKIP for large files (> 5000 frames) to prevent timeout/lag on mobile
+		if SMOOTH_SETTINGS.LiveSmoothingEnabled and isFlexible and #framesToPlay > 3 and #framesToPlay <= 5000 then
 			WindUI:Notify({ Title = "Smoothing", Content = "Applying auto-smooth...", Duration = 1 })
 			task.wait()
 			framesToPlay = GetSmoothedFrames(framesToPlay, SMOOTH_SETTINGS.LiveSmoothingStrength, isFlexible)
