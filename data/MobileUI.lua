@@ -2743,12 +2743,44 @@ local function StopPlayback()
 end
 
 -- ═══════════════════════════════════════════════════════════════════
--- PATH VISUALIZATION
+-- PATH VISUALIZATION (PREMIUM ENHANCED)
 -- ═══════════════════════════════════════════════════════════════════
 local isPathVisualsEnabled = false
 local pathVisualsFolder = nil
+local pathAnimationConnection = nil
+local currentPositionMarker = nil
+
+-- Premium gradient colors (Green → Cyan → Blue → Purple → Pink)
+local PATH_GRADIENT_COLORS = {
+	Color3.fromRGB(34, 197, 94), -- Emerald Green (Start)
+	Color3.fromRGB(6, 182, 212), -- Cyan
+	Color3.fromRGB(59, 130, 246), -- Blue
+	Color3.fromRGB(139, 92, 246), -- Purple
+	Color3.fromRGB(236, 72, 153), -- Pink (End)
+}
+
+-- Interpolate between gradient colors based on progress (0-1)
+local function GetGradientColor(progress)
+	local numColors = #PATH_GRADIENT_COLORS
+	local scaledProgress = progress * (numColors - 1)
+	local colorIndex = math.floor(scaledProgress) + 1
+	local colorAlpha = scaledProgress - math.floor(scaledProgress)
+
+	local startColor = PATH_GRADIENT_COLORS[math.clamp(colorIndex, 1, numColors)]
+	local endColor = PATH_GRADIENT_COLORS[math.clamp(colorIndex + 1, 1, numColors)]
+
+	return startColor:Lerp(endColor, colorAlpha)
+end
 
 local function ClearPath()
+	if pathAnimationConnection then
+		pathAnimationConnection:Disconnect()
+		pathAnimationConnection = nil
+	end
+	if currentPositionMarker then
+		currentPositionMarker:Destroy()
+		currentPositionMarker = nil
+	end
 	if pathVisualsFolder then
 		pathVisualsFolder:Destroy()
 		pathVisualsFolder = nil
@@ -2765,11 +2797,22 @@ local function DrawPath(frames)
 	pathVisualsFolder.Name = "StarshipPathVisuals"
 	pathVisualsFolder.Parent = workspace
 
-	local lastPos = nil
-	-- Optimization: Skip frames to reduce part count
-	local step = math.max(1, math.floor(#frames / 500)) -- Limit to ~500 points max
+	-- Create sub-folders for organization
+	local nodesFolder = Instance.new("Folder")
+	nodesFolder.Name = "Nodes"
+	nodesFolder.Parent = pathVisualsFolder
 
-	for i = 1, #frames, step do
+	local beamsFolder = Instance.new("Folder")
+	beamsFolder.Name = "Beams"
+	beamsFolder.Parent = pathVisualsFolder
+
+	local markersFolder = Instance.new("Folder")
+	markersFolder.Name = "Markers"
+	markersFolder.Parent = pathVisualsFolder
+
+	-- Collect all valid positions first
+	local positions = {}
+	for i = 1, #frames do
 		local f = frames[i]
 		local pos = nil
 		if f.pos then
@@ -2777,28 +2820,324 @@ local function DrawPath(frames)
 		elseif f.r then
 			pos = TblToCF(f.r).Position
 		end
-
 		if pos then
-			-- Only draw if distance from last point is significant (> 2 studs)
-			if not lastPos or (pos - lastPos).Magnitude > 2 then
-				local p = Instance.new("Part")
-				p.Name = "PathNode"
-				p.Size = Vector3.new(0.4, 0.4, 0.4)
-				p.Shape = Enum.PartType.Ball
-				p.Color = Color3.fromRGB(59, 130, 246) -- Blue/Cyan
-				p.Material = Enum.Material.Neon
-				p.Transparency = 0.3
-				p.Anchored = true
-				p.CanCollide = false
-				p.CastShadow = false
-				p.Position = pos
-				p.Parent = pathVisualsFolder
-				lastPos = pos
-			end
+			table.insert(positions, { pos = pos, time = f.t or i, index = i })
 		end
 	end
 
-	WindUI:Notify({ Title = "Path Visuals", Content = "Path generated!", Duration = 1 })
+	if #positions < 2 then
+		return
+	end
+
+	-- Optimization: Limit to ~300 points for mobile performance
+	local totalPoints = #positions
+	local step = math.max(1, math.floor(totalPoints / 300))
+	local filteredPositions = {}
+	local lastPos = nil
+	local minDistance = 1.5 -- Minimum distance between points
+
+	for i = 1, totalPoints, step do
+		local posData = positions[i]
+		if not lastPos or (posData.pos - lastPos).Magnitude > minDistance then
+			posData.progress = (i - 1) / math.max(1, totalPoints - 1)
+			table.insert(filteredPositions, posData)
+			lastPos = posData.pos
+		end
+	end
+
+	-- Always include last position
+	local lastPosData = positions[totalPoints]
+	lastPosData.progress = 1
+	if #filteredPositions > 0 and (filteredPositions[#filteredPositions].pos - lastPosData.pos).Magnitude > 0.1 then
+		table.insert(filteredPositions, lastPosData)
+	end
+
+	-- Draw nodes and beams
+	local nodeInstances = {}
+	local prevPart = nil
+
+	for i, posData in ipairs(filteredPositions) do
+		local pos = posData.pos
+		local progress = posData.progress
+		local color = GetGradientColor(progress)
+
+		-- Create node (smaller neon spheres)
+		local node = Instance.new("Part")
+		node.Name = "PathNode_" .. i
+		node.Size = Vector3.new(0.35, 0.35, 0.35)
+		node.Shape = Enum.PartType.Ball
+		node.Color = color
+		node.Material = Enum.Material.Neon
+		node.Transparency = 0.2
+		node.Anchored = true
+		node.CanCollide = false
+		node.CanQuery = false
+		node.CastShadow = false
+		node.Position = pos
+		node.Parent = nodesFolder
+		table.insert(nodeInstances, node)
+
+		-- Create beam/line to previous node
+		if prevPart then
+			local distance = (pos - prevPart.Position).Magnitude
+			if distance > 0.1 then
+				local midpoint = (pos + prevPart.Position) / 2
+				local direction = (pos - prevPart.Position).Unit
+
+				local beam = Instance.new("Part")
+				beam.Name = "PathBeam_" .. i
+				beam.Size = Vector3.new(0.12, 0.12, distance)
+				beam.Shape = Enum.PartType.Block
+				beam.Color = color:Lerp(GetGradientColor(filteredPositions[i - 1].progress), 0.5)
+				beam.Material = Enum.Material.Neon
+				beam.Transparency = 0.4
+				beam.Anchored = true
+				beam.CanCollide = false
+				beam.CanQuery = false
+				beam.CastShadow = false
+				beam.CFrame = CFrame.lookAt(midpoint, pos)
+				beam.Parent = beamsFolder
+			end
+		end
+
+		prevPart = node
+	end
+
+	-- ═══════════════════════════════════════════════════════════════════
+	-- SPECIAL MARKERS (START & END)
+	-- ═══════════════════════════════════════════════════════════════════
+
+	-- START MARKER (Big Green Diamond)
+	if #filteredPositions > 0 then
+		local startPos = filteredPositions[1].pos
+
+		local startMarker = Instance.new("Part")
+		startMarker.Name = "StartMarker"
+		startMarker.Size = Vector3.new(1.2, 1.2, 1.2)
+		startMarker.Shape = Enum.PartType.Ball
+		startMarker.Color = Color3.fromRGB(34, 197, 94) -- Emerald green
+		startMarker.Material = Enum.Material.Neon
+		startMarker.Transparency = 0
+		startMarker.Anchored = true
+		startMarker.CanCollide = false
+		startMarker.CastShadow = false
+		startMarker.Position = startPos + Vector3.new(0, 0.5, 0)
+		startMarker.Parent = markersFolder
+
+		-- Add "S" label using BillboardGui
+		local startBillboard = Instance.new("BillboardGui")
+		startBillboard.Name = "StartLabel"
+		startBillboard.Size = UDim2.new(0, 60, 0, 40)
+		startBillboard.StudsOffset = Vector3.new(0, 2, 0)
+		startBillboard.AlwaysOnTop = true
+		startBillboard.Parent = startMarker
+
+		local startText = Instance.new("TextLabel")
+		startText.Size = UDim2.new(1, 0, 1, 0)
+		startText.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+		startText.BackgroundTransparency = 0.2
+		startText.Text = "▶ START"
+		startText.TextColor3 = Color3.new(1, 1, 1)
+		startText.TextScaled = true
+		startText.Font = Enum.Font.GothamBold
+		startText.Parent = startBillboard
+
+		local startCorner = Instance.new("UICorner")
+		startCorner.CornerRadius = UDim.new(0.3, 0)
+		startCorner.Parent = startText
+
+		-- Glow ring effect
+		local startRing = Instance.new("Part")
+		startRing.Name = "StartRing"
+		startRing.Size = Vector3.new(2.5, 0.15, 2.5)
+		startRing.Shape = Enum.PartType.Cylinder
+		startRing.Color = Color3.fromRGB(34, 197, 94)
+		startRing.Material = Enum.Material.Neon
+		startRing.Transparency = 0.5
+		startRing.Anchored = true
+		startRing.CanCollide = false
+		startRing.CastShadow = false
+		startRing.CFrame = CFrame.new(startPos) * CFrame.Angles(0, 0, math.rad(90))
+		startRing.Parent = markersFolder
+	end
+
+	-- END MARKER (Big Pink/Red Diamond)
+	if #filteredPositions > 1 then
+		local endPos = filteredPositions[#filteredPositions].pos
+
+		local endMarker = Instance.new("Part")
+		endMarker.Name = "EndMarker"
+		endMarker.Size = Vector3.new(1.2, 1.2, 1.2)
+		endMarker.Shape = Enum.PartType.Ball
+		endMarker.Color = Color3.fromRGB(239, 68, 68) -- Red
+		endMarker.Material = Enum.Material.Neon
+		endMarker.Transparency = 0
+		endMarker.Anchored = true
+		endMarker.CanCollide = false
+		endMarker.CastShadow = false
+		endMarker.Position = endPos + Vector3.new(0, 0.5, 0)
+		endMarker.Parent = markersFolder
+
+		-- Add "E" label using BillboardGui
+		local endBillboard = Instance.new("BillboardGui")
+		endBillboard.Name = "EndLabel"
+		endBillboard.Size = UDim2.new(0, 60, 0, 40)
+		endBillboard.StudsOffset = Vector3.new(0, 2, 0)
+		endBillboard.AlwaysOnTop = true
+		endBillboard.Parent = endMarker
+
+		local endText = Instance.new("TextLabel")
+		endText.Size = UDim2.new(1, 0, 1, 0)
+		endText.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
+		endText.BackgroundTransparency = 0.2
+		endText.Text = "⏹ END"
+		endText.TextColor3 = Color3.new(1, 1, 1)
+		endText.TextScaled = true
+		endText.Font = Enum.Font.GothamBold
+		endText.Parent = endBillboard
+
+		local endCorner = Instance.new("UICorner")
+		endCorner.CornerRadius = UDim.new(0.3, 0)
+		endCorner.Parent = endText
+
+		-- Glow ring effect
+		local endRing = Instance.new("Part")
+		endRing.Name = "EndRing"
+		endRing.Size = Vector3.new(2.5, 0.15, 2.5)
+		endRing.Shape = Enum.PartType.Cylinder
+		endRing.Color = Color3.fromRGB(239, 68, 68)
+		endRing.Material = Enum.Material.Neon
+		endRing.Transparency = 0.5
+		endRing.Anchored = true
+		endRing.CanCollide = false
+		endRing.CastShadow = false
+		endRing.CFrame = CFrame.new(endPos) * CFrame.Angles(0, 0, math.rad(90))
+		endRing.Parent = markersFolder
+	end
+
+	-- ═══════════════════════════════════════════════════════════════════
+	-- DIRECTION ARROWS (Every ~20 points)
+	-- ═══════════════════════════════════════════════════════════════════
+	local arrowStep = math.max(1, math.floor(#filteredPositions / 15))
+	for i = arrowStep + 1, #filteredPositions - 1, arrowStep do
+		local currPos = filteredPositions[i].pos
+		local nextPos = filteredPositions[math.min(i + 1, #filteredPositions)].pos
+		local direction = (nextPos - currPos)
+
+		if direction.Magnitude > 0.5 then
+			direction = direction.Unit
+			local arrowColor = GetGradientColor(filteredPositions[i].progress)
+
+			-- Arrow cone pointing in direction
+			local arrow = Instance.new("Part")
+			arrow.Name = "Arrow_" .. i
+			arrow.Size = Vector3.new(0.5, 0.6, 0.5)
+			arrow.Shape = Enum.PartType.Ball -- Using ball as cone approximation
+			arrow.Color = arrowColor
+			arrow.Material = Enum.Material.Neon
+			arrow.Transparency = 0.1
+			arrow.Anchored = true
+			arrow.CanCollide = false
+			arrow.CastShadow = false
+			arrow.Position = currPos + Vector3.new(0, 0.3, 0)
+			arrow.Parent = markersFolder
+
+			-- Arrow pointing billboard
+			local arrowBB = Instance.new("BillboardGui")
+			arrowBB.Size = UDim2.new(0, 30, 0, 30)
+			arrowBB.StudsOffset = Vector3.new(0, 0.8, 0)
+			arrowBB.AlwaysOnTop = true
+			arrowBB.Parent = arrow
+
+			local arrowIcon = Instance.new("TextLabel")
+			arrowIcon.Size = UDim2.new(1, 0, 1, 0)
+			arrowIcon.BackgroundTransparency = 1
+			arrowIcon.Text = "➤"
+			arrowIcon.TextColor3 = arrowColor
+			arrowIcon.TextScaled = true
+			arrowIcon.Font = Enum.Font.GothamBold
+			arrowIcon.Rotation = math.deg(math.atan2(direction.X, direction.Z))
+			arrowIcon.Parent = arrowBB
+		end
+	end
+
+	-- ═══════════════════════════════════════════════════════════════════
+	-- ANIMATION: Pulsing glow effect on markers
+	-- ═══════════════════════════════════════════════════════════════════
+	local animTime = 0
+	pathAnimationConnection = RunService.Heartbeat:Connect(function(dt)
+		if not pathVisualsFolder or not pathVisualsFolder.Parent then
+			if pathAnimationConnection then
+				pathAnimationConnection:Disconnect()
+				pathAnimationConnection = nil
+			end
+			return
+		end
+
+		animTime = animTime + dt
+
+		-- Pulse START marker
+		local startMarker = markersFolder:FindFirstChild("StartMarker")
+		if startMarker then
+			local pulse = 0.9 + 0.1 * math.sin(animTime * 3)
+			startMarker.Size = Vector3.new(1.2 * pulse, 1.2 * pulse, 1.2 * pulse)
+		end
+
+		-- Pulse END marker
+		local endMarker = markersFolder:FindFirstChild("EndMarker")
+		if endMarker then
+			local pulse = 0.9 + 0.1 * math.sin(animTime * 3 + math.pi)
+			endMarker.Size = Vector3.new(1.2 * pulse, 1.2 * pulse, 1.2 * pulse)
+		end
+
+		-- Rotate rings
+		local startRing = markersFolder:FindFirstChild("StartRing")
+		if startRing then
+			local pos = startRing.Position
+			startRing.CFrame = CFrame.new(pos) * CFrame.Angles(0, animTime * 0.5, math.rad(90))
+		end
+
+		local endRing = markersFolder:FindFirstChild("EndRing")
+		if endRing then
+			local pos = endRing.Position
+			endRing.CFrame = CFrame.new(pos) * CFrame.Angles(0, -animTime * 0.5, math.rad(90))
+		end
+
+		-- Update current position indicator during playback
+		if PlaybackState.isPlaying and PlaybackState.frameData then
+			local char = GetCharacter()
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				if not currentPositionMarker or not currentPositionMarker.Parent then
+					currentPositionMarker = Instance.new("Part")
+					currentPositionMarker.Name = "CurrentPosMarker"
+					currentPositionMarker.Size = Vector3.new(1, 0.1, 1)
+					currentPositionMarker.Shape = Enum.PartType.Cylinder
+					currentPositionMarker.Color = Color3.fromRGB(250, 204, 21) -- Gold/Yellow
+					currentPositionMarker.Material = Enum.Material.Neon
+					currentPositionMarker.Transparency = 0.3
+					currentPositionMarker.Anchored = true
+					currentPositionMarker.CanCollide = false
+					currentPositionMarker.CastShadow = false
+					currentPositionMarker.Parent = markersFolder
+				end
+				local hrpPos = hrp.Position
+				local ringSize = 1.5 + 0.3 * math.sin(animTime * 5)
+				currentPositionMarker.Size = Vector3.new(ringSize, 0.1, ringSize)
+				currentPositionMarker.CFrame = CFrame.new(hrpPos - Vector3.new(0, 2.5, 0))
+					* CFrame.Angles(0, 0, math.rad(90))
+			end
+		elseif currentPositionMarker then
+			currentPositionMarker:Destroy()
+			currentPositionMarker = nil
+		end
+	end)
+
+	WindUI:Notify({
+		Title = "✨ Path Visuals",
+		Content = string.format("Premium path generated! (%d points)", #filteredPositions),
+		Duration = 2,
+	})
 end
 
 -- Play recording (main function)
@@ -4819,8 +5158,8 @@ function CreatePlaybackControls()
 	})
 
 	PlaybackSection:Toggle({
-		Title = "Path Visualization",
-		Desc = "Show playback path (Neon Dots)",
+		Title = "✨ Path Visualization",
+		Desc = "Premium gradient path with animated markers",
 		Value = false,
 		Callback = function(state)
 			isPathVisualsEnabled = state
@@ -4840,7 +5179,7 @@ function CreatePlaybackControls()
 		Value = { Min = 0.1, Max = 3, Default = 1 },
 		Step = 0.1,
 		Callback = function(val)
-			PlaybackState.speedMultiplier = val
+			PlaybackState.speed = val
 		end,
 	})
 
