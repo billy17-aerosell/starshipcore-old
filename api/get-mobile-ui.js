@@ -5,14 +5,19 @@
 import fs from "fs";
 import path from "path";
 
-// Event Code System API (Google Sheets)
-const EVENT_CODE_API =
-  "https://script.google.com/macros/s/AKfycbw3oc1fHMRpGMkr67f8UQ6jbIXvfxDgI_fZCZSOsNZmnf8htHVnLJFnraGekLitgR7Q/exec";
+// Event Code System API (from environment variable for security)
+const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
 
 // Check if user has active event access from Google Sheets
 async function checkEventAccess(userId) {
+  // Skip if EVENT_CODE_API not configured
+  if (!EVENT_CODE_API) {
+    console.log("[Event Code] API URL not configured, skipping check");
+    return { hasAccess: false };
+  }
+  
   try {
-    const apiUrl = `${EVENT_CODE_API}?action=status&userId=${userId}`;
+    const apiUrl = `${EVENT_CODE_API}?action=check&userId=${userId}`;
     const response = await fetch(apiUrl);
     const data = await response.json();
 
