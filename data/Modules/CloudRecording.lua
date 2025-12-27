@@ -299,6 +299,106 @@ end
             size = 1234 -- size in KB
         }
 ]]
+
+-- Helper: Sanitize name for use as filename (same as server)
+local function SanitizeName(name)
+	return name
+		:gsub("[^%w%s%-_]", "") -- Remove special characters
+		:gsub("%s+", "_") -- Replace spaces with underscore
+		:sub(1, 100) -- Limit length
+end
+
+-- Helper: Upload directly to R2 using Presigned URL (for large files > 4MB)
+local function UploadDirect(payload, callback)
+	local gameInfo = nil
+	pcall(function()
+		gameInfo = GetGameInfo()
+	end)
+
+	-- Step 1: Get presigned upload URL from server
+	local urlRequestBody = HttpService:JSONEncode({
+		name = payload.name,
+		userId = payload.userId,
+		gameId = payload.gameId,
+		gameName = payload.gameName,
+		frameCount = payload.data.Frames and #payload.data.Frames or 0,
+		duration = payload.data.Duration or 0,
+		mode = payload.data.Mode,
+	})
+
+	local apiUrl = GetAPIUrl() .. "?action=get_upload_url"
+
+	SafeRequest(apiUrl, "POST", urlRequestBody, function(urlResult)
+		if not urlResult or not urlResult.success or not urlResult.uploadUrl then
+			if callback then
+				callback({
+					success = false,
+					error = "Failed to get upload URL",
+					message = urlResult and urlResult.error or "Unknown error",
+				})
+			end
+			return
+		end
+
+		-- Step 2: Prepare the full recording object (same structure as normal upload)
+		local sanitizedName = SanitizeName(payload.name)
+		local timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+
+		local recordingObject = {
+			id = sanitizedName,
+			name = payload.name,
+			userId = payload.userId,
+			gameId = payload.gameId,
+			gameName = payload.gameName,
+			frameCount = payload.data.Frames and #payload.data.Frames or 0,
+			duration = payload.data.Duration or 0,
+			mode = payload.data.Mode,
+			createdAt = timestamp,
+			updatedAt = timestamp,
+			data = payload.data,
+		}
+
+		local fullBody = HttpService:JSONEncode(recordingObject)
+
+		-- Step 3: Upload directly to R2 using presigned URL
+		local uploadSuccess, uploadResult = pcall(function()
+			return game:GetService("HttpService"):RequestAsync({
+				Url = urlResult.uploadUrl,
+				Method = "PUT",
+				Headers = {
+					["Content-Type"] = "application/json",
+				},
+				Body = fullBody,
+			})
+		end)
+
+		if uploadSuccess and type(uploadResult) == "table" and uploadResult.Success then
+			if callback then
+				callback({
+					success = true,
+					recordingId = sanitizedName,
+					message = "Large recording uploaded directly to cloud!",
+				})
+			end
+		else
+			local errorMsg = "Unknown error"
+			if not uploadSuccess then
+				errorMsg = tostring(uploadResult) -- uploadResult contains error message if pcall failed
+			elseif type(uploadResult) == "table" then
+				errorMsg = uploadResult.StatusMessage or ("HTTP " .. (uploadResult.StatusCode or "?"))
+			end
+
+			if callback then
+				callback({
+					success = false,
+					error = "Direct upload failed",
+					message = errorMsg,
+				})
+			end
+		end
+	end)
+end
+
 function CloudRecording.Save(recordingData, name, callback)
 	if not recordingData or not recordingData.Frames or #recordingData.Frames == 0 then
 		if callback then
@@ -325,6 +425,12 @@ function CloudRecording.Save(recordingData, name, callback)
 	}
 
 	local body = HttpService:JSONEncode(payload)
+
+	-- Check size: If > 4MB, use direct upload to R2 (via presigned URL)
+	if #body > 4 * 1024 * 1024 then
+		UploadDirect(payload, callback)
+		return
+	end
 
 	SafeRequest(GetAPIUrl(), "POST", body, function(result)
 		if result and result.success then

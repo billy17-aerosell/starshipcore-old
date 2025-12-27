@@ -105,9 +105,65 @@ export default async function handler(req, res) {
   const userId = req.query.userId || req.body?.userId;
 
   // ============================================
-  // POST - Save new recording to R2
+  // POST - Generate Presigned URL or Save recording
   // ============================================
   if (method === "POST") {
+    const { action } = req.query;
+    
+    // Generate Presigned URL for direct upload to R2
+    if (action === "get_upload_url") {
+      try {
+        const { name, userId, gameId, gameName, frameCount, duration, mode } = req.body;
+        
+        if (!name || !userId) {
+          return res.status(400).json({ error: "Missing name or userId" });
+        }
+        
+        // Sanitize name for filename
+        const sanitizedName = name
+          .replace(/[^a-zA-Z0-9\s\-_]/g, "")
+          .replace(/\s+/g, "_")
+          .substring(0, 100);
+        
+        const key = `recordings/${sanitizedName}.json`;
+        const timestamp = new Date().toISOString();
+        
+        // Generate presigned PUT URL (valid for 1 hour)
+        const command = new PutObjectCommand({
+          Bucket: R2_BUCKET_NAME,
+          Key: key,
+          ContentType: "application/json",
+          Metadata: {
+            name: name,
+            userid: userId,
+            gameid: gameId?.toString() || "",
+            gamename: gameName || "",
+            framecount: frameCount?.toString() || "0",
+            duration: duration?.toString() || "0",
+            mode: mode || "Flexible",
+            createdat: timestamp,
+          }
+        });
+        
+        const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+        
+        console.log(`[R2] Generated presigned upload URL for: ${sanitizedName}`);
+        
+        return res.status(200).json({
+          success: true,
+          uploadUrl: uploadUrl,
+          recordingId: sanitizedName,
+          key: key,
+          expiresIn: 3600,
+          message: "Upload directly to this URL with PUT request"
+        });
+      } catch (error) {
+        console.error("[R2] Presigned URL error:", error);
+        return res.status(500).json({ error: "Failed to generate upload URL", details: error.message });
+      }
+    }
+    
+    // Normal POST - Save recording (for small files)
     try {
       const { name, data, gameId, gameName } = req.body;
 

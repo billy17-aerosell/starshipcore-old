@@ -8,6 +8,7 @@ import {
   PutObjectCommand,
   ListObjectsV2Command,
   HeadObjectCommand,
+  DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import zlib from "zlib";
 import { promisify } from "util";
@@ -412,11 +413,137 @@ export default async function handler(req, res) {
   }
 
   // ============================================
-  // POST - Convert existing recording to chunked format
+  // POST - Upload chunks and merge, or convert
   // ============================================
   if (method === "POST") {
     const { action: postAction } = req.query;
     const bodyRecordingId = req.body?.recordingId || recordingId;
+
+    // POST /api/r2-chunked?action=upload_chunk
+    // Upload a single chunk of a recording
+    if (postAction === "upload_chunk") {
+      const { recordingId, chunkIndex, chunkData } = req.body;
+      
+      if (!recordingId || chunkIndex === undefined || !chunkData) {
+         return res.status(400).json({ error: "Missing parameters: recordingId, chunkIndex, chunkData" });
+      }
+
+      try {
+        const chunkKey = `recordings/${recordingId}_chunk_${chunkIndex}.json`;
+        
+        // Ensure chunkData is stringified if it's an object
+        const bodyContent = typeof chunkData === 'string' ? chunkData : JSON.stringify(chunkData);
+        
+        await r2Client.send(
+          new PutObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: chunkKey,
+            Body: bodyContent,
+            ContentType: "application/json",
+          })
+        );
+        
+        console.log(`[R2-Chunked] Uploaded chunk ${chunkIndex} for ${recordingId}`);
+        return res.status(200).json({ success: true, chunkIndex });
+      } catch (error) {
+        console.error("[R2-Chunked] Upload chunk error:", error);
+        return res.status(500).json({ error: "Failed to upload chunk", details: error.message });
+      }
+    }
+
+    // POST /api/r2-chunked?action=upload_meta
+    // Finalize upload by merging chunks into a single file
+    if (postAction === "upload_meta") {
+        const { recordingId, metadata } = req.body;
+        
+        if (!recordingId || !metadata) {
+            return res.status(400).json({ error: "Missing parameters: recordingId, metadata" });
+        }
+
+        try {
+            console.log(`[R2-Chunked] Merging ${metadata.totalChunks} chunks for ${recordingId}...`);
+            
+            // 1. Download all chunks
+            const chunkPromises = [];
+            for (let i = 0; i < metadata.totalChunks; i++) {
+                chunkPromises.push(
+                    r2Client.send(new GetObjectCommand({ 
+                        Bucket: R2_BUCKET_NAME, 
+                        Key: `recordings/${recordingId}_chunk_${i}.json` 
+                    })).then(res => streamToString(res.Body))
+                       .then(str => JSON.parse(str))
+                );
+            }
+            
+            const chunks = await Promise.all(chunkPromises);
+            
+            // 2. Merge frames
+            let allFrames = [];
+            chunks.sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0));
+            
+            chunks.forEach(chunk => {
+                if (chunk && chunk.frames) {
+                    allFrames = allFrames.concat(chunk.frames);
+                }
+            });
+            
+            console.log(`[R2-Chunked] Merged ${allFrames.length} frames.`);
+            
+            // 3. Create final object (same structure as normal upload)
+            const finalRecording = {
+                id: recordingId,
+                name: metadata.name,
+                userId: metadata.userId,
+                gameId: metadata.gameId,
+                gameName: metadata.gameName,
+                frameCount: allFrames.length,
+                duration: metadata.duration,
+                mode: metadata.mode,
+                createdAt: metadata.createdAt,
+                updatedAt: new Date().toISOString(),
+                data: {
+                    Frames: allFrames,
+                    Mode: metadata.mode,
+                    FPS: 60
+                }
+            };
+            
+            // 4. Upload final file with correct name (recordingId is already sanitized)
+            await r2Client.send(new PutObjectCommand({
+                Bucket: R2_BUCKET_NAME,
+                Key: `recordings/${recordingId}.json`,
+                Body: JSON.stringify(finalRecording),
+                ContentType: "application/json",
+                Metadata: {
+                    name: metadata.name,
+                    userId: metadata.userId,
+                    framecount: allFrames.length.toString(),
+                    mode: metadata.mode
+                }
+            }));
+            
+            console.log(`[R2-Chunked] Final file saved: recordings/${recordingId}.json`);
+            
+            // 5. Delete temporary chunks
+            const deletePromises = [];
+            for (let i = 0; i < metadata.totalChunks; i++) {
+                deletePromises.push(
+                    r2Client.send(new DeleteObjectCommand({ 
+                        Bucket: R2_BUCKET_NAME, 
+                        Key: `recordings/${recordingId}_chunk_${i}.json` 
+                    }))
+                );
+            }
+            await Promise.all(deletePromises);
+            console.log(`[R2-Chunked] Cleaned up ${metadata.totalChunks} temporary chunks.`);
+            
+            return res.status(200).json({ success: true, recordingId, message: "Large recording uploaded and merged successfully!" });
+
+        } catch (error) {
+            console.error("[R2-Chunked] Merge error:", error);
+            return res.status(500).json({ error: "Failed to merge chunks", details: error.message });
+        }
+    }
 
     // POST /api/r2-chunked?action=convert
     // Convert an existing large recording to chunked format
