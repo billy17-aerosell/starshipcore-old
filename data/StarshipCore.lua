@@ -24,6 +24,12 @@ if _G.StarshipServerURL == nil then
 	_G.StarshipServerURL = "https://starship-core.my.id"
 end
 
+-- Local Upload Server URL (for unlimited cloud uploads from PC)
+-- When running in dev mode (localhost:3000), also set local upload server
+if _G.StarshipServerURL:find("localhost:3000") then
+	_G.StarshipLocalServer = "http://localhost:4000"
+end
+
 -- Store the base URL for reference
 _G.StarshipBaseURL = _G.StarshipServerURL
 

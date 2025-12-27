@@ -451,8 +451,47 @@ export default async function handler(req, res) {
       }
     }
 
+    // POST /api/r2-chunked?action=save_meta
+    // Save metadata file ONLY (no merge - chunks stay separate)
+    // This is fast and won't timeout even for huge files
+    if (postAction === "save_meta") {
+        const { recordingId, metadata } = req.body;
+        
+        if (!recordingId || !metadata) {
+            return res.status(400).json({ error: "Missing parameters: recordingId, metadata" });
+        }
+
+        try {
+            console.log(`[R2-Chunked] Saving metadata for ${recordingId} (${metadata.totalChunks} chunks)...`);
+            
+            // Just save the metadata file - NO MERGE
+            const metaKey = `recordings/${recordingId}_meta.json`;
+            
+            await r2Client.send(new PutObjectCommand({
+                Bucket: R2_BUCKET_NAME,
+                Key: metaKey,
+                Body: JSON.stringify(metadata),
+                ContentType: "application/json",
+            }));
+            
+            console.log(`[R2-Chunked] Metadata saved: ${metaKey}`);
+            
+            return res.status(200).json({ 
+                success: true, 
+                recordingId, 
+                isChunked: true,
+                totalChunks: metadata.totalChunks,
+                message: "Chunked recording saved successfully!" 
+            });
+
+        } catch (error) {
+            console.error("[R2-Chunked] Save metadata error:", error);
+            return res.status(500).json({ error: "Failed to save metadata", details: error.message });
+        }
+    }
+
     // POST /api/r2-chunked?action=upload_meta
-    // Finalize upload by merging chunks into a single file
+    // Finalize upload by merging chunks into a single file (LEGACY - may timeout on large files)
     if (postAction === "upload_meta") {
         const { recordingId, metadata } = req.body;
         

@@ -65,3 +65,13 @@ credentials/
 .cache/
 .vercel
 .env*.local
+
+
+# ===========================================
+# Scripts
+# ===========================================
+scripts/
+
+
+#recording
+folder_recorder/

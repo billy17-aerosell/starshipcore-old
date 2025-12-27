@@ -35,6 +35,12 @@ local function GetAPIUrl()
 	return baseUrl .. "/api/r2-recordings"
 end
 
+-- Local Upload Server URL (for unlimited uploads from PC)
+-- Set _G.StarshipLocalServer = "http://localhost:4000" to enable
+local function GetLocalServerUrl()
+	return _G.StarshipLocalServer
+end
+
 local MAX_RETRY = 3
 local RETRY_DELAY = 1
 
@@ -308,95 +314,117 @@ local function SanitizeName(name)
 		:sub(1, 100) -- Limit length
 end
 
--- Helper: Upload directly to R2 using Presigned URL (for large files > 4MB)
-local function UploadDirect(payload, callback)
-	local gameInfo = nil
-	pcall(function()
-		gameInfo = GetGameInfo()
-	end)
+-- Helper: Get chunked API URL
+local function GetChunkedAPIUrl()
+	local baseUrl = _G.StarshipServerURL or _G.StarshipBaseURL or "https://starship-core.my.id"
+	return baseUrl .. "/api/r2-chunked"
+end
 
-	-- Step 1: Get presigned upload URL from server
-	local urlRequestBody = HttpService:JSONEncode({
-		name = payload.name,
-		userId = payload.userId,
-		gameId = payload.gameId,
-		gameName = payload.gameName,
-		frameCount = payload.data.Frames and #payload.data.Frames or 0,
-		duration = payload.data.Duration or 0,
-		mode = payload.data.Mode,
-	})
+-- Helper: Upload Chunked (for large files > 4MB)
+-- Uploads frames in chunks, then saves metadata (no server merge to avoid timeout)
+local function UploadChunked(payload, callback)
+	local frames = payload.data.Frames
+	local totalFrames = #frames
+	local FRAMES_PER_CHUNK = 3000
+	local totalChunks = math.ceil(totalFrames / FRAMES_PER_CHUNK)
 
-	local apiUrl = GetAPIUrl() .. "?action=get_upload_url"
+	-- Use sanitized name as recordingId
+	local recordingId = SanitizeName(payload.name)
 
-	SafeRequest(apiUrl, "POST", urlRequestBody, function(urlResult)
-		if not urlResult or not urlResult.success or not urlResult.uploadUrl then
-			if callback then
-				callback({
-					success = false,
-					error = "Failed to get upload URL",
-					message = urlResult and urlResult.error or "Unknown error",
-				})
-			end
+	local completedChunks = 0
+	local failed = false
+
+	local function UploadNextChunk(chunkIndex)
+		if failed then
 			return
 		end
 
-		-- Step 2: Prepare the full recording object (same structure as normal upload)
-		local sanitizedName = SanitizeName(payload.name)
-		local timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+		if chunkIndex >= totalChunks then
+			-- All chunks done, save metadata (NO MERGE - just metadata)
+			local metadata = {
+				recordingId = recordingId,
+				name = payload.name,
+				userId = payload.userId,
+				gameId = payload.gameId,
+				gameName = payload.gameName,
+				totalChunks = totalChunks,
+				totalFrames = totalFrames,
+				framesPerChunk = FRAMES_PER_CHUNK,
+				duration = payload.data.Duration or 0,
+				mode = payload.data.Mode,
+				createdAt = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+				isChunked = true, -- Flag to indicate this is chunked storage
+			}
 
-		local recordingObject = {
-			id = sanitizedName,
-			name = payload.name,
-			userId = payload.userId,
-			gameId = payload.gameId,
-			gameName = payload.gameName,
-			frameCount = payload.data.Frames and #payload.data.Frames or 0,
-			duration = payload.data.Duration or 0,
-			mode = payload.data.Mode,
-			createdAt = timestamp,
-			updatedAt = timestamp,
-			data = payload.data,
+			local metaBody = HttpService:JSONEncode({
+				recordingId = recordingId,
+				metadata = metadata,
+			})
+
+			-- Use save_meta action (no merge, just save metadata)
+			SafeRequest(GetChunkedAPIUrl() .. "?action=save_meta", "POST", metaBody, function(res)
+				if res and res.success then
+					if callback then
+						callback({
+							success = true,
+							recordingId = recordingId,
+							message = "Large recording uploaded! (" .. totalChunks .. " chunks)",
+						})
+					end
+				else
+					if callback then
+						callback({
+							success = false,
+							error = "Failed to save metadata",
+							message = res and res.message or "Unknown error",
+						})
+					end
+				end
+			end)
+			return
+		end
+
+		-- Prepare chunk
+		local startIdx = (chunkIndex * FRAMES_PER_CHUNK) + 1
+		local endIdx = math.min(startIdx + FRAMES_PER_CHUNK - 1, totalFrames)
+		local chunkFrames = {}
+
+		for i = startIdx, endIdx do
+			table.insert(chunkFrames, frames[i])
+		end
+
+		local chunkData = {
+			recordingId = recordingId,
+			chunkIndex = chunkIndex,
+			chunkData = {
+				frames = chunkFrames,
+				chunkIndex = chunkIndex,
+				startFrame = startIdx,
+				endFrame = endIdx,
+			},
 		}
 
-		local fullBody = HttpService:JSONEncode(recordingObject)
+		local chunkBody = HttpService:JSONEncode(chunkData)
 
-		-- Step 3: Upload directly to R2 using presigned URL
-		local uploadSuccess, uploadResult = pcall(function()
-			return game:GetService("HttpService"):RequestAsync({
-				Url = urlResult.uploadUrl,
-				Method = "PUT",
-				Headers = {
-					["Content-Type"] = "application/json",
-				},
-				Body = fullBody,
-			})
+		SafeRequest(GetChunkedAPIUrl() .. "?action=upload_chunk", "POST", chunkBody, function(res)
+			if res and res.success then
+				completedChunks = completedChunks + 1
+				UploadNextChunk(chunkIndex + 1)
+			else
+				failed = true
+				if callback then
+					callback({
+						success = false,
+						error = "Failed to upload chunk " .. chunkIndex,
+						message = res and res.details or "Unknown error",
+					})
+				end
+			end
 		end)
+	end
 
-		if uploadSuccess and type(uploadResult) == "table" and uploadResult.Success then
-			if callback then
-				callback({
-					success = true,
-					recordingId = sanitizedName,
-					message = "Large recording uploaded directly to cloud!",
-				})
-			end
-		else
-			local errorMsg = "Unknown error"
-			if not uploadSuccess then
-				errorMsg = tostring(uploadResult) -- uploadResult contains error message if pcall failed
-			elseif type(uploadResult) == "table" then
-				errorMsg = uploadResult.StatusMessage or ("HTTP " .. (uploadResult.StatusCode or "?"))
-			end
-
-			if callback then
-				callback({
-					success = false,
-					error = "Direct upload failed",
-					message = errorMsg,
-				})
-			end
-		end
-	end)
+	-- Start upload
+	UploadNextChunk(0)
 end
 
 function CloudRecording.Save(recordingData, name, callback)
@@ -426,12 +454,40 @@ function CloudRecording.Save(recordingData, name, callback)
 
 	local body = HttpService:JSONEncode(payload)
 
-	-- Check size: If > 4MB, use direct upload to R2 (via presigned URL)
-	if #body > 4 * 1024 * 1024 then
-		UploadDirect(payload, callback)
+	-- Priority 1: Use Local Upload Server if available (UNLIMITED SIZE!)
+	local localServer = GetLocalServerUrl()
+	if localServer then
+		SafeRequest(localServer .. "/upload", "POST", body, function(result)
+			if result and result.success then
+				LoadedCache[result.recordingId] = recordingData
+				if callback then
+					callback({
+						success = true,
+						recordingId = result.recordingId,
+						size = result.size,
+						message = "Recording uploaded via Local Server!",
+					})
+				end
+			else
+				if callback then
+					callback({
+						success = false,
+						error = result and result.error or "Local server upload failed",
+						message = "Make sure local-upload-server.js is running",
+					})
+				end
+			end
+		end)
 		return
 	end
 
+	-- Priority 2: If > 4MB and no local server, use chunked upload (Vercel limit workaround)
+	if #body > 4 * 1024 * 1024 then
+		UploadChunked(payload, callback)
+		return
+	end
+
+	-- Priority 3: Normal upload for small files (< 4MB)
 	SafeRequest(GetAPIUrl(), "POST", body, function(result)
 		if result and result.success then
 			-- Cache the recording locally too
@@ -795,14 +851,18 @@ function CloudRecording.Update(recordingId, recordingData, name, callback)
 		return
 	end
 
+	-- Get game info
+	local gameInfo = nil
+	pcall(function()
+		gameInfo = GetGameInfo()
+	end)
+
 	local payload = {
 		userId = tostring(LocalPlayer.UserId),
-		recordingId = recordingId,
+		name = name or recordingId, -- Use recordingId as name if not provided
+		gameId = gameInfo and gameInfo.gameId or game.PlaceId,
+		gameName = gameInfo and gameInfo.gameName or "Unknown",
 	}
-
-	if name then
-		payload.name = name
-	end
 
 	if recordingData then
 		payload.data = recordingData
@@ -810,7 +870,55 @@ function CloudRecording.Update(recordingId, recordingData, name, callback)
 
 	local body = HttpService:JSONEncode(payload)
 
-	SafeRequest(GetAPIUrl(), "PATCH", body, function(result)
+	-- Priority 1: Use Local Upload Server if available (UNLIMITED SIZE!)
+	local localServer = GetLocalServerUrl()
+	if localServer and recordingData then
+		SafeRequest(localServer .. "/upload", "POST", body, function(result)
+			if result and result.success then
+				LoadedCache[result.recordingId] = recordingData
+				if callback then
+					callback({
+						success = true,
+						recordingId = result.recordingId,
+						size = result.compressedSize or result.size,
+						updatedAt = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+						message = "Recording updated via Local Server!",
+					})
+				end
+			else
+				if callback then
+					callback({
+						success = false,
+						error = result and result.error or "Local server update failed",
+						message = "Make sure local-upload-server.js is running",
+					})
+				end
+			end
+		end)
+		return
+	end
+
+	-- Priority 2: If > 4MB, use Save (which handles large files)
+	if recordingData and #body > 4 * 1024 * 1024 then
+		-- For large updates, use Save (which handles chunking)
+		CloudRecording.Save(recordingData, name or recordingId, callback)
+		return
+	end
+
+	-- Priority 3: Normal PATCH for small updates
+	local patchPayload = {
+		userId = tostring(LocalPlayer.UserId),
+		recordingId = recordingId,
+	}
+	if name then
+		patchPayload.name = name
+	end
+	if recordingData then
+		patchPayload.data = recordingData
+	end
+	local patchBody = HttpService:JSONEncode(patchPayload)
+
+	SafeRequest(GetAPIUrl(), "PATCH", patchBody, function(result)
 		if result and result.success then
 			-- Update cache if we have new data
 			if recordingData and result.recordingId then
@@ -820,7 +928,6 @@ function CloudRecording.Update(recordingId, recordingData, name, callback)
 			if callback then
 				callback({
 					success = true,
-					recordingId = result.recordingId,
 					recordingId = result.recordingId,
 					size = result.size,
 					updatedAt = result.updatedAt,
