@@ -16,15 +16,16 @@ import { promisify } from "util";
 // Promisified gzip
 const gzip = promisify(zlib.gzip);
 
-// R2 Configuration
-const R2_ACCOUNT_ID =
-  process.env.R2_ACCOUNT_ID || "17edbfea58c7f279f174bda25630eda6";
-const R2_ACCESS_KEY_ID =
-  process.env.R2_ACCESS_KEY_ID || "a25acdab0d556ba383a4b5061c1dbddf";
-const R2_SECRET_ACCESS_KEY =
-  process.env.R2_SECRET_ACCESS_KEY ||
-  "108e57502b737311b934d4d300996cb60e5a1dfd87f908c57e04d018dcea4660";
+// R2 Configuration (SECURITY: All credentials must come from environment variables)
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || "starship-recordings";
+
+// Validate required environment variables
+if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+  console.error("[R2-Chunked] CRITICAL: Missing R2 credentials in environment variables!");
+}
 
 // S3-compatible client for R2
 const r2Client = new S3Client({
