@@ -4269,7 +4269,7 @@ local function LoadCloudRecording(recInfo)
 	if selectedFileDisplay then
 		pcall(function()
 			selectedFileDisplay:SetTitle("☁️ " .. recInfo.name)
-			selectedFileDisplay:SetDesc("Downloading from cloud...")
+			selectedFileDisplay:SetDesc("⏳ Downloading... Please wait")
 		end)
 	end
 
@@ -4293,6 +4293,13 @@ LoadCloudRecordingDirect = function(recInfo)
 				Duration = 3,
 			})
 			return
+		end
+
+		-- Update UI: Processing
+		if selectedFileDisplay then
+			pcall(function()
+				selectedFileDisplay:SetDesc("⚙️ Processing data...")
+			end)
 		end
 
 		local parseSuccess, data = pcall(function()
