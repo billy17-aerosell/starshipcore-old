@@ -88,28 +88,6 @@ local function SaveSettings()
 
 	return success
 end
-
-LoadSettings()
-
--- PATCH WINDUI NOTIFY TO RESPECT SETTINGS
-local OriginalNotify = WindUI.Notify
-WindUI.Notify = function(self, args)
-	-- Filter out annoying startup notifications causing FPS drop
-	if type(args) == "table" then
-		if args.Title == "Theme" and string.find(tostring(args.Content), "Theme changed") then
-			return
-		end
-		if args.Title == "Position" and string.find(tostring(args.Content), "Position won't be saved") then
-			return
-		end
-		if args.Title == "Error" and string.find(tostring(args.Content), "Recording not found in cache") then
-			return
-		end
-	end
-
-	if Settings.ShowNotifications then
-		OriginalNotify(self, args)
-	end
 end
 
 -- CREATE WINDOW
@@ -5511,72 +5489,38 @@ local RememberPositionToggle = SettingsTab:Toggle({
 -- WindUI might not respect Default parameter, so we force-set the values
 task.defer(function()
 	if ConfigStatus == "Loaded" then
-		-- Sync toggles using :Set() method (try multiple method names for compatibility)
-		local function syncToggle(toggle, value, name)
-			if not toggle then
+		getgenv().isSyncingSettings = true -- Suppress notifications
+
+		-- Helper to safely set value
+		local function safeSet(obj, value)
+			if not obj then
 				return
 			end
-			local success = false
-
-			-- Try :Set()
-			if not success then
-				success = pcall(function()
-					if toggle.Set then
-						toggle:Set(value)
-					end
-				end)
-			end
-
-			-- Try :SetValue()
-			if not success then
-				success = pcall(function()
-					if toggle.SetValue then
-						toggle:SetValue(value)
-					end
-				end)
-			end
-
-			-- Try direct property access
-			if not success then
-				success = pcall(function()
-					if toggle.Value ~= nil then
-						toggle.Value = value
-					end
-				end)
-			end
-		end
-
-		local function syncDropdown(dropdown, value, name)
-			if not dropdown then
-				return
-			end
-			local success = false
-
-			success = pcall(function()
-				if dropdown.Set then
-					dropdown:Set(value)
-				end
+			-- Try SetValue first (most common in modern UI libs)
+			local s = pcall(function()
+				obj:SetValue(value)
 			end)
-
-			if not success then
-				success = pcall(function()
-					if dropdown.SetValue then
-						dropdown:SetValue(value)
-					end
+			if not s then
+				s = pcall(function()
+					obj:Set(value)
+				end)
+			end
+			if not s then
+				pcall(function()
+					obj.Value = value
 				end)
 			end
 		end
 
 		-- Sync all settings toggles
-		syncToggle(ShowNotificationsToggle, Settings.ShowNotifications, "ShowNotifications")
-		syncToggle(AutoAntiAFKToggle, Settings.AutoAntiAFK, "AutoAntiAFK")
-		syncToggle(RememberPositionToggle, Settings.RememberPosition, "RememberPosition")
+		safeSet(ShowNotificationsToggle, Settings.ShowNotifications)
+		safeSet(AutoAntiAFKToggle, Settings.AutoAntiAFK)
+		safeSet(RememberPositionToggle, Settings.RememberPosition)
+		safeSet(PlaybackAntiAFKToggle, Settings.AutoAntiAFK)
+		safeSet(ThemeDropdown, Settings.Theme)
 
-		-- Sync Playback Anti-AFK toggle too
-		syncToggle(PlaybackAntiAFKToggle, Settings.AutoAntiAFK, "PlaybackAntiAFK")
-
-		-- Sync theme dropdown
-		syncDropdown(ThemeDropdown, Settings.Theme, "Theme")
+		task.wait(0.5) -- Wait for any delayed callbacks
+		getgenv().isSyncingSettings = false -- Re-enable notifications
 	end
 end)
 
