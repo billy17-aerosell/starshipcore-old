@@ -4901,7 +4901,21 @@ function CreatePlaybackControls()
 	-- Auto-enable Mini Player (delayed to ensure UI is ready)
 	task.delay(0.2, function()
 		if MiniPlayerToggle then
-			MiniPlayerToggle:SetValue(true)
+			local s = pcall(function()
+				MiniPlayerToggle:Set(true)
+			end)
+			if not s then
+				s = pcall(function()
+					MiniPlayerToggle:SetValue(true)
+				end)
+			end
+			if not s then
+				-- Fallback: Manual callback + property set
+				pcall(function()
+					MiniPlayerToggle.Value = true
+				end)
+				ToggleMiniPlayer(true)
+			end
 		end
 	end)
 end
