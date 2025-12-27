@@ -2144,7 +2144,7 @@ ToolsTab:Toggle({
 
 ToolsTab:Divider()
 
--- ════════════════════════������═════════════════════════════════════════
+-- ════════════════════════�������═════════════════════════════════════════
 -- 👥 HIDE PLAYERS
 -- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "👥 Hide Players", TextSize = 20 })
@@ -4243,239 +4243,26 @@ local function LoadCloudRecording(recInfo)
 	end
 
 	-- ═══════════════════════════════════════════════════════════════
-	-- Not cached - Need to download from cloud
+	-- Not cached - Download directly from cloud
+	-- With 4-digit precision optimization on server, files are smaller!
 	-- ═══════════════════════════════════════════════════════════════
-
-	-- Reset chunked state
-	ChunkedState.isChunked = false
-	ChunkedState.loadedChunks = {}
-	ChunkedState.recordingId = recInfo.recordingId
-	ChunkedState.currentLoadingChunk = -1
-	ChunkedState.loadProgress = 0
 
 	WindUI:Notify({
 		Title = "☁️ Downloading...",
 		Content = "Fetching " .. recInfo.name .. " from cloud...",
-		Duration = 2,
+		Duration = 3,
 	})
 
-	-- Step 1: Fetch metadata first (fast - only a few KB)
-	task.spawn(function()
-		local metaUrl = CLOUD_API_BASE .. "/api/r2-chunked?recordingId=" .. recInfo.recordingId .. "&action=info"
-
-		local success, response = pcall(function()
-			return game:HttpGet(metaUrl)
+	-- Update display
+	if selectedFileDisplay then
+		pcall(function()
+			selectedFileDisplay:SetTitle("☁️ " .. recInfo.name)
+			selectedFileDisplay:SetDesc("Downloading from cloud...")
 		end)
+	end
 
-		if not success then
-			-- Fallback to old API if chunked API not available
-			warn("[Cloud] Chunked API failed, falling back to direct load")
-			LoadCloudRecordingDirect(recInfo)
-			return
-		end
-
-		local parseSuccess, metaData = pcall(function()
-			return HttpService:JSONDecode(response)
-		end)
-
-		if not parseSuccess or not metaData or not metaData.success then
-			-- Fallback to direct load
-			warn("[Cloud] Metadata parse failed, falling back to direct load")
-			LoadCloudRecordingDirect(recInfo)
-			return
-		end
-
-		-- Check if file is small enough for direct load (< 10MB)
-		if metaData.needsChunking == false then
-			-- Small file, use direct load
-			WindUI:Notify({
-				Title = "☁️ Loading...",
-				Content = "Small file, loading directly...",
-				Duration = 2,
-			})
-			LoadCloudRecordingDirect(recInfo)
-			return
-		end
-
-		-- Large file - use chunked loading (WAIT FOR ALL CHUNKS)
-		ChunkedState.isChunked = true
-		ChunkedState.totalChunks = metaData.totalChunks or metaData.suggestedChunks or 1
-		ChunkedState.totalFrames = metaData.totalFrames or 0
-		ChunkedState.framesPerChunk = metaData.framesPerChunk or 3000
-
-		local sizeMB = metaData.sizeMB or "?"
-		local totalChunks = ChunkedState.totalChunks
-
-		WindUI:Notify({
-			Title = "☁️ Loading Large File...",
-			Content = string.format("%s MB (%d chunks) - Please wait...", sizeMB, totalChunks),
-			Duration = 5,
-		})
-
-		-- Update display to show loading status
-		if selectedFileDisplay then
-			pcall(function()
-				selectedFileDisplay:SetTitle("☁️ " .. recInfo.name)
-				selectedFileDisplay:SetDesc("Loading 0/" .. totalChunks .. " chunks...")
-			end)
-		end
-
-		-- Load ALL chunks using PARALLEL batch loading (5 chunks at a time for 5x speed)
-		local allFrames = {}
-		local loadedCount = 0
-		local loadFailed = false
-		local chunkDataCache = {} -- Store loaded chunks by index
-
-		local PARALLEL_BATCH_SIZE = 5 -- Load 5 chunks simultaneously
-		local totalBatches = math.ceil(totalChunks / PARALLEL_BATCH_SIZE)
-
-		for batchIdx = 0, totalBatches - 1 do
-			if loadFailed then
-				break
-			end
-
-			local batchStart = batchIdx * PARALLEL_BATCH_SIZE
-			local batchEnd = math.min(batchStart + PARALLEL_BATCH_SIZE - 1, totalChunks - 1)
-			local batchSize = batchEnd - batchStart + 1
-
-			-- Show progress
-			local progress = math.floor((batchStart / totalChunks) * 100)
-			if selectedFileDisplay then
-				pcall(function()
-					selectedFileDisplay:SetDesc(
-						string.format(
-							"Loading %d-%d/%d chunks (%d%%)...",
-							batchStart + 1,
-							batchEnd + 1,
-							totalChunks,
-							progress
-						)
-					)
-				end)
-			end
-
-			-- Notify every few batches
-			if batchIdx % 3 == 0 then
-				WindUI:Notify({
-					Title = "☁️ Downloading...",
-					Content = string.format("Batch %d/%d (%d%%)", batchIdx + 1, totalBatches, progress),
-					Duration = 2,
-				})
-			end
-
-			-- Load this batch of chunks IN PARALLEL
-			local batchLoaded = 0
-			local batchTargetCount = batchSize
-
-			for chunkIdx = batchStart, batchEnd do
-				-- Fire off parallel load (don't wait)
-				LoadChunk(recInfo.recordingId, chunkIdx, function(success, data)
-					if success and data and data.frames then
-						chunkDataCache[chunkIdx] = data
-						loadedCount = loadedCount + 1
-					else
-						-- Retry once on failure
-						task.wait(0.5)
-						LoadChunk(recInfo.recordingId, chunkIdx, function(retrySuccess, retryData)
-							if retrySuccess and retryData and retryData.frames then
-								chunkDataCache[chunkIdx] = retryData
-								loadedCount = loadedCount + 1
-							else
-								warn("[Cloud] Failed to load chunk " .. chunkIdx .. " after retry")
-								loadFailed = true
-							end
-							batchLoaded = batchLoaded + 1
-						end)
-						return
-					end
-					batchLoaded = batchLoaded + 1
-				end)
-			end
-
-			-- Wait for ALL chunks in this batch to complete (with timeout)
-			local waitTime = 0
-			local maxWaitPerBatch = 30 -- 30 seconds max per batch
-			while batchLoaded < batchTargetCount and waitTime < maxWaitPerBatch and not loadFailed do
-				task.wait(0.1)
-				waitTime = waitTime + 0.1
-			end
-
-			if waitTime >= maxWaitPerBatch then
-				warn("[Cloud] Batch " .. batchIdx .. " timed out")
-				loadFailed = true
-				break
-			end
-
-			-- Small delay before next batch
-			task.wait(0.1)
-		end
-
-		-- Assemble all frames IN ORDER from cache
-		if not loadFailed then
-			for chunkIdx = 0, totalChunks - 1 do
-				local chunkData = chunkDataCache[chunkIdx]
-				if chunkData and chunkData.frames then
-					for _, frame in ipairs(chunkData.frames) do
-						table.insert(allFrames, frame)
-					end
-				else
-					warn("[Cloud] Missing chunk " .. chunkIdx .. " in cache")
-					loadFailed = true
-					break
-				end
-			end
-		end
-
-		if loadFailed or loadedCount < totalChunks then
-			WindUI:Notify({
-				Title = "❌ Error",
-				Content = string.format("Failed to load all chunks (%d/%d loaded)", loadedCount, totalChunks),
-				Duration = 5,
-			})
-			return
-		end
-
-		-- ALL CHUNKS LOADED! Now prepare the recording
-		CloudRecordingData = {
-			Frames = allFrames,
-			Mode = metaData.mode or "Flexible",
-			_isChunked = false, -- Not streaming anymore, all data loaded
-			_recordingId = recInfo.recordingId,
-		}
-		CloudRecordingName = metaData.name or recInfo.name
-		CloudRecordingLoaded = true
-
-		-- Update selected file display
-		selectedFile = "CLOUD:" .. recInfo.recordingId
-		if selectedFileDisplay then
-			pcall(function()
-				selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
-				selectedFileDisplay:SetDesc(string.format("Ready! • %d frames loaded", #allFrames))
-			end)
-		end
-
-		WindUI:Notify({
-			Title = "☁️ Ready!",
-			Content = string.format("%s fully loaded (%d frames) - Press Play!", CloudRecordingName, #allFrames),
-			Duration = 4,
-		})
-
-		-- Save to local cache for instant load next time
-		task.spawn(function()
-			local cacheData = {
-				Frames = allFrames,
-				Mode = metaData.mode or "Flexible",
-				name = CloudRecordingName,
-			}
-			if SaveToCache(recInfo.recordingId, cacheData) then
-				WindUI:Notify({
-					Title = "💾 Cached!",
-					Content = "Recording saved for instant load next time",
-					Duration = 2,
-				})
-			end
-		end)
-	end)
+	-- Use direct download (no chunking needed with optimized files)
+	LoadCloudRecordingDirect(recInfo)
 end
 
 -- Fallback: Direct load for small files or when chunked API fails
