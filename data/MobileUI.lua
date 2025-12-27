@@ -2144,7 +2144,7 @@ ToolsTab:Toggle({
 
 ToolsTab:Divider()
 
--- ════════════════════════������������═════════════════════════════════════════
+-- ════════════════════════���������������═════════════════════════════════════════
 -- 👥 HIDE PLAYERS
 -- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "👥 Hide Players", TextSize = 20 })
@@ -4230,12 +4230,7 @@ local function LoadCloudRecording(recInfo)
 			})
 
 			-- Show Playback Controls & Enable Mini Player
-			if PlaybackSection then
-				PlaybackSection:SetVisible(true)
-			end
-			if MiniPlayerToggle then
-				MiniPlayerToggle:SetValue(true)
-			end
+			CreatePlaybackControls()
 
 			return -- Done! No network needed
 		end
@@ -4327,12 +4322,7 @@ LoadCloudRecordingDirect = function(recInfo)
 			})
 
 			-- Show Playback Controls & Enable Mini Player
-			if PlaybackSection then
-				PlaybackSection:SetVisible(true)
-			end
-			if MiniPlayerToggle then
-				MiniPlayerToggle:SetValue(true)
-			end
+			CreatePlaybackControls()
 
 			-- Save to local cache for instant load next time
 			task.spawn(function()
@@ -4725,205 +4715,174 @@ selectedFileDisplay = ListMapTab:Paragraph({
 	Desc = "Select a file above to play",
 })
 
-ListMapTab:Space()
-local PlaybackSection = ListMapTab:Section({
-	Title = "🎮 Playback Controls",
-	Opened = true,
-	Visible = false, -- Hidden by default, shown when recording loaded
-})
+local PlaybackControlsCreated = false
 
-MiniPlayerToggle = PlaybackSection:Toggle({
-	Title = "Show Mini Player",
-	Desc = "Floating play/stop widget",
-	Value = false,
-	Callback = ToggleMiniPlayer,
-})
+function CreatePlaybackControls()
+	if PlaybackControlsCreated then
+		if MiniPlayerToggle then
+			MiniPlayerToggle:SetValue(true)
+		end
+		return
+	end
+	PlaybackControlsCreated = true
 
-PlaybackSection:Toggle({
-	Title = "Path Visualization",
-	Desc = "Show playback path (Neon Dots)",
-	Value = false,
-	Callback = function(state)
-		isPathVisualsEnabled = state
-		if state then
-			if PlaybackState.frameData then
-				DrawPath(PlaybackState.frameData)
+	local PlaybackSection = ListMapTab:Section({
+		Title = "🎮 Playback Controls",
+		Opened = true,
+	})
+
+	MiniPlayerToggle = PlaybackSection:Toggle({
+		Title = "Show Mini Player",
+		Desc = "Floating play/stop widget",
+		Value = true,
+		Callback = ToggleMiniPlayer,
+	})
+
+	PlaybackSection:Toggle({
+		Title = "Path Visualization",
+		Desc = "Show playback path (Neon Dots)",
+		Value = false,
+		Callback = function(state)
+			isPathVisualsEnabled = state
+			if state then
+				if PlaybackState.frameData then
+					DrawPath(PlaybackState.frameData)
+				end
 			else
-				WindUI:Notify({ Title = "Path Visuals", Content = "Select a recording first", Duration = 1.5 })
+				ClearPath()
+			end
+		end,
+	})
+
+	PlaybackSection:Slider({
+		Title = "Playback Speed",
+		Desc = "Speed multiplier (Default: 1)",
+		Value = 1,
+		Min = 0.1,
+		Max = 3,
+		Step = 0.1,
+		Callback = function(val)
+			PlaybackState.speedMultiplier = val
+		end,
+	})
+
+	PlaybackSection:Toggle({
+		Title = "Respawn on End",
+		Desc = "Respawn character when recording ends",
+		Value = false,
+		Callback = function(state)
+			PlaybackState.respawnOnEnd = state
+			WindUI:Notify({
+				Title = "Respawn",
+				Content = state and "Will respawn on end" or "Will NOT respawn",
+				Duration = 1,
+			})
+		end,
+	})
+
+	-- Anti-AFK Feature
+	local antiAfkConnection = nil
+	local isAntiAfkOn = Settings.AutoAntiAFK
+
+	local function setAfkState(state)
+		isAntiAfkOn = state
+		Settings.AutoAntiAFK = state
+		SaveSettings()
+
+		if isAntiAfkOn then
+			if not antiAfkConnection then
+				antiAfkConnection = LocalPlayer.Idled:Connect(function() end)
 			end
 		else
-			ClearPath()
+			if antiAfkConnection then
+				antiAfkConnection:Disconnect()
+				antiAfkConnection = nil
+			end
 		end
-	end,
-})
-
-PlaybackSection:Slider({
-	Title = "Playback Speed",
-	Desc = "Speed multiplier (Default: 1)",
-	Step = 0.1,
-	Value = { Min = 0.1, Max = 4, Default = 1 },
-	Callback = function(v)
-		PlaybackState.speed = v
-	end,
-})
-
-PlaybackSection:Toggle({
-	Title = "Respawn on End",
-	Desc = "Respawn character when recording ends",
-	Value = false,
-	Callback = function(state)
-		PlaybackState.isRespawnOnEnd = state
-		WindUI:Notify({
-			Title = "Respawn",
-			Content = state and "Respawn on end enabled" or "Respawn on end disabled",
-			Duration = 1.5,
-		})
-	end,
-})
-
--- Anti-AFK Feature
-local antiAfkConnection = nil
-local isAntiAfkOn = Settings.AutoAntiAFK
-
-local function setAfkState(state)
-	isAntiAfkOn = state
-	Settings.AutoAntiAFK = state
-	SaveSettings()
+	end
 
 	if isAntiAfkOn then
-		if not antiAfkConnection then
-			-- Simple method: Just acknowledge the Idled event without using VirtualUser
-			-- This prevents the game from kicking you without triggering anti-cheat
-			antiAfkConnection = LocalPlayer.Idled:Connect(function()
-				-- Do nothing - just having a connection prevents the kick
-				-- No VirtualUser, no detectable service calls
-			end)
-		end
-	else
-		if antiAfkConnection then
-			antiAfkConnection:Disconnect()
-			antiAfkConnection = nil
-		end
+		setAfkState(true)
 	end
-end
 
-if isAntiAfkOn then
-	setAfkState(true)
-end
-
-local PlaybackAntiAFKToggle = PlaybackSection:Toggle({
-	Title = "Anti-AFK",
-	Desc = "Prevent being kicked for inactivity",
-	Value = Settings.AutoAntiAFK,
-	Callback = function(state)
-		setAfkState(state)
-		if state then
+	PlaybackSection:Toggle({
+		Title = "Anti-AFK",
+		Desc = "Prevent being kicked for inactivity",
+		Value = Settings.AutoAntiAFK,
+		Callback = function(state)
+			setAfkState(state)
 			WindUI:Notify({
 				Title = "Anti-AFK",
-				Content = "Anti-AFK enabled! You won't be kicked for inactivity.",
-				Duration = 3,
-			})
-		else
-			WindUI:Notify({
-				Title = "Anti-AFK",
-				Content = "Anti-AFK disabled.",
+				Content = state and "Anti-AFK enabled!" or "Anti-AFK disabled.",
 				Duration = 2,
 			})
+		end,
+	})
+
+	-- Bypass Admin Feature
+	local isBypassAdminOn = false
+	local bypassAdminConnection = nil
+
+	local function CheckForAdmin(player)
+		if player == LocalPlayer or not player.Parent then
+			return
 		end
-	end,
-})
 
--- Bypass Admin Feature
-local isBypassAdminOn = false
-local bypassAdminConnection = nil
-
-local function CheckForAdmin(player)
-	if player == LocalPlayer then
-		return
-	end
-	if not player.Parent then
-		return
-	end
-
-	local isAdmin = false
-
-	-- 1. Check Game Owner
-	if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
-		isAdmin = true
-	elseif game.CreatorType == Enum.CreatorType.Group then
-		local s, rank = pcall(function()
-			if not player.Parent then
-				return 0
-			end
-			return player:GetRankInGroup(game.CreatorId)
-		end)
-		if s and rank and rank >= 100 then -- Assume Rank 100+ is staff/admin
+		local isAdmin = false
+		if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
 			isAdmin = true
-		end
-
-		local s2, role = pcall(function()
-			if not player.Parent then
-				return ""
-			end
-			return player:GetRoleInGroup(game.CreatorId)
-		end)
-		if s2 and role then
-			local lowerRole = role:lower()
-			if
-				lowerRole:find("admin")
-				or lowerRole:find("mod")
-				or lowerRole:find("staff")
-				or lowerRole:find("dev")
-				or lowerRole:find("owner")
-			then
+		elseif game.CreatorType == Enum.CreatorType.Group then
+			local s, rank = pcall(function()
+				return player:GetRankInGroup(game.CreatorId)
+			end)
+			if s and rank and rank >= 100 then
 				isAdmin = true
 			end
+
+			local s2, role = pcall(function()
+				return player:GetRoleInGroup(game.CreatorId)
+			end)
+			if s2 and role then
+				local lower = role:lower()
+				if
+					lower:find("admin")
+					or lower:find("mod")
+					or lower:find("staff")
+					or lower:find("dev")
+					or lower:find("owner")
+				then
+					isAdmin = true
+				end
+			end
+		end
+
+		if isAdmin then
+			LocalPlayer:Kick("⚠️ Safety Triggered: Admin (" .. player.Name .. ") detected.")
 		end
 	end
 
-	if isAdmin then
-		LocalPlayer:Kick(
-			"⚠️ Safety Triggered: Admin (" .. player.Name .. ") detected. Exiting to protect your account."
-		)
-	end
+	PlaybackSection:Toggle({
+		Title = "Bypass Admin",
+		Desc = "Auto-kick when admin/mod joins the server",
+		Value = false,
+		Callback = function(state)
+			isBypassAdminOn = state
+			if isBypassAdminOn then
+				for _, p in ipairs(Players:GetPlayers()) do
+					CheckForAdmin(p)
+				end
+				bypassAdminConnection = Players.PlayerAdded:Connect(CheckForAdmin)
+				WindUI:Notify({ Title = "Bypass Admin", Content = "Admin detection enabled!", Duration = 2 })
+			else
+				if bypassAdminConnection then
+					bypassAdminConnection:Disconnect()
+					bypassAdminConnection = nil
+				end
+				WindUI:Notify({ Title = "Bypass Admin", Content = "Admin detection disabled.", Duration = 2 })
+			end
+		end,
+	})
 end
-
-PlaybackSection:Toggle({
-	Title = "Bypass Admin",
-	Desc = "Auto-kick when admin/mod joins the server",
-	Value = false,
-	Callback = function(state)
-		isBypassAdminOn = state
-
-		if isBypassAdminOn then
-			-- Check existing players
-			for _, p in ipairs(Players:GetPlayers()) do
-				CheckForAdmin(p)
-			end
-
-			-- Connect to PlayerAdded event
-			bypassAdminConnection = Players.PlayerAdded:Connect(CheckForAdmin)
-
-			WindUI:Notify({
-				Title = "Bypass Admin",
-				Content = "Admin detection enabled! You will be kicked if admin joins.",
-				Duration = 3,
-			})
-		else
-			-- Disconnect
-			if bypassAdminConnection then
-				bypassAdminConnection:Disconnect()
-				bypassAdminConnection = nil
-			end
-
-			WindUI:Notify({
-				Title = "Bypass Admin",
-				Content = "Admin detection disabled.",
-				Duration = 2,
-			})
-		end
-	end,
-})
 
 -- ══════════════════════════════════════════════════════════════════
 -- 🎉 FUN TAB
