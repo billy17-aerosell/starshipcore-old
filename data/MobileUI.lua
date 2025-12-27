@@ -4747,7 +4747,7 @@ function CreatePlaybackControls()
 	MiniPlayerToggle = PlaybackSection:Toggle({
 		Title = "Show Mini Player",
 		Desc = "Floating play/stop widget",
-		Value = true,
+		Value = false,
 		Callback = ToggleMiniPlayer,
 	})
 
@@ -4893,6 +4893,12 @@ function CreatePlaybackControls()
 			end
 		end,
 	})
+	-- Auto-enable Mini Player (delayed to ensure UI is ready)
+	task.delay(0.2, function()
+		if MiniPlayerToggle then
+			MiniPlayerToggle:SetValue(true)
+		end
+	end)
 end
 
 -- ══════════════════════════════════════════════════════════════════
