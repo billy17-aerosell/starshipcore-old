@@ -88,6 +88,33 @@ local function SaveSettings()
 
 	return success
 end
+
+LoadSettings()
+
+-- PATCH WINDUI NOTIFY TO RESPECT SETTINGS
+local OriginalNotify = WindUI.Notify
+WindUI.Notify = function(self, args)
+	-- Suppress notifications during settings sync
+	if getgenv().isSyncingSettings then
+		return
+	end
+
+	-- Filter out annoying startup notifications causing FPS drop
+	if type(args) == "table" then
+		if args.Title == "Theme" and string.find(tostring(args.Content), "Theme changed") then
+			return
+		end
+		if args.Title == "Position" and string.find(tostring(args.Content), "Position won't be saved") then
+			return
+		end
+		if args.Title == "Error" and string.find(tostring(args.Content), "Recording not found in cache") then
+			return
+		end
+	end
+
+	if Settings.ShowNotifications then
+		OriginalNotify(self, args)
+	end
 end
 
 -- CREATE WINDOW
