@@ -157,10 +157,10 @@ export default async function handler(req, res) {
         return result;
       }
 
-      // Optimize the recording data (6 decimal places = ~0.000001 stud precision)
-      const optimizedData = optimizeObject(data, 6);
+      // Optimize the recording data (4 decimal places = ~0.0001 stud precision, imperceptible)
+      const optimizedData = optimizeObject(data, 4);
       
-      console.log(`[R2] Optimizing recording with 6 decimal precision...`);
+      console.log(`[R2] Optimizing recording with 4 decimal precision...`);
 
       // Prepare recording object with optimized data
       const recordingObject = {

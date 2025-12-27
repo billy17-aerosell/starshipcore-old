@@ -4243,59 +4243,122 @@ local function LoadCloudRecording(recInfo)
 	end
 
 	-- ═══════════════════════════════════════════════════════════════
-	-- Not cached - Need to download from cloud
+	-- Not cached - Download directly from cloud
+	-- With 4-digit precision optimization, files are small enough!
 	-- ═══════════════════════════════════════════════════════════════
-
-	-- Reset chunked state
-	ChunkedState.isChunked = false
-	ChunkedState.loadedChunks = {}
-	ChunkedState.recordingId = recInfo.recordingId
-	ChunkedState.currentLoadingChunk = -1
-	ChunkedState.loadProgress = 0
 
 	WindUI:Notify({
 		Title = "☁️ Downloading...",
 		Content = "Fetching " .. recInfo.name .. " from cloud...",
-		Duration = 2,
+		Duration = 3,
 	})
 
-	-- Step 1: Fetch metadata first (fast - only a few KB)
+	-- Update display
+	if selectedFileDisplay then
+		pcall(function()
+			selectedFileDisplay:SetTitle("☁️ " .. recInfo.name)
+			selectedFileDisplay:SetDesc("Downloading from cloud...")
+		end)
+	end
+
+	-- Direct download
 	task.spawn(function()
-		local metaUrl = CLOUD_API_BASE .. "/api/r2-chunked?recordingId=" .. recInfo.recordingId .. "&action=info"
+		local apiUrl = CLOUD_API_BASE .. "/api/r2-recordings?recordingId=" .. recInfo.recordingId
 
 		local success, response = pcall(function()
-			return game:HttpGet(metaUrl)
+			return game:HttpGet(apiUrl)
 		end)
 
 		if not success then
-			-- Fallback to old API if chunked API not available
-			warn("[Cloud] Chunked API failed, falling back to direct load")
-			LoadCloudRecordingDirect(recInfo)
+			WindUI:Notify({
+				Title = "❌ Error",
+				Content = "Failed to connect to cloud",
+				Duration = 3,
+			})
+			if selectedFileDisplay then
+				pcall(function()
+					selectedFileDisplay:SetDesc("Download failed")
+				end)
+			end
 			return
 		end
 
-		local parseSuccess, metaData = pcall(function()
+		local parseSuccess, data = pcall(function()
 			return HttpService:JSONDecode(response)
 		end)
 
-		if not parseSuccess or not metaData or not metaData.success then
-			-- Fallback to direct load
-			warn("[Cloud] Metadata parse failed, falling back to direct load")
-			LoadCloudRecordingDirect(recInfo)
+		if not parseSuccess then
+			warn("[Cloud] JSON parse error - file may be too large or not optimized")
+			WindUI:Notify({
+				Title = "❌ Parse Error",
+				Content = "File too large. Re-upload from PC with optimization enabled.",
+				Duration = 5,
+			})
 			return
 		end
 
-		-- Check if file is small enough for direct load (< 10MB)
-		if metaData.needsChunking == false then
-			-- Small file, use direct load
+		if not data or data.error then
 			WindUI:Notify({
-				Title = "☁️ Loading...",
-				Content = "Small file, loading directly...",
-				Duration = 2,
+				Title = "❌ Error",
+				Content = data and data.error or "Recording not found",
+				Duration = 3,
 			})
-			LoadCloudRecordingDirect(recInfo)
 			return
 		end
+
+		if data.success and data.recording then
+			-- Store in memory
+			CloudRecordingData = data.recording
+			CloudRecordingName = data.name or recInfo.name
+			CloudRecordingLoaded = true
+
+			-- Calculate frame count
+			local frameCount = 0
+			if data.recording.Frames then
+				frameCount = #data.recording.Frames
+			elseif type(data.recording) == "table" then
+				frameCount = #data.recording
+			end
+
+			-- Update selected file display
+			selectedFile = "CLOUD:" .. recInfo.recordingId
+			if selectedFileDisplay then
+				pcall(function()
+					selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
+					selectedFileDisplay:SetDesc(string.format("✅ Ready! • %d frames", frameCount))
+				end)
+			end
+
+			WindUI:Notify({
+				Title = "✅ Ready to Play!",
+				Content = string.format("%s loaded (%d frames) - Press Play!", CloudRecordingName, frameCount),
+				Duration = 4,
+			})
+
+			-- Save to cache for instant load next time
+			task.spawn(function()
+				local cacheData = {
+					Frames = data.recording.Frames or data.recording,
+					Mode = data.recording.Mode or "Flexible",
+					name = CloudRecordingName,
+				}
+				if SaveToCache(recInfo.recordingId, cacheData) then
+					WindUI:Notify({
+						Title = "💾 Cached!",
+						Content = "Next time will load instantly",
+						Duration = 2,
+					})
+				end
+			end)
+		else
+			WindUI:Notify({
+				Title = "❌ Error",
+				Content = "Recording data not found",
+				Duration = 3,
+			})
+		end
+	end)
+end
 
 		-- Large file - use STREAMING PLAYBACK (play immediately, load rest in background)
 		ChunkedState.isChunked = true
