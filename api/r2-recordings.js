@@ -1,5 +1,6 @@
 // api/r2-recordings.js - Cloud Recording Storage via Cloudflare R2
 // Supports large files up to 5GB (vs GitHub Gist 1MB limit)
+// WITH GZIP COMPRESSION for faster downloads
 
 import {
   S3Client,
@@ -8,6 +9,33 @@ import {
   DeleteObjectCommand,
   ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
+import zlib from "zlib";
+import { promisify } from "util";
+
+// Promisified gzip
+const gzip = promisify(zlib.gzip);
+
+// Helper: Send GZIP compressed JSON response
+async function sendGzipJson(res, data, statusCode = 200) {
+  try {
+    const jsonString = JSON.stringify(data);
+    const compressed = await gzip(Buffer.from(jsonString, "utf-8"));
+    
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Encoding", "gzip");
+    res.setHeader("Vary", "Accept-Encoding");
+    res.setHeader("X-Original-Size", jsonString.length);
+    res.setHeader("X-Compressed-Size", compressed.length);
+    
+    const compressionRatio = ((1 - compressed.length / jsonString.length) * 100).toFixed(1);
+    console.log(`[R2] GZIP: ${(jsonString.length/1024/1024).toFixed(2)}MB -> ${(compressed.length/1024/1024).toFixed(2)}MB (${compressionRatio}% reduction)`);
+    
+    return res.status(statusCode).send(compressed);
+  } catch (error) {
+    console.log("[R2] GZIP failed, sending uncompressed:", error.message);
+    return res.status(statusCode).json(data);
+  }
+}
 
 // R2 Configuration
 const R2_ACCOUNT_ID =
@@ -254,7 +282,8 @@ export default async function handler(req, res) {
       const content = await streamToString(getResult.Body);
       const recordingData = JSON.parse(content);
 
-      return res.status(200).json({
+      // Use GZIP compression for faster download
+      return sendGzipJson(res, {
         success: true,
         recording: recordingData.data,
         name: recordingData.name,
