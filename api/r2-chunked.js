@@ -1,5 +1,6 @@
 // api/r2-chunked.js - Chunked Recording API for Streaming Large Files
 // Supports streaming download of large recordings for mobile optimization
+// WITH GZIP COMPRESSION for faster downloads
 
 import {
   S3Client,
@@ -8,6 +9,11 @@ import {
   ListObjectsV2Command,
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
+import zlib from "zlib";
+import { promisify } from "util";
+
+// Promisified gzip
+const gzip = promisify(zlib.gzip);
 
 // R2 Configuration
 const R2_ACCOUNT_ID =
@@ -40,6 +46,29 @@ async function streamToString(stream) {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks).toString("utf-8");
+}
+
+// Helper: Send GZIP compressed JSON response
+async function sendGzipJson(res, data, statusCode = 200) {
+  try {
+    const jsonString = JSON.stringify(data);
+    const compressed = await gzip(Buffer.from(jsonString, "utf-8"));
+    
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Encoding", "gzip");
+    res.setHeader("Vary", "Accept-Encoding");
+    res.setHeader("X-Original-Size", jsonString.length);
+    res.setHeader("X-Compressed-Size", compressed.length);
+    
+    const compressionRatio = ((1 - compressed.length / jsonString.length) * 100).toFixed(1);
+    console.log(`[R2-Chunked] GZIP: ${jsonString.length} -> ${compressed.length} bytes (${compressionRatio}% reduction)`);
+    
+    return res.status(statusCode).send(compressed);
+  } catch (error) {
+    // Fallback to uncompressed if gzip fails
+    console.log("[R2-Chunked] GZIP failed, sending uncompressed:", error.message);
+    return res.status(statusCode).json(data);
+  }
 }
 
 // Helper: Get chunk info for a recording
@@ -236,7 +265,8 @@ export default async function handler(req, res) {
             const chunkContent = await streamToString(chunkResult.Body);
             const chunkData = JSON.parse(chunkContent);
             
-            return res.status(200).json({
+            // Use GZIP compression for faster transfer
+            return sendGzipJson(res, {
               success: true,
               chunkIndex: chunkIndex,
               totalChunks: info.totalChunks,
@@ -282,7 +312,8 @@ export default async function handler(req, res) {
           const chunkFrames = frames.slice(startIdx, endIdx);
           const totalChunks = Math.ceil(frames.length / FRAMES_PER_CHUNK);
           
-          return res.status(200).json({
+          // Use GZIP compression for faster transfer
+          return sendGzipJson(res, {
             success: true,
             chunkIndex: chunkIndex,
             totalChunks: totalChunks,

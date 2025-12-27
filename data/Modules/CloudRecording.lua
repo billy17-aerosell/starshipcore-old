@@ -310,15 +310,7 @@ function CloudRecording.Save(recordingData, name, callback)
 		return
 	end
 
-	-- ═══════════════════════════════════════════════════════════════
-	-- OPTIMIZE FOR MOBILE - Compress before upload
-	-- ═══════════════════════════════════════════════════════════════
-	local originalFrameCount = #recordingData.Frames
-	local optimizedData = OptimizeForMobile(recordingData)
-	local newFrameCount = #optimizedData.Frames
-
-	print(string.format("[CloudRecording] Compressing for mobile: %d -> %d frames", originalFrameCount, newFrameCount))
-
+	-- Upload original data (no compression - keeps 100% accuracy)
 	local gameInfo = nil
 	pcall(function()
 		gameInfo = GetGameInfo()
@@ -329,7 +321,7 @@ function CloudRecording.Save(recordingData, name, callback)
 		name = name or ("Rec_" .. os.date("%H%M%S")),
 		gameId = gameInfo and gameInfo.gameId or game.PlaceId,
 		gameName = gameInfo and gameInfo.gameName or "Unknown",
-		data = optimizedData, -- Use optimized data instead of original
+		data = recordingData, -- Original data, no compression
 	}
 
 	local body = HttpService:JSONEncode(payload)

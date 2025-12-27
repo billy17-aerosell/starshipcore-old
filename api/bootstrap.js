@@ -110,10 +110,18 @@ export default async function handler(req, res) {
   const platformLabel = platform === "mobile" ? "📱 Mobile" : "💻 PC";
   const platformEmoji = platform === "mobile" ? "📱" : "💻";
 
+  // Check for development mode (check this early to bypass maintenance)
+  const isDev =
+    process.env.NODE_ENV === "development" ||
+    process.env.VERCEL_ENV === "development" ||
+    req.headers.host?.includes("localhost");
+  const forceDevMode = req.query.dev === "true" || req.query.dev === "1";
+
   // ═══════════════════════════════════════════════════════════════
   // MAINTENANCE MODE CHECK - Block mobile if maintenance is enabled
+  // Skip if dev mode is active (localhost or ?dev=true)
   // ═══════════════════════════════════════════════════════════════
-  if (platform === "mobile" && MOBILE_MAINTENANCE) {
+  if (platform === "mobile" && MOBILE_MAINTENANCE && !isDev && !forceDevMode) {
     console.log(
       `[${timestamp}] 🔧 MOBILE MAINTENANCE MODE - Access blocked | IP: ${clientIP}`,
     );
@@ -160,16 +168,8 @@ warn("[StarshipCore] Mobile access is temporarily disabled for updates.")
 
   const config = platformConfig[platform];
 
-  // Check for development mode
-  const isDev =
-    process.env.NODE_ENV === "development" ||
-    process.env.VERCEL_ENV === "development" ||
-    req.headers.host?.includes("localhost");
-
-  // Check for dev query parameter to force dev mode
-  const forceDevMode = req.query.dev === "true" || req.query.dev === "1";
-
   // Development Mode: Skip loader intro and directly serve script
+  // (isDev and forceDevMode were already checked above for maintenance bypass)
   if (isDev || forceDevMode) {
     console.log(
       `[${timestamp}] 🛠️ ${platformLabel} DEV MODE - Skipping loader, serving ${config.scriptFile} directly | IP: ${clientIP}`,
