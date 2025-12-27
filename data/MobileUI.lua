@@ -269,6 +269,129 @@ local CLOUD_API_BASE = "https://starship-core.my.id"
 local PreloadNextChunks
 
 -- ══════════════════════════════════════════════════════════════════
+-- LOCAL CACHE SYSTEM FOR CLOUD RECORDINGS
+-- ══════════════════════════════════════════════════════════════════
+local CACHE_FOLDER = "StarshipCache"
+local CLOUD_CACHE_FOLDER = CACHE_FOLDER .. "/CloudRecordings"
+
+-- Initialize cache folders
+local function InitCacheFolders()
+	pcall(function()
+		if isfolder and makefolder then
+			if not isfolder(CACHE_FOLDER) then
+				makefolder(CACHE_FOLDER)
+			end
+			if not isfolder(CLOUD_CACHE_FOLDER) then
+				makefolder(CLOUD_CACHE_FOLDER)
+			end
+		end
+	end)
+end
+
+-- Check if a recording is cached locally
+local function IsRecordingCached(recordingId)
+	if not isfile then
+		return false
+	end
+	local cachePath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".json"
+	return isfile(cachePath)
+end
+
+-- Load recording from local cache (returns data or nil)
+local function LoadFromCache(recordingId)
+	if not isfile or not readfile then
+		return nil
+	end
+
+	local cachePath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".json"
+	if not isfile(cachePath) then
+		return nil
+	end
+
+	local success, content = pcall(readfile, cachePath)
+	if not success or not content then
+		return nil
+	end
+
+	local parseSuccess, data = pcall(function()
+		return HttpService:JSONDecode(content)
+	end)
+
+	if parseSuccess and data then
+		return data
+	end
+	return nil
+end
+
+-- Save recording to local cache
+local function SaveToCache(recordingId, recordingData)
+	if not writefile then
+		return false
+	end
+
+	InitCacheFolders()
+
+	local cachePath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".json"
+
+	local success = pcall(function()
+		local jsonData = HttpService:JSONEncode(recordingData)
+		writefile(cachePath, jsonData)
+	end)
+
+	if success then
+		print("[Cache] Saved recording to cache: " .. recordingId)
+	end
+
+	return success
+end
+
+-- Get cache size info
+local function GetCacheInfo()
+	if not isfolder or not listfiles then
+		return { count = 0, size = 0 }
+	end
+
+	if not isfolder(CLOUD_CACHE_FOLDER) then
+		return { count = 0, size = 0 }
+	end
+
+	local files = listfiles(CLOUD_CACHE_FOLDER)
+	local count = 0
+	local totalSize = 0
+
+	for _, filePath in ipairs(files) do
+		if string.sub(filePath, -5) == ".json" then
+			count = count + 1
+			-- Estimate size (can't get actual file size in most executors)
+		end
+	end
+
+	return { count = count }
+end
+
+-- Clear all cached recordings
+local function ClearCache()
+	if not isfolder or not listfiles or not delfile then
+		return false
+	end
+
+	if not isfolder(CLOUD_CACHE_FOLDER) then
+		return true
+	end
+
+	local files = listfiles(CLOUD_CACHE_FOLDER)
+	for _, filePath in ipairs(files) do
+		pcall(delfile, filePath)
+	end
+
+	print("[Cache] Cache cleared")
+	return true
+end
+
+-- Initialize cache on startup
+InitCacheFolders()
+
+-- ══════════════════════════════════════════════════════════════════
 -- UTILITY FUNCTIONS
 -- ══════════════════════════════════════════════════════════════════
 local function GetCharacter()
@@ -2021,7 +2144,7 @@ ToolsTab:Toggle({
 
 ToolsTab:Divider()
 
--- ══════════════════════════════════════════════════════════════════
+-- ════════════════════════������═════════════════════════════════════════
 -- 👥 HIDE PLAYERS
 -- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "👥 Hide Players", TextSize = 20 })
@@ -3852,6 +3975,37 @@ ListMapTab:Button({
 	end,
 })
 
+-- Clear Cache Button
+ListMapTab:Button({
+	Title = "🗑️ Clear Cache",
+	Desc = "Delete locally saved recordings",
+	Callback = function()
+		local cacheInfo = GetCacheInfo()
+		if cacheInfo.count == 0 then
+			WindUI:Notify({
+				Title = "ℹ️ Cache Empty",
+				Content = "No cached recordings to clear",
+				Duration = 2,
+			})
+			return
+		end
+
+		if ClearCache() then
+			WindUI:Notify({
+				Title = "🗑️ Cache Cleared",
+				Content = cacheInfo.count .. " recordings removed from cache",
+				Duration = 3,
+			})
+		else
+			WindUI:Notify({
+				Title = "❌ Error",
+				Content = "Failed to clear cache",
+				Duration = 2,
+			})
+		end
+	end,
+})
+
 ListMapTab:Space()
 
 -- Cloud Recordings Dropdown
@@ -4036,7 +4190,7 @@ end
 -- Forward declaration for direct loading function (used as fallback)
 local LoadCloudRecordingDirect
 
--- Helper function to load a cloud recording (with chunked streaming support)
+-- Helper function to load a cloud recording (with local cache support)
 local function LoadCloudRecording(recInfo)
 	if not recInfo or not recInfo.recordingId then
 		WindUI:Notify({
@@ -4050,6 +4204,48 @@ local function LoadCloudRecording(recInfo)
 	selectedCloudRecording = recInfo
 	CloudRecordingLoaded = false -- Reset until loaded
 
+	-- ═══════════════════════════════════════════════════════════════
+	-- STEP 0: CHECK LOCAL CACHE FIRST (INSTANT if cached!)
+	-- ═══════════════════════════════════════════════════════════════
+	if IsRecordingCached(recInfo.recordingId) then
+		WindUI:Notify({
+			Title = "📂 Loading from cache...",
+			Content = recInfo.name,
+			Duration = 1.5,
+		})
+
+		local cachedData = LoadFromCache(recInfo.recordingId)
+		if cachedData then
+			-- Loaded from cache! INSTANT!
+			CloudRecordingData = cachedData
+			CloudRecordingName = cachedData.name or recInfo.name
+			CloudRecordingLoaded = true
+
+			-- Update selected file display
+			selectedFile = "CLOUD:" .. recInfo.recordingId
+			if selectedFileDisplay then
+				pcall(function()
+					selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
+					local frameCount = cachedData.Frames and #cachedData.Frames or 0
+					selectedFileDisplay:SetDesc(string.format("Ready! • %d frames (cached)", frameCount))
+				end)
+			end
+
+			local frameCount = cachedData.Frames and #cachedData.Frames or 0
+			WindUI:Notify({
+				Title = "✅ Ready! (Cached)",
+				Content = string.format("%s loaded instantly - Press Play!", CloudRecordingName),
+				Duration = 2,
+			})
+
+			return -- Done! No network needed
+		end
+	end
+
+	-- ═══════════════════════════════════════════════════════════════
+	-- Not cached - Need to download from cloud
+	-- ═══════════════════════════════════════════════════════════════
+
 	-- Reset chunked state
 	ChunkedState.isChunked = false
 	ChunkedState.loadedChunks = {}
@@ -4058,8 +4254,8 @@ local function LoadCloudRecording(recInfo)
 	ChunkedState.loadProgress = 0
 
 	WindUI:Notify({
-		Title = "☁️ Checking...",
-		Content = "Analyzing " .. recInfo.name .. "...",
+		Title = "☁️ Downloading...",
+		Content = "Fetching " .. recInfo.name .. " from cloud...",
 		Duration = 2,
 	})
 
@@ -4263,6 +4459,22 @@ local function LoadCloudRecording(recInfo)
 			Content = string.format("%s fully loaded (%d frames) - Press Play!", CloudRecordingName, #allFrames),
 			Duration = 4,
 		})
+
+		-- Save to local cache for instant load next time
+		task.spawn(function()
+			local cacheData = {
+				Frames = allFrames,
+				Mode = metaData.mode or "Flexible",
+				name = CloudRecordingName,
+			}
+			if SaveToCache(recInfo.recordingId, cacheData) then
+				WindUI:Notify({
+					Title = "💾 Cached!",
+					Content = "Recording saved for instant load next time",
+					Duration = 2,
+				})
+			end
+		end)
 	end)
 end
 
@@ -4327,6 +4539,16 @@ LoadCloudRecordingDirect = function(recInfo)
 				Content = CloudRecordingName .. " loaded - tap Play to start",
 				Duration = 3,
 			})
+
+			-- Save to local cache for instant load next time
+			task.spawn(function()
+				local cacheData = {
+					Frames = data.recording.Frames or data.recording,
+					Mode = data.recording.Mode or "Flexible",
+					name = CloudRecordingName,
+				}
+				SaveToCache(recInfo.recordingId, cacheData)
+			end)
 		else
 			WindUI:Notify({
 				Title = "Error",
