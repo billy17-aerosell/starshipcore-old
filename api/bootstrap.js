@@ -10,7 +10,7 @@ const OWNER_USER_ID = "9268011358";
 // ═══════════════════════════════════════════════════════════════════
 // MAINTENANCE MODE - Set to true to disable mobile access temporarily
 // ═══════════════════════════════════════════════════════════════════
-const MOBILE_MAINTENANCE = true; // <-- SET TO false TO RE-ENABLE MOBILE
+const MOBILE_MAINTENANCE = false; // <-- SET TO false TO RE-ENABLE MOBILE
 
 import fs from "fs";
 import path from "path";
