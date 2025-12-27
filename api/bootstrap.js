@@ -7,6 +7,11 @@
 // Owner userId - bypasses cross-platform restrictions
 const OWNER_USER_ID = "9268011358";
 
+// ═══════════════════════════════════════════════════════════════════
+// MAINTENANCE MODE - Set to true to disable mobile access temporarily
+// ═══════════════════════════════════════════════════════════════════
+const MOBILE_MAINTENANCE = true; // <-- SET TO false TO RE-ENABLE MOBILE
+
 import fs from "fs";
 import path from "path";
 
@@ -104,6 +109,38 @@ export default async function handler(req, res) {
   const platform = req.query.platform === "mobile" ? "mobile" : "pc";
   const platformLabel = platform === "mobile" ? "📱 Mobile" : "💻 PC";
   const platformEmoji = platform === "mobile" ? "📱" : "💻";
+
+  // ═══════════════════════════════════════════════════════════════
+  // MAINTENANCE MODE CHECK - Block mobile if maintenance is enabled
+  // ═══════════════════════════════════════════════════════════════
+  if (platform === "mobile" && MOBILE_MAINTENANCE) {
+    console.log(
+      `[${timestamp}] 🔧 MOBILE MAINTENANCE MODE - Access blocked | IP: ${clientIP}`,
+    );
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("X-Mode", "maintenance");
+    
+    // Return a Lua script that shows maintenance message
+    const maintenanceScript = `
+-- StarshipCore Mobile - Maintenance Mode
+print("[StarshipCore Mobile] 🔧 Maintenance Mode")
+print("[StarshipCore Mobile] The mobile version is currently under maintenance.")
+print("[StarshipCore Mobile] Please try again later!")
+
+-- Show notification if possible
+pcall(function()
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "🔧 Maintenance",
+        Text = "Mobile version is under maintenance. Please try again later!",
+        Duration = 10
+    })
+end)
+
+warn("[StarshipCore] Mobile access is temporarily disabled for updates.")
+`;
+    return res.status(200).send(maintenanceScript);
+  }
 
   // Platform-specific configuration
   const platformConfig = {
