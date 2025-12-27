@@ -2144,7 +2144,7 @@ ToolsTab:Toggle({
 
 ToolsTab:Divider()
 
--- ════════════════════════�������═════════════════════════════════════════
+-- ════════════════════════��������═════════════════════════════════════════
 -- 👥 HIDE PLAYERS
 -- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "👥 Hide Players", TextSize = 20 })
@@ -4286,10 +4286,22 @@ local function LoadCloudRecording(recInfo)
 			return HttpService:JSONDecode(response)
 		end)
 
-		if not parseSuccess or not data then
+		if not parseSuccess then
+			-- Show actual error for debugging
+			warn("[Cloud] JSON parse error:", tostring(data))
+			warn("[Cloud] Response preview:", string.sub(tostring(response), 1, 200))
+			WindUI:Notify({
+				Title = "❌ Parse Error",
+				Content = "Failed to parse: " .. string.sub(tostring(data), 1, 50),
+				Duration = 5,
+			})
+			return
+		end
+
+		if not data then
 			WindUI:Notify({
 				Title = "❌ Error",
-				Content = "Invalid response from server",
+				Content = "Empty response from server",
 				Duration = 3,
 			})
 			return
