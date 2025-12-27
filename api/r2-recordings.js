@@ -15,26 +15,38 @@ import { promisify } from "util";
 // Promisified gzip
 const gzip = promisify(zlib.gzip);
 
-// Helper: Send GZIP compressed JSON response
-async function sendGzipJson(res, data, statusCode = 200) {
-  try {
-    const jsonString = JSON.stringify(data);
-    const compressed = await gzip(Buffer.from(jsonString, "utf-8"));
-    
-    res.setHeader("Content-Type", "application/json");
-    res.setHeader("Content-Encoding", "gzip");
-    res.setHeader("Vary", "Accept-Encoding");
-    res.setHeader("X-Original-Size", jsonString.length);
-    res.setHeader("X-Compressed-Size", compressed.length);
-    
-    const compressionRatio = ((1 - compressed.length / jsonString.length) * 100).toFixed(1);
-    console.log(`[R2] GZIP: ${(jsonString.length/1024/1024).toFixed(2)}MB -> ${(compressed.length/1024/1024).toFixed(2)}MB (${compressionRatio}% reduction)`);
-    
-    return res.status(statusCode).send(compressed);
-  } catch (error) {
-    console.log("[R2] GZIP failed, sending uncompressed:", error.message);
-    return res.status(statusCode).json(data);
+// Helper: Send JSON response (GZIP only if client supports it)
+async function sendGzipJson(req, res, data, statusCode = 200) {
+  const jsonString = JSON.stringify(data);
+  
+  // Check if client supports GZIP
+  const acceptEncoding = req?.headers?.['accept-encoding'] || '';
+  const supportsGzip = acceptEncoding.includes('gzip');
+  
+  // For Roblox clients (usually no Accept-Encoding), send uncompressed
+  // Only compress if client explicitly accepts GZIP and data is large enough
+  if (supportsGzip && jsonString.length > 10000) {
+    try {
+      const compressed = await gzip(Buffer.from(jsonString, "utf-8"));
+      
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Encoding", "gzip");
+      res.setHeader("Vary", "Accept-Encoding");
+      res.setHeader("X-Original-Size", jsonString.length);
+      res.setHeader("X-Compressed-Size", compressed.length);
+      
+      const compressionRatio = ((1 - compressed.length / jsonString.length) * 100).toFixed(1);
+      console.log(`[R2] GZIP: ${(jsonString.length/1024/1024).toFixed(2)}MB -> ${(compressed.length/1024/1024).toFixed(2)}MB (${compressionRatio}% reduction)`);
+      
+      return res.status(statusCode).send(compressed);
+    } catch (error) {
+      console.log("[R2] GZIP failed, sending uncompressed:", error.message);
+    }
   }
+  
+  // Send uncompressed (for Roblox or small responses)
+  console.log(`[R2] Sending uncompressed: ${(jsonString.length/1024/1024).toFixed(2)}MB`);
+  return res.status(statusCode).json(data);
 }
 
 // R2 Configuration
@@ -282,8 +294,8 @@ export default async function handler(req, res) {
       const content = await streamToString(getResult.Body);
       const recordingData = JSON.parse(content);
 
-      // Use GZIP compression for faster download
-      return sendGzipJson(res, {
+      // Use GZIP compression for faster download (only if client supports it)
+      return sendGzipJson(req, res, {
         success: true,
         recording: recordingData.data,
         name: recordingData.name,
