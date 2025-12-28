@@ -8,6 +8,37 @@ const OWNER_USER_ID = "9268011358";
 import fs from "fs";
 import path from "path";
 
+// Event Code System API (from environment variable for security)
+const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
+
+// Check if user has active event access from Google Sheets
+async function checkEventAccess(userId) {
+  // Skip if EVENT_CODE_API not configured
+  if (!EVENT_CODE_API) {
+    return { hasAccess: false };
+  }
+  
+  try {
+    const apiUrl = `${EVENT_CODE_API}?action=check&userId=${userId}`;
+    const response = await fetch(apiUrl);
+    const data = await response.json();
+
+    if (data.success && data.hasAccess) {
+      return {
+        hasAccess: true,
+        codeUsed: data.codeUsed,
+        expiresAt: data.expiresAt,
+        remainingDays: data.remainingDays,
+        remainingHours: data.remainingHours,
+      };
+    }
+    return { hasAccess: false };
+  } catch (error) {
+    console.error("Event code check error:", error.message);
+    return { hasAccess: false };
+  }
+}
+
 // Platform-specific configuration
 const PLATFORM_CONFIG = {
   pc: {
@@ -498,6 +529,30 @@ export default async function handler(req, res) {
     if (otherWhitelist && otherWhitelist[userId]) {
       const otherUser = otherWhitelist[userId];
 
+      // === CHECK EVENT ACCESS FIRST (before blocking cross-platform) ===
+      // If user has event access for mobile, allow them even if they have PC license
+      if (platform === "mobile") {
+        const eventAccess = await checkEventAccess(userId);
+        
+        if (eventAccess.hasAccess) {
+          console.log(
+            `[${timestamp}] 🎟️ EVENT ACCESS GRANTED (PC user with event code) - ${platformLabel} - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
+          );
+          
+          return res.status(200).json({
+            status: "success",
+            platform: "mobile",
+            role: "EVENT_ACCESS",
+            duration: `${eventAccess.remainingDays} days`,
+            remainingDays: eventAccess.remainingDays,
+            username: otherUser.username || `EventUser_${userId}`,
+            isEventAccess: true,
+            eventCode: eventAccess.codeUsed,
+            expiresAt: eventAccess.expiresAt,
+          });
+        }
+      }
+
       console.log(
         `[${timestamp}] 🔀 CROSS-PLATFORM ATTEMPT - ${config.otherLabel} user trying ${platformLabel} access - UserID: ${userId} (${otherUser.username}) | IP: ${clientIP}`,
       );
@@ -672,6 +727,42 @@ export default async function handler(req, res) {
         }
       } catch (error) {
         console.error("Error reading keys file:", error);
+      }
+    }
+
+    // === CHECK EVENT CODE ACCESS (Google Sheets) - Mobile Only ===
+    if (platform === "mobile") {
+      const eventAccess = await checkEventAccess(userId);
+      
+      if (eventAccess.hasAccess) {
+        console.log(
+          `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - ${platformLabel} - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
+        );
+        
+        await sendDiscordLog({
+          title: `🎟️ Event Code Access Granted - ${platformLabel}`,
+          status: "success",
+          authType: `Event Code: ${eventAccess.codeUsed}`,
+          owner: `UserID: ${userId}`,
+          ip: clientIP,
+          platform: platformLabel,
+          deviceCount: "N/A",
+          timestamp: timestamp,
+          message: `✅ Event access granted\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
+        });
+        
+        // Return success for mobile event access
+        return res.status(200).json({
+          status: "success",
+          platform: "mobile",
+          role: "EVENT_ACCESS",
+          duration: `${eventAccess.remainingDays} days`,
+          remainingDays: eventAccess.remainingDays,
+          username: `EventUser_${userId}`,
+          isEventAccess: true,
+          eventCode: eventAccess.codeUsed,
+          expiresAt: eventAccess.expiresAt,
+        });
       }
     }
 
