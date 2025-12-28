@@ -293,7 +293,7 @@ local CLOUD_API_ENDPOINTS = {
 }
 local CLOUD_EVENT_CODE = _G.StarshipEventCode or "" -- Event code set by loader or entered by user
 
--- Helper function to build cloud API URL with event code
+-- Helper function to build cloud API URL with event code and userId
 -- @param params: table of query parameters
 -- @param useChunked: boolean - if true, use chunked endpoint instead of main
 local function BuildCloudURL(params, useChunked)
@@ -301,15 +301,21 @@ local function BuildCloudURL(params, useChunked)
 	local url = CLOUD_API_BASE .. endpoint
 	local queryParts = {}
 
-	-- Add event code first
+	-- Add event code first (required for R2 access)
 	if CLOUD_EVENT_CODE and CLOUD_EVENT_CODE ~= "" then
 		table.insert(queryParts, "eventCode=" .. CLOUD_EVENT_CODE)
 	end
 
+	-- Always add userId for server-side validation and blacklist check
+	table.insert(queryParts, "userId=" .. tostring(LocalPlayer.UserId))
+
 	-- Add other params
 	if params then
 		for key, value in pairs(params) do
-			table.insert(queryParts, key .. "=" .. tostring(value))
+			-- Skip userId if already in params (avoid duplicate)
+			if key ~= "userId" then
+				table.insert(queryParts, key .. "=" .. tostring(value))
+			end
 		end
 	end
 

@@ -146,10 +146,17 @@ export default async function handler(req, res) {
 
   // ============================================
   // EVENT PROTECTION - Check if event is enabled and code is valid
+  // + User-specific validation and blacklist system
   // ============================================
   const EVENT_ENABLED = process.env.R2_EVENT_ENABLED === "true";
   const EVENT_CODE = process.env.R2_EVENT_CODE || "";
   const requestCode = req.query.eventCode || req.body?.eventCode || req.headers["x-event-code"];
+  const requestUserId = req.query.userId || req.body?.userId || req.headers["x-user-id"];
+  
+  // BLACKLIST - Add userIds here that should be blocked (comma-separated in env)
+  // Example: R2_BLACKLIST="123456789,987654321,111222333"
+  const BLACKLIST_RAW = process.env.R2_BLACKLIST || "";
+  const BLACKLIST = BLACKLIST_RAW.split(",").map(id => id.trim()).filter(id => id);
   
   // Check if event mode is enabled
   if (!EVENT_ENABLED) {
@@ -162,14 +169,32 @@ export default async function handler(req, res) {
   
   // Check event code
   if (!requestCode || requestCode !== EVENT_CODE) {
-    console.log(`[R2-Chunked] ❌ Invalid event code: ${requestCode ? "wrong code" : "no code"}`);
+    console.log(`[R2-Chunked] ❌ Invalid event code: ${requestCode ? "wrong code" : "no code"} | UserId: ${requestUserId || "none"}`);
     return res.status(403).json({ 
       error: "Kode event tidak valid",
       message: "Masukkan kode event yang benar untuk mengakses cloud storage"
     });
   }
   
-  console.log(`[R2-Chunked] ✅ Event code verified`);
+  // Check userId is provided
+  if (!requestUserId) {
+    console.log(`[R2-Chunked] ❌ No userId provided with event code`);
+    return res.status(403).json({ 
+      error: "UserId tidak ditemukan",
+      message: "Autentikasi tidak valid"
+    });
+  }
+  
+  // Check if user is blacklisted
+  if (BLACKLIST.includes(requestUserId.toString())) {
+    console.log(`[R2-Chunked] 🚫 BLACKLISTED USER BLOCKED - UserId: ${requestUserId}`);
+    return res.status(403).json({ 
+      error: "Akses ditolak",
+      message: "Akun Anda telah diblokir dari layanan ini"
+    });
+  }
+  
+  console.log(`[R2-Chunked] ✅ Access granted - UserId: ${requestUserId}`);
 
   const { method } = req;
   const { recordingId, action, chunk } = req.query;
