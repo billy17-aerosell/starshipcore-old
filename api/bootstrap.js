@@ -223,15 +223,18 @@ warn("[StarshipCore] Mobile access is temporarily disabled for updates.")
   }
 
   // Platform-specific configuration
+  // NOTE: Using obfuscated versions for production security
   const platformConfig = {
     pc: {
-      scriptFile: "StarshipCore.lua",
+      scriptFile: "StarshipCore-obfuscated.lua",
+      scriptFileDev: "StarshipCore.lua", // Non-obfuscated for dev
       loaderEndpoint: "get-loader",
       sessionPlatform: "pc",
       bootstrapVersion: "2.0",
     },
     mobile: {
-      scriptFile: "MobileUI.lua",
+      scriptFile: "MobileUI-obfuscated.lua",
+      scriptFileDev: "MobileUI.lua", // Non-obfuscated for dev
       loaderEndpoint: "get-mobile-loader",
       sessionPlatform: "mobile",
       bootstrapVersion: "2.0-mobile",
@@ -245,18 +248,21 @@ warn("[StarshipCore] Mobile access is temporarily disabled for updates.")
   // Skip this block if forceLoaderMode is true (to test obfuscated loader)
   // Skip this block if testBanMode is true (to test browser detection and auto-ban)
   if ((isDev || forceDevMode) && !forceLoaderMode && !testBanMode) {
+    // Use non-obfuscated version for dev mode (easier debugging)
+    const devScriptFile = config.scriptFileDev || config.scriptFile;
+    
     console.log(
-      `[${timestamp}] 🛠️ ${platformLabel} DEV MODE - Skipping loader, serving ${config.scriptFile} directly | IP: ${clientIP}`,
+      `[${timestamp}] 🛠️ ${platformLabel} DEV MODE - Skipping loader, serving ${devScriptFile} directly | IP: ${clientIP}`,
     );
 
     try {
-      const scriptPath = path.join(process.cwd(), "data", config.scriptFile);
+      const scriptPath = path.join(process.cwd(), "data", devScriptFile);
 
       if (!fs.existsSync(scriptPath)) {
         console.error(
-          `[${timestamp}] ❌ DEV MODE - ${config.scriptFile} not found`,
+          `[${timestamp}] ❌ DEV MODE - ${devScriptFile} not found`,
         );
-        return res.status(404).send(`error("${config.scriptFile} not found")`);
+        return res.status(404).send(`error("${devScriptFile} not found")`);
       }
 
       let scriptContent = fs.readFileSync(scriptPath, "utf8");

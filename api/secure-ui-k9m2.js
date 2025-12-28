@@ -273,8 +273,8 @@ export default async function handler(req, res) {
           `[${timestamp}] 📱 MOBILE UI ACCESS - UserID: ${userId} (${mobileUser.username}) | IP: ${clientIP}`,
         );
 
-        // Read MobileUI.lua from data folder
-        const uiPath = path.join(process.cwd(), "data", "MobileUI.lua");
+        // Read MobileUI.lua (obfuscated version for security) from data folder
+        const uiPath = path.join(process.cwd(), "data", "MobileUI-obfuscated.lua");
 
         if (!fs.existsSync(uiPath)) {
           console.error("MobileUI.lua not found:", uiPath);
@@ -339,8 +339,8 @@ export default async function handler(req, res) {
             `[${timestamp}] 📱 MOBILE UI ACCESS (File) - UserID: ${userId} | IP: ${clientIP}`,
           );
 
-          // Read MobileUI.lua from data folder
-          const uiPath = path.join(process.cwd(), "data", "MobileUI.lua");
+          // Read MobileUI.lua (obfuscated version for security) from data folder
+          const uiPath = path.join(process.cwd(), "data", "MobileUI-obfuscated.lua");
 
           if (!fs.existsSync(uiPath)) {
             return res.status(500).send('error("Mobile UI not available")');
@@ -373,8 +373,8 @@ export default async function handler(req, res) {
         `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
       );
       
-      // Read MobileUI.lua from data folder
-      const uiPath = path.join(process.cwd(), "data", "MobileUI.lua");
+      // Read MobileUI.lua (obfuscated version for security) from data folder
+      const uiPath = path.join(process.cwd(), "data", "MobileUI-obfuscated.lua");
 
       if (!fs.existsSync(uiPath)) {
         return res.status(500).send('error("Mobile UI not available")');

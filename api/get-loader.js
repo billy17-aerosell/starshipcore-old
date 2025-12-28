@@ -28,11 +28,12 @@ async function getRedis() {
 }
 
 // Platform-specific configuration
+// NOTE: Using obfuscated versions for production security
 const PLATFORM_CONFIG = {
   pc: {
     whitelistKey: "starship:whitelist",
     otherWhitelistKey: "starship:mobile_whitelist",
-    loaderFile: "loader.lua",
+    loaderFile: "loader.lua", // Original PC loader (not obfuscated yet)
     keysFilePath: path.join(process.cwd(), "data", "keys.json"),
     otherKeysFilePath: path.join(process.cwd(), "data", "mobile-keys.json"),
     label: "💻 PC",
@@ -42,7 +43,7 @@ const PLATFORM_CONFIG = {
   mobile: {
     whitelistKey: "starship:mobile_whitelist",
     otherWhitelistKey: "starship:whitelist",
-    loaderFile: "mobile-loader.lua",
+    loaderFile: "mobile-loader-obfuscated.lua", // Obfuscated for security
     keysFilePath: path.join(process.cwd(), "data", "mobile-keys.json"),
     otherKeysFilePath: path.join(process.cwd(), "data", "keys.json"),
     label: "📱 Mobile",
