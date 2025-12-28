@@ -8,6 +8,11 @@
 // Owner userId - bypasses cross-platform restrictions
 const OWNER_USER_ID = "9268011358";
 
+// Owner IPs - NEVER ban these IPs (add your IP here if you accidentally got banned)
+const OWNER_IPS = [
+  "36.80.245.122", // Owner IP - auto-unban on request
+];
+
 // ═══════════════════════════════════════════════════════════════════
 // MAINTENANCE MODE - Set to true to disable mobile access temporarily
 // ═══════════════════════════════════════════════════════════════════
@@ -39,8 +44,26 @@ async function getRedis() {
   return redis;
 }
 
-// Check if IP is banned
+// Check if IP is banned (skip owner IPs)
 async function isIPBanned(ip) {
+  // Owner IPs are NEVER banned - auto-unban if they were accidentally banned
+  if (OWNER_IPS.includes(ip)) {
+    console.log(`[IP Ban] 👑 Owner IP detected: ${ip} - skipping ban check`);
+    
+    // Auto-unban owner IP if it was accidentally banned
+    try {
+      const redisClient = await getRedis();
+      if (redisClient) {
+        await redisClient.srem(BANNED_IPS_KEY, ip);
+        console.log(`[IP Ban] 🔓 Auto-unbanned owner IP: ${ip}`);
+      }
+    } catch (e) {
+      // Ignore errors during auto-unban
+    }
+    
+    return false;
+  }
+  
   try {
     const redisClient = await getRedis();
     if (!redisClient) return false;
@@ -53,8 +76,14 @@ async function isIPBanned(ip) {
   }
 }
 
-// Ban an IP address
+// Ban an IP address (skip owner IPs)
 async function banIP(ip, reason) {
+  // Never ban owner IPs
+  if (OWNER_IPS.includes(ip)) {
+    console.log(`[IP Ban] 👑 Cannot ban owner IP: ${ip}`);
+    return false;
+  }
+  
   try {
     const redisClient = await getRedis();
     if (!redisClient) {
