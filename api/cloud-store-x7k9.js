@@ -82,13 +82,35 @@ function sanitizeName(name) {
     .substring(0, 100); // Limit length
 }
 
-// Helper: Convert stream to string
+// Helper: Convert stream to string (with better error handling)
 async function streamToString(stream) {
   const chunks = [];
   for await (const chunk of stream) {
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks).toString("utf-8");
+  const buffer = Buffer.concat(chunks);
+  
+  // Check for GZIP magic bytes (1f 8b) - file might be accidentally compressed
+  if (buffer[0] === 0x1f && buffer[1] === 0x8b) {
+    console.log("[R2] Detected GZIP compressed file, decompressing...");
+    const gunzip = promisify(zlib.gunzip);
+    try {
+      const decompressed = await gunzip(buffer);
+      return decompressed.toString("utf-8");
+    } catch (e) {
+      console.error("[R2] GZIP decompression failed:", e.message);
+      throw new Error("File appears to be corrupted (GZIP decompression failed)");
+    }
+  }
+  
+  // Check for null bytes or other binary characters that indicate corruption
+  const str = buffer.toString("utf-8");
+  if (str.includes('\0') || str.charCodeAt(0) === 0) {
+    console.error("[R2] File contains null bytes - likely corrupted or binary");
+    throw new Error("File appears to be corrupted (contains binary data)");
+  }
+  
+  return str;
 }
 
 export default async function handler(req, res) {
@@ -477,6 +499,17 @@ export default async function handler(req, res) {
         return res.status(404).json({
           error: "Recording not found",
           recordingId: recordingId,
+        });
+      }
+
+      // Handle JSON parse errors (corrupted file)
+      if (error.name === "SyntaxError" || error.message.includes("corrupted")) {
+        console.error(`[R2] File corrupted or invalid JSON: ${recordingId}`);
+        return res.status(500).json({
+          error: "Recording file is corrupted",
+          message: "The recording file appears to be damaged or in an invalid format. It may need to be re-uploaded.",
+          recordingId: recordingId,
+          technicalDetails: error.message,
         });
       }
 
