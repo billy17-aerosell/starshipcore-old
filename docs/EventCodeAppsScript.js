@@ -49,8 +49,11 @@ function doGet(e) {
     if (userId && isUserBanned(userId)) {
       return jsonResponse({
         success: false,
+        hasAccess: false,
         message: "Akun Anda telah diblokir",
-        banned: true
+        banned: true,
+        isBanned: true,
+        banReason: getBanReason(userId)
       });
     }
 
@@ -121,6 +124,8 @@ function checkAccess(userId) {
         return jsonResponse({
           success: false,
           hasAccess: false,
+          isBanned: true,
+          banReason: "Access suspended by administrator",
           message: "Access suspended"
         });
       }
@@ -157,11 +162,14 @@ function checkAccess(userId) {
     }
   }
   
-  // User not found
+  // User not found - also check if they're in banned sheet
+  const banned = isUserBanned(userId);
   return jsonResponse({
     success: false,
     hasAccess: false,
-    message: "No active event access"
+    isBanned: banned,
+    banReason: banned ? getBanReason(userId) : null,
+    message: banned ? "Akun Anda telah diblokir" : "No active event access"
   });
 }
 
@@ -283,6 +291,24 @@ function isUserBanned(userId) {
   }
   
   return false;
+}
+
+// Get ban reason from Banned sheet
+function getBanReason(userId) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const bannedSheet = ss.getSheetByName(SHEET_BANNED);
+  
+  if (!bannedSheet) return "Banned by administrator";
+  
+  const data = bannedSheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(userId)) {
+      return String(data[i][1]) || "Banned by administrator"; // Column B = Reason
+    }
+  }
+  
+  return "Banned by administrator";
 }
 
 function checkAccessInternal(userId, redeemedSheet) {
