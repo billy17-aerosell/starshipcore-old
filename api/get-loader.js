@@ -597,7 +597,19 @@ export default async function handler(req, res) {
     }
   }
 
-  // === NOT WHITELISTED - BLOCK ACCESS (Security Fix 2025-12-28) ===
+  // === NOT WHITELISTED ===
+  // For mobile: Still serve loader script so user can see event code popup
+  // The loader will handle showing the event code UI for redemption
+  if (platform === "mobile") {
+    console.log(
+      `[${timestamp}] ℹ️ NOT WHITELISTED - Serving loader for event code popup - UserID: ${userId} | IP: ${clientIP}`,
+    );
+    
+    // Serve loader script - it will show event code popup for new users
+    return serveLoaderScript(res, config, "pending", "PENDING_EVENT");
+  }
+  
+  // For PC: Block access (PC doesn't have event code system)
   console.log(
     `[${timestamp}] ❌ NOT ${platform.toUpperCase()} WHITELISTED - ACCESS BLOCKED - UserID: ${userId} | IP: ${clientIP}`,
   );
