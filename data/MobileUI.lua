@@ -262,6 +262,169 @@ local Config = {
 	FlySpeed = 50,
 }
 
+-- ══════════════════════════════════════════════════════════════════
+-- PERIODIC BAN CHECK SYSTEM (Every 5 minutes)
+-- Checks both IP ban and Google Sheets ban status
+-- ══════════════════════════════════════════════════════════════════
+local BAN_CHECK_INTERVAL = 5 * 60 -- 5 minutes in seconds
+local BAN_CHECK_API = (CLOUD_API_BASE or "https://starship-core.my.id") .. "/api/m-auth-k5r9z7"
+local isBanCheckRunning = false
+
+local function ShowBannedMessage(reason)
+	-- Destroy any existing Starship UIs
+	pcall(function()
+		for _, gui in pairs(game:GetService("CoreGui"):GetChildren()) do
+			if gui.Name:find("Starship") or gui.Name:find("WindUI") then
+				gui:Destroy()
+			end
+		end
+	end)
+	pcall(function()
+		for _, gui in pairs(LocalPlayer:WaitForChild("PlayerGui"):GetChildren()) do
+			if gui.Name:find("Starship") or gui.Name:find("WindUI") then
+				gui:Destroy()
+			end
+		end
+	end)
+
+	-- Create ban notification screen
+	local banGui = Instance.new("ScreenGui")
+	banGui.Name = "StarshipBanned"
+	banGui.ResetOnSpawn = false
+	banGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	banGui.IgnoreGuiInset = true
+
+	pcall(function()
+		banGui.Parent = game:GetService("CoreGui")
+	end)
+	if not banGui.Parent then
+		banGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	local bg = Instance.new("Frame", banGui)
+	bg.Size = UDim2.new(1, 0, 1, 0)
+	bg.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+	bg.BorderSizePixel = 0
+
+	local container = Instance.new("Frame", bg)
+	container.Size = UDim2.new(0, 340, 0, 200)
+	container.Position = UDim2.new(0.5, 0, 0.5, 0)
+	container.AnchorPoint = Vector2.new(0.5, 0.5)
+	container.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+	container.BorderSizePixel = 0
+	Instance.new("UICorner", container).CornerRadius = UDim.new(0, 16)
+
+	local stroke = Instance.new("UIStroke", container)
+	stroke.Color = Color3.fromRGB(239, 68, 68)
+	stroke.Thickness = 2
+
+	local icon = Instance.new("TextLabel", container)
+	icon.Size = UDim2.new(1, 0, 0, 50)
+	icon.Position = UDim2.new(0.5, 0, 0, 25)
+	icon.AnchorPoint = Vector2.new(0.5, 0)
+	icon.BackgroundTransparency = 1
+	icon.Text = "🚫"
+	icon.TextSize = 40
+	icon.Font = Enum.Font.GothamBold
+
+	local title = Instance.new("TextLabel", container)
+	title.Size = UDim2.new(1, -40, 0, 30)
+	title.Position = UDim2.new(0.5, 0, 0, 80)
+	title.AnchorPoint = Vector2.new(0.5, 0)
+	title.BackgroundTransparency = 1
+	title.Text = "ACCESS REVOKED"
+	title.TextColor3 = Color3.fromRGB(239, 68, 68)
+	title.TextSize = 22
+	title.Font = Enum.Font.GothamBold
+
+	local msg = Instance.new("TextLabel", container)
+	msg.Size = UDim2.new(1, -40, 0, 60)
+	msg.Position = UDim2.new(0.5, 0, 0, 115)
+	msg.AnchorPoint = Vector2.new(0.5, 0)
+	msg.BackgroundTransparency = 1
+	msg.Text = reason or "Your access has been revoked."
+	msg.TextColor3 = Color3.fromRGB(161, 161, 170)
+	msg.TextSize = 14
+	msg.Font = Enum.Font.Gotham
+	msg.TextWrapped = true
+
+	-- Auto-close after 10 seconds
+	task.delay(10, function()
+		if banGui and banGui.Parent then
+			banGui:Destroy()
+		end
+	end)
+end
+
+local function CheckBanStatus()
+	if isBanCheckRunning then
+		return
+	end
+	isBanCheckRunning = true
+
+	local userId = tostring(LocalPlayer.UserId)
+	local checkUrl = BAN_CHECK_API .. "?userId=" .. userId .. "&action=check"
+
+	local success, response = pcall(function()
+		return game:HttpGet(checkUrl)
+	end)
+
+	isBanCheckRunning = false
+
+	if not success then
+		warn("[StarshipCore] Ban check failed: Connection error")
+		return
+	end
+
+	-- Try to parse JSON response
+	local data = nil
+	pcall(function()
+		data = game:GetService("HttpService"):JSONDecode(response)
+	end)
+
+	-- Check if banned
+	if data then
+		if data.isBanned then
+			warn("[StarshipCore] User is BANNED - Terminating script")
+			ShowBannedMessage("You have been banned.\nReason: " .. (data.banReason or "Violation of terms"))
+			return true -- Return banned status
+		end
+
+		if data.status == "denied" then
+			warn("[StarshipCore] Access DENIED - " .. (data.message or "Unknown reason"))
+			ShowBannedMessage(data.message or "Your access has been revoked.")
+			return true
+		end
+	end
+
+	-- Check if response contains error indicating ban
+	if response:find("banned") or response:find("BANNED") then
+		ShowBannedMessage("Your account has been banned.")
+		return true
+	end
+
+	return false -- Not banned
+end
+
+-- Start periodic ban check loop
+task.spawn(function()
+	-- Wait a bit before first check (let UI load first)
+	task.wait(30)
+
+	while true do
+		local isBanned = CheckBanStatus()
+		if isBanned then
+			-- Stop the loop if banned
+			break
+		end
+
+		-- Wait 5 minutes before next check
+		task.wait(BAN_CHECK_INTERVAL)
+	end
+end)
+
+print("[StarshipCore] 🔒 Periodic ban check enabled (every 5 minutes)")
+
 -- Cloud recording storage (in memory for mobile) - declared early for PlayRecording access
 local CloudRecordingData = nil
 local CloudRecordingName = nil
@@ -6069,7 +6232,7 @@ SettingsTab:Button({
 
 -- ══════════════════════════════════════════════════════════════════
 -- SELECT DEFAULT TAB & WELCOME
--- ══════════════════════════════════════════════════════════════════
+-- ═════════════════════��════════════════════════════════════════════
 DashboardTab:Select()
 
 -- Track window state untuk cleanup
