@@ -388,6 +388,57 @@ export default async function handler(req, res) {
   const clientIP = getClientIP(req);
   const userAgent = req.headers["user-agent"] || "";
 
+  // === EVENT CODE ACTIONS (for mobile loader) ===
+  const action = req.query.action;
+  const code = req.query.code;
+  const username = req.query.username;
+
+  if (action === "status" || action === "check") {
+    // Check if user has active event access
+    if (!EVENT_CODE_API) {
+      return res.status(200).json({ success: false, hasAccess: false, message: "Event system not configured" });
+    }
+    
+    try {
+      const apiUrl = `${EVENT_CODE_API}?action=check&userId=${userId}`;
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      return res.status(200).json(data);
+    } catch (error) {
+      console.error("[Event Status] Error:", error.message);
+      return res.status(200).json({ success: false, hasAccess: false, message: "Connection error" });
+    }
+  }
+
+  if (action === "redeem") {
+    // Redeem event code
+    if (!EVENT_CODE_API) {
+      return res.status(200).json({ success: false, message: "Event system not configured" });
+    }
+    
+    if (!code) {
+      return res.status(200).json({ success: false, message: "Kode tidak boleh kosong" });
+    }
+    
+    try {
+      const apiUrl = `${EVENT_CODE_API}?action=redeem&code=${encodeURIComponent(code)}&userId=${userId}&username=${encodeURIComponent(username || "Unknown")}`;
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      
+      // Log to Discord
+      if (data.success) {
+        console.log(`[${timestamp}] 🎟️ EVENT CODE REDEEMED - User: ${username} (${userId}) | Code: ${code} | IP: ${clientIP}`);
+      } else {
+        console.log(`[${timestamp}] ❌ EVENT CODE FAILED - User: ${username} (${userId}) | Code: ${code} | Reason: ${data.message}`);
+      }
+      
+      return res.status(200).json(data);
+    } catch (error) {
+      console.error("[Event Redeem] Error:", error.message);
+      return res.status(200).json({ success: false, message: "Gagal terhubung ke server" });
+    }
+  }
+
   console.log(
     `[${timestamp}] ${platformLabel} LOAD Request | UserID: ${userId} | IP: ${clientIP}`,
   );

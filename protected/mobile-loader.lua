@@ -16,7 +16,7 @@ local SECURE_API_URL = "https://starship-core.my.id"
 local MOBILE_UI_API = SECURE_API_URL .. "/api/secure-ui-k9m2?userId="
 local MOBILE_AUTH_API = SECURE_API_URL .. "/api/auth-check-x7p4"
 
--- Event Code System API - Server-side proxy to Google Sheets
+-- Event Code System API - Redirected to load.js via vercel.json rewrite
 -- This allows new users to redeem event codes from the mobile loader
 local EVENT_CODE_API = SECURE_API_URL .. "/api/event-code"
 

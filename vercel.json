@@ -17,6 +17,10 @@
       "destination": "/api/get-loader?platform=mobile"
     },
     {
+      "source": "/api/event-code",
+      "destination": "/api/load?platform=mobile"
+    },
+    {
       "source": "/protected/(.*)",
       "destination": "/404"
     }
