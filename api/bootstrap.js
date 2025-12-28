@@ -323,12 +323,15 @@ warn("[StarshipCore] Mobile access is temporarily disabled for updates.")
 _G.StarshipServerMode = true
 _G.StarshipServerURL = "http://localhost:3000"
 
+-- [DEV MODE] Force enable cloud features
+_G.StarshipCloudEnabled = true
+
 -- R2 Event Code for cloud access (auto-injected in dev mode)
 _G.StarshipEventCode = "${process.env.R2_EVENT_CODE || ""}"
 
--- Set mock session data for development
+-- Set mock session data for development (Role = DEVELOPER for cloud access!)
 getgenv().StarshipSession = {
-    Role = "DEV_MODE",
+    Role = "DEVELOPER",
     Duration = "DEVELOPMENT",
     Expiry = nil,
     RemainingDays = nil,
@@ -340,6 +343,7 @@ getgenv().StarshipSession = {
 }
 
 print("[StarshipCore] 🛠️ Development Mode - Auth Skipped")
+print("[StarshipCore] ☁️ Cloud features ENABLED (dev mode)")
 print("[StarshipCore] ${platformEmoji} Loading ${config.scriptFile} directly...")
 
 -- Load script directly

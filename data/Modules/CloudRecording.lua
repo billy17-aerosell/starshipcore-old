@@ -29,10 +29,27 @@ local LocalPlayer = Players.LocalPlayer
 local CloudRecording = {}
 
 -- Configuration - use dynamic URL from global (supports localhost dev mode)
--- Uses Cloudflare R2 storage for large files support (up to 5GB vs Cloudflare R2 1MB)
-local function GetAPIUrl()
+-- Uses Cloudflare R2 storage for large files support (up to 5GB)
+local function GetEventCode()
+	return _G.StarshipEventCode or ""
+end
+
+-- Get base API URL (without auth params)
+local function GetAPIBaseUrl()
 	local baseUrl = _G.StarshipServerURL or _G.StarshipBaseURL or "https://starship-core.my.id"
-	return baseUrl .. "/api/r2-recordings"
+	return baseUrl .. "/api/cloud-store-x7k9"
+end
+
+-- Get auth params string (eventCode + userId)
+local function GetAuthParams()
+	local eventCode = GetEventCode()
+	local userId = tostring(LocalPlayer.UserId)
+	return "eventCode=" .. eventCode .. "&userId=" .. userId
+end
+
+-- Full API URL with auth params (for simple requests)
+local function GetAPIUrl()
+	return GetAPIBaseUrl() .. "?" .. GetAuthParams()
 end
 
 -- Local Upload Server URL (for unlimited uploads from PC)
@@ -326,7 +343,7 @@ end
 -- Helper: Get chunked API URL
 local function GetChunkedAPIUrl()
 	local baseUrl = _G.StarshipServerURL or _G.StarshipBaseURL or "https://starship-core.my.id"
-	return baseUrl .. "/api/r2-chunked"
+	return baseUrl .. "/api/cloud-chunk-m3p7"
 end
 
 -- Helper: Upload Chunked (for large files > 4MB)
@@ -562,7 +579,7 @@ function CloudRecording.Load(recordingId, callback)
 		return
 	end
 
-	local url = GetAPIUrl() .. "?recordingId=" .. recordingId
+	local url = GetAPIUrl() .. "&recordingId=" .. recordingId
 
 	SafeRequest(url, "GET", nil, function(result)
 		if result and result.success then
@@ -605,7 +622,7 @@ end
         }
 ]]
 function CloudRecording.List(callback)
-	local url = GetAPIUrl() .. "?list=true&userId=" .. tostring(LocalPlayer.UserId)
+	local url = GetAPIUrl() .. "&list=true"
 
 	SafeRequest(url, "GET", nil, function(result)
 		if result and result.success then
@@ -645,7 +662,7 @@ function CloudRecording.Delete(recordingId, callback)
 		return
 	end
 
-	local url = GetAPIUrl() .. "?recordingId=" .. recordingId .. "&userId=" .. tostring(LocalPlayer.UserId)
+	local url = GetAPIUrl() .. "&recordingId=" .. recordingId
 
 	SafeRequest(url, "DELETE", nil, function(result)
 		if result and result.success then
@@ -727,7 +744,7 @@ end
         }
 ]]
 function CloudRecording.ListAll(callback)
-	local url = GetAPIUrl() .. "?list=all"
+	local url = GetAPIUrl() .. "&list=all"
 
 	SafeRequest(url, "GET", nil, function(result)
 		if result and result.success then

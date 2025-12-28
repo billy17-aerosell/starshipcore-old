@@ -41,9 +41,7 @@ Sistem VIP Management memungkinkan Anda untuk:
 
 ### 1. Buka Dashboard
 
-```
-https://www.starship-core.my.id/vip-dashboard.html
-```
+> ⚠️ **Security Note:** Dashboard URL disembunyikan untuk keamanan. Hubungi owner untuk akses.
 
 ### 2. Login
 
@@ -70,9 +68,7 @@ Masukkan **ADMIN_SECRET** Anda (sama dengan yang di environment variables).
 
 ### URL:
 
-```
-https://www.starship-core.my.id/vip-dashboard.html
-```
+> ⚠️ URL dashboard tidak dipublikasikan untuk keamanan. Simpan URL dengan aman setelah diberikan.
 
 ### 🎨 Features:
 
@@ -406,7 +402,7 @@ REDIS_URL=redis://default:PASSWORD@redis-xxxxx.cloud.redislabs.com:14973
 
 **Frontend**:
 
-- `public/vip-dashboard.html` - Web dashboard (standalone HTML)
+- `public/panel-[hash].html` - Web dashboard (hidden/secured)
 
 **Config**:
 

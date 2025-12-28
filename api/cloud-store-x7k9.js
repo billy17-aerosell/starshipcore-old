@@ -3,7 +3,6 @@
 // Protected by EVENT_ENABLED toggle and EVENT_CODE verification
 // Supports large files up to 5GB (vs GitHub Gist 1MB limit)
 // WITH GZIP COMPRESSION for faster downloads
-// WITH SERVER-SIDE ENCRYPTION for secure caching on mobile
 
 import {
   S3Client,
@@ -15,127 +14,10 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import zlib from "zlib";
-import crypto from "crypto";
 import { promisify } from "util";
 
 // Promisified gzip
 const gzip = promisify(zlib.gzip);
-const gunzip = promisify(zlib.gunzip);
-
-// ═══════════════════════════════════════════════════════════════════
-// SERVER-SIDE ENCRYPTION SYSTEM
-// Uses RC4 stream cipher for better security
-// NO REVEALING HEADER - algorithm is hidden
-// ═══════════════════════════════════════════════════════════════════
-const ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET || "STARSHIP_CORE_2024_SECURE";
-
-// Hidden magic bytes (looks random but identifies our format)
-// First 4 bytes after Base64 decode will be: 0x53, 0x43, 0x30, 0x31 ("SC01")
-const MAGIC_BYTES = [0x53, 0x43, 0x30, 0x31]; // "SC01" in hex
-
-// Generate user-specific encryption key from userId and server secret
-function generateUserKey(userId) {
-  const baseKey = `${ENCRYPTION_SECRET}_USER_${userId}_KEY`;
-  
-  // Create extended key (256 bytes)
-  let extendedKey = "";
-  for (let i = 1; i <= 256; i++) {
-    const charIdx = ((i - 1) % baseKey.length);
-    const baseChar = baseKey.charCodeAt(charIdx);
-    const userIdNum = parseInt(userId) || 0;
-    const modifier = (i * 7 + (userIdNum % 100)) % 256;
-    extendedKey += String.fromCharCode((baseChar + modifier) % 256);
-  }
-  
-  return extendedKey;
-}
-
-// RC4 Key Scheduling Algorithm (KSA)
-function rc4Init(key) {
-  const S = new Array(256);
-  for (let i = 0; i < 256; i++) {
-    S[i] = i;
-  }
-  
-  let j = 0;
-  for (let i = 0; i < 256; i++) {
-    j = (j + S[i] + key.charCodeAt(i % key.length)) % 256;
-    [S[i], S[j]] = [S[j], S[i]]; // Swap
-  }
-  
-  return S;
-}
-
-// RC4 Pseudo-Random Generation Algorithm (PRGA) + Encryption
-function rc4Crypt(data, key) {
-  const S = rc4Init(key);
-  let result = "";
-  let i = 0, j = 0;
-  
-  for (let k = 0; k < data.length; k++) {
-    i = (i + 1) % 256;
-    j = (j + S[i]) % 256;
-    [S[i], S[j]] = [S[j], S[i]]; // Swap
-    
-    const K = S[(S[i] + S[j]) % 256];
-    const byte = data.charCodeAt(k) ^ K;
-    result += String.fromCharCode(byte);
-  }
-  
-  return result;
-}
-
-// Encrypt data for a specific user (RC4 + hidden format)
-function encryptForUser(data, userId) {
-  const key = generateUserKey(userId);
-  
-  // Add magic bytes at the start (hidden identifier)
-  const magicPrefix = String.fromCharCode(...MAGIC_BYTES);
-  const dataWithMagic = magicPrefix + data;
-  
-  // RC4 encrypt
-  const encrypted = rc4Crypt(dataWithMagic, key);
-  
-  // Base64 encode (no revealing header!)
-  const result = Buffer.from(encrypted, 'binary').toString('base64');
-  
-  return result;
-}
-
-// Decrypt data (for verification or server-side operations)
-function decryptForUser(encryptedData, userId) {
-  try {
-    const key = generateUserKey(userId);
-    
-    // Base64 decode
-    const encrypted = Buffer.from(encryptedData, 'base64').toString('binary');
-    
-    // RC4 decrypt (same as encrypt - symmetric)
-    const decrypted = rc4Crypt(encrypted, key);
-    
-    // Verify magic bytes
-    const magic = [
-      decrypted.charCodeAt(0),
-      decrypted.charCodeAt(1),
-      decrypted.charCodeAt(2),
-      decrypted.charCodeAt(3)
-    ];
-    
-    if (magic[0] !== MAGIC_BYTES[0] || magic[1] !== MAGIC_BYTES[1] ||
-        magic[2] !== MAGIC_BYTES[2] || magic[3] !== MAGIC_BYTES[3]) {
-      throw new Error('Invalid magic bytes - wrong key or corrupted data');
-    }
-    
-    // Remove magic bytes and return data
-    return decrypted.substring(4);
-  } catch (error) {
-    console.error('[Encryption] Decryption failed:', error.message);
-    return null;
-  }
-}
-
-
-
 
 // Helper: Send JSON response (GZIP only if client supports it)
 async function sendGzipJson(req, res, data, statusCode = 200) {
@@ -576,7 +458,6 @@ export default async function handler(req, res) {
       const size = head.ContentLength;
 
       // If large (> 3.5MB to be safe), return Presigned URL
-      // For large files, encryption happens on mobile side after download
       if (size > 3.5 * 1024 * 1024) {
           console.log(`[R2] File is large (${(size/1024/1024).toFixed(2)}MB). Generating Presigned URL...`);
           const url = await getSignedUrl(r2Client, new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }), { expiresIn: 3600 });
@@ -588,8 +469,6 @@ export default async function handler(req, res) {
               size: size,
               name: head.Metadata?.name || recordingId,
               frameCount: parseInt(head.Metadata?.framecount || "0"),
-              // For large files, mobile needs to handle encryption after download
-              requiresClientEncryption: true,
           });
       }
 
@@ -603,40 +482,6 @@ export default async function handler(req, res) {
       const content = await streamToString(getResult.Body);
       const recordingData = JSON.parse(content);
 
-      // Check if client wants encrypted response for caching
-      const wantEncrypted = req.query.encrypted === "true";
-      const requestUserId = req.query.userId || req.body?.userId;
-      
-      if (wantEncrypted && requestUserId) {
-        // Encrypt the recording data for this specific user
-        const recordingJson = JSON.stringify({
-          recording: recordingData.data,
-          name: recordingData.name,
-          recordingId: recordingData.id,
-          frameCount: recordingData.frameCount,
-          duration: recordingData.duration,
-          mode: recordingData.mode,
-        });
-        
-        const encryptedData = encryptForUser(recordingJson, requestUserId);
-        const encryptedSize = Buffer.byteLength(encryptedData, 'utf8');
-        const originalSize = Buffer.byteLength(recordingJson, 'utf8');
-        
-        console.log(`[R2] 🔐 Encrypted for user ${requestUserId}: ${(originalSize/1024).toFixed(1)}KB → ${(encryptedSize/1024).toFixed(1)}KB`);
-        
-        return res.status(200).json({
-          success: true,
-          encrypted: true,
-          encryptedData: encryptedData,
-          recordingId: recordingData.id,
-          name: recordingData.name,
-          // These are sent unencrypted for display purposes (not sensitive)
-          frameCount: recordingData.frameCount,
-          duration: recordingData.duration,
-        });
-      }
-
-      // Normal unencrypted response (for backwards compatibility)
       // Use GZIP compression for faster download (only if client supports it)
       return sendGzipJson(req, res, {
         success: true,
