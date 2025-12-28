@@ -185,6 +185,9 @@ export default async function handler(req, res) {
   
   // Force loader mode - use ?loader=true to test obfuscated loader even on localhost
   const forceLoaderMode = req.query.loader === "true" || req.query.loader === "1";
+  
+  // Force browser check - use ?testBan=true to test auto-ban even on localhost
+  const testBanMode = req.query.testBan === "true" || req.query.testBan === "1";
 
   // ═══════════════════════════════════════════════════════════════
   // MAINTENANCE MODE CHECK - Block mobile if maintenance is enabled
@@ -240,7 +243,8 @@ warn("[StarshipCore] Mobile access is temporarily disabled for updates.")
   // Development Mode: Skip loader intro and directly serve script
   // (isDev and forceDevMode were already checked above for maintenance bypass)
   // Skip this block if forceLoaderMode is true (to test obfuscated loader)
-  if ((isDev || forceDevMode) && !forceLoaderMode) {
+  // Skip this block if testBanMode is true (to test browser detection and auto-ban)
+  if ((isDev || forceDevMode) && !forceLoaderMode && !testBanMode) {
     console.log(
       `[${timestamp}] 🛠️ ${platformLabel} DEV MODE - Skipping loader, serving ${config.scriptFile} directly | IP: ${clientIP}`,
     );
@@ -270,6 +274,9 @@ warn("[StarshipCore] Mobile access is temporarily disabled for updates.")
 -- Server-based module loading configuration (auto-injected)
 _G.StarshipServerMode = true
 _G.StarshipServerURL = "http://localhost:3000"
+
+-- R2 Event Code for cloud access (auto-injected in dev mode)
+_G.StarshipEventCode = "${process.env.R2_EVENT_CODE || ""}"
 
 -- Set mock session data for development
 getgenv().StarshipSession = {

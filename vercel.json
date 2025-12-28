@@ -9,7 +9,7 @@
       "destination": "/api/bootstrap?platform=mobile"
     },
     {
-      "source": "/api/mobile-load",
+      "source": "/api/auth-check-x7p4",
       "destination": "/api/load?platform=mobile"
     },
     {

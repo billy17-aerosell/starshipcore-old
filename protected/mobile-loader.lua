@@ -13,8 +13,8 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Configuration
 local SECURE_API_URL = "https://starship-core.my.id"
-local MOBILE_UI_API = SECURE_API_URL .. "/api/get-mobile-ui?userId="
-local MOBILE_AUTH_API = SECURE_API_URL .. "/api/mobile-load"
+local MOBILE_UI_API = SECURE_API_URL .. "/api/secure-ui-k9m2?userId="
+local MOBILE_AUTH_API = SECURE_API_URL .. "/api/auth-check-x7p4"
 
 -- Event Code System API - NOW HANDLED SERVER-SIDE
 -- The event code check and R2 access code injection now happens in get-mobile-ui.js
