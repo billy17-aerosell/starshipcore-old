@@ -3,6 +3,7 @@
 // Returns a small script that auto-detects userId and calls secure get-loader API
 // With browser detection, obfuscated response, and Discord logging
 // Development mode: Skip loader intro and directly serve script
+// + AUTO IP BAN for browser access attempts
 
 // Owner userId - bypasses cross-platform restrictions
 const OWNER_USER_ID = "9268011358";
@@ -14,6 +15,61 @@ const MOBILE_MAINTENANCE = false; // <-- SECURITY: Re-enabled after security fix
 
 import fs from "fs";
 import path from "path";
+
+// ═══════════════════════════════════════════════════════════════════
+// REDIS FOR IP BAN SYSTEM
+// ═══════════════════════════════════════════════════════════════════
+let redis = null;
+let redisInitAttempted = false;
+const BANNED_IPS_KEY = "starship:banned_ips";
+const BAN_DURATION_SECONDS = 60 * 60 * 24 * 7; // 7 days
+
+async function getRedis() {
+  if (!redisInitAttempted) {
+    try {
+      const redisModule = await import("../lib/redis.js");
+      redis = redisModule.default;
+      console.log("✅ Redis loaded for IP ban system");
+    } catch (error) {
+      console.error("⚠️ Redis not available for IP bans:", error.message);
+      redis = null;
+    }
+    redisInitAttempted = true;
+  }
+  return redis;
+}
+
+// Check if IP is banned
+async function isIPBanned(ip) {
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return false;
+    
+    const isBanned = await redisClient.sismember(BANNED_IPS_KEY, ip);
+    return isBanned === 1;
+  } catch (error) {
+    console.error("[IP Ban] Check error:", error.message);
+    return false;
+  }
+}
+
+// Ban an IP address
+async function banIP(ip, reason) {
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) {
+      console.log(`[IP Ban] Redis not available, cannot ban ${ip}`);
+      return false;
+    }
+    
+    await redisClient.sadd(BANNED_IPS_KEY, ip);
+    console.log(`[IP Ban] 🚫 BANNED IP: ${ip} - Reason: ${reason}`);
+    return true;
+  } catch (error) {
+    console.error("[IP Ban] Ban error:", error.message);
+    return false;
+  }
+}
 
 // Helper function to send Discord webhook notification
 async function sendDiscordLog(logData) {
@@ -104,6 +160,16 @@ export default async function handler(req, res) {
     "unknown";
   const userAgent = req.headers["user-agent"] || "";
   const referer = req.headers["referer"] || "Direct";
+
+  // ═══════════════════════════════════════════════════════════════
+  // CHECK IF IP IS BANNED
+  // ═══════════════════════════════════════════════════════════════
+  const banned = await isIPBanned(clientIP);
+  if (banned) {
+    console.log(`[${timestamp}] 🚫 BANNED IP BLOCKED: ${clientIP}`);
+    res.setHeader("Content-Type", "text/plain");
+    return res.status(403).send('error("Access denied")');
+  }
 
   // Determine platform (default: pc)
   const platform = req.query.platform === "mobile" ? "mobile" : "pc";
@@ -297,16 +363,21 @@ ${scriptContent}
       `[${timestamp}] 🚨 BROWSER ACCESS BLOCKED (${platformLabel}) | IP: ${clientIP} | UA: ${userAgent.substring(0, 50)}`,
     );
 
-    // Send Discord alert for suspicious browser access
+    // ═══════════════════════════════════════════════════════════════
+    // AUTO-BAN IP FOR BROWSER ACCESS
+    // ═══════════════════════════════════════════════════════════════
+    await banIP(clientIP, `Browser access attempt - UA: ${userAgent.substring(0, 50)}`);
+
+    // Send Discord alert for suspicious browser access + IP banned
     await sendDiscordLog({
-      title: `🚨 Suspicious Browser Access - ${platformLabel} Bootstrap`,
+      title: `🚨 BROWSER ACCESS - IP BANNED - ${platformLabel} Bootstrap`,
       status: "suspicious",
       ip: clientIP,
       userAgent: userAgent,
       endpoint: `/api/bootstrap${platform === "mobile" ? "?platform=mobile" : ""}`,
       platform: platformLabel,
       timestamp: timestamp,
-      message: `⚠️ **Someone tried to access ${platform} bootstrap from a browser!**\n\n**Referer:** \`${referer}\`\n**This could be:**\n• Hacker trying to discover API\n• Curious user\n• Bot/crawler`,
+      message: `⚠️ **Browser access detected - IP AUTO-BANNED!**\n\n**IP:** \`${clientIP}\`\n**Referer:** \`${referer}\`\n**Action:** IP permanently blocked from all endpoints`,
     });
 
     const bgColor = platform === "mobile" ? "#0f0f1a" : "#1a1a2e";
