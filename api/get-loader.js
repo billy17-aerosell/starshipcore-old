@@ -8,6 +8,36 @@ const OWNER_USER_ID = "9268011358";
 import fs from "fs";
 import path from "path";
 
+// Event Code System API (from environment variable for security)
+const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
+
+// Check if user has active event access from Google Sheets
+async function checkEventAccess(userId) {
+  // Skip if EVENT_CODE_API not configured
+  if (!EVENT_CODE_API) {
+    return { hasAccess: false };
+  }
+  
+  try {
+    const apiUrl = `${EVENT_CODE_API}?action=check&userId=${userId}`;
+    const response = await fetch(apiUrl);
+    const data = await response.json();
+
+    if (data.success && data.hasAccess) {
+      return {
+        hasAccess: true,
+        codeUsed: data.codeUsed,
+        expiresAt: data.expiresAt,
+        remainingDays: data.remainingDays,
+      };
+    }
+    return { hasAccess: false };
+  } catch (error) {
+    console.error("Event code check error:", error.message);
+    return { hasAccess: false };
+  }
+}
+
 // Get Redis client
 let redis = null;
 let redisInitAttempted = false;
@@ -525,32 +555,30 @@ export default async function handler(req, res) {
     }
   }
 
-  // === PRIORITY 2: No Parameters - Require Authentication ===
-  if (!key && !userId) {
-    console.log(
-      `[${timestamp}] ❌ Unauthorized access attempt (no params) ${platformLabel} | IP: ${clientIP}`,
-    );
-
-    await sendDiscordLog({
-      title: `🚨 Suspicious Access Attempt - ${platformLabel}`,
-      status: "warning",
-      statusMessage: "No Auth Params",
-      authType: "None",
-      owner: "Unknown",
-      ip: clientIP,
-      platform: platformLabel,
-      deviceCount: "N/A",
-      timestamp: timestamp,
-      message: `⚠️ Someone tried to access ${platform} get-loader without authentication!\n\n**IP:** \`${clientIP}\`\n**User Agent:** \`${userAgent || "Unknown"}\``,
-    });
-
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Cache-Control", "no-cache");
-    return res
-      .status(403)
-      .send(
-        `-- StarshipCore ${platform.toUpperCase()}\n-- Authentication required\n-- Contact administrator for access\nerror("Authentication required")`,
+  // === PRIORITY 3: CHECK EVENT CODE ACCESS (Google Sheets) - Mobile Only ===
+  if (platform === "mobile" && userId) {
+    const eventAccess = await checkEventAccess(userId);
+    
+    if (eventAccess.hasAccess) {
+      console.log(
+        `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - ${platformLabel} Loader - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
       );
+      
+      await sendDiscordLog({
+        title: `🎟️ Event Code Access - ${platformLabel} Loader`,
+        status: "success",
+        statusMessage: "✅ Event Access",
+        authType: `Event Code: ${eventAccess.codeUsed}`,
+        owner: `UserID: ${userId}`,
+        ip: clientIP,
+        platform: platformLabel,
+        deviceCount: "N/A",
+        timestamp: timestamp,
+        message: `✅ Event access granted for loader\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
+      });
+      
+      return serveLoaderScript(res, config, "event", "EVENT_ACCESS");
+    }
   }
 
   // === NOT WHITELISTED - BLOCK ACCESS (Security Fix 2025-12-28) ===
