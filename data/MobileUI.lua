@@ -281,8 +281,44 @@ local ChunkedState = {
 	loadProgress = 0, -- Loading progress (0-100)
 }
 
--- API Base URL
-local CLOUD_API_BASE = "https://starship-core.my.id"
+-- API Base URL and Security Configuration
+local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
+
+-- ══════════════════════════════════════════════════════════════════
+-- CLOUD API SECURITY - Event Code required for R2 access
+-- ══════════════════════════════════════════════════════════════════
+local CLOUD_API_ENDPOINTS = {
+	main = "/api/cloud-store-x7k9", -- Main recordings endpoint (renamed from r2-recordings)
+	chunked = "/api/cloud-chunk-m3p7", -- Chunked streaming endpoint (renamed from r2-chunked)
+}
+local CLOUD_EVENT_CODE = _G.StarshipEventCode or "" -- Event code set by loader or entered by user
+
+-- Helper function to build cloud API URL with event code
+-- @param params: table of query parameters
+-- @param useChunked: boolean - if true, use chunked endpoint instead of main
+local function BuildCloudURL(params, useChunked)
+	local endpoint = useChunked and CLOUD_API_ENDPOINTS.chunked or CLOUD_API_ENDPOINTS.main
+	local url = CLOUD_API_BASE .. endpoint
+	local queryParts = {}
+
+	-- Add event code first
+	if CLOUD_EVENT_CODE and CLOUD_EVENT_CODE ~= "" then
+		table.insert(queryParts, "eventCode=" .. CLOUD_EVENT_CODE)
+	end
+
+	-- Add other params
+	if params then
+		for key, value in pairs(params) do
+			table.insert(queryParts, key .. "=" .. tostring(value))
+		end
+	end
+
+	if #queryParts > 0 then
+		url = url .. "?" .. table.concat(queryParts, "&")
+	end
+
+	return url
+end
 
 -- Forward declarations for chunked loading functions (defined later in file)
 local PreloadNextChunks
@@ -4231,7 +4267,7 @@ ListMapTab:Space()
 
 -- Fetch cloud recordings list BEFORE creating dropdown
 do
-	local apiUrl = CLOUD_API_BASE .. "/api/r2-recordings?list=all"
+	local apiUrl = BuildCloudURL({ list = "all" })
 
 	local success, response = pcall(function()
 		return game:HttpGet(apiUrl)
@@ -4287,7 +4323,7 @@ ListMapTab:Button({
 		CloudDropdownValues = {}
 		CloudRecordingsCache = {}
 
-		local apiUrl = CLOUD_API_BASE .. "/api/r2-recordings?list=all"
+		local apiUrl = BuildCloudURL({ list = "all" })
 
 		local success, response = pcall(function()
 			return game:HttpGet(apiUrl)
@@ -4390,7 +4426,7 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 	ChunkedState.currentLoadingChunk = chunkIndex
 
 	task.spawn(function()
-		local apiUrl = CLOUD_API_BASE .. "/api/r2-chunked?recordingId=" .. recordingId .. "&chunk=" .. chunkIndex
+		local apiUrl = BuildCloudURL({ recordingId = recordingId, chunk = chunkIndex }, true) -- true = use chunked endpoint
 
 		local success, response = pcall(function()
 			return game:HttpGet(apiUrl)
@@ -4620,7 +4656,7 @@ end
 -- Fallback: Direct load for small files or when chunked API fails
 LoadCloudRecordingDirect = function(recInfo)
 	task.spawn(function()
-		local apiUrl = CLOUD_API_BASE .. "/api/r2-recordings?recordingId=" .. recInfo.recordingId
+		local apiUrl = BuildCloudURL({ recordingId = recInfo.recordingId })
 
 		local success, response = pcall(function()
 			return game:HttpGet(apiUrl)

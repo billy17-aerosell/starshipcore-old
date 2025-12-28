@@ -16,8 +16,10 @@ local SECURE_API_URL = "https://starship-core.my.id"
 local MOBILE_UI_API = SECURE_API_URL .. "/api/get-mobile-ui?userId="
 local MOBILE_AUTH_API = SECURE_API_URL .. "/api/mobile-load"
 
--- Event Code System API (DISABLED - handled server-side now)
--- local EVENT_CODE_API = "" -- Removed for security
+-- Event Code System API - NOW HANDLED SERVER-SIDE
+-- The event code check and R2 access code injection now happens in get-mobile-ui.js
+-- User doesn't need to enter code manually - server checks Google Sheets automatically
+local EVENT_CODE_API = nil -- Set to nil to skip client-side checks
 
 -- Encryption helpers
 local function xorEncrypt(text, key)
@@ -534,6 +536,18 @@ local function showEventCodeUI(onSuccess, onCancel)
 		setLoading(true)
 		updateStatus("🔍 Memeriksa kode...", "#a1a1aa")
 
+		-- Skip if EVENT_CODE_API is nil (handled server-side now)
+		if not EVENT_CODE_API then
+			setLoading(false)
+			updateStatus("ℹ️ Event code dihandle otomatis oleh server", "#3b82f6")
+			task.wait(2)
+			screenGui:Destroy()
+			if onCancel then
+				onCancel()
+			end
+			return
+		end
+
 		-- Call Google Sheets API to redeem code
 		local apiUrl = EVENT_CODE_API
 			.. "?action=redeem&code="
@@ -614,6 +628,11 @@ end
 -- ══════════════════════════════════════════════════════════════════
 
 local function checkEventAccess(userId)
+	-- Skip if EVENT_CODE_API is nil (handled server-side now)
+	if not EVENT_CODE_API then
+		return nil, "Event code handled server-side"
+	end
+
 	local apiUrl = EVENT_CODE_API .. "?action=status&userId=" .. userId
 
 	local success, response = pcall(function()

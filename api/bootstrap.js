@@ -10,7 +10,7 @@ const OWNER_USER_ID = "9268011358";
 // ═══════════════════════════════════════════════════════════════════
 // MAINTENANCE MODE - Set to true to disable mobile access temporarily
 // ═══════════════════════════════════════════════════════════════════
-const MOBILE_MAINTENANCE = true; // <-- SECURITY: Mobile disabled during investigation (updated: 2025-12-28)
+const MOBILE_MAINTENANCE = false; // <-- SECURITY: Re-enabled after security fix (updated: 2025-12-28)
 
 import fs from "fs";
 import path from "path";
@@ -116,6 +116,9 @@ export default async function handler(req, res) {
     process.env.VERCEL_ENV === "development" ||
     req.headers.host?.includes("localhost");
   const forceDevMode = req.query.dev === "true" || req.query.dev === "1";
+  
+  // Force loader mode - use ?loader=true to test obfuscated loader even on localhost
+  const forceLoaderMode = req.query.loader === "true" || req.query.loader === "1";
 
   // ═══════════════════════════════════════════════════════════════
   // MAINTENANCE MODE CHECK - Block mobile if maintenance is enabled
@@ -170,7 +173,8 @@ warn("[StarshipCore] Mobile access is temporarily disabled for updates.")
 
   // Development Mode: Skip loader intro and directly serve script
   // (isDev and forceDevMode were already checked above for maintenance bypass)
-  if (isDev || forceDevMode) {
+  // Skip this block if forceLoaderMode is true (to test obfuscated loader)
+  if ((isDev || forceDevMode) && !forceLoaderMode) {
     console.log(
       `[${timestamp}] 🛠️ ${platformLabel} DEV MODE - Skipping loader, serving ${config.scriptFile} directly | IP: ${clientIP}`,
     );
@@ -358,12 +362,19 @@ ${scriptContent}
 
   // Obfuscated bootstrap script
   // The actual URL is encoded to prevent easy discovery
-  const loaderUrl = `https://starship-core.my.id/api/${config.loaderEndpoint}?userId=`;
-  const serverUrl = "https://starship-core.my.id";
+  // Use localhost when testing loader from dev environment
+  const baseUrl = (forceLoaderMode && isDev) ? "http://localhost:3000" : "https://starship-core.my.id";
+  const loaderUrl = `${baseUrl}/api/${config.loaderEndpoint}?userId=`;
+  const serverUrl = baseUrl;
   const encodedUrl = Buffer.from(loaderUrl).toString("base64");
 
   // Prefix for error messages (S for PC, SM for Mobile)
   const errorPrefix = platform === "mobile" ? "SM" : "S";
+  
+  // Log loader test mode
+  if (forceLoaderMode) {
+    console.log(`[${timestamp}] 🔧 ${platformLabel} LOADER TEST MODE - Using ${baseUrl} | IP: ${clientIP}`);
+  }
 
   const bootstrapScript = `_G.StarshipServerMode=true;_G.StarshipServerURL="${serverUrl}";local a=game:GetService("Players")local b=a.LocalPlayer;if not b then b=a:GetPropertyChangedSignal("LocalPlayer"):Wait()end;local c=tostring(b.UserId)local function d(e)local f=""for g in e:gmatch(".")do local h=string.byte(g)if h>=65 and h<=90 then f=f..string.char((h-65+26-13)%26+65)elseif h>=97 and h<=122 then f=f..string.char((h-97+26-13)%26+97)else f=f..g end end;return f end;local function i(j)local k="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"j=string.gsub(j,"[^"..k.."=]","")return(j:gsub(".",function(l)if l=="="then return""end;local m,n="",k:find(l)-1;for o=6,1,-1 do m=m..(n%2^o-n%2^(o-1)>0 and"1"or"0")end;return m end):gsub("%d%d%d?%d?%d?%d?%d?%d?",function(l)if#l~=8 then return""end;local p=0;for o=1,8 do p=p+(l:sub(o,o)=="1"and 2^(8-o)or 0)end;return string.char(p)end))end;local q=i("${encodedUrl}")..c;local r,s=pcall(function()return game:HttpGet(q)end)if r and s then if s:find("error%(")then warn("[${errorPrefix}] "..s)return end;local t,u=loadstring(s)if t then t()else warn("[${errorPrefix}] Load failed: "..tostring(u))end else warn("[${errorPrefix}] Connection failed")end`;
 

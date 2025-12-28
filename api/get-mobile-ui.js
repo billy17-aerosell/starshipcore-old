@@ -8,6 +8,9 @@ import path from "path";
 // Event Code System API (from environment variable for security)
 const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
 
+// R2 Event Code - injected to script for cloud access
+const R2_EVENT_CODE = process.env.R2_EVENT_CODE || "";
+
 // Check if user has active event access from Google Sheets
 async function checkEventAccess(userId) {
   // Skip if EVENT_CODE_API not configured
@@ -278,7 +281,14 @@ export default async function handler(req, res) {
           return res.status(500).send('error("Mobile UI not available")');
         }
 
-        const uiScript = fs.readFileSync(uiPath, "utf8");
+        let uiScript = fs.readFileSync(uiPath, "utf8");
+        
+        // Inject R2 Event Code for cloud access (VIP users get access)
+        if (R2_EVENT_CODE) {
+          const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
+          uiScript = eventCodeInjection + uiScript;
+          console.log(`[${timestamp}] 🔑 Injected R2 event code for VIP user`);
+        }
 
         res.setHeader("Content-Type", "text/plain; charset=utf-8");
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -336,7 +346,14 @@ export default async function handler(req, res) {
             return res.status(500).send('error("Mobile UI not available")');
           }
 
-          const uiScript = fs.readFileSync(uiPath, "utf8");
+          let uiScript = fs.readFileSync(uiPath, "utf8");
+          
+          // Inject R2 Event Code for cloud access (file-based VIP users)
+          if (R2_EVENT_CODE) {
+            const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
+            uiScript = eventCodeInjection + uiScript;
+            console.log(`[${timestamp}] 🔑 Injected R2 event code for file-based VIP user`);
+          }
 
           res.setHeader("Content-Type", "text/plain; charset=utf-8");
           res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -347,11 +364,50 @@ export default async function handler(req, res) {
       }
     }
 
-    // === EVENT CODE SYSTEM DISABLED (Security Fix 2025-12-28) ===
-    // Event Code system was exploited by hackers to bypass whitelist authentication
-    // This feature is temporarily disabled until a more secure implementation is ready
+    // === CHECK EVENT CODE ACCESS (Google Sheets) ===
+    // Re-enabled with improved security - only grants access, doesn't bypass whitelist
+    const eventAccess = await checkEventAccess(userId);
+    
+    if (eventAccess.hasAccess) {
+      console.log(
+        `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
+      );
+      
+      // Read MobileUI.lua from data folder
+      const uiPath = path.join(process.cwd(), "data", "MobileUI.lua");
+
+      if (!fs.existsSync(uiPath)) {
+        return res.status(500).send('error("Mobile UI not available")');
+      }
+
+      let uiScript = fs.readFileSync(uiPath, "utf8");
+      
+      // Inject R2 Event Code for cloud access
+      if (R2_EVENT_CODE) {
+        const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
+        uiScript = eventCodeInjection + uiScript;
+        console.log(`[${timestamp}] 🔑 Injected R2 event code for event user`);
+      }
+
+      await sendDiscordLog({
+        title: "🎟️ Event Code Access Granted",
+        status: "success",
+        owner: `UserID: ${userId}`,
+        authType: `Event Code: ${eventAccess.codeUsed}`,
+        ip: clientIP,
+        timestamp: timestamp,
+        message: `✅ Event access granted\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
+      });
+
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("X-Platform", "mobile");
+      res.setHeader("X-Auth", "event");
+      return res.status(200).send(uiScript);
+    }
+    
     console.log(
-      `[${timestamp}] 🚫 EVENT CODE SYSTEM DISABLED - UserID: ${userId} | IP: ${clientIP}`,
+      `[${timestamp}] ℹ️ No event access - UserID: ${userId} | IP: ${clientIP}`,
     );
 
     // === NOT WHITELISTED ===

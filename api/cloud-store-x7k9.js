@@ -1,4 +1,6 @@
-// api/r2-recordings.js - Cloud Recording Storage via Cloudflare R2
+// api/cloud-store-x7k9.js - Secure Cloud Recording Storage via Cloudflare R2
+// RENAMED from r2-recordings.js for security (old endpoint no longer works)
+// Protected by EVENT_ENABLED toggle and EVENT_CODE verification
 // Supports large files up to 5GB (vs GitHub Gist 1MB limit)
 // WITH GZIP COMPRESSION for faster downloads
 
@@ -101,6 +103,33 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
+
+  // ============================================
+  // EVENT PROTECTION - Check if event is enabled and code is valid
+  // ============================================
+  const EVENT_ENABLED = process.env.R2_EVENT_ENABLED === "true";
+  const EVENT_CODE = process.env.R2_EVENT_CODE || "";
+  const requestCode = req.query.eventCode || req.body?.eventCode || req.headers["x-event-code"];
+  
+  // Check if event mode is enabled
+  if (!EVENT_ENABLED) {
+    console.log(`[R2] ❌ Event mode disabled - access denied`);
+    return res.status(403).json({ 
+      error: "Event tidak aktif",
+      message: "Cloud storage sedang tidak tersedia"
+    });
+  }
+  
+  // Check event code
+  if (!requestCode || requestCode !== EVENT_CODE) {
+    console.log(`[R2] ❌ Invalid event code: ${requestCode ? "wrong code" : "no code"}`);
+    return res.status(403).json({ 
+      error: "Kode event tidak valid",
+      message: "Masukkan kode event yang benar untuk mengakses cloud storage"
+    });
+  }
+  
+  console.log(`[R2] ✅ Event code verified`);
 
   const { method } = req;
   const userId = req.query.userId || req.body?.userId;
