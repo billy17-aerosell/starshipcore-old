@@ -16,10 +16,9 @@ local SECURE_API_URL = "https://starship-core.my.id"
 local MOBILE_UI_API = SECURE_API_URL .. "/api/secure-ui-k9m2?userId="
 local MOBILE_AUTH_API = SECURE_API_URL .. "/api/auth-check-x7p4"
 
--- Event Code System API - NOW HANDLED SERVER-SIDE
--- The event code check and R2 access code injection now happens in get-mobile-ui.js
--- User doesn't need to enter code manually - server checks Google Sheets automatically
-local EVENT_CODE_API = nil -- Set to nil to skip client-side checks
+-- Event Code System API - Server-side proxy to Google Sheets
+-- This allows new users to redeem event codes from the mobile loader
+local EVENT_CODE_API = SECURE_API_URL .. "/api/event-code"
 
 -- Encryption helpers
 local function xorEncrypt(text, key)
