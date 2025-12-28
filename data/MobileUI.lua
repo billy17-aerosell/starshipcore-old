@@ -271,28 +271,63 @@ local BAN_CHECK_API = (CLOUD_API_BASE or "https://starship-core.my.id") .. "/api
 local isBanCheckRunning = false
 
 local function ShowBannedMessage(reason)
-	-- Destroy any existing Starship UIs
+	-- DESTROY ALL GUIs from Starship/WindUI (more aggressive matching)
 	pcall(function()
 		for _, gui in pairs(game:GetService("CoreGui"):GetChildren()) do
-			if gui.Name:find("Starship") or gui.Name:find("WindUI") then
-				gui:Destroy()
-			end
-		end
-	end)
-	pcall(function()
-		for _, gui in pairs(LocalPlayer:WaitForChild("PlayerGui"):GetChildren()) do
-			if gui.Name:find("Starship") or gui.Name:find("WindUI") then
-				gui:Destroy()
+			-- Destroy all ScreenGuis except core Roblox ones
+			if gui:IsA("ScreenGui") then
+				local name = gui.Name:lower()
+				-- Only keep essential Roblox GUIs
+				if
+					not (
+						name == "robloxpromptgui"
+						or name == "chatgui"
+						or name == "topbargui"
+						or name == "notificationbingui"
+					)
+				then
+					pcall(function()
+						gui:Destroy()
+					end)
+				end
 			end
 		end
 	end)
 
-	-- Create ban notification screen
+	pcall(function()
+		for _, gui in pairs(LocalPlayer:WaitForChild("PlayerGui"):GetChildren()) do
+			if gui:IsA("ScreenGui") then
+				pcall(function()
+					gui:Destroy()
+				end)
+			end
+		end
+	end)
+
+	-- Also try to destroy WindUI's internal references
+	pcall(function()
+		if WindUI and WindUI.Windows then
+			for _, window in pairs(WindUI.Windows) do
+				pcall(function()
+					window:Destroy()
+				end)
+			end
+		end
+	end)
+
+	-- Clear global references
+	pcall(function()
+		getgenv().StarshipSession = nil
+		getgenv().StarshipModules = nil
+	end)
+
+	-- Create ban notification screen (PERSISTENT - doesn't auto-close quickly)
 	local banGui = Instance.new("ScreenGui")
 	banGui.Name = "StarshipBanned"
 	banGui.ResetOnSpawn = false
 	banGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	banGui.IgnoreGuiInset = true
+	banGui.DisplayOrder = 999999 -- Make it on top of everything
 
 	pcall(function()
 		banGui.Parent = game:GetService("CoreGui")
@@ -304,6 +339,7 @@ local function ShowBannedMessage(reason)
 	local bg = Instance.new("Frame", banGui)
 	bg.Size = UDim2.new(1, 0, 1, 0)
 	bg.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+	bg.BackgroundTransparency = 0 -- Fully opaque to block everything
 	bg.BorderSizePixel = 0
 
 	local container = Instance.new("Frame", bg)
@@ -342,18 +378,21 @@ local function ShowBannedMessage(reason)
 	msg.Position = UDim2.new(0.5, 0, 0, 115)
 	msg.AnchorPoint = Vector2.new(0.5, 0)
 	msg.BackgroundTransparency = 1
-	msg.Text = reason or "Your access has been revoked."
+	msg.Text = reason or "Your access has been revoked.\n\nPlease contact administrator."
 	msg.TextColor3 = Color3.fromRGB(161, 161, 170)
 	msg.TextSize = 14
 	msg.Font = Enum.Font.Gotham
 	msg.TextWrapped = true
 
-	-- Auto-close after 10 seconds
-	task.delay(10, function()
+	-- Keep the ban screen longer (30 seconds)
+	task.delay(30, function()
 		if banGui and banGui.Parent then
 			banGui:Destroy()
 		end
 	end)
+
+	-- IMPORTANT: Return error to break the script execution
+	error("[StarshipCore] Access revoked - Script terminated")
 end
 
 local function CheckBanStatus()
@@ -6198,7 +6237,7 @@ SettingsTab:Button({
 })
 
 SettingsTab:Button({
-	Title = "🗑️ Clear Cache",
+	Title = "����️ Clear Cache",
 	Desc = "Clear saved data and cache",
 	Callback = function()
 		pcall(function()
