@@ -44,7 +44,7 @@ const PLATFORM_CONFIG = {
   pc: {
     whitelistKey: "starship:whitelist",
     otherWhitelistKey: "starship:mobile_whitelist",
-    scriptFile: "StarshipCore.lua",
+    scriptFile: "StarshipCore-obfuscated.lua", // Obfuscated for security
     keysFilePath: path.join(process.cwd(), "data", "keys.json"),
     otherKeysFilePath: path.join(process.cwd(), "data", "mobile-keys.json"),
     label: "💻 PC",
