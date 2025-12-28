@@ -457,6 +457,33 @@ export default async function handler(req, res) {
     if (otherWhitelist && otherWhitelist[userId]) {
       const otherUser = otherWhitelist[userId];
 
+      // === CHECK EVENT ACCESS FIRST (before blocking cross-platform) ===
+      // If user has event access for mobile, allow them even if they have PC license
+      if (platform === "mobile") {
+        const eventAccess = await checkEventAccess(userId);
+        
+        if (eventAccess.hasAccess) {
+          console.log(
+            `[${timestamp}] 🎟️ EVENT ACCESS GRANTED (PC user with event code) - ${platformLabel} Loader - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
+          );
+          
+          await sendDiscordLog({
+            title: `🎟️ Event Code Access - PC User → Mobile`,
+            status: "success",
+            statusMessage: "✅ Event Access (Cross-Platform OK)",
+            authType: `Event Code: ${eventAccess.codeUsed}`,
+            owner: `${otherUser.username} (UserID: ${userId})`,
+            ip: clientIP,
+            platform: platformLabel,
+            deviceCount: "N/A",
+            timestamp: timestamp,
+            message: `✅ PC user with event code granted mobile access\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
+          });
+          
+          return serveLoaderScript(res, config, "event", "EVENT_ACCESS");
+        }
+      }
+
       console.log(
         `[${timestamp}] 🔀 CROSS-PLATFORM ATTEMPT - ${config.otherLabel} user trying ${platformLabel} loader - UserID: ${userId} | IP: ${clientIP}`,
       );
@@ -496,6 +523,19 @@ export default async function handler(req, res) {
 
         if (fileOtherWhitelist[userId]) {
           const otherUser = fileOtherWhitelist[userId];
+
+          // === CHECK EVENT ACCESS FIRST (before blocking cross-platform) ===
+          if (platform === "mobile") {
+            const eventAccess = await checkEventAccess(userId);
+            
+            if (eventAccess.hasAccess) {
+              console.log(
+                `[${timestamp}] 🎟️ EVENT ACCESS GRANTED (File PC user with event code) - ${platformLabel} Loader - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
+              );
+              
+              return serveLoaderScript(res, config, "event", "EVENT_ACCESS");
+            }
+          }
 
           console.log(
             `[${timestamp}] 🔀 CROSS-PLATFORM ATTEMPT (File) - ${config.otherLabel} user trying ${platformLabel} loader - UserID: ${userId} | IP: ${clientIP}`,
