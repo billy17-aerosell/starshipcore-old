@@ -39,6 +39,33 @@ async function checkEventAccess(userId) {
   }
 }
 
+// Webhook rate limiting to prevent duplicate notifications
+// Key: "userId:type" -> timestamp of last webhook sent
+const webhookRateLimit = new Map();
+const WEBHOOK_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
+function shouldSendWebhook(userId, type = "access") {
+  const key = `${userId}:${type}`;
+  const lastSent = webhookRateLimit.get(key);
+  const now = Date.now();
+  
+  if (lastSent && (now - lastSent) < WEBHOOK_COOLDOWN_MS) {
+    console.log(`[Webhook] Rate limited for ${key} (cooldown: ${Math.ceil((WEBHOOK_COOLDOWN_MS - (now - lastSent)) / 1000)}s remaining)`);
+    return false;
+  }
+  
+  webhookRateLimit.set(key, now);
+  
+  // Clean up old entries (older than 10 minutes)
+  for (const [k, v] of webhookRateLimit.entries()) {
+    if (now - v > 10 * 60 * 1000) {
+      webhookRateLimit.delete(k);
+    }
+  }
+  
+  return true;
+}
+
 // Platform-specific configuration
 const PLATFORM_CONFIG = {
   pc: {
@@ -557,18 +584,21 @@ export default async function handler(req, res) {
         `[${timestamp}] 🔀 CROSS-PLATFORM ATTEMPT - ${config.otherLabel} user trying ${platformLabel} access - UserID: ${userId} (${otherUser.username}) | IP: ${clientIP}`,
       );
 
-      await sendCrossPlatformAlert({
-        userId: userId,
-        username: otherUser.username,
-        currentPlatform: config.otherLabel,
-        attemptedPlatform: platformLabel,
-        licenseType:
-          otherUser.type || config.otherLabel.includes("Mobile")
-            ? "MOBILE_VIP"
-            : "VIP",
-        ip: clientIP,
-        timestamp: timestamp,
-      });
+      // Only send alert if not rate limited
+      if (shouldSendWebhook(userId, "cross_platform")) {
+        await sendCrossPlatformAlert({
+          userId: userId,
+          username: otherUser.username,
+          currentPlatform: config.otherLabel,
+          attemptedPlatform: platformLabel,
+          licenseType:
+            otherUser.type || config.otherLabel.includes("Mobile")
+              ? "MOBILE_VIP"
+              : "VIP",
+          ip: clientIP,
+          timestamp: timestamp,
+        });
+      }
 
       return res.status(403).json({
         status: "denied",
@@ -739,17 +769,20 @@ export default async function handler(req, res) {
           `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - ${platformLabel} - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
         );
         
-        await sendDiscordLog({
-          title: `🎟️ Event Code Access Granted - ${platformLabel}`,
-          status: "success",
-          authType: `Event Code: ${eventAccess.codeUsed}`,
-          owner: `UserID: ${userId}`,
-          ip: clientIP,
-          platform: platformLabel,
-          deviceCount: "N/A",
-          timestamp: timestamp,
-          message: `✅ Event access granted\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
-        });
+        // Only send webhook if not rate limited (prevents spam on script re-run)
+        if (shouldSendWebhook(userId, "event_access")) {
+          await sendDiscordLog({
+            title: `🎟️ Event Code Access Granted - ${platformLabel}`,
+            status: "success",
+            authType: `Event Code: ${eventAccess.codeUsed}`,
+            owner: `UserID: ${userId}`,
+            ip: clientIP,
+            platform: platformLabel,
+            deviceCount: "N/A",
+            timestamp: timestamp,
+            message: `✅ Event access granted\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
+          });
+        }
         
         // Return success for mobile event access
         return res.status(200).json({
