@@ -31,10 +31,31 @@ async function checkEventAccess(userId) {
         remainingDays: data.remainingDays,
       };
     }
-    return { hasAccess: false };
+    return { hasAccess: false, isBanned: data.isBanned || false };
   } catch (error) {
     console.error("Event code check error:", error.message);
     return { hasAccess: false };
+  }
+}
+
+// Check if user is banned in Google Sheets
+async function checkUserBanned(userId) {
+  if (!EVENT_CODE_API) {
+    return { isBanned: false };
+  }
+  
+  try {
+    const apiUrl = `${EVENT_CODE_API}?action=check&userId=${userId}`;
+    const response = await fetch(apiUrl);
+    const data = await response.json();
+    
+    return { 
+      isBanned: data.isBanned || false,
+      reason: data.banReason || "Banned by administrator"
+    };
+  } catch (error) {
+    console.error("Ban check error:", error.message);
+    return { isBanned: false };
   }
 }
 
@@ -598,9 +619,41 @@ export default async function handler(req, res) {
   }
 
   // === NOT WHITELISTED ===
-  // For mobile: Still serve loader script so user can see event code popup
-  // The loader will handle showing the event code UI for redemption
+  // For mobile: Check if banned first, then serve loader for event code popup
   if (platform === "mobile") {
+    // Check if user is banned in Google Sheets
+    const banCheck = await checkUserBanned(userId);
+    
+    if (banCheck.isBanned) {
+      console.log(
+        `[${timestamp}] 🚫 BANNED USER BLOCKED - UserID: ${userId} | IP: ${clientIP}`,
+      );
+      
+      await sendDiscordLog({
+        title: `🚫 Banned User Attempted Access`,
+        status: "blocked",
+        statusMessage: "🚫 BANNED",
+        authType: "None",
+        owner: `UserID: ${userId}`,
+        ip: clientIP,
+        platform: platformLabel,
+        deviceCount: "N/A",
+        timestamp: timestamp,
+        message: `🚫 Banned user attempted to access\\nReason: ${banCheck.reason}`,
+      });
+      
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return res.status(403).send(
+        `-- StarshipCore MOBILE\\n` +
+        `-- 🚫 ACCESS PERMANENTLY BANNED\\n` +
+        `-- You have been banned from using this script.\\n` +
+        `-- Reason: ${banCheck.reason}\\n` +
+        `-- Your User ID: ${userId}\\n` +
+        `error("You are banned from using StarshipCore.")`
+      );
+    }
+    
+    // Not banned - serve loader for event code popup
     console.log(
       `[${timestamp}] ℹ️ NOT WHITELISTED - Serving loader for event code popup - UserID: ${userId} | IP: ${clientIP}`,
     );
