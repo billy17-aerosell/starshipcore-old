@@ -486,28 +486,70 @@ ${scriptContent}
     `[${timestamp}] ${platformEmoji} Bootstrap GRANTED | IP: ${clientIP}${platform === "mobile" ? ` | UA: "${userAgent}"` : ""}`,
   );
 
-  // Obfuscated bootstrap script
-  // The actual URL is encoded to prevent easy discovery
-  // Use localhost when testing loader from dev environment
-  const baseUrl = (forceLoaderMode && isDev) ? "http://localhost:3000" : "https://starship-core.my.id";
-  const loaderUrl = `${baseUrl}/api/${config.loaderEndpoint}?userId=`;
-  const serverUrl = baseUrl;
-  const encodedUrl = Buffer.from(loaderUrl).toString("base64");
-
-  // Prefix for error messages (S for PC, SM for Mobile)
-  const errorPrefix = platform === "mobile" ? "SM" : "S";
+  // ═══════════════════════════════════════════════════════════════
+  // PRODUCTION MODE - Serve obfuscated Loader directly (SECURE)
+  // NO URLs are exposed to the client - loader is served directly
+  // This prevents hackers from discovering internal endpoints
+  // ═══════════════════════════════════════════════════════════════
   
-  // Log loader test mode
-  if (forceLoaderMode) {
-    console.log(`[${timestamp}] 🔧 ${platformLabel} LOADER TEST MODE - Using ${baseUrl} | IP: ${clientIP}`);
+  try {
+    // Use obfuscated loader for production
+    const loaderPath = path.join(process.cwd(), "protected", "Loader-obfuscated.lua");
+    
+    if (!fs.existsSync(loaderPath)) {
+      // Fallback to non-obfuscated if obfuscated doesn't exist
+      const fallbackPath = path.join(process.cwd(), "Loader.lua");
+      if (!fs.existsSync(fallbackPath)) {
+        console.error(`[${timestamp}] ❌ PC Loader not found`);
+        return res.status(500).send('error("PC Loader not available")');
+      }
+      
+      let loaderScript = fs.readFileSync(fallbackPath, "utf8");
+      
+      // Remove BOM if present
+      if (loaderScript.charCodeAt(0) === 0xfeff) {
+        loaderScript = loaderScript.slice(1);
+      }
+      
+      // Inject server mode config at the top
+      const configuredScript = `-- StarshipCore PC Loader v3.0 (Secure)
+_G.StarshipServerMode = true
+_G.StarshipServerURL = "https://starship-core.my.id"
+
+${loaderScript}`;
+
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("X-Bootstrap-Version", "3.0-secure");
+      res.setHeader("X-Platform", "pc");
+      
+      return res.status(200).send(configuredScript);
+    }
+    
+    // Serve obfuscated loader
+    let loaderScript = fs.readFileSync(loaderPath, "utf8");
+    
+    // Remove BOM if present
+    if (loaderScript.charCodeAt(0) === 0xfeff) {
+      loaderScript = loaderScript.slice(1);
+    }
+    
+    // Inject server mode config at the top (before obfuscated code)
+    const configuredScript = `-- StarshipCore PC v3.0
+_G.StarshipServerMode = true
+_G.StarshipServerURL = "https://starship-core.my.id"
+
+${loaderScript}`;
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("X-Bootstrap-Version", "3.0-secure");
+    res.setHeader("X-Platform", "pc");
+
+    return res.status(200).send(configuredScript);
+    
+  } catch (error) {
+    console.error(`[${timestamp}] ❌ Error serving PC loader:`, error);
+    return res.status(500).send('error("Server error")');
   }
-
-  const bootstrapScript = `_G.StarshipServerMode=true;_G.StarshipServerURL="${serverUrl}";local a=game:GetService("Players")local b=a.LocalPlayer;if not b then b=a:GetPropertyChangedSignal("LocalPlayer"):Wait()end;local c=tostring(b.UserId)local function d(e)local f=""for g in e:gmatch(".")do local h=string.byte(g)if h>=65 and h<=90 then f=f..string.char((h-65+26-13)%26+65)elseif h>=97 and h<=122 then f=f..string.char((h-97+26-13)%26+97)else f=f..g end end;return f end;local function i(j)local k="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"j=string.gsub(j,"[^"..k.."=]","")return(j:gsub(".",function(l)if l=="="then return""end;local m,n="",k:find(l)-1;for o=6,1,-1 do m=m..(n%2^o-n%2^(o-1)>0 and"1"or"0")end;return m end):gsub("%d%d%d?%d?%d?%d?%d?%d?",function(l)if#l~=8 then return""end;local p=0;for o=1,8 do p=p+(l:sub(o,o)=="1"and 2^(8-o)or 0)end;return string.char(p)end))end;local q=i("${encodedUrl}")..c;local r,s=pcall(function()return game:HttpGet(q)end)if r and s then if s:find("error%(")then warn("[${errorPrefix}] "..s)return end;local t,u=loadstring(s)if t then t()else warn("[${errorPrefix}] Load failed: "..tostring(u))end else warn("[${errorPrefix}] Connection failed")end`;
-
-  res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.setHeader("X-Bootstrap-Version", config.bootstrapVersion);
-  res.setHeader("X-Platform", platform);
-
-  return res.status(200).send(bootstrapScript);
 }
