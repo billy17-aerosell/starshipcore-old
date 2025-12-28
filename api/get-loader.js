@@ -467,19 +467,7 @@ export default async function handler(req, res) {
             `[${timestamp}] 🎟️ EVENT ACCESS GRANTED (PC user with event code) - ${platformLabel} Loader - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
           );
           
-          await sendDiscordLog({
-            title: `🎟️ Event Code Access - PC User → Mobile`,
-            status: "success",
-            statusMessage: "✅ Event Access (Cross-Platform OK)",
-            authType: `Event Code: ${eventAccess.codeUsed}`,
-            owner: `${otherUser.username} (UserID: ${userId})`,
-            ip: clientIP,
-            platform: platformLabel,
-            deviceCount: "N/A",
-            timestamp: timestamp,
-            message: `✅ PC user with event code granted mobile access\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
-          });
-          
+          // Note: Discord webhook sent from load.js instead (to avoid duplicate)
           return serveLoaderScript(res, config, "event", "EVENT_ACCESS");
         }
       }
@@ -604,19 +592,7 @@ export default async function handler(req, res) {
         `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - ${platformLabel} Loader - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
       );
       
-      await sendDiscordLog({
-        title: `🎟️ Event Code Access - ${platformLabel} Loader`,
-        status: "success",
-        statusMessage: "✅ Event Access",
-        authType: `Event Code: ${eventAccess.codeUsed}`,
-        owner: `UserID: ${userId}`,
-        ip: clientIP,
-        platform: platformLabel,
-        deviceCount: "N/A",
-        timestamp: timestamp,
-        message: `✅ Event access granted for loader\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
-      });
-      
+      // Note: Discord webhook sent from load.js instead (to avoid duplicate)
       return serveLoaderScript(res, config, "event", "EVENT_ACCESS");
     }
   }

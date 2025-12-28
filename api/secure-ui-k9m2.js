@@ -389,16 +389,7 @@ export default async function handler(req, res) {
         console.log(`[${timestamp}] 🔑 Injected R2 event code for event user`);
       }
 
-      await sendDiscordLog({
-        title: "🎟️ Event Code Access Granted",
-        status: "success",
-        owner: `UserID: ${userId}`,
-        authType: `Event Code: ${eventAccess.codeUsed}`,
-        ip: clientIP,
-        timestamp: timestamp,
-        message: `✅ Event access granted\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
-      });
-
+      // Note: Discord webhook sent from load.js instead (to avoid duplicate)
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("X-Platform", "mobile");
