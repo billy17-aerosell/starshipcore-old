@@ -265,21 +265,21 @@ warn("[StarshipCore] Mobile access is temporarily disabled for updates.")
   }
 
   // Platform-specific configuration
-  // NOTE: Using obfuscated versions for production security
+  // NOTE: Using obfuscated endpoints for production security
   const platformConfig = {
     pc: {
       scriptFile: "StarshipCore-obfuscated.lua",
       scriptFileDev: "StarshipCore.lua", // Non-obfuscated for dev
-      loaderEndpoint: "get-loader",
+      loaderEndpoint: "pc-ld-q8r4", // SECURITY: Obscured endpoint name
       sessionPlatform: "pc",
-      bootstrapVersion: "2.0",
+      bootstrapVersion: "3.0",
     },
     mobile: {
       scriptFile: "MobileUI-obfuscated.lua",
       scriptFileDev: "MobileUI.lua", // Non-obfuscated for dev
-      loaderEndpoint: "get-mobile-loader",
+      loaderEndpoint: "m-ld-x7k9", // SECURITY: Obscured endpoint name (not used - mobile goes through mobile-bootstrap)
       sessionPlatform: "mobile",
-      bootstrapVersion: "2.0-mobile",
+      bootstrapVersion: "3.0-mobile",
     },
   };
 

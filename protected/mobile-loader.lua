@@ -11,14 +11,13 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
--- Configuration
+-- Configuration (SECURITY: Obscured endpoint names - v3.0)
 local SECURE_API_URL = "https://starship-core.my.id"
-local MOBILE_UI_API = SECURE_API_URL .. "/api/secure-ui-k9m2?userId="
-local MOBILE_AUTH_API = SECURE_API_URL .. "/api/auth-check-x7p4"
+local MOBILE_UI_API = SECURE_API_URL .. "/api/m-ui-v8x3q2?userId="
+local MOBILE_AUTH_API = SECURE_API_URL .. "/api/m-auth-k5r9z7"
 
--- Event Code System API - Redirected to load.js via vercel.json rewrite
--- This allows new users to redeem event codes from the mobile loader
-local EVENT_CODE_API = SECURE_API_URL .. "/api/event-code"
+-- Event Code System API (SECURITY: Obscured)
+local EVENT_CODE_API = SECURE_API_URL .. "/api/m-evt-j3w8p4"
 
 -- Encryption helpers
 local function xorEncrypt(text, key)

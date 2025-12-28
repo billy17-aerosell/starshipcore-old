@@ -6,22 +6,18 @@
     },
     {
       "source": "/api/mobile-bootstrap",
-      "destination": "/api/bootstrap?platform=mobile"
+      "destination": "/api/mobile-bootstrap"
     },
     {
-      "source": "/api/auth-check-x7p4",
+      "source": "/api/m-auth-k5r9z7",
       "destination": "/api/load?platform=mobile"
     },
     {
-      "source": "/api/get-mobile-loader",
-      "destination": "/api/get-loader?platform=mobile"
-    },
-    {
-      "source": "/api/event-code",
+      "source": "/api/m-evt-j3w8p4",
       "destination": "/api/load?platform=mobile"
     },
     {
-      "source": "/protected/(.*)",
+      "source": "/api/protected/(.*)",
       "destination": "/404"
     }
   ],

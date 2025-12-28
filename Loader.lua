@@ -593,8 +593,9 @@ local function main()
 	-- Auto-detect userId from current logged-in player
 	local userId = tostring(game:GetService("Players").LocalPlayer.UserId)
 
-	-- STEP 1: Call get-loader for authentication & webhook notification
-	local authUrl = SECURE_API_URL .. "/api/get-loader?userId=" .. userId
+	-- STEP 1: Call secure loader for authentication & webhook notification
+	-- SECURITY: Using obscured endpoint name
+	local authUrl = SECURE_API_URL .. "/api/pc-ld-q8r4?userId=" .. userId
 	local authSuccess, authResponse = pcall(function()
 		return game:HttpGet(authUrl)
 	end)
