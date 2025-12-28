@@ -163,6 +163,10 @@ local Window = WindUI:CreateWindow({
 	},
 })
 
+-- Store Window reference globally for ban system
+getgenv().StarshipWindow = Window
+getgenv().StarshipWindUI = WindUI
+
 -- ══════════════════════════════════════════════════════════════════
 -- FPS, PING & ROLE TAGS (Top bar display)
 -- ══════════════════════════════════════════════════════════════════
@@ -271,10 +275,56 @@ local BAN_CHECK_API = (CLOUD_API_BASE or "https://starship-core.my.id") .. "/api
 local isBanCheckRunning = false
 
 local function ShowBannedMessage(reason)
-	-- DESTROY ALL GUIs from Starship/WindUI (more aggressive matching)
+	-- FIRST: Try to destroy using local Window variable
+	pcall(function()
+		if Window then
+			-- Try multiple methods
+			if Window.Destroy then
+				Window:Destroy()
+			end
+			if Window.Toggle then
+				Window:Toggle(false)
+			end
+			if Window.Hide then
+				Window:Hide()
+			end
+		end
+	end)
+
+	-- SECOND: Try global references
+	pcall(function()
+		if getgenv().StarshipWindow then
+			local w = getgenv().StarshipWindow
+			if w.Destroy then
+				w:Destroy()
+			end
+			if w.Toggle then
+				w:Toggle(false)
+			end
+			if w.Hide then
+				w:Hide()
+			end
+		end
+	end)
+
+	-- THIRD: Destroy WindUI library itself
+	pcall(function()
+		if WindUI then
+			if WindUI.Destroy then
+				WindUI:Destroy()
+			end
+		end
+		if getgenv().StarshipWindUI then
+			local ui = getgenv().StarshipWindUI
+			if ui.Destroy then
+				ui:Destroy()
+			end
+		end
+	end)
+
+	-- THIRD: Force destroy all ScreenGuis in CoreGui
 	pcall(function()
 		for _, gui in pairs(game:GetService("CoreGui"):GetChildren()) do
-			-- Destroy all ScreenGuis except core Roblox ones
 			if gui:IsA("ScreenGui") then
 				local name = gui.Name:lower()
 				-- Only keep essential Roblox GUIs
@@ -284,6 +334,7 @@ local function ShowBannedMessage(reason)
 						or name == "chatgui"
 						or name == "topbargui"
 						or name == "notificationbingui"
+						or name == "purchasepromptapp"
 					)
 				then
 					pcall(function()
@@ -294,6 +345,7 @@ local function ShowBannedMessage(reason)
 		end
 	end)
 
+	-- FOURTH: Destroy all in PlayerGui
 	pcall(function()
 		for _, gui in pairs(LocalPlayer:WaitForChild("PlayerGui"):GetChildren()) do
 			if gui:IsA("ScreenGui") then
@@ -304,20 +356,10 @@ local function ShowBannedMessage(reason)
 		end
 	end)
 
-	-- Also try to destroy WindUI's internal references
-	pcall(function()
-		if WindUI and WindUI.Windows then
-			for _, window in pairs(WindUI.Windows) do
-				pcall(function()
-					window:Destroy()
-				end)
-			end
-		end
-	end)
-
 	-- Clear global references
 	pcall(function()
 		getgenv().StarshipSession = nil
+		getgenv().StarshipModules = nil
 		getgenv().StarshipModules = nil
 	end)
 
