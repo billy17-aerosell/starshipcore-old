@@ -581,10 +581,11 @@ local CACHE_FOLDER = "StarshipCache"
 local CLOUD_CACHE_FOLDER = CACHE_FOLDER .. "/CloudRecordings"
 
 -- ══════════════════════════════════════════════════════════════════
--- 🔐 ENCRYPTION SYSTEM (AES-like + Dynamic Key per User)
+-- 🔐 ENCRYPTION SYSTEM (RC4 Stream Cipher + Hidden Format)
+-- NO REVEALING HEADER - algorithm is hidden from hackers
 -- ══════════════════════════════════════════════════════════════════
-local ENCRYPTION_SECRET = "STARSHIP_CORE_2024_SECURE" -- Base secret (obfuscated in final script)
-local ENCRYPTION_ROUNDS = 3 -- Multiple rounds for stronger encryption
+local ENCRYPTION_SECRET = "STARSHIP_CORE_2024_SECURE" -- Must match server
+local MAGIC_BYTES = { 0x53, 0x43, 0x30, 0x31 } -- "SC01" in hex (hidden identifier)
 
 -- Generate dynamic encryption key based on UserId
 local function GenerateUserKey()
@@ -713,91 +714,101 @@ local function XORCipher(data, key, encrypt)
 	return table.concat(result)
 end
 
--- Byte shuffle for additional obfuscation
-local function ShuffleBytes(data, key, encrypt)
-	local bytes = {}
-	for i = 1, #data do
-		table.insert(bytes, string.byte(data, i))
+-- RC4 Key Scheduling Algorithm (KSA)
+local function RC4Init(key)
+	local S = {}
+	for i = 0, 255 do
+		S[i] = i
 	end
 
-	local len = #bytes
-	if len < 2 then
-		return data
+	local j = 0
+	for i = 0, 255 do
+		local keyIdx = (i % #key) + 1
+		j = (j + S[i] + string.byte(key, keyIdx)) % 256
+		S[i], S[j] = S[j], S[i] -- Swap
 	end
 
-	-- Generate shuffle pattern from key
-	local pattern = {}
-	for i = 1, len do
-		local keyIdx = ((i - 1) % #key) + 1
-		pattern[i] = string.byte(key, keyIdx)
-	end
+	return S
+end
 
-	if encrypt then
-		-- Shuffle forward
-		for i = 1, len - 1 do
-			local swapIdx = (pattern[i] % (len - i + 1)) + i
-			bytes[i], bytes[swapIdx] = bytes[swapIdx], bytes[i]
-		end
-	else
-		-- Unshuffle (reverse order)
-		for i = len - 1, 1, -1 do
-			local swapIdx = (pattern[i] % (len - i + 1)) + i
-			bytes[i], bytes[swapIdx] = bytes[swapIdx], bytes[i]
-		end
-	end
-
+-- RC4 Pseudo-Random Generation Algorithm (PRGA)
+local function RC4Crypt(data, key)
+	local S = RC4Init(key)
 	local result = {}
-	for _, b in ipairs(bytes) do
-		table.insert(result, string.char(b))
+	local i, j = 0, 0
+
+	for k = 1, #data do
+		i = (i + 1) % 256
+		j = (j + S[i]) % 256
+		S[i], S[j] = S[j], S[i] -- Swap
+
+		local K = S[(S[i] + S[j]) % 256]
+		local dataByte = string.byte(data, k)
+
+		-- XOR: works with or without bit32
+		local byte
+		if bit32 then
+			byte = bit32.bxor(dataByte, K)
+		else
+			-- Manual XOR for environments without bit32
+			local xorResult = 0
+			for b = 0, 7 do
+				local dataBit = math.floor(dataByte / (2 ^ b)) % 2
+				local keyBit = math.floor(K / (2 ^ b)) % 2
+				if dataBit ~= keyBit then
+					xorResult = xorResult + (2 ^ b)
+				end
+			end
+			byte = xorResult
+		end
+
+		table.insert(result, string.char(byte))
 	end
+
 	return table.concat(result)
 end
 
--- Main encrypt function
+-- Main encrypt function (RC4 + hidden format)
 local function EncryptData(plainText)
 	local key = GenerateUserKey()
 
-	-- Step 1: XOR cipher
-	local encrypted = XORCipher(plainText, key, true)
+	-- Add magic bytes at the start (hidden identifier)
+	local magicPrefix = string.char(MAGIC_BYTES[1], MAGIC_BYTES[2], MAGIC_BYTES[3], MAGIC_BYTES[4])
+	local dataWithMagic = magicPrefix .. plainText
 
-	-- Step 2: Shuffle bytes
-	encrypted = ShuffleBytes(encrypted, key, true)
+	-- RC4 encrypt
+	local encrypted = RC4Crypt(dataWithMagic, key)
 
-	-- Step 3: Base64 encode for storage
-	encrypted = Base64Encode(encrypted)
-
-	-- Step 4: Add signature header (for validation)
-	encrypted = "STARSHIP_ENC_V1:" .. encrypted
-
-	return encrypted
+	-- Base64 encode (no revealing header!)
+	return Base64Encode(encrypted)
 end
 
--- Main decrypt function
+-- Main decrypt function (RC4 + hidden format)
 local function DecryptData(encryptedText)
-	-- Step 0: Check signature
-	if not string.sub(encryptedText, 1, 16) == "STARSHIP_ENC_V1:" then
-		warn("[Decrypt] Invalid signature - file may be corrupted or unencrypted")
+	local key = GenerateUserKey()
+
+	-- Base64 decode
+	local encrypted = Base64Decode(encryptedText)
+
+	-- RC4 decrypt (symmetric - same as encrypt)
+	local decrypted = RC4Crypt(encrypted, key)
+
+	-- Verify magic bytes
+	local m1 = string.byte(decrypted, 1) or 0
+	local m2 = string.byte(decrypted, 2) or 0
+	local m3 = string.byte(decrypted, 3) or 0
+	local m4 = string.byte(decrypted, 4) or 0
+
+	if m1 ~= MAGIC_BYTES[1] or m2 ~= MAGIC_BYTES[2] or m3 ~= MAGIC_BYTES[3] or m4 ~= MAGIC_BYTES[4] then
+		warn("[Decrypt] Invalid magic bytes - wrong key or corrupted data")
 		return nil
 	end
 
-	-- Remove signature
-	local data = string.sub(encryptedText, 17)
-
-	local key = GenerateUserKey()
-
-	-- Step 1: Base64 decode
-	local decrypted = Base64Decode(data)
-
-	-- Step 2: Unshuffle bytes
-	decrypted = ShuffleBytes(decrypted, key, false)
-
-	-- Step 3: XOR decipher
-	decrypted = XORCipher(decrypted, key, false)
-
-	return decrypted
+	-- Remove magic bytes and return data
+	return string.sub(decrypted, 5)
 end
 
-print("[StarshipCore] 🔐 Encryption system initialized (AES-like + Dynamic Key)")
+print("[StarshipCore] 🔐 RC4 Encryption system initialized (Hidden Format)")
 
 -- Initialize cache folders
 local function InitCacheFolders()
@@ -880,8 +891,10 @@ local function LoadFromCache(recordingId)
 	return nil
 end
 
--- Save recording to local cache (with encryption)
-local function SaveToCache(recordingId, recordingData)
+-- Save recording to local cache
+-- NEW: Server sends pre-encrypted data, we just save it directly!
+-- This avoids timeout issues on mobile
+local function SaveToCache(recordingId, encryptedData)
 	if not writefile then
 		warn("[Cache] writefile not available - cannot save to cache")
 		return false
@@ -890,57 +903,51 @@ local function SaveToCache(recordingId, recordingData)
 	-- Ensure folders exist
 	InitCacheFolders()
 
-	local cachePath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".enc" -- Use .enc for encrypted files
+	local cachePath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".enc"
 
-	-- Step 1: Encode to JSON first
-	local jsonData
-	local encodeSuccess, encodeErr = pcall(function()
-		jsonData = HttpService:JSONEncode(recordingData)
-	end)
-
-	if not encodeSuccess then
-		warn("[Cache] JSON encode failed: " .. tostring(encodeErr))
-		return false
-	end
-
-	if not jsonData or jsonData == "" then
-		warn("[Cache] JSON encode returned empty data")
-		return false
-	end
-
-	-- Step 2: Encrypt the JSON data
-	local encryptedData
-	local encryptSuccess, encryptErr = pcall(function()
-		encryptedData = EncryptData(jsonData)
-	end)
-
-	if not encryptSuccess then
-		warn("[Cache] Encryption failed: " .. tostring(encryptErr))
-		return false
-	end
-
-	if not encryptedData or encryptedData == "" then
-		warn("[Cache] Encryption returned empty data")
-		return false
-	end
-
-	-- Step 3: Write encrypted data to file
+	-- Just save the encrypted data directly - no processing needed!
 	local writeSuccess, writeErr = pcall(function()
 		writefile(cachePath, encryptedData)
 	end)
 
 	if writeSuccess then
-		local originalKB = math.floor(string.len(jsonData) / 1024)
-		local encryptedKB = math.floor(string.len(encryptedData) / 1024)
-		print(
-			"[Cache] 🔐 Encrypted and saved: "
-				.. recordingId
-				.. " ("
-				.. originalKB
-				.. "KB → "
-				.. encryptedKB
-				.. "KB)"
-		)
+		local sizeKB = math.floor(string.len(encryptedData) / 1024)
+		print("[Cache] 🔐 Saved encrypted cache: " .. recordingId .. " (" .. sizeKB .. "KB)")
+		return true
+	else
+		warn("[Cache] ❌ writefile failed: " .. tostring(writeErr))
+		return false
+	end
+end
+
+-- Save recording with JSON data (for legacy/fallback - used when server doesn't encrypt)
+local function SaveToCacheLegacy(recordingId, recordingData)
+	if not writefile then
+		warn("[Cache] writefile not available - cannot save to cache")
+		return false
+	end
+
+	InitCacheFolders()
+
+	local cachePath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".json"
+
+	local jsonData
+	local encodeSuccess = pcall(function()
+		jsonData = HttpService:JSONEncode(recordingData)
+	end)
+
+	if not encodeSuccess or not jsonData then
+		warn("[Cache] JSON encode failed")
+		return false
+	end
+
+	local writeSuccess, writeErr = pcall(function()
+		writefile(cachePath, jsonData)
+	end)
+
+	if writeSuccess then
+		local sizeKB = math.floor(string.len(jsonData) / 1024)
+		print("[Cache] 💾 Saved legacy cache: " .. recordingId .. " (" .. sizeKB .. "KB)")
 		return true
 	else
 		warn("[Cache] ❌ writefile failed: " .. tostring(writeErr))
@@ -5242,9 +5249,11 @@ local function LoadCloudRecording(recInfo)
 end
 
 -- Fallback: Direct load for small files or when chunked API fails
+-- NOW WITH SERVER-SIDE ENCRYPTION: Server sends encrypted data, we save it directly!
 LoadCloudRecordingDirect = function(recInfo)
 	task.spawn(function()
-		local apiUrl = BuildCloudURL({ recordingId = recInfo.recordingId })
+		-- Request encrypted data from server (encrypted=true)
+		local apiUrl = BuildCloudURL({ recordingId = recInfo.recordingId, encrypted = "true" })
 
 		local success, response = pcall(function()
 			return game:HttpGet(apiUrl)
@@ -5288,7 +5297,7 @@ LoadCloudRecordingDirect = function(recInfo)
 			return
 		end
 
-		-- Handle Large File Download (Presigned URL)
+		-- Handle Large File Download (Presigned URL) - these need client-side save
 		if data.downloadUrl then
 			if selectedFileDisplay then
 				pcall(function()
@@ -5340,14 +5349,14 @@ LoadCloudRecordingDirect = function(recInfo)
 			-- Show Playback Controls & Enable Mini Player
 			CreatePlaybackControls()
 
-			-- SAVE TO CACHE: Large file download via presigned URL
+			-- For large files: Save using legacy method (no timeout on presigned since server already sent it)
 			task.spawn(function()
 				local cacheData = {
 					Frames = CloudRecordingData.Frames or CloudRecordingData,
 					Mode = CloudRecordingData.Mode or "Flexible",
 					name = CloudRecordingName,
 				}
-				local saveResult = SaveToCache(recInfo.recordingId, cacheData)
+				local saveResult = SaveToCacheLegacy(recInfo.recordingId, cacheData)
 				if saveResult then
 					print("[Cache] Saved large file to cache: " .. recInfo.recordingId)
 				else
@@ -5357,6 +5366,61 @@ LoadCloudRecordingDirect = function(recInfo)
 			return
 		end
 
+		-- ═══════════════════════════════════════════════════════════════
+		-- NEW: Handle Encrypted Response (for caching)
+		-- Server sent pre-encrypted data - just save it directly!
+		-- ═══════════════════════════════════════════════════════════════
+		if data.success and data.encrypted and data.encryptedData then
+			-- Save encrypted data directly to cache (NO TIMEOUT!)
+			task.spawn(function()
+				local saveResult = SaveToCache(recInfo.recordingId, data.encryptedData)
+				if saveResult then
+					print("[Cache] 🔐 Saved server-encrypted data to cache: " .. recInfo.recordingId)
+				end
+			end)
+
+			-- Now decrypt for playback (only in memory)
+			local decryptedJson = DecryptData(data.encryptedData)
+			if not decryptedJson then
+				WindUI:Notify({
+					Title = "Error",
+					Content = "Failed to decrypt recording",
+					Duration = 3,
+				})
+				return
+			end
+
+			local decryptedData = HttpService:JSONDecode(decryptedJson)
+
+			-- Store in memory for playback
+			CloudRecordingData = decryptedData.recording
+			CloudRecordingName = decryptedData.name or recInfo.name
+			CloudRecordingLoaded = true
+			ChunkedState.isChunked = false
+
+			-- Update selected file display
+			selectedFile = "CLOUD:" .. recInfo.recordingId
+			if selectedFileDisplay then
+				pcall(function()
+					selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
+					selectedFileDisplay:SetDesc("Cloud Recording • Ready to play (encrypted)")
+				end)
+			end
+
+			WindUI:Notify({
+				Title = "☁️ Ready!",
+				Content = CloudRecordingName .. " loaded - tap Play to start",
+				Duration = 3,
+			})
+
+			-- Show Playback Controls & Enable Mini Player
+			CreatePlaybackControls()
+			return
+		end
+
+		-- ═══════════════════════════════════════════════════════════════
+		-- Legacy: Non-encrypted response (backwards compatibility)
+		-- ═══════════════════════════════════════════════════════════════
 		if data.success and data.recording then
 			-- Store in memory
 			CloudRecordingData = data.recording
@@ -5382,14 +5446,14 @@ LoadCloudRecordingDirect = function(recInfo)
 			-- Show Playback Controls & Enable Mini Player
 			CreatePlaybackControls()
 
-			-- Save to local cache for instant load next time
+			-- Save to local cache using legacy method
 			task.spawn(function()
 				local cacheData = {
 					Frames = data.recording.Frames or data.recording,
 					Mode = data.recording.Mode or "Flexible",
 					name = CloudRecordingName,
 				}
-				SaveToCache(recInfo.recordingId, cacheData)
+				SaveToCacheLegacy(recInfo.recordingId, cacheData)
 			end)
 		else
 			WindUI:Notify({
