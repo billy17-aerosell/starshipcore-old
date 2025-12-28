@@ -1,6 +1,7 @@
 // Unified Bootstrap Endpoint - Public entry point for StarshipCore
 // Supports both PC and Mobile platforms via ?platform=mobile query parameter
-// Returns a small script that auto-detects userId and calls secure get-loader API
+// PC: Returns a small script that auto-detects userId and calls secure get-loader API
+// MOBILE: Redirects to mobile-bootstrap (which serves loader directly - no URL exposure)
 // With browser detection, obfuscated response, and Discord logging
 // Development mode: Skip loader intro and directly serve script
 // + AUTO IP BAN for browser access attempts
@@ -20,6 +21,9 @@ const MOBILE_MAINTENANCE = false; // <-- SECURITY: Re-enabled after security fix
 
 import fs from "fs";
 import path from "path";
+
+// Import mobile-bootstrap handler for secure mobile loading (no URL exposure)
+import mobileBootstrapHandler from "./mobile-bootstrap.js";
 
 // ═══════════════════════════════════════════════════════════════════
 // REDIS FOR IP BAN SYSTEM
@@ -204,6 +208,15 @@ export default async function handler(req, res) {
   const platform = req.query.platform === "mobile" ? "mobile" : "pc";
   const platformLabel = platform === "mobile" ? "📱 Mobile" : "💻 PC";
   const platformEmoji = platform === "mobile" ? "📱" : "💻";
+
+  // ═══════════════════════════════════════════════════════════════
+  // SECURITY: Redirect mobile to secure mobile-bootstrap handler
+  // This handler serves loader DIRECTLY without exposing any URLs
+  // ═══════════════════════════════════════════════════════════════
+  if (platform === "mobile") {
+    console.log(`[${timestamp}] 📱 Mobile request -> Redirecting to secure mobile-bootstrap | IP: ${clientIP}`);
+    return mobileBootstrapHandler(req, res);
+  }
 
   // Check for development mode (check this early to bypass maintenance)
   const isDev =
