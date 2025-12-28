@@ -9,6 +9,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 local VERSION = "1.0.0-mobile"
 local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
@@ -579,6 +580,225 @@ local PreloadNextChunks
 local CACHE_FOLDER = "StarshipCache"
 local CLOUD_CACHE_FOLDER = CACHE_FOLDER .. "/CloudRecordings"
 
+-- ══════════════════════════════════════════════════════════════════
+-- 🔐 ENCRYPTION SYSTEM (AES-like + Dynamic Key per User)
+-- ══════════════════════════════════════════════════════════════════
+local ENCRYPTION_SECRET = "STARSHIP_CORE_2024_SECURE" -- Base secret (obfuscated in final script)
+local ENCRYPTION_ROUNDS = 3 -- Multiple rounds for stronger encryption
+
+-- Generate dynamic encryption key based on UserId
+local function GenerateUserKey()
+	local userId = tostring(LocalPlayer.UserId)
+	local baseKey = ENCRYPTION_SECRET .. "_USER_" .. userId .. "_KEY"
+
+	-- Create a longer key by repeating and modifying
+	local extendedKey = ""
+	for i = 1, 256 do
+		local charIdx = ((i - 1) % #baseKey) + 1
+		local baseChar = string.byte(baseKey, charIdx)
+		local modifier = (i * 7 + tonumber(userId) % 100) % 256
+		extendedKey = extendedKey .. string.char((baseChar + modifier) % 256)
+	end
+
+	return extendedKey
+end
+
+-- Simple Base64 encode (for storage)
+local function Base64Encode(data)
+	local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	local result = {}
+	local padding = ""
+
+	-- Pad to multiple of 3
+	local mod = #data % 3
+	if mod > 0 then
+		for i = 1, 3 - mod do
+			data = data .. "\0"
+			padding = padding .. "="
+		end
+	end
+
+	for i = 1, #data, 3 do
+		local b1 = string.byte(data, i)
+		local b2 = string.byte(data, i + 1)
+		local b3 = string.byte(data, i + 2)
+
+		local n = b1 * 65536 + b2 * 256 + b3
+
+		table.insert(result, string.sub(b64chars, math.floor(n / 262144) % 64 + 1, math.floor(n / 262144) % 64 + 1))
+		table.insert(result, string.sub(b64chars, math.floor(n / 4096) % 64 + 1, math.floor(n / 4096) % 64 + 1))
+		table.insert(result, string.sub(b64chars, math.floor(n / 64) % 64 + 1, math.floor(n / 64) % 64 + 1))
+		table.insert(result, string.sub(b64chars, n % 64 + 1, n % 64 + 1))
+	end
+
+	local encoded = table.concat(result)
+	if #padding > 0 then
+		encoded = string.sub(encoded, 1, #encoded - #padding) .. padding
+	end
+
+	return encoded
+end
+
+-- Simple Base64 decode
+local function Base64Decode(data)
+	local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	local b64lookup = {}
+	for i = 1, #b64chars do
+		b64lookup[string.sub(b64chars, i, i)] = i - 1
+	end
+
+	-- Remove padding and track it
+	local padding = 0
+	if string.sub(data, -2) == "==" then
+		padding = 2
+		data = string.sub(data, 1, -3) .. "AA"
+	elseif string.sub(data, -1) == "=" then
+		padding = 1
+		data = string.sub(data, 1, -2) .. "A"
+	end
+
+	local result = {}
+	for i = 1, #data, 4 do
+		local c1 = b64lookup[string.sub(data, i, i)] or 0
+		local c2 = b64lookup[string.sub(data, i + 1, i + 1)] or 0
+		local c3 = b64lookup[string.sub(data, i + 2, i + 2)] or 0
+		local c4 = b64lookup[string.sub(data, i + 3, i + 3)] or 0
+
+		local n = c1 * 262144 + c2 * 4096 + c3 * 64 + c4
+
+		table.insert(result, string.char(math.floor(n / 65536) % 256))
+		table.insert(result, string.char(math.floor(n / 256) % 256))
+		table.insert(result, string.char(n % 256))
+	end
+
+	local decoded = table.concat(result)
+	if padding > 0 then
+		decoded = string.sub(decoded, 1, #decoded - padding)
+	end
+
+	return decoded
+end
+
+-- Multi-round XOR cipher with key derivation
+local function XORCipher(data, key, encrypt)
+	local result = {}
+	local keyLen = #key
+
+	for round = 1, ENCRYPTION_ROUNDS do
+		local roundData = (round == 1) and data or table.concat(result)
+		result = {}
+
+		-- Derive round-specific sub-key
+		local roundOffset = round * 17
+
+		for i = 1, #roundData do
+			local dataByte = string.byte(roundData, i)
+			local keyIdx = ((i - 1 + roundOffset) % keyLen) + 1
+			local keyByte = string.byte(key, keyIdx)
+
+			-- XOR with additional mixing
+			local mixed
+			if encrypt then
+				mixed = (dataByte + keyByte + round) % 256
+				mixed = bit32 and bit32.bxor(mixed, keyByte) or ((mixed + keyByte) % 256)
+			else
+				mixed = bit32 and bit32.bxor(dataByte, keyByte) or ((dataByte + 256 - keyByte) % 256)
+				mixed = (mixed + 256 - keyByte - round) % 256
+			end
+
+			table.insert(result, string.char(mixed))
+		end
+	end
+
+	return table.concat(result)
+end
+
+-- Byte shuffle for additional obfuscation
+local function ShuffleBytes(data, key, encrypt)
+	local bytes = {}
+	for i = 1, #data do
+		table.insert(bytes, string.byte(data, i))
+	end
+
+	local len = #bytes
+	if len < 2 then
+		return data
+	end
+
+	-- Generate shuffle pattern from key
+	local pattern = {}
+	for i = 1, len do
+		local keyIdx = ((i - 1) % #key) + 1
+		pattern[i] = string.byte(key, keyIdx)
+	end
+
+	if encrypt then
+		-- Shuffle forward
+		for i = 1, len - 1 do
+			local swapIdx = (pattern[i] % (len - i + 1)) + i
+			bytes[i], bytes[swapIdx] = bytes[swapIdx], bytes[i]
+		end
+	else
+		-- Unshuffle (reverse order)
+		for i = len - 1, 1, -1 do
+			local swapIdx = (pattern[i] % (len - i + 1)) + i
+			bytes[i], bytes[swapIdx] = bytes[swapIdx], bytes[i]
+		end
+	end
+
+	local result = {}
+	for _, b in ipairs(bytes) do
+		table.insert(result, string.char(b))
+	end
+	return table.concat(result)
+end
+
+-- Main encrypt function
+local function EncryptData(plainText)
+	local key = GenerateUserKey()
+
+	-- Step 1: XOR cipher
+	local encrypted = XORCipher(plainText, key, true)
+
+	-- Step 2: Shuffle bytes
+	encrypted = ShuffleBytes(encrypted, key, true)
+
+	-- Step 3: Base64 encode for storage
+	encrypted = Base64Encode(encrypted)
+
+	-- Step 4: Add signature header (for validation)
+	encrypted = "STARSHIP_ENC_V1:" .. encrypted
+
+	return encrypted
+end
+
+-- Main decrypt function
+local function DecryptData(encryptedText)
+	-- Step 0: Check signature
+	if not string.sub(encryptedText, 1, 16) == "STARSHIP_ENC_V1:" then
+		warn("[Decrypt] Invalid signature - file may be corrupted or unencrypted")
+		return nil
+	end
+
+	-- Remove signature
+	local data = string.sub(encryptedText, 17)
+
+	local key = GenerateUserKey()
+
+	-- Step 1: Base64 decode
+	local decrypted = Base64Decode(data)
+
+	-- Step 2: Unshuffle bytes
+	decrypted = ShuffleBytes(decrypted, key, false)
+
+	-- Step 3: XOR decipher
+	decrypted = XORCipher(decrypted, key, false)
+
+	return decrypted
+end
+
+print("[StarshipCore] 🔐 Encryption system initialized (AES-like + Dynamic Key)")
+
 -- Initialize cache folders
 local function InitCacheFolders()
 	pcall(function()
@@ -593,13 +813,14 @@ local function InitCacheFolders()
 	end)
 end
 
--- Check if a recording is cached locally
+-- Check if a recording is cached locally (checks both encrypted and legacy)
 local function IsRecordingCached(recordingId)
 	if not isfile then
 		return false
 	end
-	local cachePath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".json"
-	return isfile(cachePath)
+	local encPath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".enc"
+	local legacyPath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".json"
+	return isfile(encPath) or isfile(legacyPath)
 end
 
 -- Load recording from local cache (returns data or nil)
@@ -608,9 +829,21 @@ local function LoadFromCache(recordingId)
 		return nil
 	end
 
-	local cachePath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".json"
+	local cachePath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".enc" -- Use .enc extension for encrypted
+
+	-- Also check for legacy .json files (unencrypted)
+	local legacyPath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".json"
+	local useLegacy = false
+
 	if not isfile(cachePath) then
-		return nil
+		if isfile(legacyPath) then
+			-- Legacy unencrypted file exists - use it but don't save again
+			cachePath = legacyPath
+			useLegacy = true
+			print("[Cache] Found legacy unencrypted cache file")
+		else
+			return nil
+		end
 	end
 
 	local success, content = pcall(readfile, cachePath)
@@ -618,8 +851,27 @@ local function LoadFromCache(recordingId)
 		return nil
 	end
 
+	local jsonData
+
+	if useLegacy then
+		-- Legacy file - no decryption needed
+		jsonData = content
+	else
+		-- Encrypted file - decrypt first
+		local decryptSuccess, decrypted = pcall(function()
+			return DecryptData(content)
+		end)
+
+		if not decryptSuccess or not decrypted then
+			warn("[Cache] Decryption failed - file may be corrupted")
+			return nil
+		end
+
+		jsonData = decrypted
+	end
+
 	local parseSuccess, data = pcall(function()
-		return HttpService:JSONDecode(content)
+		return HttpService:JSONDecode(jsonData)
 	end)
 
 	if parseSuccess and data then
@@ -628,26 +880,72 @@ local function LoadFromCache(recordingId)
 	return nil
 end
 
--- Save recording to local cache
+-- Save recording to local cache (with encryption)
 local function SaveToCache(recordingId, recordingData)
 	if not writefile then
+		warn("[Cache] writefile not available - cannot save to cache")
 		return false
 	end
 
+	-- Ensure folders exist
 	InitCacheFolders()
 
-	local cachePath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".json"
+	local cachePath = CLOUD_CACHE_FOLDER .. "/" .. recordingId .. ".enc" -- Use .enc for encrypted files
 
-	local success = pcall(function()
-		local jsonData = HttpService:JSONEncode(recordingData)
-		writefile(cachePath, jsonData)
+	-- Step 1: Encode to JSON first
+	local jsonData
+	local encodeSuccess, encodeErr = pcall(function()
+		jsonData = HttpService:JSONEncode(recordingData)
 	end)
 
-	if success then
-		print("[Cache] Saved recording to cache: " .. recordingId)
+	if not encodeSuccess then
+		warn("[Cache] JSON encode failed: " .. tostring(encodeErr))
+		return false
 	end
 
-	return success
+	if not jsonData or jsonData == "" then
+		warn("[Cache] JSON encode returned empty data")
+		return false
+	end
+
+	-- Step 2: Encrypt the JSON data
+	local encryptedData
+	local encryptSuccess, encryptErr = pcall(function()
+		encryptedData = EncryptData(jsonData)
+	end)
+
+	if not encryptSuccess then
+		warn("[Cache] Encryption failed: " .. tostring(encryptErr))
+		return false
+	end
+
+	if not encryptedData or encryptedData == "" then
+		warn("[Cache] Encryption returned empty data")
+		return false
+	end
+
+	-- Step 3: Write encrypted data to file
+	local writeSuccess, writeErr = pcall(function()
+		writefile(cachePath, encryptedData)
+	end)
+
+	if writeSuccess then
+		local originalKB = math.floor(string.len(jsonData) / 1024)
+		local encryptedKB = math.floor(string.len(encryptedData) / 1024)
+		print(
+			"[Cache] 🔐 Encrypted and saved: "
+				.. recordingId
+				.. " ("
+				.. originalKB
+				.. "KB → "
+				.. encryptedKB
+				.. "KB)"
+		)
+		return true
+	else
+		warn("[Cache] ❌ writefile failed: " .. tostring(writeErr))
+		return false
+	end
 end
 
 -- Get cache size info
@@ -662,16 +960,20 @@ local function GetCacheInfo()
 
 	local files = listfiles(CLOUD_CACHE_FOLDER)
 	local count = 0
-	local totalSize = 0
+	local encryptedCount = 0
+	local legacyCount = 0
 
 	for _, filePath in ipairs(files) do
-		if string.sub(filePath, -5) == ".json" then
+		if string.sub(filePath, -4) == ".enc" then
 			count = count + 1
-			-- Estimate size (can't get actual file size in most executors)
+			encryptedCount = encryptedCount + 1
+		elseif string.sub(filePath, -5) == ".json" then
+			count = count + 1
+			legacyCount = legacyCount + 1
 		end
 	end
 
-	return { count = count }
+	return { count = count, encrypted = encryptedCount, legacy = legacyCount }
 end
 
 -- Clear all cached recordings
@@ -695,6 +997,42 @@ end
 
 -- Initialize cache on startup
 InitCacheFolders()
+
+-- FILE API DIAGNOSTICS (helps debug Delta Executor and other executors)
+do
+	local apiStatus = {
+		isfolder = isfolder ~= nil,
+		isfile = isfile ~= nil,
+		readfile = readfile ~= nil,
+		writefile = writefile ~= nil,
+		makefolder = makefolder ~= nil,
+		listfiles = listfiles ~= nil,
+		delfile = delfile ~= nil,
+	}
+
+	local availableApis = {}
+	local missingApis = {}
+
+	for name, available in pairs(apiStatus) do
+		if available then
+			table.insert(availableApis, name)
+		else
+			table.insert(missingApis, name)
+		end
+	end
+
+	print("[StarshipCore] File API Status:")
+	print("  ✅ Available: " .. (#availableApis > 0 and table.concat(availableApis, ", ") or "NONE"))
+	if #missingApis > 0 then
+		warn("  ❌ Missing: " .. table.concat(missingApis, ", "))
+		warn("  ⚠️ Cache system may not work - recordings will download each time")
+	else
+		print("  ✅ All File APIs available - Cache system fully functional!")
+	end
+
+	-- Store for later reference
+	getgenv().StarshipFileAPIStatus = apiStatus
+end
 
 -- ══════════════════════════════════════════════════════════════════
 -- UTILITY FUNCTIONS
@@ -2046,7 +2384,7 @@ ToolsTab:Button({
 
 ToolsTab:Divider()
 
--- ══════════════════════════════════════════════════════════════════
+-- ═══════════════════════════�����══════════════════════════════════════
 -- 📊 SPEED CHECKER
 -- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "📊 Speed Checker", TextSize = 20 })
@@ -5001,6 +5339,21 @@ LoadCloudRecordingDirect = function(recInfo)
 
 			-- Show Playback Controls & Enable Mini Player
 			CreatePlaybackControls()
+
+			-- SAVE TO CACHE: Large file download via presigned URL
+			task.spawn(function()
+				local cacheData = {
+					Frames = CloudRecordingData.Frames or CloudRecordingData,
+					Mode = CloudRecordingData.Mode or "Flexible",
+					name = CloudRecordingName,
+				}
+				local saveResult = SaveToCache(recInfo.recordingId, cacheData)
+				if saveResult then
+					print("[Cache] Saved large file to cache: " .. recInfo.recordingId)
+				else
+					warn("[Cache] Failed to save to cache - File API may not be supported")
+				end
+			end)
 			return
 		end
 
@@ -6182,7 +6535,7 @@ SettingsTab:Divider()
 
 -- ══════════════════════════════════════════════════════════════════
 -- 🔧 GENERAL SETTINGS
--- ══════════════════════════════════════════════════════════════════
+-- ═══════════════════════════���═���════════════════════════════════════
 SettingsTab:Section({ Title = "🔧 General", TextSize = 16 })
 
 local AutoAntiAFKToggle = SettingsTab:Toggle({

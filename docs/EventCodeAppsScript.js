@@ -8,10 +8,11 @@
  * 2. Rename Sheet1 to "EventCodes" - for storing available codes
  * 3. Create Sheet2 named "Redeemed" - for tracking who redeemed
  * 4. Create Sheet3 named "Banned" - for blocked users
- * 5. Go to Extensions > Apps Script
- * 6. Paste this entire code
- * 7. Deploy as Web App (Execute as: Me, Access: Anyone)
- * 8. Copy the deployment URL to Vercel EVENT_CODE_API_URL
+ * 5. Create Sheet4 named "Settings" - for maintenance mode (NEW!)
+ * 6. Go to Extensions > Apps Script
+ * 7. Paste this entire code
+ * 8. Deploy as Web App (Execute as: Me, Access: Anyone)
+ * 9. Copy the deployment URL to Vercel EVENT_CODE_API_URL
  * 
  * SHEET STRUCTURE:
  * 
@@ -26,6 +27,11 @@
  * Banned sheet (blocked users):
  * | A: UserId | B: Reason | C: BannedAt |
  * | 999999    | Hacker    | 2024-12-28  |
+ * 
+ * Settings sheet (maintenance mode - NEW!):
+ * | A: Settings   | B: Value                              | C: Description |
+ * | MAINTENANCE   | OFF                                   | ON/OFF         |
+ * | MAINT_MSG     | Server is under maintenance...        | message        |
  */
 
 // ═══════════════════════════════════════════════════════════════════
@@ -34,6 +40,7 @@
 const SHEET_EVENT_CODES = "EventCodes";
 const SHEET_REDEEMED = "Redeemed";
 const SHEET_BANNED = "Banned";
+const SHEET_SETTINGS = "Settings"; // NEW: For maintenance mode
 
 // ═══════════════════════════════════════════════════════════════════
 // MAIN HANDLER - Receives all requests
@@ -67,10 +74,18 @@ function doGet(e) {
       case "status":
         return checkAccess(userId); // Same as check
       
+      case "maintenance":
+        const maintStatus = checkMaintenance();
+        return jsonResponse({
+          success: true,
+          maintenance: maintStatus.maintenance,
+          message: maintStatus.message
+        });
+      
       default:
         return jsonResponse({
           success: false,
-          message: "Invalid action. Use: check, redeem, or status"
+          message: "Invalid action. Use: check, redeem, status, or maintenance"
         });
     }
   } catch (error) {
@@ -344,4 +359,44 @@ function jsonResponse(data) {
   return ContentService
     .createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MAINTENANCE MODE CHECK
+// ═══════════════════════════════════════════════════════════════════
+// Sheet "Settings" structure:
+// | A: Settings    | B: Value      | C: Description |
+// | MAINTENANCE    | OFF           | ON/OFF         |
+// | MAINT_MSG      | Your message  | message        |
+// ═══════════════════════════════════════════════════════════════════
+
+function checkMaintenance() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const settingsSheet = ss.getSheetByName(SHEET_SETTINGS);
+  
+  if (!settingsSheet) {
+    return { maintenance: false, message: "" };
+  }
+  
+  const data = settingsSheet.getDataRange().getValues();
+  
+  let isMaintenanceOn = false;
+  let maintenanceMessage = "Server is under maintenance. Please try again later!";
+  
+  for (let i = 1; i < data.length; i++) {
+    const setting = String(data[i][0]).toUpperCase();
+    const value = data[i][1];
+    
+    if (setting === "MAINTENANCE") {
+      isMaintenanceOn = String(value).toUpperCase() === "ON" || value === true;
+    }
+    if (setting === "MAINT_MSG") {
+      maintenanceMessage = String(value) || maintenanceMessage;
+    }
+  }
+  
+  return {
+    maintenance: isMaintenanceOn,
+    message: maintenanceMessage
+  };
 }

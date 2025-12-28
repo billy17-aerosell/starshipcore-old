@@ -16,8 +16,28 @@ const OWNER_IPS = [
   "36.80.245.122",
 ];
 
-// MAINTENANCE MODE
-const MOBILE_MAINTENANCE = false;
+// MAINTENANCE MODE - Now fetched from Google Sheets!
+// To toggle: Go to Google Sheets > Settings sheet > Set MAINTENANCE to ON or OFF
+const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
+
+async function checkMaintenanceFromSheets() {
+  if (!EVENT_CODE_API) {
+    console.log("[Maintenance] No EVENT_CODE_API configured, maintenance disabled");
+    return { maintenance: false, message: "" };
+  }
+  
+  try {
+    const response = await fetch(`${EVENT_CODE_API}?action=maintenance`);
+    const data = await response.json();
+    return {
+      maintenance: data.maintenance === true,
+      message: data.message || "Server is under maintenance."
+    };
+  } catch (error) {
+    console.error("[Maintenance] Error checking:", error.message);
+    return { maintenance: false, message: "" };
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // REDIS FOR IP BAN
@@ -153,23 +173,26 @@ export default async function handler(req, res) {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // MAINTENANCE MODE
+  // MAINTENANCE MODE - Fetched from Google Sheets (no deploy needed!)
   // ═══════════════════════════════════════════════════════════════
-  if (MOBILE_MAINTENANCE && !isDev) {
-    console.log(`[${timestamp}] 🔧 MOBILE MAINTENANCE | IP: ${clientIP}`);
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    return res.status(200).send(`
+  if (!isDev) {
+    const maintStatus = await checkMaintenanceFromSheets();
+    if (maintStatus.maintenance) {
+      console.log(`[${timestamp}] 🔧 MOBILE MAINTENANCE | IP: ${clientIP}`);
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return res.status(200).send(`
 -- StarshipCore Mobile - Maintenance Mode
 print("[StarshipCore Mobile] 🔧 Maintenance Mode")
 pcall(function()
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "🔧 Maintenance",
-        Text = "Mobile version is under maintenance. Please try again later!",
+        Text = "${maintStatus.message}",
         Duration = 10
     })
 end)
 warn("[StarshipCore] Mobile access is temporarily disabled.")
 `);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════
