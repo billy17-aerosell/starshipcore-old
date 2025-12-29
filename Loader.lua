@@ -667,8 +667,8 @@ local function showError(message)
 	end)
 end
 
--- Production: local SECURE_API_URL = "https://starship-core.my.id"
-local SECURE_API_URL = "http://localhost:3000" -- Testing
+-- Configuration (Production)
+local SECURE_API_URL = "https://starship-core.my.id"
 
 local function main()
 	local loaderGui, updateStatus = createLoadingUI()
