@@ -426,28 +426,27 @@ export default async function handler(req, res) {
       const data = await response.json();
       
       // Log and send Discord webhook
-      // RATE LIMIT: Only send webhook if not rate limited (prevent spam)
-      if (shouldSendWebhook(userId, "redeem")) {
-        if (data.success) {
-          console.log(`[${timestamp}] 🎟️ EVENT CODE REDEEMED - User: ${username} (${userId}) | Code: ${code} | IP: ${clientIP}`);
-          
-          // Send success webhook
-          await sendDiscordLog({
-            title: "🎟️ Event Code Redeemed Successfully",
-            status: "success",
-            statusMessage: "✅ Code Activated",
-            authType: `Event Code: ${code}`,
-            owner: `${username || "Unknown"} (${userId})`,
-            ip: clientIP,
-            platform: platformLabel,
-            deviceCount: "N/A",
-            timestamp: timestamp,
-            message: `✅ Event code berhasil di-redeem!\n**Code:** \`${code}\`\n**Duration:** ${data.duration || "N/A"} days\n**Expires:** ${data.expiresAt || "N/A"}`,
-          });
-        } else {
+      if (data.success) {
+        // SUCCESS: Always send webhook (Important!)
+        console.log(`[${timestamp}] 🎟️ EVENT CODE REDEEMED - User: ${username} (${userId}) | Code: ${code} | IP: ${clientIP}`);
+        
+        await sendDiscordLog({
+          title: "🎟️ Event Code Redeemed Successfully",
+          status: "success",
+          statusMessage: "✅ Code Activated",
+          authType: `Event Code: ${code}`,
+          owner: `${username || "Unknown"} (${userId})`,
+          ip: clientIP,
+          platform: platformLabel,
+          deviceCount: "N/A",
+          timestamp: timestamp,
+          message: `✅ Event code berhasil di-redeem!\n**Code:** \`${code}\`\n**Duration:** ${data.duration || "N/A"} days\n**Expires:** ${data.expiresAt || "N/A"}`,
+        });
+      } else {
+        // FAILURE: Rate limit to prevent spam
+        if (shouldSendWebhook(userId, "redeem_fail")) {
           console.log(`[${timestamp}] ❌ EVENT CODE FAILED - User: ${username} (${userId}) | Code: ${code} | Reason: ${data.message}`);
           
-          // Send failed webhook
           await sendDiscordLog({
             title: "❌ Event Code Failed",
             status: "blocked",
@@ -460,9 +459,9 @@ export default async function handler(req, res) {
             timestamp: timestamp,
             message: `❌ Event code gagal: ${data.message}`,
           });
+        } else {
+          console.log(`[${timestamp}] 🔇 Webhook skipped (Rate Limited) - User: ${userId} | Action: Redeem Fail`);
         }
-      } else {
-        console.log(`[${timestamp}] 🔇 Webhook skipped (Rate Limited) - User: ${userId} | Action: Redeem`);
       }
       
       return res.status(200).json(data);
