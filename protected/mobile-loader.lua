@@ -835,6 +835,17 @@ local function main()
 			loaderGui:Destroy()
 		end
 
+		-- Check if event system is active (from server response)
+		if data.isEventActive == false then
+			-- Event system disabled -> Show error directly
+			local errorMsg = data.message or "Access Denied"
+			if data.hint then
+				errorMsg = errorMsg .. "\n\n" .. data.hint
+			end
+			showError(errorMsg)
+			return
+		end
+
 		-- Instead of showing error directly, show event code UI
 		showEventCodeUI(function(sessionData)
 			-- On success, load mobile UI

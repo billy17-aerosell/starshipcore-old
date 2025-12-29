@@ -899,10 +899,14 @@ export default async function handler(req, res) {
       message: `❌ User not in ${platform} whitelist\nUserID: ${userId}`,
     });
 
+    // Check if event system is active globally
+    const isEventActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
+
     return res.status(200).json({
       status: "denied",
       message: `Not whitelisted for ${platform.toUpperCase()} access`,
       hint: `Purchase ${platform.toUpperCase()} VIP to get access`,
+      isEventActive: isEventActive
     });
   } catch (error) {
     console.error(`${platformLabel} Load Error:`, error);
