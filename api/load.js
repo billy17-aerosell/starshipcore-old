@@ -702,7 +702,7 @@ export default async function handler(req, res) {
               owner: `${vipUser.username} (${userId})`,
               ip: clientIP,
               platform: platformLabel,
-              hwidStatus: hwidResult ? (hwidResult.isNew ? "New HWID Registered" : "HWID Bound") : "Protected",
+              hwidStatus: "MISMATCH",
               timestamp: timestamp,
               message: `⚠️ **Possible account sharing detected!**\n\n**Reason:** ${hwidResult.reason}\n**Stored HWID:** ${hwidResult.storedHWID || "N/A"}\n**Provided HWID:** ${hwidResult.providedHWID || "N/A"}\n**Registered:** ${hwidResult.registeredAt || "N/A"}`,
             });
