@@ -113,6 +113,45 @@ async function streamToString(stream) {
   return str;
 }
 
+// Helper: Send Discord Log
+async function sendDiscordLog(logData) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  try {
+    const colors = {
+      upload: 0x22c55e, // Green
+      delete: 0xef4444, // Red
+      update: 0x3b82f6, // Blue
+      warning: 0xeab308, // Yellow
+    };
+
+    const embed = {
+      title: logData.title || "Cloud Storage Activity",
+      color: colors[logData.type] || 0x808080,
+      fields: [
+        { name: "👤 User ID", value: `\`${logData.userId || "Unknown"}\``, inline: true },
+        { name: "📂 File", value: `\`${logData.fileName || "Unknown"}\``, inline: true },
+        { name: "🔧 Action", value: logData.action || "Unknown", inline: true },
+      ],
+      timestamp: new Date().toISOString(),
+      footer: { text: "☁️ StarshipCore R2 Cloud" },
+    };
+
+    if (logData.details) {
+      embed.description = logData.details;
+    }
+
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ embeds: [embed] }),
+    });
+  } catch (error) {
+    console.error("[Discord] Error sending log:", error.message);
+  }
+}
+
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -225,6 +264,16 @@ export default async function handler(req, res) {
         const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
         
         console.log(`[R2] Generated presigned upload URL for: ${sanitizedName}`);
+        
+        // Log to Discord
+        await sendDiscordLog({
+          title: "📤 Upload Started (Presigned URL)",
+          type: "upload",
+          userId: userId,
+          fileName: sanitizedName,
+          action: "Generated Upload URL",
+          details: `User requested upload URL for **${name}**\nSize: Large File (Direct Upload)`
+        });
         
         return res.status(200).json({
           success: true,
@@ -342,6 +391,16 @@ export default async function handler(req, res) {
       );
 
       console.log(`[R2] Upload successful: ${sanitizedName}`);
+
+      // Log to Discord
+      await sendDiscordLog({
+        title: "📤 New Recording Uploaded",
+        type: "upload",
+        userId: userId,
+        fileName: name,
+        action: "Upload Success",
+        details: `Size: **${contentSizeKB} KB**\nFrames: **${frameCount}**\nGame: ${gameName || "Unknown"}`
+      });
 
       return res.status(200).json({
         success: true,
@@ -613,6 +672,16 @@ export default async function handler(req, res) {
 
       console.log(`[R2] Update successful: ${existingData.id}`);
 
+      // Log to Discord
+      await sendDiscordLog({
+        title: "📝 Recording Updated",
+        type: "update",
+        userId: userId,
+        fileName: updatedName,
+        action: "Update Success",
+        details: `Updated recording **${existingData.id}**\nNew Size: ${contentSizeKB} KB`
+      });
+
       return res.status(200).json({
         success: true,
         message: "Recording updated successfully!",
@@ -654,6 +723,16 @@ export default async function handler(req, res) {
       );
 
       console.log(`[R2] Delete successful: ${key}`);
+
+      // Log to Discord (CRITICAL ALERT)
+      await sendDiscordLog({
+        title: "🗑️ Recording DELETED",
+        type: "delete",
+        userId: userId,
+        fileName: recordingId,
+        action: "Delete Success",
+        details: `User **${userId}** deleted recording **${recordingId}**\n⚠️ Check if this was authorized.`
+      });
 
       return res.status(200).json({
         success: true,
