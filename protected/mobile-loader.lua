@@ -645,7 +645,7 @@ local function showEventCodeUI(onSuccess, onCancel)
 		end)
 
 		if not success then
-			setLoading(false)-
+			setLoading(false)
 			updateStatus("❌ Gagal terhubung ke server!", "#ef4444")
 			return
 		end
@@ -863,7 +863,7 @@ local function main()
 			Username = username,
 		}
 
-		updateStatus("Access granted! (" .. eventData.remainingDays .. " days left)", 0.7)
+		updateStatus("Access granted! (" .. tostring(eventData.remainingDays or "N/A") .. " days left)", 0.7)
 		task.wait(0.3)
 
 		loadMobileUI(sessionData, loaderGui, updateStatus)
