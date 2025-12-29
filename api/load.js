@@ -539,6 +539,50 @@ export default async function handler(req, res) {
   }
 
   if (action === "status" || action === "check") {
+    // 1. CHECK REDIS WHITELIST FIRST (for VIP users)
+    try {
+      const redisClient = await getRedis();
+      if (redisClient) {
+        const mobileWhitelist = await getWhitelistFromRedis(config.mobileWhitelistKey);
+        
+        if (mobileWhitelist && mobileWhitelist[userId]) {
+          const user = mobileWhitelist[userId];
+          
+          // Check if suspended
+          if (user.status === "suspended") {
+            return res.status(200).json({
+              success: true,
+              isBanned: true,
+              banReason: "Account suspended by admin",
+              hasAccess: false
+            });
+          }
+          
+          // Check if expired
+          if (user.expiresAt && new Date(user.expiresAt) < new Date()) {
+             return res.status(200).json({
+              success: true,
+              status: "denied",
+              message: "VIP access expired",
+              hasAccess: false
+            });
+          }
+          
+          // User is VIP and Active
+          return res.status(200).json({
+            success: true,
+            isBanned: false,
+            hasAccess: true,
+            role: "VIP",
+            message: "Active VIP"
+          });
+        }
+      }
+    } catch (e) {
+      console.error("[Ban Check] Redis error:", e);
+    }
+
+    // 2. FALLBACK TO EVENT SYSTEM CHECK
     // Check if event system is active globally
     const isEventActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
     
