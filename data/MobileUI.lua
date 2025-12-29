@@ -270,6 +270,7 @@ local Config = {
 -- PERIODIC BAN CHECK SYSTEM (Every 5 minutes)
 -- Checks both IP ban and Google Sheets ban status
 -- ══════════════════════════════════════════════════════════════════
+local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 local BAN_CHECK_INTERVAL = 5 * 60 -- 5 minutes in seconds
 local BAN_CHECK_API = (CLOUD_API_BASE or "https://starship-core.my.id") .. "/api/m-auth-k5r9z7"
 local isBanCheckRunning = false
@@ -524,9 +525,6 @@ local ChunkedState = {
 	isPreloading = false, -- Whether preloading is in progress
 	loadProgress = 0, -- Loading progress (0-100)
 }
-
--- API Base URL and Security Configuration
-local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 
 -- ══════════════════════════════════════════════════════════════════
 -- CLOUD API SECURITY - Event Code required for R2 access
