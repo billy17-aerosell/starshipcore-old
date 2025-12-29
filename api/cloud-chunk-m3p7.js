@@ -18,6 +18,95 @@ import { promisify } from "util";
 // Promisified gzip
 const gzip = promisify(zlib.gzip);
 
+// ============================================
+// USER ACCESS VALIDATION - Check Redis VIP or Google Sheets Event
+// ============================================
+
+// Event Code System API (from environment variable for security)
+const EVENT_CODE_API_URL = process.env.EVENT_CODE_API_URL || "";
+
+// Redis singleton
+let redis = null;
+let redisInitAttempted = false;
+
+// Get Redis instance (lazy load)
+async function getRedis() {
+  if (!redisInitAttempted) {
+    try {
+      const redisModule = await import("../lib/redis.js");
+      redis = redisModule.default;
+      console.log("[R2-Chunked] ✅ Redis module loaded");
+    } catch (error) {
+      console.error("[R2-Chunked] ⚠️ Redis module load failed:", error.message);
+      redis = null;
+    }
+    redisInitAttempted = true;
+  }
+  return redis;
+}
+
+// Check if userId has VIP access (exists in Redis whitelist)
+async function checkVIPAccess(userId) {
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return { hasAccess: false };
+    
+    // Check PC whitelist
+    const pcWhitelist = await redisClient.get("starship:whitelist");
+    if (pcWhitelist) {
+      const pcData = JSON.parse(pcWhitelist);
+      if (pcData[userId] && pcData[userId].status === "active") {
+        return { hasAccess: true, source: "PC VIP" };
+      }
+    }
+    
+    // Check Mobile whitelist
+    const mobileWhitelist = await redisClient.get("starship:mobile_whitelist");
+    if (mobileWhitelist) {
+      const mobileData = JSON.parse(mobileWhitelist);
+      if (mobileData[userId] && mobileData[userId].status === "active") {
+        return { hasAccess: true, source: "Mobile VIP" };
+      }
+    }
+    
+    return { hasAccess: false };
+  } catch (error) {
+    console.error("[R2-Chunked] VIP check error:", error.message);
+    return { hasAccess: false };
+  }
+}
+
+// Check if userId has Event access (from Google Sheets)
+async function checkEventAccessForUser(userId) {
+  if (!EVENT_CODE_API_URL) {
+    return { hasAccess: false };
+  }
+  
+  try {
+    const apiUrl = `${EVENT_CODE_API_URL}?action=check&userId=${userId}`;
+    const response = await fetch(apiUrl);
+    const data = await response.json();
+    
+    if (data.success && data.hasAccess) {
+      return { hasAccess: true, source: "Event" };
+    }
+    return { hasAccess: false };
+  } catch (error) {
+    console.error("[R2-Chunked] Event check error:", error.message);
+    return { hasAccess: false };
+  }
+}
+
+// Main validation function - check if userId has ANY valid access
+async function validateUserAccess(userId) {
+  const vipResult = await checkVIPAccess(userId);
+  if (vipResult.hasAccess) {
+    return vipResult;
+  }
+  const eventResult = await checkEventAccessForUser(userId);
+  return eventResult;
+}
+
 // R2 Configuration (SECURITY: All credentials must come from environment variables)
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
@@ -194,7 +283,20 @@ export default async function handler(req, res) {
     });
   }
   
-  console.log(`[R2-Chunked] ✅ Access granted - UserId: ${requestUserId}`);
+  // ============================================
+  // CRITICAL: Validate userId has ACTUAL access (VIP or Event)
+  // This prevents hackers with stolen event codes from accessing R2
+  // ============================================
+  const accessResult = await validateUserAccess(requestUserId);
+  if (!accessResult.hasAccess) {
+    console.log(`[R2-Chunked] ❌ NO VALID ACCESS - UserId: ${requestUserId} (not VIP, not Event)`);
+    return res.status(403).json({ 
+      error: "Akses tidak valid",
+      message: "UserId tidak memiliki akses VIP atau Event"
+    });
+  }
+  
+  console.log(`[R2-Chunked] ✅ Access granted - UserId: ${requestUserId} (${accessResult.source})`);
 
   const { method } = req;
   const { recordingId, action, chunk } = req.query;
