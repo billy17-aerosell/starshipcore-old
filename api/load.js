@@ -125,6 +125,124 @@ async function getWhitelistFromRedis(whitelistKey) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+// HWID BINDING SYSTEM
+// ══════════════════════════════════════════════════════════════════
+
+// Check if HWID system is enabled
+function isHWIDEnabled() {
+  return process.env.HWID_ENABLED === "true";
+}
+
+// Get stored HWID for a user
+async function getStoredHWID(userId, platform) {
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return null;
+
+    const key = `hwid:${platform}:${userId}`;
+    const data = await redisClient.get(key);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    console.error("Redis HWID read error:", error.message);
+    return null;
+  }
+}
+
+// Store HWID for a user
+async function storeHWID(userId, platform, hwid, username) {
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return false;
+
+    const key = `hwid:${platform}:${userId}`;
+    const data = {
+      hwid: hwid,
+      platform: platform,
+      username: username,
+      registeredAt: new Date().toISOString(),
+      lastUsed: new Date().toISOString(),
+    };
+    await redisClient.set(key, JSON.stringify(data));
+    console.log(`[HWID] Registered new HWID for ${userId} (${platform})`);
+    return true;
+  } catch (error) {
+    console.error("Redis HWID write error:", error.message);
+    return false;
+  }
+}
+
+// Update last used time for HWID
+async function updateHWIDLastUsed(userId, platform) {
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return;
+
+    const key = `hwid:${platform}:${userId}`;
+    const data = await redisClient.get(key);
+    if (data) {
+      const parsed = JSON.parse(data);
+      parsed.lastUsed = new Date().toISOString();
+      await redisClient.set(key, JSON.stringify(parsed));
+    }
+  } catch (error) {
+    console.error("Redis HWID update error:", error.message);
+  }
+}
+
+// Validate HWID - returns { valid: boolean, reason?: string }
+async function validateHWID(userId, platform, hwid, username) {
+  // If HWID system is disabled, always pass
+  if (!isHWIDEnabled()) {
+    return { valid: true, reason: "HWID system disabled" };
+  }
+
+  // If no HWID provided, reject
+  if (!hwid || hwid === "" || hwid === "unknown") {
+    return { valid: false, reason: "No HWID provided" };
+  }
+
+  const storedData = await getStoredHWID(userId, platform);
+
+  if (!storedData) {
+    // First time - register this HWID
+    await storeHWID(userId, platform, hwid, username);
+    return { valid: true, reason: "New HWID registered", isNew: true };
+  }
+
+  // Compare HWID
+  if (storedData.hwid === hwid) {
+    // Same HWID - update last used and allow
+    await updateHWIDLastUsed(userId, platform);
+    return { valid: true, reason: "HWID matched" };
+  } else {
+    // Different HWID - REJECT
+    return { 
+      valid: false, 
+      reason: "HWID mismatch",
+      storedHWID: storedData.hwid.substring(0, 8) + "...",
+      providedHWID: hwid.substring(0, 8) + "...",
+      registeredAt: storedData.registeredAt
+    };
+  }
+}
+
+// Reset HWID for a user (admin function)
+async function resetHWID(userId, platform) {
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return false;
+
+    const key = `hwid:${platform}:${userId}`;
+    await redisClient.del(key);
+    console.log(`[HWID] Reset HWID for ${userId} (${platform})`);
+    return true;
+  } catch (error) {
+    console.error("Redis HWID reset error:", error.message);
+    return false;
+  }
+}
+
 // Get client IP helper
 function getClientIP(req) {
   return (
@@ -180,8 +298,8 @@ async function sendDiscordLog(logData) {
           inline: true,
         },
         {
-          name: "📱 Device Count",
-          value: logData.deviceCount || "N/A",
+          name: "🔐 HWID Status",
+          value: logData.hwidStatus || "Protected",
           inline: true,
         },
         {
@@ -392,6 +510,33 @@ export default async function handler(req, res) {
   const action = req.query.action;
   const code = req.query.code;
   const username = req.query.username;
+  const hwid = req.query.hwid || "";
+
+  // === ADMIN: RESET HWID ===
+  if (action === "reset_hwid") {
+    const adminSecret = req.query.adminSecret || req.headers["x-admin-secret"];
+    const targetUserId = req.query.targetUserId;
+    const targetPlatform = req.query.targetPlatform || "mobile";
+
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    if (!targetUserId) {
+      return res.status(400).json({ error: "Missing targetUserId" });
+    }
+
+    const success = await resetHWID(targetUserId, targetPlatform);
+    if (success) {
+      console.log(`[HWID] Admin reset HWID for ${targetUserId} (${targetPlatform})`);
+      return res.status(200).json({ 
+        success: true, 
+        message: `HWID reset for user ${targetUserId} (${targetPlatform})` 
+      });
+    } else {
+      return res.status(500).json({ success: false, message: "Failed to reset HWID" });
+    }
+  }
 
   if (action === "status" || action === "check") {
     // Check if event system is active globally
@@ -460,7 +605,7 @@ export default async function handler(req, res) {
           owner: `${username || "Unknown"} (${userId})`,
           ip: clientIP,
           platform: platformLabel,
-          deviceCount: "N/A",
+          hwidStatus: "Protected",
           timestamp: timestamp,
           message: `✅ Event code berhasil di-redeem!\n**Code:** \`${code}\`\n**Duration:** ${data.duration || "N/A"} days\n**Expires:** ${data.expiresAt || "N/A"}`,
         });
@@ -477,7 +622,7 @@ export default async function handler(req, res) {
             owner: `${username || "Unknown"} (${userId})`,
             ip: clientIP,
             platform: platformLabel,
-            deviceCount: "N/A",
+            hwidStatus: "Protected",
             timestamp: timestamp,
             message: `❌ Event code gagal: ${data.message}`,
           });
@@ -524,7 +669,7 @@ export default async function handler(req, res) {
                 owner: vipUser.username,
                 ip: clientIP,
                 platform: platformLabel,
-                deviceCount: "N/A",
+                hwidStatus: "Protected",
                 timestamp: timestamp,
                 message: `❌ ${platformLabel} VIP access expired for ${vipUser.username}\nExpired: ${expiryDate.toISOString()}`,
               });
@@ -540,6 +685,42 @@ export default async function handler(req, res) {
 
         // User valid - grant access
         const isOwner = userId === "9268011358";
+
+        // === HWID VALIDATION ===
+        const hwidResult = await validateHWID(userId, platform, hwid, vipUser.username);
+        if (!hwidResult.valid) {
+          console.log(
+            `[${timestamp}] 🚫 HWID MISMATCH - UserID: ${userId} (${vipUser.username}) | Reason: ${hwidResult.reason} | IP: ${clientIP}`,
+          );
+          
+          // Send Discord alert for HWID mismatch
+          if (shouldSendWebhook(userId, "hwid_mismatch")) {
+            await sendDiscordLog({
+              title: `🚫 HWID Mismatch Detected`,
+              status: "blocked",
+              authType: `${config.defaultType} (HWID Blocked)`,
+              owner: `${vipUser.username} (${userId})`,
+              ip: clientIP,
+              platform: platformLabel,
+              hwidStatus: "Protected",
+              timestamp: timestamp,
+              message: `⚠️ **Possible account sharing detected!**\n\n**Reason:** ${hwidResult.reason}\n**Stored HWID:** ${hwidResult.storedHWID || "N/A"}\n**Provided HWID:** ${hwidResult.providedHWID || "N/A"}\n**Registered:** ${hwidResult.registeredAt || "N/A"}`,
+            });
+          }
+          
+          return res.status(200).json({
+            status: "denied",
+            message: "Device tidak dikenali. Hubungi admin untuk reset HWID.",
+            reason: "HWID_MISMATCH",
+          });
+        }
+
+        if (hwidResult.isNew) {
+          console.log(
+            `[${timestamp}] 📱 NEW HWID REGISTERED - UserID: ${userId} (${vipUser.username}) | Platform: ${platform}`,
+          );
+        }
+
         console.log(
           `[${timestamp}] ${isOwner ? "👑 OWNER" : "💎 VIP"} ${platformLabel} ACCESS - UserID: ${userId} (${vipUser.username}) | IP: ${clientIP}`,
         );
@@ -593,7 +774,7 @@ export default async function handler(req, res) {
             owner: vipUser.username,
             ip: clientIP,
             platform: platformLabel,
-            deviceCount: "N/A",
+            hwidStatus: "Protected",
             timestamp: timestamp,
             message: `🚫 Suspended user attempted access: ${vipUser.username}`,
           });
@@ -887,7 +1068,7 @@ export default async function handler(req, res) {
               owner: `UserID: ${userId}`,
               ip: clientIP,
               platform: platformLabel,
-              deviceCount: "N/A",
+              hwidStatus: "Protected",
               timestamp: timestamp,
               message: `✅ Event access granted\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
             });
@@ -923,7 +1104,7 @@ export default async function handler(req, res) {
         owner: `UserID: ${userId}`,
         ip: clientIP,
         platform: platformLabel,
-        deviceCount: "N/A",
+        hwidStatus: "Protected",
         timestamp: timestamp,
         message: `❌ User not in ${platform} whitelist\nUserID: ${userId}`,
       });
@@ -944,7 +1125,7 @@ export default async function handler(req, res) {
   }
 }
 
-// Handle Mobile success with device tracking
+// Handle Mobile success (simplified - device limit removed, using HWID instead)
 async function handleMobileSuccess(
   res,
   userId,
@@ -955,87 +1136,8 @@ async function handleMobileSuccess(
   remainingDays,
   config,
 ) {
-  const redisClient = await getRedis();
-  let deviceCount = 1;
-  const maxDevices =
-    mobileUser.maxDevices || mobileUser.restrictions?.maxDevices || 2;
-
-  if (redisClient) {
-    const deviceKey = `mobile_devices:${userId}`;
-
-    try {
-      let devices = [];
-      const devicesData = await redisClient.get(deviceKey);
-      if (devicesData) {
-        devices = JSON.parse(devicesData);
-      }
-
-      const existingDevice = devices.find((d) => d.ip === clientIP);
-
-      if (!existingDevice) {
-        if (devices.length >= maxDevices) {
-          console.log(
-            `[${timestamp}] ❌ Mobile device limit reached - UserID: ${userId} (${devices.length}/${maxDevices})`,
-          );
-
-          await sendDiscordLog({
-            title: "Mobile Device Limit Reached",
-            status: "blocked",
-            authType: config.defaultType,
-            owner: mobileUser.username,
-            ip: clientIP,
-            platform: config.label,
-            deviceCount: `${devices.length}/${maxDevices} (LIMIT)`,
-            timestamp: timestamp,
-            message: `⚠️ Device limit reached for ${mobileUser.username}\nNew IP: ${clientIP}\nMax allowed: ${maxDevices} devices`,
-          });
-
-          return res.status(403).json({
-            status: "denied",
-            message: `Device limit reached (${maxDevices} devices max)`,
-            currentDevices: devices.length,
-          });
-        }
-
-        devices.push({
-          ip: clientIP,
-          firstSeen: timestamp,
-          lastSeen: timestamp,
-        });
-
-        await redisClient.set(
-          deviceKey,
-          JSON.stringify(devices),
-          "EX",
-          86400 * 30,
-        );
-
-        await sendDiscordLog({
-          title: "New Mobile Device Registered",
-          status: "success",
-          authType: `${config.defaultType} (${mobileUser.type || "Standard"})`,
-          owner: mobileUser.username,
-          ip: clientIP,
-          platform: config.label,
-          deviceCount: `${devices.length}/${maxDevices}`,
-          timestamp: timestamp,
-          message: `📱 New device registered for ${mobileUser.username}\n🆕 Device #${devices.length}`,
-        });
-      } else {
-        existingDevice.lastSeen = timestamp;
-        await redisClient.set(
-          deviceKey,
-          JSON.stringify(devices),
-          "EX",
-          86400 * 30,
-        );
-      }
-
-      deviceCount = devices.length;
-    } catch (err) {
-      console.error("Device tracking error:", err);
-    }
-  }
+  // Note: Device limit has been replaced by HWID binding
+  // Device tracking kept for logging purposes only
 
   return res.status(200).json({
     status: "success",
@@ -1049,8 +1151,6 @@ async function handleMobileSuccess(
     activatedAt: mobileUser.addedAt
       ? Math.floor(new Date(mobileUser.addedAt).getTime() / 1000)
       : null,
-    deviceCount: deviceCount,
-    maxDevices: maxDevices,
     username: mobileUser.username,
   });
 }

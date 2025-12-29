@@ -1,6 +1,5 @@
 local HttpService = game:GetService("HttpService")
 local VERCEL_URL = "https://starship-core.my.id"
-local ENCRYPTION_KEY = "Starship_X7k9P2mQ_2025"
 local FOLDER_NAME = "StarshipCore"
 local MODULES_FOLDER = FOLDER_NAME .. "/Modules"
 local TABS_FOLDER = MODULES_FOLDER .. "/Tabs"
@@ -46,9 +45,108 @@ local function base64Decode(data)
 	)
 end
 
-local function decrypt(encryptedBase64)
-	local encrypted = base64Decode(encryptedBase64)
-	return xorEncrypt(encrypted, ENCRYPTION_KEY)
+-- ══════════════════════════════════════════════════════════════════
+-- HWID DETECTION (Hardware ID for device binding)
+-- ══════════════════════════════════════════════════════════════════
+local function getDeviceHWID()
+	local hwid = nil
+
+	-- Method 1: Try gethwid() - Most common in PC executors (Xeno, Synapse, etc)
+	pcall(function()
+		if gethwid then
+			hwid = gethwid()
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 2: Try HWID from getexecutorinfo
+	pcall(function()
+		if getexecutorinfo then
+			local info = getexecutorinfo()
+			if type(info) == "table" and info.HWID then
+				hwid = info.HWID
+			elseif type(info) == "table" and info.hwid then
+				hwid = info.hwid
+			end
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 3: Try identifyexecutor() + custom HWID storage
+	pcall(function()
+		if identifyexecutor then
+			-- Some executors store HWID in _G or getgenv()
+			if getgenv and getgenv().HWID then
+				hwid = getgenv().HWID
+			elseif _G.HWID then
+				hwid = _G.HWID
+			end
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 4: Try get_hwid (alternative naming)
+	pcall(function()
+		if get_hwid then
+			hwid = get_hwid()
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 5: Xeno executor specific
+	pcall(function()
+		if Xeno and Xeno.HWID then
+			hwid = Xeno.HWID
+		elseif xeno and xeno.hwid then
+			hwid = xeno.hwid
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 6: Synapse specific
+	pcall(function()
+		if syn and syn.hwid then
+			hwid = syn.hwid()
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 7: Script-Ware specific
+	pcall(function()
+		if gethwidstring then
+			hwid = gethwidstring()
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 8: Fallback - Generate pseudo-HWID from user data
+	pcall(function()
+		local userId = tostring(game:GetService("Players").LocalPlayer.UserId)
+		local execName = "unknown"
+		pcall(function()
+			if identifyexecutor then
+				execName = identifyexecutor() or "unknown"
+			end
+		end)
+		-- Create a pseudo-HWID (not as secure, but provides some protection)
+		hwid = "PSEUDO_PC_" .. execName .. "_" .. userId
+	end)
+
+	return hwid or "unknown"
 end
 
 -- Setup folder only for user data (recordings, configs) - NOT for modules
@@ -569,7 +667,8 @@ local function showError(message)
 	end)
 end
 
-local SECURE_API_URL = "https://starship-core.my.id"
+-- Production: local SECURE_API_URL = "https://starship-core.my.id"
+local SECURE_API_URL = "http://localhost:3000" -- Testing
 
 local function main()
 	local loaderGui, updateStatus = createLoadingUI()
@@ -593,9 +692,17 @@ local function main()
 	-- Auto-detect userId from current logged-in player
 	local userId = tostring(game:GetService("Players").LocalPlayer.UserId)
 
+	-- Detect device HWID for binding
+	local deviceHWID = getDeviceHWID()
+	print("[StarshipCore] Device HWID: " .. (deviceHWID:sub(1, 16) or "unknown") .. "...")
+
 	-- STEP 1: Call secure loader for authentication & webhook notification
-	-- SECURITY: Using obscured endpoint name
-	local authUrl = SECURE_API_URL .. "/api/pc-ld-q8r4?userId=" .. userId
+	-- SECURITY: Using obscured endpoint name with HWID
+	local authUrl = SECURE_API_URL
+		.. "/api/pc-ld-q8r4?userId="
+		.. userId
+		.. "&hwid="
+		.. HttpService:UrlEncode(deviceHWID)
 	local authSuccess, authResponse = pcall(function()
 		return game:HttpGet(authUrl)
 	end)
@@ -619,8 +726,8 @@ local function main()
 		return
 	end
 
-	-- STEP 2: Now call /api/load to get the encrypted script
-	local targetUrl = SECURE_API_URL .. "/api/load?user=" .. userId
+	-- STEP 2: Now call /api/load to get the encrypted script (with HWID)
+	local targetUrl = SECURE_API_URL .. "/api/load?user=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
 
 	local success, response = pcall(function()
 		return game:HttpGet(targetUrl)

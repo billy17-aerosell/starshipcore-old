@@ -56,7 +56,92 @@ local function base64Decode(data)
 	)
 end
 
--- Create Loading UI
+-- ══════════════════════════════════════════════════════════════════
+-- HWID DETECTION (Hardware ID for device binding)
+-- ══════════════════════════════════════════════════════════════════
+local function getDeviceHWID()
+	local hwid = nil
+
+	-- Method 1: Try gethwid() - Most common in PC executors
+	pcall(function()
+		if gethwid then
+			hwid = gethwid()
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 2: Try HWID from getexecutorinfo (Delta, Fluxus, etc)
+	pcall(function()
+		if getexecutorinfo then
+			local info = getexecutorinfo()
+			if type(info) == "table" and info.HWID then
+				hwid = info.HWID
+			elseif type(info) == "table" and info.hwid then
+				hwid = info.hwid
+			end
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 3: Try identifyexecutor() + custom HWID
+	pcall(function()
+		if identifyexecutor then
+			local execName, execVersion = identifyexecutor()
+			-- Some executors store HWID in _G or getgenv()
+			if getgenv and getgenv().HWID then
+				hwid = getgenv().HWID
+			elseif _G.HWID then
+				hwid = _G.HWID
+			end
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 4: Try get_hwid (alternative naming)
+	pcall(function()
+		if get_hwid then
+			hwid = get_hwid()
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 5: Delta Executor specific
+	pcall(function()
+		if Delta and Delta.HWID then
+			hwid = Delta.HWID
+		elseif delta and delta.hwid then
+			hwid = delta.hwid
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
+	-- Method 6: Fallback - Generate pseudo-HWID from user data
+	-- This is less secure but better than nothing
+	pcall(function()
+		local userId = tostring(LocalPlayer.UserId)
+		local execName = "unknown"
+		pcall(function()
+			if identifyexecutor then
+				execName = identifyexecutor() or "unknown"
+			end
+		end)
+		-- Create a pseudo-HWID (not as secure, but provides some protection)
+		hwid = "PSEUDO_" .. execName .. "_" .. userId
+	end)
+
+	return hwid or "unknown"
+end
+
 local function createLoadingUI()
 	-- Remove existing UI if any
 	local existingGui = LocalPlayer:FindFirstChild("PlayerGui")
@@ -788,8 +873,12 @@ local function main()
 	-- Step 4: Authenticate with MOBILE-SPECIFIC Server (Separate from PC)
 	updateStatus("Authenticating...", 0.4)
 
+	-- Detect device HWID for binding
+	local deviceHWID = getDeviceHWID()
+	print("[StarshipCore] Device HWID: " .. (deviceHWID:sub(1, 16) or "unknown") .. "...")
+
 	-- Call mobile-load API (separate whitelist from PC)
-	local authUrl = MOBILE_AUTH_API .. "?userId=" .. userId
+	local authUrl = MOBILE_AUTH_API .. "?userId=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
 	local authSuccess, authResponse = pcall(function()
 		return game:HttpGet(authUrl)
 	end)

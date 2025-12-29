@@ -78,6 +78,106 @@ async function getRedis() {
   return redis;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// HWID MANAGEMENT FUNCTIONS
+// ══════════════════════════════════════════════════════════════════
+
+// Check if HWID binding is enabled
+function isHWIDEnabled() {
+  return process.env.HWID_ENABLED === "true";
+}
+
+// Get stored HWID for a user
+async function getStoredHWID(userId, platform) {
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return null;
+    
+    const key = `hwid:${platform}:${userId}`;
+    const data = await redisClient.get(key);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    console.error("[HWID] Error getting stored HWID:", error.message);
+    return null;
+  }
+}
+
+// Store new HWID for a user
+async function storeHWID(userId, platform, hwid, username) {
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return false;
+    
+    const key = `hwid:${platform}:${userId}`;
+    const data = {
+      hwid: hwid,
+      platform: platform,
+      userId: userId,
+      username: username || "Unknown",
+      registeredAt: new Date().toISOString(),
+      lastUsed: new Date().toISOString(),
+    };
+    
+    // Store with no expiry (permanent until reset)
+    await redisClient.set(key, JSON.stringify(data));
+    console.log(`[HWID] Registered new HWID for ${userId} (${platform})`);
+    return true;
+  } catch (error) {
+    console.error("[HWID] Error storing HWID:", error.message);
+    return false;
+  }
+}
+
+// Validate HWID - returns { valid: boolean, reason: string, storedHWID?, providedHWID? }
+async function validateHWID(userId, platform, providedHWID, username) {
+  // If HWID binding is disabled, always valid
+  if (!isHWIDEnabled()) {
+    return { valid: true, reason: "HWID binding disabled" };
+  }
+  
+  // If no HWID provided, reject (required when enabled)
+  if (!providedHWID || providedHWID === "" || providedHWID === "unknown") {
+    return { valid: false, reason: "No HWID provided" };
+  }
+  
+  const storedData = await getStoredHWID(userId, platform);
+  
+  // If no stored HWID, this is first login - store and allow
+  if (!storedData) {
+    const stored = await storeHWID(userId, platform, providedHWID, username);
+    if (stored) {
+      return { valid: true, reason: "New HWID registered", isNew: true };
+    } else {
+      // Failed to store but allow anyway (Redis issue)
+      return { valid: true, reason: "Redis unavailable, allowing access" };
+    }
+  }
+  
+  // Compare stored HWID with provided
+  if (storedData.hwid === providedHWID) {
+    // Update last used timestamp
+    try {
+      const redisClient = await getRedis();
+      if (redisClient) {
+        storedData.lastUsed = new Date().toISOString();
+        const key = `hwid:${platform}:${userId}`;
+        await redisClient.set(key, JSON.stringify(storedData));
+      }
+    } catch (e) {}
+    
+    return { valid: true, reason: "HWID match" };
+  } else {
+    // HWID mismatch - reject!
+    return { 
+      valid: false, 
+      reason: "HWID mismatch - device tidak dikenali",
+      storedHWID: storedData.hwid?.substring(0, 16) + "...",
+      providedHWID: providedHWID?.substring(0, 16) + "...",
+      registeredAt: storedData.registeredAt,
+    };
+  }
+}
+
 // Platform-specific configuration
 // NOTE: Using obfuscated versions for production security
 const PLATFORM_CONFIG = {
@@ -190,8 +290,8 @@ async function sendDiscordLog(logData) {
           inline: true,
         },
         {
-          name: "📱 Device Count",
-          value: logData.deviceCount || "N/A",
+          name: "🔐 HWID Status",
+          value: logData.hwidStatus || "Protected",
           inline: true,
         },
         {
@@ -298,7 +398,7 @@ export default async function handler(req, res) {
   }
 
   // Get parameters
-  const { key, userId, platform: platformParam } = req.query;
+  const { key, userId, platform: platformParam, hwid } = req.query;
   const platform = platformParam === "mobile" ? "mobile" : "pc";
   const config = PLATFORM_CONFIG[platform];
   const platformLabel = config.label;
@@ -418,6 +518,59 @@ export default async function handler(req, res) {
 
         // VIP user - grant access
         const isOwner = userId === "9268011358";
+        
+        // === HWID VALIDATION (Skip for owner) ===
+        if (!isOwner && isHWIDEnabled()) {
+          const hwidResult = await validateHWID(userId, platform, hwid, vipUser.username);
+          
+          if (!hwidResult.valid) {
+            console.log(
+              `[${timestamp}] 🚫 HWID MISMATCH - UserID: ${userId} | Platform: ${platform} | Reason: ${hwidResult.reason}`,
+            );
+            
+            await sendDiscordLog({
+              title: `🚫 PC HWID Mismatch Detected`,
+              status: "blocked",
+              statusMessage: "❌ Device tidak dikenali",
+              authType: `${vipUser.type || config.defaultType} (HWID Blocked)`,
+              owner: `${vipUser.username} (${userId})`,
+              ip: clientIP,
+              platform: platformLabel,
+              hwidStatus: "❌ MISMATCH",
+              timestamp: timestamp,
+              message: `⚠️ **Possible account sharing detected!**\n\n**Reason:** ${hwidResult.reason}\n**Stored HWID:** ${hwidResult.storedHWID || "N/A"}\n**Provided HWID:** ${hwidResult.providedHWID || "N/A"}\n**Registered:** ${hwidResult.registeredAt || "N/A"}`,
+            });
+            
+            res.setHeader("Content-Type", "text/plain; charset=utf-8");
+            return res.status(403).send(
+              `-- ERROR: Device tidak dikenali\n` +
+              `-- Akun ini terdaftar di perangkat lain.\n` +
+              `-- Hubungi admin untuk reset HWID jika ini adalah kesalahan.\n` +
+              `error("Device tidak dikenali. HWID mismatch.")`
+            );
+          }
+          
+          // Log new HWID registration
+          if (hwidResult.isNew) {
+            console.log(
+              `[${timestamp}] 📱 NEW HWID REGISTERED - UserID: ${userId} (${vipUser.username}) | Platform: ${platform}`,
+            );
+            
+            await sendDiscordLog({
+              title: `📱 New PC HWID Registered`,
+              status: "success",
+              statusMessage: "✅ HWID Bound",
+              authType: `${vipUser.type || config.defaultType} (New Device)`,
+              owner: `${vipUser.username} (${userId})`,
+              ip: clientIP,
+              platform: platformLabel,
+              hwidStatus: "🆕 Registered",
+              timestamp: timestamp,
+              message: `🔐 New device bound to account\n**Platform:** ${platform}`,
+            });
+          }
+        }
+        
         console.log(
           `[${timestamp}] ${isOwner ? "👑 OWNER" : "💎 VIP"} ACCESS [${platformLabel}] - UserID: ${userId} (${vipUser.username}) | IP: ${clientIP}`,
         );
@@ -637,7 +790,7 @@ export default async function handler(req, res) {
         owner: `UserID: ${userId}`,
         ip: clientIP,
         platform: platformLabel,
-        deviceCount: "N/A",
+        hwidStatus: "Protected",
         timestamp: timestamp,
         message: `🚫 Banned user attempted to access\\nReason: ${banCheck.reason}`,
       });
@@ -675,7 +828,7 @@ export default async function handler(req, res) {
     owner: `UserID: ${userId}`,
     ip: clientIP,
     platform: platformLabel,
-    deviceCount: "N/A",
+    hwidStatus: "Protected",
     timestamp: timestamp,
     message: `❌ Unauthorized access attempt blocked\\nUserID: ${userId}\\nIP: ${clientIP}`,
   });
@@ -755,7 +908,7 @@ async function handleVIPWebhook(
         owner: vipUser.username,
         ip: clientIP,
         platform: config.label,
-        deviceCount: "N/A (Redis unavailable)",
+        hwidStatus: "Protected (Redis unavailable)",
         timestamp: timestamp,
         message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username}\n⚠️ (Rate limiting unavailable)`,
       });
@@ -832,7 +985,7 @@ async function handleVIPWebhook(
         owner: vipUser.username,
         ip: ipChanged ? `${lastIP} → ${clientIP}` : clientIP,
         platform: config.label,
-        deviceCount: deviceInfo,
+        hwidStatus: "Protected",
         timestamp: timestamp,
         message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username} via ${config.label}${ipChanged ? "\n⚠️ IP Address Changed!" : ""}`,
       });
@@ -856,7 +1009,7 @@ async function handleVIPWebhook(
       owner: vipUser.username,
       ip: clientIP,
       platform: config.label,
-      deviceCount: "N/A",
+      hwidStatus: "Protected",
       timestamp: timestamp,
       message: `✅ VIP loader delivered to ${vipUser.username}\n⚠️ (Fallback mode - Rate limiting error)`,
     });
