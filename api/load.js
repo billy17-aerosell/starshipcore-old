@@ -914,17 +914,20 @@ export default async function handler(req, res) {
       `[${timestamp}] ❌ NOT ${platform.toUpperCase()} WHITELISTED - UserID: ${userId} | IP: ${clientIP}`,
     );
 
-    await sendDiscordLog({
-      title: `${platformLabel} Access Denied`,
-      status: "blocked",
-      authType: "None",
-      owner: `UserID: ${userId}`,
-      ip: clientIP,
-      platform: platformLabel,
-      deviceCount: "N/A",
-      timestamp: timestamp,
-      message: `❌ User not in ${platform} whitelist\nUserID: ${userId}`,
-    });
+    // Only send webhook if not rate limited (prevents spam from repeated attempts)
+    if (shouldSendWebhook(userId, "access_denied")) {
+      await sendDiscordLog({
+        title: `${platformLabel} Access Denied`,
+        status: "blocked",
+        authType: "None",
+        owner: `UserID: ${userId}`,
+        ip: clientIP,
+        platform: platformLabel,
+        deviceCount: "N/A",
+        timestamp: timestamp,
+        message: `❌ User not in ${platform} whitelist\nUserID: ${userId}`,
+      });
+    }
 
     // Check if event system is active globally
     const isEventActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
