@@ -543,7 +543,7 @@ export default async function handler(req, res) {
     try {
       const redisClient = await getRedis();
       if (redisClient) {
-        const mobileWhitelist = await getWhitelistFromRedis(config.mobileWhitelistKey);
+        const mobileWhitelist = await getWhitelistFromRedis(config.whitelistKey);
         
         if (mobileWhitelist && mobileWhitelist[userId]) {
           const user = mobileWhitelist[userId];
