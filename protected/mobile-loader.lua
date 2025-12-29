@@ -645,7 +645,7 @@ local function showEventCodeUI(onSuccess, onCancel)
 		end)
 
 		if not success then
-			setLoading(false)
+			setLoading(false)-
 			updateStatus("❌ Gagal terhubung ke server!", "#ef4444")
 			return
 		end
