@@ -1139,6 +1139,22 @@ async function handleMobileSuccess(
   // Note: Device limit has been replaced by HWID binding
   // Device tracking kept for logging purposes only
 
+  // Send VIP Access webhook (skip for OWNER)
+  const isOwner = mobileUser.type === "OWNER";
+  if (!isOwner) {
+    await sendDiscordLog({
+      title: "Mobile VIP Access Granted",
+      status: "success",
+      statusMessage: "Authorized (VIP)",
+      authType: mobileUser.type || config.defaultType,
+      owner: mobileUser.username + " (" + userId + ")",
+      ip: clientIP,
+      platform: "Mobile",
+      hwidStatus: "Protected",
+      timestamp: timestamp,
+      message: "Mobile VIP access granted - Duration: " + (mobileUser.expiresAt ? remainingDays + " days" : "LIFETIME"),
+    });
+  }
   return res.status(200).json({
     status: "success",
     platform: "mobile",
