@@ -845,40 +845,45 @@ export default async function handler(req, res) {
 
     // === CHECK EVENT CODE ACCESS (Google Sheets) - Mobile Only ===
     if (platform === "mobile") {
-      const eventAccess = await checkEventAccess(userId);
-      
-      if (eventAccess.hasAccess) {
-        console.log(
-          `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - ${platformLabel} - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
-        );
+      // Check if event system is active globally
+      const isEventActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
+
+      if (isEventActive) {
+        const eventAccess = await checkEventAccess(userId);
         
-        // Only send webhook if not rate limited (prevents spam on script re-run)
-        if (shouldSendWebhook(userId, "event_access")) {
-          await sendDiscordLog({
-            title: `🎟️ Event Code Access Granted - ${platformLabel}`,
+        if (eventAccess.hasAccess) {
+          console.log(
+            `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - ${platformLabel} - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
+          );
+          
+          // Only send webhook if not rate limited (prevents spam on script re-run)
+          if (shouldSendWebhook(userId, "event_access")) {
+            await sendDiscordLog({
+              title: `🎟️ Event Code Access Granted - ${platformLabel}`,
+              status: "success",
+              authType: `Event Code: ${eventAccess.codeUsed}`,
+              owner: `UserID: ${userId}`,
+              ip: clientIP,
+              platform: platformLabel,
+              deviceCount: "N/A",
+              timestamp: timestamp,
+              message: `✅ Event access granted\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
+            });
+          }
+          
+          // Return success for mobile event access
+          return res.status(200).json({
             status: "success",
-            authType: `Event Code: ${eventAccess.codeUsed}`,
-            owner: `UserID: ${userId}`,
-            ip: clientIP,
-            platform: platformLabel,
-            deviceCount: "N/A",
-            timestamp: timestamp,
-            message: `✅ Event access granted\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
+            platform: "mobile",
+            role: "EVENT_ACCESS",
+            duration: `${eventAccess.remainingDays} days`,
+            remainingDays: eventAccess.remainingDays,
+            username: `EventUser_${userId}`,
+            isEventAccess: true,
+            eventCode: eventAccess.codeUsed,
+            expiresAt: eventAccess.expiresAt,
           });
         }
-        
-        // Return success for mobile event access
-        return res.status(200).json({
-          status: "success",
-          platform: "mobile",
-          role: "EVENT_ACCESS",
-          duration: `${eventAccess.remainingDays} days`,
-          remainingDays: eventAccess.remainingDays,
-          username: `EventUser_${userId}`,
-          isEventAccess: true,
-          eventCode: eventAccess.codeUsed,
-          expiresAt: eventAccess.expiresAt,
-        });
       }
     }
 
