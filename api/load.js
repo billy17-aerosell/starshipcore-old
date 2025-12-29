@@ -554,6 +554,8 @@ export default async function handler(req, res) {
               success: true,
               isBanned: true,
               banReason: "Account suspended by admin",
+              message: "Account suspended by admin",
+              status: "denied",
               hasAccess: false
             });
           }
@@ -564,6 +566,8 @@ export default async function handler(req, res) {
               success: true,
               status: "denied",
               message: "VIP access expired",
+              isBanned: false,
+              banReason: "VIP access expired",
               hasAccess: false
             });
           }
