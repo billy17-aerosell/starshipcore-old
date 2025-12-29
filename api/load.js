@@ -508,7 +508,7 @@ export default async function handler(req, res) {
               });
             }
 
-            return res.status(403).json({
+            return res.status(200).json({
               status: "denied",
               message: `${platform.toUpperCase()} VIP access expired`,
               expiredAt: expiryDate.toISOString(),
@@ -577,7 +577,7 @@ export default async function handler(req, res) {
           });
         }
 
-        return res.status(403).json({
+        return res.status(200).json({
           status: "denied",
           message: `${platform.toUpperCase()} VIP access suspended`,
         });
@@ -683,7 +683,7 @@ export default async function handler(req, res) {
         });
       }
 
-      return res.status(403).json({
+      return res.status(200).json({
         status: "denied",
         message: `You have a ${config.otherLabel.replace(/[📱💻]/g, "").trim()} license, not ${platform.toUpperCase()}`,
         hint: `Your whitelist is for ${config.otherLabel.replace(/[📱💻]/g, "").trim()} only. Purchase ${platform.toUpperCase()} VIP for ${platform} access.`,
@@ -717,7 +717,7 @@ export default async function handler(req, res) {
             timestamp: timestamp,
           });
 
-          return res.status(403).json({
+          return res.status(200).json({
             status: "denied",
             message: `You have a ${config.otherLabel.replace(/[📱💻]/g, "").trim()} license, not ${platform.toUpperCase()}`,
             hint: `Your whitelist is for ${config.otherLabel.replace(/[📱💻]/g, "").trim()} only. Purchase ${platform.toUpperCase()} VIP for ${platform} access.`,
@@ -743,7 +743,7 @@ export default async function handler(req, res) {
           if (userData.expiresAt) {
             const expiryDate = new Date(userData.expiresAt);
             if (expiryDate < new Date()) {
-              return res.status(403).json({
+              return res.status(200).json({
                 status: "denied",
                 message: `${platform.toUpperCase()} access expired`,
                 expiredAt: expiryDate.toISOString(),
@@ -792,7 +792,7 @@ export default async function handler(req, res) {
           // Check PC expiry (file-based)
           if (platform === "pc" && userData.expiry) {
             if (now > userData.expiry) {
-              return res.status(403).json({
+              return res.status(200).json({
                 status: "denied",
                 message: "License Expired",
                 expiredAt: new Date(userData.expiry * 1000).toISOString(),
@@ -899,7 +899,7 @@ export default async function handler(req, res) {
       message: `❌ User not in ${platform} whitelist\nUserID: ${userId}`,
     });
 
-    return res.status(403).json({
+    return res.status(200).json({
       status: "denied",
       message: `Not whitelisted for ${platform.toUpperCase()} access`,
       hint: `Purchase ${platform.toUpperCase()} VIP to get access`,
