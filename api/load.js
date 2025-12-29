@@ -394,6 +394,18 @@ export default async function handler(req, res) {
   const username = req.query.username;
 
   if (action === "status" || action === "check") {
+    // Check if event system is active globally
+    const isEventActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
+    
+    if (!isEventActive) {
+      return res.status(200).json({ 
+        success: false, 
+        hasAccess: false, 
+        message: "Event system is currently disabled",
+        isEventActive: false
+      });
+    }
+
     // Check if user has active event access
     if (!EVENT_CODE_API) {
       return res.status(200).json({ success: false, hasAccess: false, message: "Event system not configured" });
@@ -411,6 +423,16 @@ export default async function handler(req, res) {
   }
 
   if (action === "redeem") {
+    // Check if event system is active globally
+    const isEventActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
+    
+    if (!isEventActive) {
+      return res.status(200).json({ 
+        success: false, 
+        message: "Event system is currently disabled"
+      });
+    }
+
     // Redeem event code
     if (!EVENT_CODE_API) {
       return res.status(200).json({ success: false, message: "Event system not configured" });
