@@ -97,8 +97,16 @@ async function checkEventAccessForUser(userId) {
   }
 }
 
+// Owner userId - always has access (bypass validation)
+const OWNER_USER_ID = "9268011358";
+
 // Main validation function - check if userId has ANY valid access
 async function validateUserAccess(userId) {
+  // Owner bypass - always has access
+  if (userId === OWNER_USER_ID) {
+    return { hasAccess: true, source: "OWNER" };
+  }
+
   const vipResult = await checkVIPAccess(userId);
   if (vipResult.hasAccess) {
     return vipResult;
