@@ -1141,21 +1141,52 @@ async function handleMobileSuccess(
   // Note: Device limit has been replaced by HWID binding
   // Device tracking kept for logging purposes only
 
-  // Send VIP Access webhook (skip for OWNER)
+    // Send VIP Access webhook with rate limiting (skip for OWNER)
   const isOwner = mobileUser.type === "OWNER";
   if (!isOwner) {
-    await sendDiscordLog({
-      title: "Mobile VIP Access Granted",
-      status: "success",
-      statusMessage: "Authorized (VIP)",
-      authType: mobileUser.type || config.defaultType,
-      owner: mobileUser.username + " (" + userId + ")",
-      ip: clientIP,
-      platform: "Mobile",
-      hwidStatus: hwidResult ? (hwidResult.isNew ? "New HWID Registered" : "HWID Bound") : "Protected",
-      timestamp: timestamp,
-      message: "Mobile VIP access granted - Duration: " + (mobileUser.expiresAt ? remainingDays + " days" : "LIFETIME"),
-    });
+    // Rate limiting - check cooldown
+    const COOLDOWN_MINUTES = 10;
+    const cooldownKey = `webhook_cooldown:mobile:${userId}`;
+    let shouldSendWebhook = true;
+    
+    try {
+      const redisClient = await getRedis();
+      if (redisClient) {
+        const lastNotification = await redisClient.get(cooldownKey);
+        if (lastNotification) {
+          const elapsed = (Date.now() - parseInt(lastNotification)) / 1000 / 60;
+          if (elapsed < COOLDOWN_MINUTES) {
+            shouldSendWebhook = false;
+            console.log(`[${timestamp}] Webhook skipped for ${mobileUser.username} - Cooldown ${Math.ceil(COOLDOWN_MINUTES - elapsed)} min remaining`);
+          }
+        }
+      }
+    } catch (e) {
+      // Redis error - send anyway
+    }
+    
+    if (shouldSendWebhook) {
+      await sendDiscordLog({
+        title: "Mobile VIP Access Granted",
+        status: "success",
+        statusMessage: "Authorized (VIP)",
+        authType: mobileUser.type || config.defaultType,
+        owner: mobileUser.username + " (" + userId + ")",
+        ip: clientIP,
+        platform: "Mobile",
+        hwidStatus: hwidResult ? (hwidResult.isNew ? "New HWID Registered" : "HWID Bound") : "Protected",
+        timestamp: timestamp,
+        message: "Mobile VIP access granted - Duration: " + (mobileUser.expiresAt ? remainingDays + " days" : "LIFETIME"),
+      });
+      
+      // Update cooldown
+      try {
+        const redisClient = await getRedis();
+        if (redisClient) {
+          await redisClient.set(cooldownKey, Date.now().toString(), "EX", 86400);
+        }
+      } catch (e) {}
+    }
   }
   return res.status(200).json({
     status: "success",

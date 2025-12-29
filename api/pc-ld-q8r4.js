@@ -584,6 +584,7 @@ export default async function handler(req, res) {
             timestamp,
             platform,
             config,
+            hwidResult,
           );
         } else {
           console.log(
@@ -880,6 +881,7 @@ async function handleVIPWebhook(
   timestamp,
   platform,
   config,
+  hwidResult = null,
 ) {
   const COOLDOWN_MINUTES = 10;
   const redisKey = `webhook_cooldown:${platform}:${userId}`;
@@ -985,7 +987,7 @@ async function handleVIPWebhook(
         owner: vipUser.username,
         ip: ipChanged ? `${lastIP} → ${clientIP}` : clientIP,
         platform: config.label,
-        hwidStatus: "Protected",
+        hwidStatus: hwidResult ? (hwidResult.isNew ? "New Registered" : "HWID Bound") : "Protected",
         timestamp: timestamp,
         message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username} via ${config.label}${ipChanged ? "\n⚠️ IP Address Changed!" : ""}`,
       });
