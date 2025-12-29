@@ -4027,13 +4027,19 @@ local function PlayRecording(fileName, force)
 							else
 								-- Smoothly move to target position
 								local currentPos = hrp.Position
-								local posBlend = math.clamp(0.5 * speed, 0.3, 0.9)
-								local newPos = currentPos:Lerp(targetPos, posBlend)
-								hrp.CFrame = CFrame.new(newPos) * hrp.CFrame.Rotation
+
+								-- FIX: Do not force CFrame every frame in air to prevent camera jitter
+								-- Only correct if drift is large (> 2 studs)
+								local dist = (targetPos - currentPos).Magnitude
+								if dist > 2 then
+									local posBlend = math.clamp(0.2 * speed, 0.1, 0.5)
+									local newPos = currentPos:Lerp(targetPos, posBlend)
+									hrp.CFrame = CFrame.new(newPos) * hrp.CFrame.Rotation
+								end
 
 								-- Use RECORDED velocity for animation (not calculated)
 								local recordedVelY = fA.vel and fA.vel.y or 0
-								local horizVel = (targetPos - currentPos) * 10 * speed
+								local horizVel = (targetPos - currentPos) * 8 * speed
 								hrp.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY * speed, horizVel.Z)
 							end
 						else
@@ -4198,7 +4204,7 @@ local function PlayRecording(fileName, force)
 					end
 
 					-- 4. Jump & State Replication (SAME AS PC)
-					if fA.jmp then
+					if fA.jmp and not hum.Jump then
 						hum.Jump = true
 					end
 
@@ -4224,13 +4230,19 @@ local function PlayRecording(fileName, force)
 							if targetState ~= lastAirState or forceStateChange then
 								lastAirState = targetState
 								if targetState == "jump" then
-									hum:ChangeState(Enum.HumanoidStateType.Jumping)
+									-- Only change state if not already jumping to prevent physics jitter
+									if hum:GetState() ~= Enum.HumanoidStateType.Jumping then
+										hum:ChangeState(Enum.HumanoidStateType.Jumping)
+									end
 									-- R6 SPECIAL: Also set hum.Jump for proper animation
 									if playbackIsR6 then
 										hum.Jump = true
 									end
 								else
-									hum:ChangeState(Enum.HumanoidStateType.Freefall)
+									-- Only change state if not already falling
+									if hum:GetState() ~= Enum.HumanoidStateType.Freefall then
+										hum:ChangeState(Enum.HumanoidStateType.Freefall)
+									end
 								end
 							end
 						elseif stateEnum == Enum.HumanoidStateType.Landed then
