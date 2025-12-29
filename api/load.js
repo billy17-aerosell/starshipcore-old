@@ -568,13 +568,14 @@ export default async function handler(req, res) {
             });
           }
           
-          // User is VIP and Active
+          // User is VIP and Active - return isBanned:false for periodic check
+          // But hasAccess:false so mobile-loader proceeds to VIP auth flow (not event flow)
           return res.status(200).json({
             success: true,
             isBanned: false,
-            hasAccess: true,
-            role: "VIP",
-            message: "Active VIP"
+            hasAccess: false,  // VIP should use VIP auth, not event auth
+            isVIP: true,
+            message: "Active VIP - use VIP auth flow"
           });
         }
       }
