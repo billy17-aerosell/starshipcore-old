@@ -255,56 +255,64 @@ export default async function handler(req, res) {
   const BLACKLIST_RAW = process.env.R2_BLACKLIST || "";
   const BLACKLIST = BLACKLIST_RAW.split(",").map(id => id.trim()).filter(id => id);
   
-  // Check if event mode is enabled
-  if (!EVENT_ENABLED) {
-    console.log(`[R2-Chunked] ❌ Event mode disabled - access denied`);
-    return res.status(403).json({ 
-      error: "Event tidak aktif",
-      message: "Cloud storage sedang tidak tersedia"
-    });
-  }
-  
-  // Check event code
-  if (!requestCode || requestCode !== EVENT_CODE) {
-    console.log(`[R2-Chunked] ❌ Invalid event code: ${requestCode ? "wrong code" : "no code"} | UserId: ${requestUserId || "none"}`);
-    return res.status(403).json({ 
-      error: "Kode event tidak valid",
-      message: "Masukkan kode event yang benar untuk mengakses cloud storage"
-    });
-  }
-  
-  // Check userId is provided
-  if (!requestUserId) {
-    console.log(`[R2-Chunked] ❌ No userId provided with event code`);
-    return res.status(403).json({ 
-      error: "UserId tidak ditemukan",
-      message: "Autentikasi tidak valid"
-    });
-  }
-  
-  // Check if user is blacklisted
-  if (BLACKLIST.includes(requestUserId.toString())) {
-    console.log(`[R2-Chunked] 🚫 BLACKLISTED USER BLOCKED - UserId: ${requestUserId}`);
-    return res.status(403).json({ 
-      error: "Akses ditolak",
-      message: "Akun Anda telah diblokir dari layanan ini"
-    });
-  }
-  
   // ============================================
   // CRITICAL: Validate userId has ACTUAL access (VIP or Event)
   // This prevents hackers with stolen event codes from accessing R2
   // ============================================
-  const accessResult = await validateUserAccess(requestUserId);
-  if (!accessResult.hasAccess) {
-    console.log(`[R2-Chunked] ❌ NO VALID ACCESS - UserId: ${requestUserId} (not VIP, not Event)`);
-    return res.status(403).json({ 
-      error: "Akses tidak valid",
-      message: "UserId tidak memiliki akses VIP atau Event"
-    });
-  }
   
-  console.log(`[R2-Chunked] ✅ Access granted - UserId: ${requestUserId} (${accessResult.source})`);
+  // DEV MODE BYPASS - Allow localhost/dev access
+  const IS_DEV = process.env.NODE_ENV === 'development' || req.headers.host?.includes('localhost');
+  
+  if (IS_DEV) {
+    console.log(`[R2-Chunked] 🔧 DEV MODE DETECTED - Bypassing strict auth for ${requestUserId}`);
+  } else {
+    // Check if event mode is enabled
+    if (!EVENT_ENABLED) {
+      console.log(`[R2-Chunked] ❌ Event mode disabled - access denied`);
+      return res.status(403).json({ 
+        error: "Event tidak aktif",
+        message: "Cloud storage sedang tidak tersedia"
+      });
+    }
+    
+    // Check event code
+    if (!requestCode || requestCode !== EVENT_CODE) {
+      console.log(`[R2-Chunked] ❌ Invalid event code: ${requestCode ? "wrong code" : "no code"} | UserId: ${requestUserId || "none"}`);
+      return res.status(403).json({ 
+        error: "Kode event tidak valid",
+        message: "Masukkan kode event yang benar untuk mengakses cloud storage"
+      });
+    }
+    
+    // Check userId is provided
+    if (!requestUserId) {
+      console.log(`[R2-Chunked] ❌ No userId provided with event code`);
+      return res.status(403).json({ 
+        error: "UserId tidak ditemukan",
+        message: "Autentikasi tidak valid"
+      });
+    }
+    
+    // Check if user is blacklisted
+    if (BLACKLIST.includes(requestUserId.toString())) {
+      console.log(`[R2-Chunked] 🚫 BLACKLISTED USER BLOCKED - UserId: ${requestUserId}`);
+      return res.status(403).json({ 
+        error: "Akses ditolak",
+        message: "Akun Anda telah diblokir dari layanan ini"
+      });
+    }
+    
+    // Validate User Access (VIP/Event)
+    const accessResult = await validateUserAccess(requestUserId);
+    if (!accessResult.hasAccess) {
+      console.log(`[R2-Chunked] ❌ NO VALID ACCESS - UserId: ${requestUserId} (not VIP, not Event)`);
+      return res.status(403).json({ 
+        error: "Akses tidak valid",
+        message: "UserId tidak memiliki akses VIP atau Event"
+      });
+    }
+    console.log(`[R2-Chunked] ✅ Access granted - UserId: ${requestUserId} (${accessResult.source})`);
+  }
 
   const { method } = req;
   const { recordingId, action, chunk } = req.query;

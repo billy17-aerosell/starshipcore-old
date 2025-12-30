@@ -1,3 +1,690 @@
+-- Target Recording Window Setup (separate function to avoid local register limit)
+local function SetupTargetRecordingWindow(LocalPlayer, UI, Connections, UIHandlers, RegisterTheme)
+	local Players = game:GetService("Players")
+	local RunService = game:GetService("RunService")
+	local UserInputService = game:GetService("UserInputService")
+	local HttpService = game:GetService("HttpService")
+	local CoreGui = game:GetService("CoreGui")
+
+	local C_MAIN = Color3.fromRGB(10, 10, 14)
+	local C_SIDE = Color3.fromRGB(15, 15, 20)
+	local C_ACCENT = Color3.fromRGB(90, 110, 245)
+	local C_TEXT = Color3.fromRGB(240, 240, 250)
+	local C_TEXT_DIM = Color3.fromRGB(140, 140, 160)
+	local C_ITEM = Color3.fromRGB(20, 20, 28)
+	local C_RED = Color3.fromRGB(255, 80, 80)
+	local C_YELLOW = Color3.fromRGB(255, 220, 60)
+	local C_GREEN = Color3.fromRGB(60, 255, 160)
+
+	local function L(key)
+		if _G.StarshipLocale and _G.StarshipLocale.Get then
+			return _G.StarshipLocale.Get(key)
+		end
+		return key
+	end
+	if not RegisterTheme then
+		RegisterTheme = function() end
+	end
+
+	local TRGui = Instance.new("ScreenGui")
+	TRGui.Name = "StarshipTargetRecording"
+	TRGui.ResetOnSpawn = false
+	TRGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	TRGui.DisplayOrder = 999
+	pcall(function()
+		TRGui.Parent = CoreGui
+	end)
+	if not TRGui.Parent then
+		TRGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	local Window = Instance.new("Frame", TRGui)
+	Window.Name = "TargetRecordingWindow"
+	Window.Size = UDim2.new(0, 480, 0, 420)
+	Window.Position = UDim2.new(0.5, -240, 0.5, -210)
+	Window.BackgroundColor3 = C_SIDE
+	Window.Visible = false
+	Window.ZIndex = 200
+	Instance.new("UICorner", Window).CornerRadius = UDim.new(0, 12)
+
+	local WStroke = Instance.new("UIStroke", Window)
+	WStroke.Color = C_ACCENT
+	WStroke.Thickness = 1.5
+	WStroke.Transparency = 0.4
+
+	local drag = { active = false, input = nil, start = nil, pos = nil }
+	Window.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			drag.active = true
+			drag.start = i.Position
+			drag.pos = Window.Position
+		end
+	end)
+	Window.InputChanged:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+			drag.input = i
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if i == drag.input and drag.active then
+			local d = i.Position - drag.start
+			Window.Position =
+				UDim2.new(drag.pos.X.Scale, drag.pos.X.Offset + d.X, drag.pos.Y.Scale, drag.pos.Y.Offset + d.Y)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			drag.active = false
+		end
+	end)
+
+	local Header = Instance.new("Frame", Window)
+	Header.Size = UDim2.new(1, 0, 0, 40)
+	Header.BackgroundColor3 = C_MAIN
+	Header.ZIndex = 201
+	Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
+
+	local Title = Instance.new("TextLabel", Header)
+	Title.Text = "🎯 " .. L("target_recording")
+	Title.Size = UDim2.new(1, -50, 1, 0)
+	Title.Position = UDim2.new(0, 15, 0, 0)
+	Title.BackgroundTransparency = 1
+	Title.TextColor3 = C_TEXT
+	Title.Font = Enum.Font.GothamBold
+	Title.TextSize = 14
+	Title.TextXAlignment = Enum.TextXAlignment.Left
+	Title.ZIndex = 202
+
+	local CloseBtn = Instance.new("TextButton", Header)
+	CloseBtn.Text = "×"
+	CloseBtn.Size = UDim2.new(0, 40, 1, 0)
+	CloseBtn.Position = UDim2.new(1, -40, 0, 0)
+	CloseBtn.BackgroundTransparency = 1
+	CloseBtn.TextColor3 = C_RED
+	CloseBtn.TextSize = 24
+	CloseBtn.Font = Enum.Font.GothamBold
+	CloseBtn.ZIndex = 202
+	CloseBtn.MouseButton1Click:Connect(function()
+		Window.Visible = false
+	end)
+
+	local Container = Instance.new("Frame", Window)
+	Container.Size = UDim2.new(1, -20, 1, -50)
+	Container.Position = UDim2.new(0, 10, 0, 45)
+	Container.BackgroundTransparency = 1
+	Container.ZIndex = 201
+
+	local S = { player = nil, recording = false, data = nil, con = nil, startTime = 0, selFile = nil }
+
+	local LPanel = Instance.new("Frame", Container)
+	LPanel.Size = UDim2.new(0.5, -5, 1, 0)
+	LPanel.BackgroundColor3 = C_ITEM
+	LPanel.ZIndex = 202
+	Instance.new("UICorner", LPanel).CornerRadius = UDim.new(0, 10)
+	local LLayout = Instance.new("UIListLayout", LPanel)
+	LLayout.Padding = UDim.new(0, 6)
+	LLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	LLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	Instance.new("UIPadding", LPanel).PaddingTop = UDim.new(0, 8)
+
+	local LblPlayer = Instance.new("TextLabel", LPanel)
+	LblPlayer.Text = "👤 " .. L("select_player")
+	LblPlayer.Size = UDim2.new(0.9, 0, 0, 22)
+	LblPlayer.BackgroundTransparency = 1
+	LblPlayer.TextColor3 = C_TEXT
+	LblPlayer.Font = Enum.Font.GothamBold
+	LblPlayer.TextSize = 12
+	LblPlayer.TextXAlignment = Enum.TextXAlignment.Left
+	LblPlayer.LayoutOrder = 1
+	LblPlayer.ZIndex = 203
+
+	local PlayerScroll = Instance.new("ScrollingFrame", LPanel)
+	PlayerScroll.Size = UDim2.new(0.9, 0, 0, 120)
+	PlayerScroll.BackgroundColor3 = C_SIDE
+	PlayerScroll.BorderSizePixel = 0
+	PlayerScroll.ScrollBarThickness = 4
+	PlayerScroll.ScrollBarImageColor3 = C_ACCENT
+	PlayerScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	PlayerScroll.LayoutOrder = 2
+	PlayerScroll.ZIndex = 203
+	Instance.new("UICorner", PlayerScroll).CornerRadius = UDim.new(0, 6)
+	Instance.new("UIListLayout", PlayerScroll).Padding = UDim.new(0, 2)
+	Instance.new("UIPadding", PlayerScroll).PaddingTop = UDim.new(0, 4)
+
+	local SelPlayerLbl = Instance.new("TextLabel", LPanel)
+	SelPlayerLbl.Text = L("select_player_to_record")
+	SelPlayerLbl.Size = UDim2.new(0.9, 0, 0, 26)
+	SelPlayerLbl.BackgroundColor3 = C_SIDE
+	SelPlayerLbl.TextColor3 = C_TEXT_DIM
+	SelPlayerLbl.Font = Enum.Font.GothamBold
+	SelPlayerLbl.TextSize = 10
+	SelPlayerLbl.LayoutOrder = 3
+	SelPlayerLbl.ZIndex = 203
+	Instance.new("UICorner", SelPlayerLbl).CornerRadius = UDim.new(0, 6)
+
+	local BtnRecord = Instance.new("TextButton", LPanel)
+	BtnRecord.Text = "⏺ " .. L("start_recording")
+	BtnRecord.Size = UDim2.new(0.9, 0, 0, 38)
+	BtnRecord.BackgroundColor3 = C_GREEN
+	BtnRecord.TextColor3 = Color3.new(0, 0, 0)
+	BtnRecord.Font = Enum.Font.GothamBold
+	BtnRecord.TextSize = 13
+	BtnRecord.LayoutOrder = 4
+	BtnRecord.ZIndex = 203
+	Instance.new("UICorner", BtnRecord).CornerRadius = UDim.new(0, 8)
+
+	local FrameLbl = Instance.new("TextLabel", LPanel)
+	FrameLbl.Text = "0 " .. L("frames") .. " | 0.0s"
+	FrameLbl.Size = UDim2.new(0.9, 0, 0, 22)
+	FrameLbl.BackgroundTransparency = 1
+	FrameLbl.TextColor3 = C_TEXT
+	FrameLbl.Font = Enum.Font.GothamBold
+	FrameLbl.TextSize = 14
+	FrameLbl.LayoutOrder = 5
+	FrameLbl.ZIndex = 203
+
+	local FileBox = Instance.new("TextBox", LPanel)
+	FileBox.Text = "TargetRec_" .. os.date("%H%M%S")
+	FileBox.PlaceholderText = L("enter_filename")
+	FileBox.Size = UDim2.new(0.9, 0, 0, 30)
+	FileBox.BackgroundColor3 = C_SIDE
+	FileBox.TextColor3 = C_TEXT
+	FileBox.Font = Enum.Font.GothamBold
+	FileBox.TextSize = 11
+	FileBox.ClearTextOnFocus = false
+	FileBox.LayoutOrder = 6
+	FileBox.ZIndex = 203
+	Instance.new("UICorner", FileBox).CornerRadius = UDim.new(0, 6)
+
+	local BtnRow = Instance.new("Frame", LPanel)
+	BtnRow.Size = UDim2.new(0.9, 0, 0, 32)
+	BtnRow.BackgroundTransparency = 1
+	BtnRow.LayoutOrder = 7
+	BtnRow.ZIndex = 203
+
+	local BtnSave = Instance.new("TextButton", BtnRow)
+	BtnSave.Text = "💾 " .. L("save")
+	BtnSave.Size = UDim2.new(0.48, 0, 1, 0)
+	BtnSave.BackgroundColor3 = C_ACCENT
+	BtnSave.TextColor3 = Color3.new(0, 0, 0)
+	BtnSave.Font = Enum.Font.GothamBold
+	BtnSave.TextSize = 11
+	BtnSave.ZIndex = 204
+	Instance.new("UICorner", BtnSave).CornerRadius = UDim.new(0, 6)
+
+	local BtnClear = Instance.new("TextButton", BtnRow)
+	BtnClear.Text = "🗑 " .. L("clear")
+	BtnClear.Size = UDim2.new(0.48, 0, 1, 0)
+	BtnClear.Position = UDim2.new(0.52, 0, 0, 0)
+	BtnClear.BackgroundColor3 = C_RED
+	BtnClear.TextColor3 = Color3.new(0, 0, 0)
+	BtnClear.Font = Enum.Font.GothamBold
+	BtnClear.TextSize = 11
+	BtnClear.ZIndex = 204
+	Instance.new("UICorner", BtnClear).CornerRadius = UDim.new(0, 6)
+
+	local RPanel = Instance.new("Frame", Container)
+	RPanel.Size = UDim2.new(0.5, -5, 1, 0)
+	RPanel.Position = UDim2.new(0.5, 5, 0, 0)
+	RPanel.BackgroundColor3 = C_ITEM
+	RPanel.ZIndex = 202
+	Instance.new("UICorner", RPanel).CornerRadius = UDim.new(0, 10)
+	local RLayout = Instance.new("UIListLayout", RPanel)
+	RLayout.Padding = UDim.new(0, 6)
+	RLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	RLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	Instance.new("UIPadding", RPanel).PaddingTop = UDim.new(0, 8)
+
+	local LblRecs = Instance.new("TextLabel", RPanel)
+	LblRecs.Text = "📁 " .. L("recordings")
+	LblRecs.Size = UDim2.new(0.9, 0, 0, 22)
+	LblRecs.BackgroundTransparency = 1
+	LblRecs.TextColor3 = C_TEXT
+	LblRecs.Font = Enum.Font.GothamBold
+	LblRecs.TextSize = 12
+	LblRecs.TextXAlignment = Enum.TextXAlignment.Left
+	LblRecs.LayoutOrder = 1
+	LblRecs.ZIndex = 203
+
+	local RecScroll = Instance.new("ScrollingFrame", RPanel)
+	RecScroll.Size = UDim2.new(0.9, 0, 0, 200)
+	RecScroll.BackgroundColor3 = C_SIDE
+	RecScroll.BorderSizePixel = 0
+	RecScroll.ScrollBarThickness = 4
+	RecScroll.ScrollBarImageColor3 = C_ACCENT
+	RecScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	RecScroll.LayoutOrder = 2
+	RecScroll.ZIndex = 203
+	Instance.new("UICorner", RecScroll).CornerRadius = UDim.new(0, 6)
+	Instance.new("UIListLayout", RecScroll).Padding = UDim.new(0, 2)
+	Instance.new("UIPadding", RecScroll).PaddingTop = UDim.new(0, 4)
+
+	local SelRecLbl = Instance.new("TextLabel", RPanel)
+	SelRecLbl.Text = L("no_file_selected")
+	SelRecLbl.Size = UDim2.new(0.9, 0, 0, 26)
+	SelRecLbl.BackgroundColor3 = C_SIDE
+	SelRecLbl.TextColor3 = C_TEXT_DIM
+	SelRecLbl.Font = Enum.Font.GothamBold
+	SelRecLbl.TextSize = 10
+	SelRecLbl.LayoutOrder = 3
+	SelRecLbl.ZIndex = 203
+	Instance.new("UICorner", SelRecLbl).CornerRadius = UDim.new(0, 6)
+
+	local PlayRow = Instance.new("Frame", RPanel)
+	PlayRow.Size = UDim2.new(0.9, 0, 0, 35)
+	PlayRow.BackgroundTransparency = 1
+	PlayRow.LayoutOrder = 4
+	PlayRow.ZIndex = 203
+
+	local BtnPlay = Instance.new("TextButton", PlayRow)
+	BtnPlay.Text = "▶ " .. L("play")
+	BtnPlay.Size = UDim2.new(0.48, 0, 1, 0)
+	BtnPlay.BackgroundColor3 = C_GREEN
+	BtnPlay.TextColor3 = Color3.new(0, 0, 0)
+	BtnPlay.Font = Enum.Font.GothamBold
+	BtnPlay.TextSize = 12
+	BtnPlay.ZIndex = 204
+	Instance.new("UICorner", BtnPlay).CornerRadius = UDim.new(0, 6)
+
+	local BtnDel = Instance.new("TextButton", PlayRow)
+	BtnDel.Text = "🗑 " .. L("delete")
+	BtnDel.Size = UDim2.new(0.48, 0, 1, 0)
+	BtnDel.Position = UDim2.new(0.52, 0, 0, 0)
+	BtnDel.BackgroundColor3 = C_RED
+	BtnDel.TextColor3 = Color3.new(0, 0, 0)
+	BtnDel.Font = Enum.Font.GothamBold
+	BtnDel.TextSize = 11
+	BtnDel.ZIndex = 204
+	Instance.new("UICorner", BtnDel).CornerRadius = UDim.new(0, 6)
+
+	local BtnRefresh = Instance.new("TextButton", RPanel)
+	BtnRefresh.Text = "🔄 " .. L("refresh")
+	BtnRefresh.Size = UDim2.new(0.9, 0, 0, 28)
+	BtnRefresh.BackgroundColor3 = C_ITEM
+	BtnRefresh.TextColor3 = C_TEXT
+	BtnRefresh.Font = Enum.Font.GothamBold
+	BtnRefresh.TextSize = 10
+	BtnRefresh.LayoutOrder = 5
+	BtnRefresh.ZIndex = 203
+	Instance.new("UICorner", BtnRefresh).CornerRadius = UDim.new(0, 6)
+
+	local PATH = "StarshipCore/Recordings/TargetRec"
+	local function EnsureFolder()
+		if not isfolder("StarshipCore") then
+			makefolder("StarshipCore")
+		end
+		if not isfolder("StarshipCore/Recordings") then
+			makefolder("StarshipCore/Recordings")
+		end
+		if not isfolder(PATH) then
+			makefolder(PATH)
+		end
+	end
+
+	local function RefreshPlayers()
+		for _, c in pairs(PlayerScroll:GetChildren()) do
+			if c:IsA("TextButton") then
+				c:Destroy()
+			end
+		end
+		local list = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LocalPlayer then
+				table.insert(list, p)
+			end
+		end
+		table.sort(list, function(a, b)
+			return a.Name:lower() < b.Name:lower()
+		end)
+		for _, p in ipairs(list) do
+			local b = Instance.new("TextButton", PlayerScroll)
+			b.Text = "  " .. p.Name
+			b.Size = UDim2.new(1, -8, 0, 26)
+			b.BackgroundColor3 = (S.player == p) and C_ACCENT or C_ITEM
+			b.TextColor3 = (S.player == p) and Color3.new(0, 0, 0) or C_TEXT
+			b.Font = Enum.Font.GothamBold
+			b.TextSize = 10
+			b.TextXAlignment = Enum.TextXAlignment.Left
+			b.ZIndex = 204
+			Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+			b.MouseEnter:Connect(function()
+				if S.player ~= p then
+					b.BackgroundColor3 = C_SIDE
+				end
+			end)
+			b.MouseLeave:Connect(function()
+				if S.player ~= p then
+					b.BackgroundColor3 = C_ITEM
+				end
+			end)
+			b.MouseButton1Click:Connect(function()
+				S.player = p
+				SelPlayerLbl.Text = "✓ " .. p.Name
+				SelPlayerLbl.TextColor3 = C_GREEN
+				-- Update default filename with player name
+				local safeName = p.Name:gsub("[^%w]", "")
+				FileBox.Text = safeName .. "_" .. os.date("%H%M%S")
+				RefreshPlayers()
+			end)
+		end
+		if #list == 0 then
+			local n = Instance.new("TextLabel", PlayerScroll)
+			n.Text = L("no_other_players")
+			n.Size = UDim2.new(1, 0, 0, 26)
+			n.BackgroundTransparency = 1
+			n.TextColor3 = C_TEXT_DIM
+			n.Font = Enum.Font.Gotham
+			n.TextSize = 10
+			n.ZIndex = 204
+		end
+	end
+
+	local function RefreshFiles()
+		for _, c in pairs(RecScroll:GetChildren()) do
+			if c:IsA("TextButton") then
+				c:Destroy()
+			end
+		end
+		EnsureFolder()
+		local files = {}
+		local ok, fl = pcall(function()
+			return listfiles(PATH)
+		end)
+		if ok and fl then
+			for _, path in ipairs(fl) do
+				if path:match("%.json$") then
+					local fn = path:match("([^/\\]+)%.json$")
+					if fn then
+						table.insert(files, fn)
+					end
+				end
+			end
+		end
+		table.sort(files, function(a, b)
+			return a:lower() < b:lower()
+		end)
+		for _, fn in ipairs(files) do
+			local b = Instance.new("TextButton", RecScroll)
+			b.Text = "  📄 " .. fn
+			b.Size = UDim2.new(1, -8, 0, 26)
+			b.BackgroundColor3 = (S.selFile == fn) and C_ACCENT or C_ITEM
+			b.TextColor3 = (S.selFile == fn) and Color3.new(0, 0, 0) or C_TEXT
+			b.Font = Enum.Font.GothamBold
+			b.TextSize = 9
+			b.TextXAlignment = Enum.TextXAlignment.Left
+			b.ZIndex = 204
+			Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+			b.MouseEnter:Connect(function()
+				if S.selFile ~= fn then
+					b.BackgroundColor3 = C_SIDE
+				end
+			end)
+			b.MouseLeave:Connect(function()
+				if S.selFile ~= fn then
+					b.BackgroundColor3 = C_ITEM
+				end
+			end)
+			b.MouseButton1Click:Connect(function()
+				S.selFile = fn
+				SelRecLbl.Text = "✓ " .. fn .. ".json"
+				SelRecLbl.TextColor3 = C_GREEN
+				RefreshFiles()
+			end)
+		end
+		if #files == 0 then
+			local n = Instance.new("TextLabel", RecScroll)
+			n.Text = L("no_files")
+			n.Size = UDim2.new(1, 0, 0, 26)
+			n.BackgroundTransparency = 1
+			n.TextColor3 = C_TEXT_DIM
+			n.Font = Enum.Font.Gotham
+			n.TextSize = 10
+			n.ZIndex = 204
+		end
+	end
+
+	local function StopRec()
+		S.recording = false
+		if S.con then
+			S.con:Disconnect()
+			S.con = nil
+		end
+		BtnRecord.Text = "⏺ " .. L("start_recording")
+		BtnRecord.BackgroundColor3 = C_GREEN
+		if S.data and S.data.Frames and #S.data.Frames > 0 then
+			local dur = S.data.Frames[#S.data.Frames].t
+			FrameLbl.Text = #S.data.Frames .. " " .. L("frames") .. " | " .. string.format("%.1f", dur) .. "s"
+			if UI and UI.ShowToast then
+				UI.ShowToast(
+					L("target_recording"),
+					L("stopped_recording") .. " - " .. #S.data.Frames .. " " .. L("frames"),
+					"success",
+					2
+				)
+			end
+		else
+			FrameLbl.Text = L("no_data_recorded")
+		end
+	end
+
+	local function StartRec()
+		if not S.player then
+			if UI and UI.ShowToast then
+				UI.ShowToast(L("error"), L("select_player_first"), "error", 2)
+			end
+			return
+		end
+		local tc = S.player.Character
+		local tr = tc and tc:FindFirstChild("HumanoidRootPart")
+		if not tr then
+			if UI and UI.ShowToast then
+				UI.ShowToast(L("error"), L("target_not_found"), "error", 2)
+			end
+			return
+		end
+		S.recording = true
+		S.startTime = os.clock()
+		S.data =
+			{ FPS = 60, Mode = "Flexible", TargetPlayer = S.player.Name, TargetUserId = S.player.UserId, Frames = {} }
+		BtnRecord.Text = "⏹ " .. L("stop_recording")
+		BtnRecord.BackgroundColor3 = C_RED
+		-- Update filename to include target player name
+		local safeName = S.player.Name:gsub("[^%w]", "")
+		FileBox.Text = safeName .. "_" .. os.date("%H%M%S")
+		if UI and UI.ShowToast then
+			UI.ShowToast(L("target_recording"), L("started_recording") .. " " .. S.player.Name, "success", 2)
+		end
+
+		S.con = RunService.Heartbeat:Connect(function()
+			if not S.recording then
+				return
+			end
+			local tC = S.player and S.player.Character
+			local tR = tC and tC:FindFirstChild("HumanoidRootPart")
+			local tH = tC and tC:FindFirstChild("Humanoid")
+			if not tR then
+				StopRec()
+				return
+			end
+			local fd = {
+				t = os.clock() - S.startTime,
+				pos = { x = tR.Position.X, y = tR.Position.Y, z = tR.Position.Z },
+				rot = tR.Orientation.Y,
+				vel = {
+					x = tR.AssemblyLinearVelocity.X,
+					y = tR.AssemblyLinearVelocity.Y,
+					z = tR.AssemblyLinearVelocity.Z,
+				},
+			}
+			if tH then
+				fd.md = { x = tH.MoveDirection.X, y = tH.MoveDirection.Y, z = tH.MoveDirection.Z }
+				fd.st = tostring(tH:GetState())
+				fd.jmp = tH.Jump
+			end
+			local cl = tR.CFrame.LookVector
+			fd.charLook = { x = cl.X, y = cl.Y, z = cl.Z }
+			table.insert(S.data.Frames, fd)
+			FrameLbl.Text = #S.data.Frames .. " " .. L("frames") .. " | " .. string.format("%.1f", fd.t) .. "s"
+		end)
+		table.insert(Connections, S.con)
+	end
+
+	BtnRecord.MouseButton1Click:Connect(function()
+		if S.recording then
+			StopRec()
+		else
+			StartRec()
+		end
+	end)
+
+	BtnSave.MouseButton1Click:Connect(function()
+		if not S.data or not S.data.Frames or #S.data.Frames == 0 then
+			if UI and UI.ShowToast then
+				UI.ShowToast(L("error"), L("no_data_to_save"), "error", 2)
+			end
+			return
+		end
+		local fn = FileBox.Text
+		if fn == "" then
+			fn = "TargetRec_" .. os.date("%H%M%S")
+		end
+		fn = fn:gsub("[^%w_%-]", "_")
+		EnsureFolder()
+		local ok, err = pcall(function()
+			writefile(PATH .. "/" .. fn .. ".json", HttpService:JSONEncode(S.data))
+		end)
+		if ok then
+			if UI and UI.ShowToast then
+				UI.ShowToast(L("saved"), L("saved_as") .. ": " .. fn .. ".json", "success", 3)
+			end
+			RefreshFiles()
+		else
+			if UI and UI.ShowToast then
+				UI.ShowToast(L("error"), L("save_failed") .. ": " .. tostring(err), "error", 3)
+			end
+		end
+	end)
+
+	BtnClear.MouseButton1Click:Connect(function()
+		if S.recording then
+			StopRec()
+		end
+		S.data = nil
+		FrameLbl.Text = "0 " .. L("frames") .. " | 0.0s"
+		FileBox.Text = "TargetRec_" .. os.date("%H%M%S")
+		if UI and UI.ShowToast then
+			UI.ShowToast(L("cleared"), L("recording_data_cleared"), "info", 2)
+		end
+	end)
+
+	BtnPlay.MouseButton1Click:Connect(function()
+		if not S.selFile then
+			if UI and UI.ShowToast then
+				UI.ShowToast(L("error"), L("no_file_selected"), "error", 2)
+			end
+			return
+		end
+
+		-- Copy file to main workspace so PlayMergerRecording can find it
+		local srcPath = PATH .. "/" .. S.selFile .. ".json"
+		local dstFolder = "StarshipCore/Starship_Recorder/Default"
+		local dstPath = dstFolder .. "/" .. S.selFile .. ".json"
+
+		-- Ensure destination folder exists
+		if not isfolder("StarshipCore/Starship_Recorder") then
+			makefolder("StarshipCore/Starship_Recorder")
+		end
+		if not isfolder(dstFolder) then
+			makefolder(dstFolder)
+		end
+
+		-- Copy file
+		local ok, content = pcall(readfile, srcPath)
+		if ok and content then
+			pcall(writefile, dstPath, content)
+		end
+
+		-- Play via main handler
+		if UIHandlers and UIHandlers.PlayMergerRecording then
+			UIHandlers.PlayMergerRecording(S.selFile .. ".json")
+			-- Window stays open so user can see/manage recordings
+		else
+			if UI and UI.ShowToast then
+				UI.ShowToast(L("error"), "Playback handler not available", "error", 2)
+			end
+		end
+	end)
+
+	BtnDel.MouseButton1Click:Connect(function()
+		if not S.selFile then
+			if UI and UI.ShowToast then
+				UI.ShowToast(L("error"), L("no_file_selected"), "error", 2)
+			end
+			return
+		end
+		local ok = pcall(function()
+			delfile(PATH .. "/" .. S.selFile .. ".json")
+		end)
+		if ok then
+			if UI and UI.ShowToast then
+				UI.ShowToast(L("deleted"), S.selFile .. ".json", "success", 2)
+			end
+			S.selFile = nil
+			SelRecLbl.Text = L("no_file_selected")
+			SelRecLbl.TextColor3 = C_TEXT_DIM
+			RefreshFiles()
+		end
+	end)
+
+	BtnRefresh.MouseButton1Click:Connect(function()
+		RefreshPlayers()
+		RefreshFiles()
+	end)
+
+	local plc = Players.PlayerRemoving:Connect(function(p)
+		if S.player == p then
+			if S.recording then
+				StopRec()
+				if UI and UI.ShowToast then
+					UI.ShowToast(L("warning"), L("target_player_left"), "warning", 3)
+				end
+			end
+			S.player = nil
+			SelPlayerLbl.Text = L("target_player_left")
+			SelPlayerLbl.TextColor3 = C_YELLOW
+			RefreshPlayers()
+		end
+	end)
+	table.insert(Connections, plc)
+
+	local pjc = Players.PlayerAdded:Connect(function()
+		task.wait(0.5)
+		if Window.Visible then
+			RefreshPlayers()
+		end
+	end)
+	table.insert(Connections, pjc)
+
+	UIHandlers.ToggleTargetRecordingWindow = function()
+		Window.Visible = not Window.Visible
+		if Window.Visible then
+			RefreshPlayers()
+			RefreshFiles()
+		end
+	end
+
+	UIHandlers.CleanupTargetRecording = function()
+		if S.recording then
+			StopRec()
+		end
+		S.data = nil
+		S.player = nil
+		if TRGui then
+			TRGui:Destroy()
+		end
+	end
+end
+
 local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
 	local Players = game:GetService("Players")
 	local RunService = game:GetService("RunService")
@@ -2433,6 +3120,41 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 		BtnPresetDropdown.Text = "🎨 " .. L("preset") .. ": OFF ▼"
 		ShaderStatus.Text = L("shader_disabled")
 		ShaderStatus.TextColor3 = C_TEXT_DIM
+	end)
+
+	-- ═══════════════════════════════════════════════════════════════════════════
+	-- TARGET RECORDING - Button to open separate window
+	-- ═══════════════════════════════════════════════════════════════════════════
+	-- Initialize Target Recording Window (separate function to avoid local register limit)
+	SetupTargetRecordingWindow(LocalPlayer, UI, Connections, UIHandlers, RegisterTheme)
+
+	local CardTargetRec = CreateCard("🎯 " .. L("target_recording"), 100, 10)
+
+	local TargetRecDesc = Instance.new("TextLabel", CardTargetRec)
+	TargetRecDesc.Text = L("select_player_to_record")
+	TargetRecDesc.Size = UDim2.new(1, -20, 0, 20)
+	TargetRecDesc.Position = UDim2.new(0, 10, 0, 30)
+	TargetRecDesc.BackgroundTransparency = 1
+	TargetRecDesc.TextColor3 = C_TEXT_DIM
+	TargetRecDesc.Font = Enum.Font.Gotham
+	TargetRecDesc.TextSize = 10
+	TargetRecDesc.TextXAlignment = Enum.TextXAlignment.Left
+	RegisterTheme(TargetRecDesc, "TextColor3", "TextDim")
+
+	local BtnOpenTargetRec = Instance.new("TextButton", CardTargetRec)
+	BtnOpenTargetRec.Text = "🎯 " .. L("open_target_recorder")
+	BtnOpenTargetRec.Size = UDim2.new(0.94, 0, 0, 40)
+	BtnOpenTargetRec.Position = UDim2.new(0.03, 0, 0, 52)
+	StyleBtn(BtnOpenTargetRec, C_ACCENT)
+
+	BtnOpenTargetRec.MouseButton1Click:Connect(function()
+		if UIHandlers and UIHandlers.ToggleTargetRecordingWindow then
+			UIHandlers.ToggleTargetRecordingWindow()
+		else
+			if UI and UI.ShowToast then
+				UI.ShowToast(L("error"), "Target Recording not available", "error", 2)
+			end
+		end
 	end)
 end
 

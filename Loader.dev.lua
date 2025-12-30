@@ -12,6 +12,7 @@ local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua"
 _G.StarshipServerURL = VERCEL_URL
 _G.StarshipBaseURL = VERCEL_URL
 _G.StarshipServerMode = true
+_G.StarshipEventCode = "DEV" -- Default event code for dev mode
 
 local function xorEncrypt(text, key)
 	local result = {}

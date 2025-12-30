@@ -29,7 +29,7 @@ local DEV_SKIP_MODULES = false -- Set TRUE to skip initial setup popup and other
 if _G.StarshipServerURL:find("localhost:3000") then
 	_G.StarshipLocalServer = "http://localhost:4000"
 	DEV_MODE = true
-	DEV_SKIP_MODULES = true -- Uncomment to skip modules in dev mode
+	DEV_SKIP_MODULES = false -- Set to true to skip modules in dev mode
 end
 _G.StarshipDevMode = DEV_MODE -- Expose for other modules
 

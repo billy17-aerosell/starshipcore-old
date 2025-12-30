@@ -465,6 +465,25 @@ local Translations = {
 		emote_removed = "Emote Removed",
 		playing_emote = "Playing Emote",
 		stopped_emote = "Stopped Emote",
+
+		-- Target Recording
+		target_recording = "Target Recording",
+		open_target_recorder = "OPEN TARGET RECORDER",
+		select_player = "Select Player",
+		select_player_first = "Please select a player first",
+		select_player_to_record = "Select a player to record",
+		start_recording = "Start Recording",
+		stop_recording = "Stop Recording",
+		started_recording = "Started recording",
+		stopped_recording = "Stopped recording",
+		target_not_found = "Target character not found",
+		target_player_left = "Target player left the game",
+		no_other_players = "No other players in server",
+		no_data_recorded = "No data recorded",
+		no_data_to_save = "No data to save",
+		recording_data_cleared = "Recording data cleared",
+		recordings = "Recordings",
+		no_files = "No files found",
 	},
 
 	-- ═══════════════════════════════════════════════════════════════════
@@ -917,6 +936,25 @@ local Translations = {
 		emote_removed = "Emote Dihapus",
 		playing_emote = "Memutar Emote",
 		stopped_emote = "Emote Dihentikan",
+
+		-- Target Recording
+		target_recording = "Rekam Target",
+		open_target_recorder = "BUKA PEREKAM TARGET",
+		select_player = "Pilih Pemain",
+		select_player_first = "Silakan pilih pemain terlebih dahulu",
+		select_player_to_record = "Pilih pemain untuk direkam",
+		start_recording = "Mulai Rekam",
+		stop_recording = "Hentikan Rekam",
+		started_recording = "Mulai merekam",
+		stopped_recording = "Rekaman dihentikan",
+		target_not_found = "Karakter target tidak ditemukan",
+		target_player_left = "Pemain target meninggalkan game",
+		no_other_players = "Tidak ada pemain lain di server",
+		no_data_recorded = "Tidak ada data terekam",
+		no_data_to_save = "Tidak ada data untuk disimpan",
+		recording_data_cleared = "Data rekaman dihapus",
+		recordings = "Rekaman",
+		no_files = "Tidak ada file",
 	},
 }
 

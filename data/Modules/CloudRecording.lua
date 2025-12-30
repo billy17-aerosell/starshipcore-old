@@ -59,6 +59,7 @@ local function GetLocalServerUrl()
 	if _G.StarshipLocalServer then
 		return _G.StarshipLocalServer
 	end
+
 	-- Auto-detect: if running from localhost:3000, use localhost:4000 for uploads
 	local baseUrl = _G.StarshipServerURL or ""
 	if baseUrl:find("localhost:3000") then
