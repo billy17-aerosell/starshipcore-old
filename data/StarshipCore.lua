@@ -25,9 +25,11 @@ end
 -- Local Upload Server URL (for unlimited cloud uploads from PC)
 -- When running in dev mode (localhost:3000), also set local upload server
 local DEV_MODE = false
+local DEV_SKIP_MODULES = false -- Set TRUE to skip initial setup popup and other dev shortcuts
 if _G.StarshipServerURL:find("localhost:3000") then
 	_G.StarshipLocalServer = "http://localhost:4000"
 	DEV_MODE = true
+	DEV_SKIP_MODULES = true -- Uncomment to skip modules in dev mode
 end
 _G.StarshipDevMode = DEV_MODE -- Expose for other modules
 
@@ -46,6 +48,11 @@ _G.StarshipModulePrefix = nil
 if getgenv then
 	getgenv().StarshipRunning = false
 end -- Reset running state for debug
+
+-- CARRY PRESERVATION (Always ON for PC - same as mobile)
+-- Preserves carry animation during playback automatically
+_G.StarshipForceCarryMode = true
+_G.StarshipCarryNotified = nil
 
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
@@ -1372,14 +1379,18 @@ local function ResetChar()
 	if h then
 		h.AutoRotate = true
 		h.PlatformStand = false -- Ensure not stuck in platform stand
-		for _, t in pairs(h:GetPlayingAnimationTracks()) do
-			t:Stop()
+		-- CARRY PRESERVATION: Skip stopping animations when ForceCarryMode is ON
+		if not _G.StarshipForceCarryMode then
+			for _, t in pairs(h:GetPlayingAnimationTracks()) do
+				t:Stop()
+			end
 		end
 		h:MoveTo(r.Position) -- Cancel any movement
 	end
 
 	local a = c:FindFirstChild("Animate")
-	if a then
+	-- CARRY PRESERVATION: Skip Animate restart when ForceCarryMode is ON
+	if a and not _G.StarshipForceCarryMode then
 		a.Disabled = true
 		task.wait() -- Yield to ensure script stops
 		a.Disabled = false
@@ -2249,7 +2260,8 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		end
 
 		-- Restart Animate script to ensure it picks up (with R6 compatibility)
-		if a then
+		-- CARRY PRESERVATION: Skip if ForceCarryMode is ON
+		if a and not _G.StarshipForceCarryMode then
 			a.Disabled = true
 			task.wait(0.05) -- Slightly longer yield for R6 compatibility
 			a.Disabled = false
@@ -2813,23 +2825,35 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 							)
 
 							if isAirState then
-								-- Use velocity Y to determine animation
-								local velY = fA.vel and fA.vel.y or 0
-								local targetState = velY > 0 and "jump" or "fall"
+								-- PRIORITY: Use RECORDED STATE directly, not velocity
+								-- If recording says "Jumping", use Jumping. If "Freefall", use Freefall.
+								-- This is more accurate than velocity-based detection
+								local isJumpState = (stateEnum == Enum.HumanoidStateType.Jumping)
+								local targetState = isJumpState and "jump" or "fall"
 
-								-- Only change state if it's different from last air state (prevent stuttering)
-								-- For spam jumps: Force state change if velocity is significant
-								local forceStateChange = math.abs(velY) > 8
-								if targetState ~= lastAirState or forceStateChange then
+								-- FALLBACK: Use velocity only if state seems wrong (velY > 15 but state says fall)
+								local velY = fA.vel and fA.vel.y or 0
+								if velY > 15 and not isJumpState then
+									targetState = "jump" -- Override to jump if velocity is strongly upward
+								end
+
+								-- Change state if different from last
+								if targetState ~= lastAirState then
 									lastAirState = targetState
 									if targetState == "jump" then
-										h:ChangeState(Enum.HumanoidStateType.Jumping)
+										-- Trigger jump animation
+										if h:GetState() ~= Enum.HumanoidStateType.Jumping then
+											h:ChangeState(Enum.HumanoidStateType.Jumping)
+										end
 										-- R6: Also set h.Jump for proper animation
 										if cachedPlaybackIsR6 then
 											h.Jump = true
 										end
 									else
-										h:ChangeState(Enum.HumanoidStateType.Freefall)
+										-- Trigger freefall animation
+										if h:GetState() ~= Enum.HumanoidStateType.Freefall then
+											h:ChangeState(Enum.HumanoidStateType.Freefall)
+										end
 									end
 								end
 							elseif stateEnum == Enum.HumanoidStateType.Landed then
@@ -2879,11 +2903,15 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					end
 				end
 
-				-- 5. IMPROVED Drift Correction (Smooth) - Skip during climbing/swimming
+				-- 5. IMPROVED Drift Correction (Smooth) - Skip during climbing/swimming/carrying
 				local skipDriftCorrection = false
 				if fA.st then
 					local stName = string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
 					skipDriftCorrection = (stName == "Climbing" or stName == "Swimming")
+				end
+				-- CARRY PRESERVATION: Skip drift correction to reduce jitter for carried player
+				if _G.StarshipForceCarryMode then
+					skipDriftCorrection = true
 				end
 
 				if not skipDriftCorrection then
@@ -4691,76 +4719,81 @@ TabParams = {
 }
 
 -- Load and execute the modular tabs here
-local WarpTab = LoadModule("Tabs/Warp")
-if WarpTab then
-	WarpTab(PageWarp, UIModule, Connections, Config, LocalPlayer, UIHandlers, ShowConfirm, RegisterTheme)
-	-- Store for reactive refresh
-	TabModules.Warp = WarpTab
-	TabPages.Warp = PageWarp
-end
-
-local FunTab = LoadModule("Tabs/Fun")
-if FunTab then
-	FunTab(PageFun, UIModule, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
-	-- Store for reactive refresh
-	TabModules.Fun = FunTab
-	TabPages.Fun = PageFun
-end
-
-local ToolsTab = LoadModule("Tabs/Tools")
-if ToolsTab then
-	ToolsTab(PageTools, UIModule, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
-	-- Store for reactive refresh
-	TabModules.Tools = ToolsTab
-	TabPages.Tools = PageTools
-end
-
-local HelperTab = LoadModule("Tabs/Helper")
-if HelperTab then
-	HelperTab(PageHelper, UIModule, Connections, Config, LocalPlayer, UIHandlers, ShowConfirm, RegisterTheme)
-	-- Store for reactive refresh
-	TabModules.Helper = HelperTab
-	TabPages.Helper = PageHelper
-end
-
-local EmotesTab = LoadModule("Tabs/Emotes")
-if EmotesTab then
-	EmotesTab(ScreenGui, UIModule, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
-end
-
-local ConfigTabModule = LoadModule("Tabs/ConfigTab")
-if ConfigTabModule then
-	-- ConfigTab returns a table, not just a function
-	if type(ConfigTabModule) == "table" and ConfigTabModule.SetupUI then
-		ConfigTabModule.SetupUI(
-			PageConfig,
-			UIModule,
-			Connections,
-			Config,
-			LocalPlayer,
-			UIHandlers,
-			Themes,
-			ThemeObjects,
-			Main
-		)
-		-- Force Apply Default Theme immediately to catch any missed elements
-		if ConfigTabModule.ApplyTheme then
-			ConfigTabModule.ApplyTheme(Config.Theme or "Default")
-		end
+-- DEV: Skip loading tabs if DEV_SKIP_MODULES is enabled for faster development
+if not DEV_SKIP_MODULES then
+	local WarpTab = LoadModule("Tabs/Warp")
+	if WarpTab then
+		WarpTab(PageWarp, UIModule, Connections, Config, LocalPlayer, UIHandlers, ShowConfirm, RegisterTheme)
 		-- Store for reactive refresh
-		TabModules.Config = ConfigTabModule
-		TabPages.Config = PageConfig
+		TabModules.Warp = WarpTab
+		TabPages.Warp = PageWarp
 	end
-end
 
-local DashboardTab = LoadModule("Tabs/Dashboard")
-if DashboardTab then
-	-- Store for reactive refresh (will be called below)
-	TabModules.Dashboard = DashboardTab
-	TabPages.Dashboard = PageDashboard
-end
-if DashboardTab then
-	DashboardTab(PageDashboard, UIModule, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
+	local FunTab = LoadModule("Tabs/Fun")
+	if FunTab then
+		FunTab(PageFun, UIModule, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
+		-- Store for reactive refresh
+		TabModules.Fun = FunTab
+		TabPages.Fun = PageFun
+	end
+
+	local ToolsTab = LoadModule("Tabs/Tools")
+	if ToolsTab then
+		ToolsTab(PageTools, UIModule, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
+		-- Store for reactive refresh
+		TabModules.Tools = ToolsTab
+		TabPages.Tools = PageTools
+	end
+
+	local HelperTab = LoadModule("Tabs/Helper")
+	if HelperTab then
+		HelperTab(PageHelper, UIModule, Connections, Config, LocalPlayer, UIHandlers, ShowConfirm, RegisterTheme)
+		-- Store for reactive refresh
+		TabModules.Helper = HelperTab
+		TabPages.Helper = PageHelper
+	end
+
+	local EmotesTab = LoadModule("Tabs/Emotes")
+	if EmotesTab then
+		EmotesTab(ScreenGui, UIModule, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
+	end
+
+	local ConfigTabModule = LoadModule("Tabs/ConfigTab")
+	if ConfigTabModule then
+		-- ConfigTab returns a table, not just a function
+		if type(ConfigTabModule) == "table" and ConfigTabModule.SetupUI then
+			ConfigTabModule.SetupUI(
+				PageConfig,
+				UIModule,
+				Connections,
+				Config,
+				LocalPlayer,
+				UIHandlers,
+				Themes,
+				ThemeObjects,
+				Main
+			)
+			-- Force Apply Default Theme immediately to catch any missed elements
+			if ConfigTabModule.ApplyTheme then
+				ConfigTabModule.ApplyTheme(Config.Theme or "Default")
+			end
+			-- Store for reactive refresh
+			TabModules.Config = ConfigTabModule
+			TabPages.Config = PageConfig
+		end
+	end
+
+	local DashboardTab = LoadModule("Tabs/Dashboard")
+	if DashboardTab then
+		-- Store for reactive refresh (will be called below)
+		TabModules.Dashboard = DashboardTab
+		TabPages.Dashboard = PageDashboard
+	end
+	if DashboardTab then
+		DashboardTab(PageDashboard, UIModule, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
+	end
+else
+	warn("[Starship DEV] Skipping tab modules loading (DEV_SKIP_MODULES)")
 end
 
 -- ========================
@@ -8810,7 +8843,11 @@ end
 
 -- Show popup
 _G.StarshipSetup.show = function(onDone)
-	if _G.StarshipSetup.cfg.skip then
+	-- Skip initial setup if DEV_SKIP_MODULES is enabled or user config says skip
+	if DEV_SKIP_MODULES or _G.StarshipSetup.cfg.skip then
+		if DEV_SKIP_MODULES then
+			warn("[Starship DEV] Skipping initial setup (DEV_SKIP_MODULES)")
+		end
 		onDone(_G.StarshipSetup.cfg.anonMode, _G.StarshipSetup.cfg.showTags)
 		return
 	end

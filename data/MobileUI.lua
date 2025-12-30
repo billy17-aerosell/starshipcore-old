@@ -712,6 +712,13 @@ local function GetHRP()
 end
 
 -- ══════════════════════════════════════════════════════════════════
+-- CARRY PRESERVATION (Always ON for mobile)
+-- ══════════════════════════════════════════════════════════════════
+_G.StarshipForceCarryMode = true -- Always enabled for mobile
+_G.StarshipCarryNotified = nil
+_G.StarshipCarryNotifiedStd = nil
+
+-- ══════════════════════════════════════════════════════════════════
 -- 🏠 DASHBOARD TAB
 -- ══════════════════════════════════════════════════════════════════
 local DashboardTab = Window:Tab({
@@ -2995,8 +3002,11 @@ local function ResetCharacter()
 	if hum then
 		hum.AutoRotate = true
 		hum.PlatformStand = false
-		for _, track in pairs(hum:GetPlayingAnimationTracks()) do
-			track:Stop()
+		-- CARRY PRESERVATION: Skip stopping animations when ForceCarryMode is ON
+		if not _G.StarshipForceCarryMode then
+			for _, track in pairs(hum:GetPlayingAnimationTracks()) do
+				track:Stop()
+			end
 		end
 		if hrp then
 			hum:MoveTo(hrp.Position)
@@ -3004,7 +3014,8 @@ local function ResetCharacter()
 	end
 
 	local animate = char:FindFirstChild("Animate")
-	if animate then
+	-- CARRY PRESERVATION: Skip Animate restart when ForceCarryMode is ON
+	if animate and not _G.StarshipForceCarryMode then
 		animate.Disabled = true
 		task.wait()
 		animate.Disabled = false
@@ -3739,7 +3750,8 @@ local function PlayRecording(fileName, force)
 	if PlaybackState.isFlexible then
 		-- FLEXIBLE MODE (same as PC StarshipCore.lua)
 		hrp.Anchored = false
-		if animate then
+		-- CARRY PRESERVATION: Skip Animate restart when ForceCarryMode is ON
+		if animate and not _G.StarshipForceCarryMode then
 			animate.Disabled = true
 			task.wait()
 			animate.Disabled = false
@@ -4015,29 +4027,23 @@ local function PlayRecording(fileName, force)
 						end
 
 						if isInAir and smoothPos then
-							-- Follow recorded position for smooth jump arc (like recording)
-							local targetPos = smoothPos -- Use Catmull-Rom interpolated position
+							-- SAME AS PC (StarshipCore.lua): Follow recorded position for smooth jump arc
+							local targetPos = smoothPos
 
 							-- On time jump or high speed, snap directly to target position
 							if isTimeJump or speed >= 2 then
-								hrp.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
+								hrp.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
 								hrp.AssemblyLinearVelocity = vel
 							else
-								-- Smoothly move to target position
+								-- Smoothly move to target position (SAME AS PC)
 								local currentPos = hrp.Position
+								local posBlend = math.clamp(0.5 * speed, 0.3, 0.9)
+								local newPos = currentPos:Lerp(targetPos, posBlend)
+								hrp.CFrame = CFrame.new(newPos) * hrp.CFrame.Rotation
 
-								-- FIX: Do not force CFrame every frame in air to prevent camera jitter
-								-- Only correct if drift is large (> 2 studs)
-								local dist = (targetPos - currentPos).Magnitude
-								if dist > 2 then
-									local posBlend = math.clamp(0.2 * speed, 0.1, 0.5)
-									local newPos = currentPos:Lerp(targetPos, posBlend)
-									hrp.CFrame = CFrame.new(newPos) * hrp.CFrame.Rotation
-								end
-
-								-- Use RECORDED velocity for animation (not calculated)
+								-- Use RECORDED velocity for animation (SAME AS PC)
 								local recordedVelY = fA.vel and fA.vel.y or 0
-								local horizVel = (targetPos - currentPos) * 8 * speed
+								local horizVel = (targetPos - currentPos) * 10 * speed
 								hrp.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY * speed, horizVel.Z)
 							end
 						else
@@ -4217,18 +4223,23 @@ local function PlayRecording(fileName, force)
 						)
 
 						if isAirState then
-							-- Use velocity Y to determine animation
+							-- PRIORITY: Use RECORDED STATE directly, not velocity
+							-- If recording says "Jumping", use Jumping. If "Freefall", use Freefall.
+							-- This is more accurate than velocity-based detection
+							local isJumpState = (stateEnum == Enum.HumanoidStateType.Jumping)
+							local targetState = isJumpState and "jump" or "fall"
+
+							-- FALLBACK: Use velocity only if state seems wrong (velY > 15 but state says fall)
 							local velY = fA.vel and fA.vel.y or 0
-							local targetState = velY > 0 and "jump" or "fall"
+							if velY > 15 and not isJumpState then
+								targetState = "jump" -- Override to jump if velocity is strongly upward
+							end
 
-							-- SPAM JUMP DETECTION: Force state change if velocity is significant
-							local forceStateChange = math.abs(velY) > 8
-
-							-- Change state if different OR if velocity is significant (spam jump detection)
-							if targetState ~= lastAirState or forceStateChange then
+							-- Change state if different from last
+							if targetState ~= lastAirState then
 								lastAirState = targetState
 								if targetState == "jump" then
-									-- Only change state if not already jumping to prevent physics jitter
+									-- Trigger jump animation
 									if hum:GetState() ~= Enum.HumanoidStateType.Jumping then
 										hum:ChangeState(Enum.HumanoidStateType.Jumping)
 									end
@@ -4237,7 +4248,7 @@ local function PlayRecording(fileName, force)
 										hum.Jump = true
 									end
 								else
-									-- Only change state if not already falling
+									-- Trigger freefall animation
 									if hum:GetState() ~= Enum.HumanoidStateType.Freefall then
 										hum:ChangeState(Enum.HumanoidStateType.Freefall)
 									end
@@ -4254,7 +4265,7 @@ local function PlayRecording(fileName, force)
 							-- Running: Prevent unwanted freefall on small bumps
 							if currentState == Enum.HumanoidStateType.Freefall then
 								-- Check if we should be running instead
-								if fA.vel and math.abs(fA.vel.y) < 3 then
+								if fA.vel and math.abs(fA.vel.y) < -999 then -- DISABLED: Let recorded state be respected
 									hum:ChangeState(Enum.HumanoidStateType.Running)
 								end
 							elseif currentState ~= Enum.HumanoidStateType.Running then
@@ -4295,9 +4306,14 @@ local function PlayRecording(fileName, force)
 						end
 					end
 
-					-- 5. Drift Correction (Subtle) - Skip during climbing/swimming/air states
+					-- 5. Drift Correction (Subtle) - Skip during climbing/swimming/air states/carrying
 					local isInAirState = (stateName == "Jumping" or stateName == "Freefall")
 					local skipDriftCorrection = (stateName == "Climbing" or stateName == "Swimming" or isInAirState)
+
+					-- CARRY PRESERVATION: Skip drift correction to reduce jitter for carried player
+					if _G.StarshipForceCarryMode then
+						skipDriftCorrection = true
+					end
 
 					-- IMPROVED: Smooth Drift Correction (same as PC)
 					if not skipDriftCorrection then
@@ -4364,8 +4380,8 @@ local function PlayRecording(fileName, force)
 		ao.Responsiveness = PlaybackState.nativeAnim and 80 or 200
 		ao.RigidityEnabled = not PlaybackState.nativeAnim
 
-		-- Disable animate for non-native mode
-		if animate and not PlaybackState.nativeAnim then
+		-- Disable animate for non-native mode (but NOT if ForceCarryMode is ON)
+		if animate and not PlaybackState.nativeAnim and not _G.StarshipForceCarryMode then
 			animate.Disabled = true
 		end
 
