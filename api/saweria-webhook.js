@@ -207,32 +207,41 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // IP Whitelist Security - Only accept from Saweria servers
+    // ===== SECURITY CHECKS =====
+    
+    // 1. Secret Token Check (PRIMARY - Most reliable)
+    const WEBHOOK_SECRET = process.env.SAWERIA_WEBHOOK_SECRET;
+    const urlToken = req.query.token;
+    const hasValidToken = WEBHOOK_SECRET && urlToken === WEBHOOK_SECRET;
+    
+    // 2. IP Whitelist Check (SECONDARY)
     const SAWERIA_ALLOWED_IPS = [
         '157.230.37.7',     // Saweria Singapore
-        '157.230.37.0/24',  // Saweria IP range (allow subnet)
+        '157.230.37.0/24',  // Saweria IP range
     ];
     
     const clientIP = req.headers['x-real-ip'] || 
                      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
                      'unknown';
     
-    // Simple IP check (exact match or starts with subnet base)
     const isAllowedIP = SAWERIA_ALLOWED_IPS.some(ip => {
         if (ip.includes('/')) {
-            // Subnet check (simplified - just check prefix)
             const baseIP = ip.split('/')[0].split('.').slice(0, 3).join('.');
             return clientIP.startsWith(baseIP);
         }
         return clientIP === ip;
     });
 
-    // Also check for Saweria user-agent as additional verification
+    // 3. User-Agent Check (TERTIARY)
     const userAgent = req.headers['user-agent'] || '';
     const isSaweriaAgent = userAgent.includes('Saweria');
 
-    if (!isAllowedIP && !isSaweriaAgent) {
-        console.warn(`⚠️ Blocked webhook from unauthorized IP: ${clientIP}`);
+    // Pass if ANY of these is true:
+    // - Has valid secret token
+    // - IP is whitelisted
+    // - User-Agent is Saweria
+    if (!hasValidToken && !isAllowedIP && !isSaweriaAgent) {
+        console.warn(`⚠️ Blocked webhook - IP: ${clientIP}, Token: ${urlToken ? 'provided' : 'missing'}, UA: ${userAgent}`);
         return res.status(403).json({ error: 'Forbidden - Unauthorized source' });
     }
 
