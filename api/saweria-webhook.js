@@ -181,7 +181,15 @@ async function addToWhitelist(redisClient, platform, userId, username, duration,
     metadata.lastUpdated = new Date().toISOString();
     await redisClient.set(config.metadataKey, JSON.stringify(metadata));
 
-    return { isExisting, user: whitelist[userId] };
+    // Return with extended info
+    const isExtended = isExisting && extendedDays > 0;
+    return { 
+        isExisting, 
+        isExtended, 
+        extendedDays,
+        totalDays: isExtended ? extendedDays + (daysUntilExpiry || 0) : daysUntilExpiry,
+        user: whitelist[userId] 
+    };
 }
 
 export default async function handler(req, res) {
@@ -353,7 +361,9 @@ export default async function handler(req, res) {
                     { name: 'Duration', value: durationConfig.label, inline: true },
                     { name: 'Amount', value: `Rp ${amount_raw.toLocaleString()}`, inline: true },
                     { name: 'Donator', value: donator_name || 'Anonymous', inline: true },
-                    { name: 'Status', value: mobileResult.isExisting || pcResult.isExisting ? '🔄 Renewed' : '🆕 New VIP', inline: true }
+                    { name: 'Status', value: (mobileResult.isExtended || pcResult.isExtended) 
+                        ? `📅 Extended (+${mobileResult.extendedDays || pcResult.extendedDays} days remaining)`
+                        : (mobileResult.isExisting || pcResult.isExisting) ? '🔄 Renewed' : '🆕 New VIP', inline: true }
                 ],
                 footer: { text: `Transaction: ${transactionId || 'N/A'}` },
                 timestamp: new Date().toISOString()
@@ -379,6 +389,14 @@ export default async function handler(req, res) {
 
         console.log(`✅ ${platform.toUpperCase()} VIP added: ${username} (${userId})`);
 
+        // Determine status text
+        let statusText = '🆕 New VIP';
+        if (result.isExtended) {
+            statusText = `📅 Extended (+${result.extendedDays} days → ${result.totalDays} total)`;
+        } else if (result.isExisting) {
+            statusText = '🔄 Renewed';
+        }
+
         // Send Discord notification
         const platformEmoji = platform === 'mobile' ? '📱' : '💻';
         await sendDiscordNotification({
@@ -392,7 +410,7 @@ export default async function handler(req, res) {
                 { name: 'Duration', value: durationConfig.label, inline: true },
                 { name: 'Amount', value: `Rp ${amount_raw.toLocaleString()}`, inline: true },
                 { name: 'Donator', value: donator_name || 'Anonymous', inline: true },
-                { name: 'Status', value: result.isExisting ? '🔄 Renewed' : '🆕 New VIP', inline: true }
+                { name: 'Status', value: statusText, inline: true }
             ],
             footer: { text: `Transaction: ${transactionId || 'N/A'}` },
             timestamp: new Date().toISOString()
