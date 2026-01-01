@@ -1,150 +1,1504 @@
-<!doctype html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>StarshipCore - Roblox Script Platform</title>
-        <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Starship VIP Store - Premium Roblox Script</title>
+    <meta name="description" content="Get VIP access to Starship - Premium Roblox Script Platform">
+    <link rel="icon" type="image/png" href="/starship-logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #fffef5;
+            --bg-alt: #f5f3e7;
+            --black: #1a1a1a;
+            --white: #ffffff;
+            --accent-1: #ff5722;
+            --accent-2: #7c4dff;
+            --accent-3: #00e676;
+            --accent-4: #ffea00;
+            --accent-5: #00bcd4;
+            --border: 3px solid var(--black);
+            --border-thick: 4px solid var(--black);
+            --shadow: 6px 6px 0 var(--black);
+            --shadow-sm: 4px 4px 0 var(--black);
+            --shadow-hover: 8px 8px 0 var(--black);
+            --radius: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Space Grotesk', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--black);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ============ NOISE TEXTURE ============ */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.03;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ============ MARQUEE ============ */
+        .marquee-wrapper {
+            background: var(--black);
+            color: var(--accent-4);
+            padding: 12px 0;
+            overflow: hidden;
+            border-bottom: var(--border-thick);
+        }
+
+        .marquee {
+            display: flex;
+            animation: marquee 20s linear infinite;
+            white-space: nowrap;
+        }
+
+        .marquee span {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 0 40px;
+        }
+
+        @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        /* ============ MAIN CONTAINER ============ */
+        .main-container {
+            position: relative;
+            z-index: 1;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* ============ HERO SECTION ============ */
+        .hero {
+            text-align: center;
+            padding: 50px 0 60px;
+            position: relative;
+        }
+
+        .hero-logo {
+            width: 140px;
+            height: 140px;
+            margin-bottom: 25px;
+            border: var(--border-thick);
+            box-shadow: var(--shadow);
+            background: var(--white);
+            padding: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .hero-logo:hover {
+            transform: translate(-3px, -3px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .hero h1 {
+            font-size: clamp(3rem, 10vw, 5rem);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            line-height: 0.95;
+        }
+
+        .hero h1 span {
+            display: inline-block;
+            background: var(--accent-4);
+            padding: 5px 15px;
+            border: var(--border);
+            box-shadow: var(--shadow-sm);
+            transform: rotate(-1deg);
+        }
+
+        .hero p {
+            font-size: clamp(1rem, 3vw, 1.2rem);
+            max-width: 500px;
+            margin: 20px auto 35px;
+            color: var(--black);
+            font-weight: 500;
+        }
+
+        .hero-socials {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .social-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 24px;
+            background: var(--white);
+            border: var(--border);
+            box-shadow: var(--shadow-sm);
+            color: var(--black);
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            transition: all 0.15s ease;
+        }
+
+        .social-link:hover {
+            transform: translate(-3px, -3px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .social-link:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 var(--black);
+        }
+
+        .social-link.tiktok {
+            background: var(--accent-1);
+            color: var(--white);
+        }
+
+        .social-link.discord {
+            background: var(--accent-2);
+            color: var(--white);
+        }
+
+        .social-link span {
+            font-size: 1.3rem;
+        }
+
+        /* ============ FEATURES BAR ============ */
+        .features-bar {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 0;
+            margin: 50px 0;
+            border: var(--border);
+            background: var(--white);
+            box-shadow: var(--shadow);
+        }
+
+        .feature-box {
+            flex: 1;
+            min-width: 140px;
+            padding: 20px 15px;
+            text-align: center;
+            border-right: var(--border);
+            transition: background 0.15s ease;
+        }
+
+        .feature-box:last-child {
+            border-right: none;
+        }
+
+        .feature-box:hover {
+            background: var(--accent-4);
+        }
+
+        .feature-box .icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+        }
+
+        .feature-box span {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* ============ STEPS TRACKER ============ */
+        .steps-tracker {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0;
+            margin-bottom: 50px;
+            flex-wrap: wrap;
+        }
+
+        .step-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .step-number {
+            width: 55px;
+            height: 55px;
+            background: var(--white);
+            border: var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            font-size: 1.3rem;
+            transition: all 0.15s ease;
+        }
+
+        .step-number.active {
+            background: var(--accent-4);
+            transform: rotate(-2deg);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .step-number.completed {
+            background: var(--accent-3);
+        }
+
+        .step-text {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .step-connector {
+            width: 50px;
+            height: 4px;
+            background: var(--black);
+            margin-bottom: 25px;
+        }
+
+        .step-connector.completed {
+            background: var(--accent-3);
+        }
+
+        /* ============ SECTION STYLING ============ */
+        .section {
+            margin-bottom: 50px;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .section-badge {
+            display: inline-block;
+            background: var(--accent-2);
+            color: var(--white);
+            font-family: 'Space Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 8px 16px;
+            border: var(--border);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .section-title {
+            font-size: clamp(1.6rem, 5vw, 2.2rem);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: -0.02em;
+        }
+
+        .section-desc {
+            font-size: 1rem;
+            margin-top: 10px;
+            font-weight: 500;
+        }
+
+        /* ============ PLATFORM CARDS ============ */
+        .platform-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .platform-card {
+            position: relative;
+            background: var(--white);
+            border: var(--border-thick);
+            padding: 35px 25px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: var(--shadow);
+        }
+
+        .platform-card:hover {
+            transform: translate(-4px, -4px);
+            box-shadow: 10px 10px 0 var(--black);
+        }
+
+        .platform-card:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 var(--black);
+        }
+
+        .platform-card.selected {
+            background: var(--accent-4);
+        }
+
+        .platform-card.mobile .platform-accent {
+            background: var(--accent-5);
+        }
+
+        .platform-card.pc .platform-accent {
+            background: var(--accent-2);
+        }
+
+        .platform-card.bundle .platform-accent {
+            background: var(--accent-1);
+        }
+
+        .platform-accent {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 8px;
+            background: var(--accent-3);
+        }
+
+        .platform-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--accent-1);
+            color: var(--white);
+            padding: 6px 12px;
+            border: 2px solid var(--black);
+            font-family: 'Space Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transform: rotate(3deg);
+        }
+
+        .platform-icon {
+            width: 70px;
+            height: 70px;
+            background: var(--bg-alt);
+            border: var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.2rem;
+            margin-bottom: 20px;
+        }
+
+        .platform-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
+        }
+
+        .platform-desc {
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .platform-price {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .platform-price strong {
+            font-size: 1.2rem;
+            background: var(--accent-3);
+            padding: 2px 8px;
+            border: 2px solid var(--black);
+        }
+
+        /* ============ DURATION CARDS ============ */
+        .duration-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            max-width: 650px;
+            margin: 0 auto;
+        }
+
+        .duration-card {
+            position: relative;
+            background: var(--white);
+            border: var(--border);
+            padding: 25px 18px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .duration-card:hover {
+            transform: translate(-3px, -3px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .duration-card:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 var(--black);
+        }
+
+        .duration-card.selected {
+            background: var(--accent-4);
+        }
+
+        .duration-card.best-value::before {
+            content: '★ BEST';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%) rotate(-2deg);
+            background: var(--accent-1);
+            color: var(--white);
+            padding: 4px 12px;
+            border: 2px solid var(--black);
+            font-family: 'Space Mono', monospace;
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        .duration-time {
+            font-size: 1.4rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .duration-price {
+            font-family: 'Space Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
+            background: var(--accent-3);
+            display: inline-block;
+            padding: 4px 10px;
+            border: 2px solid var(--black);
+        }
+
+        /* ============ USER ID INPUT ============ */
+        .input-wrapper {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .input-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 20px;
+            padding-right: 110px;
+            background: var(--white);
+            border: var(--border-thick);
+            box-shadow: var(--shadow);
+            color: var(--black);
+            font-size: 1.1rem;
+            font-family: 'Space Mono', monospace;
+            font-weight: 500;
+            outline: none;
+            transition: all 0.15s ease;
+        }
+
+        .input-field:focus {
+            transform: translate(-2px, -2px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .input-field::placeholder {
+            color: #999;
+            font-weight: 400;
+        }
+
+        .input-status {
+            position: absolute;
+            right: 18px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .input-status.valid { color: #16a34a; }
+        .input-status.invalid { color: #dc2626; }
+        .input-status.checking { color: #666; }
+
+        .user-preview {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            padding: 18px;
+            background: var(--white);
+            border: var(--border);
+            box-shadow: var(--shadow-sm);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.2s ease;
+        }
+
+        .user-preview.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .user-preview img {
+            width: 60px;
+            height: 60px;
+            border: var(--border);
+        }
+
+        .user-details h4 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .user-details p {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        /* ============ SUMMARY CARD ============ */
+        .summary-section {
+            max-width: 550px;
+            margin: 0 auto;
+        }
+
+        .how-it-works {
+            background: var(--accent-5);
+            border: var(--border);
+            box-shadow: var(--shadow);
+            padding: 25px;
+            margin-bottom: 25px;
+        }
+
+        .how-it-works h4 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .how-it-works ol {
+            padding-left: 22px;
+            font-size: 0.95rem;
+            line-height: 2;
+        }
+
+        .summary-card {
+            background: var(--white);
+            border: var(--border-thick);
+            box-shadow: var(--shadow);
+            padding: 30px;
+            margin-bottom: 25px;
+        }
+
+        .summary-header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: var(--border);
+        }
+
+        .summary-header h4 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 0;
+            border-bottom: 2px dashed var(--black);
+        }
+
+        .summary-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .summary-label {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .summary-value {
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        .summary-total {
+            font-family: 'Space Mono', monospace;
+            font-size: 1.6rem;
+            font-weight: 700;
+            background: var(--accent-3);
+            padding: 5px 12px;
+            border: 2px solid var(--black);
+        }
+
+        /* ============ PAY BUTTON ============ */
+        .pay-button {
+            width: 100%;
+            padding: 22px;
+            background: var(--accent-1);
+            border: var(--border-thick);
+            box-shadow: var(--shadow);
+            color: var(--white);
+            font-size: 1.2rem;
+            font-weight: 700;
+            font-family: 'Space Grotesk', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .pay-button:hover:not(:disabled) {
+            transform: translate(-4px, -4px);
+            box-shadow: 10px 10px 0 var(--black);
+        }
+
+        .pay-button:active:not(:disabled) {
+            transform: translate(3px, 3px);
+            box-shadow: 2px 2px 0 var(--black);
+        }
+
+        .pay-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: #999;
+        }
+
+        .pay-button .icon {
+            font-size: 1.4rem;
+        }
+
+        /* ============ FOOTER ============ */
+        .footer {
+            text-align: center;
+            padding: 50px 20px 30px;
+            margin-top: 60px;
+            border-top: var(--border-thick);
+            background: var(--black);
+            color: var(--white);
+        }
+
+        .footer-logo {
+            width: 60px;
+            height: 60px;
+            border: 3px solid var(--white);
+            margin-bottom: 20px;
+        }
+
+        .footer p {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.8rem;
+            margin-bottom: 20px;
+            letter-spacing: 0.05em;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+        }
+
+        .footer-links a {
+            color: var(--accent-4);
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transition: color 0.15s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--accent-3);
+        }
+
+        /* ============ LOADING SPINNER ============ */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #ccc;
+            border-top-color: var(--black);
+            border-radius: 0;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ============ TOAST ============ */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--black);
+            color: var(--white);
+            border: 3px solid var(--white);
+            padding: 16px 28px;
+            box-shadow: var(--shadow);
+            z-index: 1000;
+            opacity: 0;
+            transition: all 0.2s ease;
+            font-weight: 700;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast.error {
+            background: #dc2626;
+        }
+
+        .toast.success {
+            background: var(--accent-3);
+            color: var(--black);
+            border-color: var(--black);
+        }
+
+        /* ============ MOBILE RESPONSIVE ============ */
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 25px 15px;
             }
 
-            body {
-                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: white;
+            .marquee span {
+                font-size: 0.75rem;
             }
 
-            .container {
-                text-align: center;
-                padding: 3rem;
-                background: rgba(255, 255, 255, 0.1);
-                backdrop-filter: blur(10px);
-                border-radius: 20px;
-                box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-                border: 1px solid rgba(255, 255, 255, 0.18);
-                max-width: 600px;
+            .hero {
+                padding: 35px 0 50px;
             }
 
-            h1 {
-                font-size: 3rem;
-                margin-bottom: 1rem;
-                background: linear-gradient(45deg, #fff, #e0e0e0);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
+            .hero-logo {
+                width: 110px;
+                height: 110px;
             }
 
-            .subtitle {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero-socials {
+                gap: 10px;
+            }
+
+            .social-link {
+                padding: 12px 18px;
+                font-size: 0.85rem;
+            }
+
+            .features-bar {
+                flex-wrap: wrap;
+                box-shadow: var(--shadow-sm);
+            }
+
+            .feature-box {
+                flex: 1 0 50%;
+                min-width: 0;
+                border-right: none;
+                border-bottom: var(--border);
+                padding: 15px 10px;
+            }
+
+            .feature-box:nth-child(odd) {
+                border-right: var(--border);
+            }
+
+            .feature-box:nth-last-child(-n+2) {
+                border-bottom: none;
+            }
+
+            .feature-box .icon {
+                font-size: 1.6rem;
+            }
+
+            .feature-box span {
+                font-size: 0.65rem;
+            }
+
+            .steps-tracker {
+                margin-bottom: 40px;
+            }
+
+            .step-number {
+                width: 45px;
+                height: 45px;
+                font-size: 1.1rem;
+            }
+
+            .step-text {
+                display: none;
+            }
+
+            .step-connector {
+                width: 35px;
+                margin-bottom: 0;
+            }
+
+            .section {
+                margin-bottom: 40px;
+            }
+
+            .section-header {
+                margin-bottom: 25px;
+            }
+
+            .section-badge {
+                font-size: 0.7rem;
+                padding: 6px 12px;
+            }
+
+            .platform-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .platform-card {
+                padding: 28px 20px;
+                box-shadow: var(--shadow-sm);
+            }
+
+            .platform-icon {
+                width: 60px;
+                height: 60px;
+                font-size: 1.8rem;
+            }
+
+            .platform-name {
+                font-size: 1.3rem;
+            }
+
+            .platform-desc {
+                font-size: 0.85rem;
+            }
+
+            .duration-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
+
+            .duration-card {
+                padding: 20px 12px;
+            }
+
+            .duration-time {
                 font-size: 1.2rem;
-                margin-bottom: 2rem;
-                opacity: 0.9;
             }
 
-            .status {
-                display: inline-block;
-                padding: 0.5rem 1.5rem;
-                background: rgba(76, 175, 80, 0.3);
-                border: 2px solid #4caf50;
-                border-radius: 25px;
-                margin-bottom: 2rem;
-                font-weight: bold;
+            .duration-price {
+                font-size: 1rem;
             }
 
-            .info {
-                background: rgba(0, 0, 0, 0.2);
-                padding: 1.5rem;
-                border-radius: 10px;
-                margin-top: 2rem;
-                text-align: left;
+            .input-field {
+                padding: 18px;
+                padding-right: 100px;
+                font-size: 1rem;
             }
 
-            .info p {
-                margin: 0.5rem 0;
-                line-height: 1.6;
+            .user-preview {
+                gap: 14px;
+                padding: 14px;
             }
 
-            .warning {
-                margin-top: 2rem;
-                padding: 1rem;
-                background: rgba(255, 152, 0, 0.2);
-                border-left: 4px solid #ff9800;
-                border-radius: 4px;
-                text-align: left;
+            .user-preview img {
+                width: 50px;
+                height: 50px;
             }
 
-            .links {
-                margin-top: 2rem;
-                display: flex;
-                gap: 1rem;
+            .how-it-works {
+                padding: 20px;
+            }
+
+            .how-it-works ol {
+                font-size: 0.9rem;
+            }
+
+            .summary-card {
+                padding: 25px;
+            }
+
+            .summary-header h4 {
+                font-size: 1.1rem;
+            }
+
+            .summary-total {
+                font-size: 1.4rem;
+            }
+
+            .pay-button {
+                padding: 18px;
+                font-size: 1.05rem;
+            }
+
+            .footer {
+                padding: 40px 15px 25px;
+            }
+
+            .footer-logo {
+                width: 50px;
+                height: 50px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .hero h1 {
+                font-size: 2rem;
+            }
+
+            .hero h1 span {
+                padding: 3px 10px;
+            }
+
+            .hero-socials {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .social-link {
+                width: 100%;
+                max-width: 220px;
                 justify-content: center;
             }
 
-            .btn {
-                padding: 0.8rem 1.5rem;
-                background: rgba(255, 255, 255, 0.2);
-                border: 2px solid rgba(255, 255, 255, 0.3);
-                border-radius: 10px;
-                color: white;
-                text-decoration: none;
-                transition: all 0.3s;
+            .feature-box span {
+                font-size: 0.6rem;
             }
+        }
 
-            .btn:hover {
-                background: rgba(255, 255, 255, 0.3);
-                transform: translateY(-2px);
-            }
+        /* Hide sections initially */
+        #section-duration,
+        #section-userid,
+        #section-summary {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Marquee -->
+    <div class="marquee-wrapper">
+        <div class="marquee">
+            <span>★ VIP ACCESS ★ CLOUD RECORDING ★ ANTI-DETECTION ★ AUTO UPDATES ★ MULTI-LANGUAGE ★ 24/7 SUPPORT ★</span>
+            <span>★ VIP ACCESS ★ CLOUD RECORDING ★ ANTI-DETECTION ★ AUTO UPDATES ★ MULTI-LANGUAGE ★ 24/7 SUPPORT ★</span>
+            <span>★ VIP ACCESS ★ CLOUD RECORDING ★ ANTI-DETECTION ★ AUTO UPDATES ★ MULTI-LANGUAGE ★ 24/7 SUPPORT ★</span>
+            <span>★ VIP ACCESS ★ CLOUD RECORDING ★ ANTI-DETECTION ★ AUTO UPDATES ★ MULTI-LANGUAGE ★ 24/7 SUPPORT ★</span>
+        </div>
+    </div>
 
-            .btn.tiktok {
-                background: rgba(0, 0, 0, 0.3);
-                border-color: #ff0050;
-            }
-
-            .btn.tiktok:hover {
-                background: rgba(255, 0, 80, 0.3);
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🚀 StarshipCore</h1>
-            <p class="subtitle">Roblox Script Platform</p>
-
-            <div class="status">✅ System Online</div>
-
-            <div class="info">
-                <p><strong>📡 Status:</strong> Active & Running</p>
-                <p><strong>🔐 Access:</strong> VIP Members Only</p>
-                <p><strong>🎮 Platform:</strong> Roblox</p>
-            </div>
-
-            <div class="warning">
-                <p><strong>⚠️ Notice:</strong></p>
-                <p>This platform is for authorized VIP members only.</p>
-                <p>Contact administrator for access.</p>
-            </div>
-
-            <div class="links">
-                <a
-                    href="https://www.tiktok.com/@starshipcore"
-                    class="btn tiktok"
-                    target="_blank"
-                >
-                    🎵 TikTok
+    <div class="main-container">
+        <!-- Hero Section -->
+        <section class="hero">
+            <img src="/starship-logo.png" alt="Starship Logo" class="hero-logo">
+            
+            <h1>STARSHIP <span>VIP</span></h1>
+            <p>Unlock premium features for your Roblox experience. No limits. Full power.</p>
+            
+            <div class="hero-socials">
+                <a href="https://www.tiktok.com/@starshipcore" class="social-link tiktok" target="_blank">
+                    <span>🎵</span> TikTok
                 </a>
-                <a
-                    href="https://discord.gg/BUJuXA8Z"
-                    class="btn"
-                    target="_blank"
-                >
-                    💬 Discord
+                <a href="https://discord.gg/BUJuXA8Z" class="social-link discord" target="_blank">
+                    <span>💬</span> Discord
                 </a>
+            </div>
+        </section>
+
+        <!-- Features Bar -->
+        <div class="features-bar">
+            <div class="feature-box">
+                <div class="icon">☁️</div>
+                <span>Cloud Recording</span>
+            </div>
+            <div class="feature-box">
+                <div class="icon">🔄</div>
+                <span>Auto Updates</span>
+            </div>
+            <div class="feature-box">
+                <div class="icon">🛡️</div>
+                <span>Anti-Detection</span>
+            </div>
+            <div class="feature-box">
+                <div class="icon">🌍</div>
+                <span>Multi-Language</span>
             </div>
         </div>
-    </body>
+
+        <!-- Steps Tracker -->
+        <div class="steps-tracker">
+            <div class="step-box">
+                <div class="step-number active" id="step1">1</div>
+                <span class="step-text">Platform</span>
+            </div>
+            <div class="step-connector" id="line1"></div>
+            <div class="step-box">
+                <div class="step-number" id="step2">2</div>
+                <span class="step-text">Duration</span>
+            </div>
+            <div class="step-connector" id="line2"></div>
+            <div class="step-box">
+                <div class="step-number" id="step3">3</div>
+                <span class="step-text">Account</span>
+            </div>
+            <div class="step-connector" id="line3"></div>
+            <div class="step-box">
+                <div class="step-number" id="step4">4</div>
+                <span class="step-text">Pay</span>
+            </div>
+        </div>
+
+        <!-- Step 1: Platform Selection -->
+        <section class="section" id="section-platform">
+            <div class="section-header">
+                <div class="section-badge">Step 01</div>
+                <h2 class="section-title">Choose Your Platform</h2>
+                <p class="section-desc">Select where you want to use Starship VIP</p>
+            </div>
+            
+            <div class="platform-grid">
+                <div class="platform-card mobile" data-platform="mobile" onclick="selectPlatform('mobile')">
+                    <div class="platform-accent"></div>
+                    <div class="platform-icon">📱</div>
+                    <h3 class="platform-name">Mobile VIP</h3>
+                    <p class="platform-desc">For Android & iOS devices with mobile executors</p>
+                    <p class="platform-price">From <strong>Rp 25K</strong></p>
+                </div>
+                
+                <div class="platform-card pc" data-platform="pc" onclick="selectPlatform('pc')">
+                    <div class="platform-accent"></div>
+                    <div class="platform-icon">💻</div>
+                    <h3 class="platform-name">PC VIP</h3>
+                    <p class="platform-desc">For Windows with desktop executors</p>
+                    <p class="platform-price">Lifetime <strong>Rp 250K</strong></p>
+                </div>
+                
+                <div class="platform-card bundle" data-platform="bundle" onclick="selectPlatform('bundle')">
+                    <div class="platform-accent"></div>
+                    <span class="platform-badge">Save 20%</span>
+                    <div class="platform-icon">🎁</div>
+                    <h3 class="platform-name">Bundle Pack</h3>
+                    <p class="platform-desc">Get both Mobile + PC access combined</p>
+                    <p class="platform-price">Lifetime <strong>Rp 300K</strong></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 2: Duration Selection -->
+        <section class="section" id="section-duration">
+            <div class="section-header">
+                <div class="section-badge">Step 02</div>
+                <h2 class="section-title">Select Duration</h2>
+                <p class="section-desc">How long do you need VIP access?</p>
+            </div>
+            
+            <div class="duration-grid" id="duration-grid">
+                <!-- Dynamically populated -->
+            </div>
+        </section>
+
+        <!-- Step 3: User ID -->
+        <section class="section" id="section-userid">
+            <div class="section-header">
+                <div class="section-badge">Step 03</div>
+                <h2 class="section-title">Enter Roblox Account</h2>
+                <p class="section-desc">Enter your Username or User ID</p>
+            </div>
+            
+            <div class="input-wrapper">
+                <div class="input-container">
+                    <input 
+                        type="text" 
+                        class="input-field"
+                        id="userid-input" 
+                        placeholder="Username or User ID"
+                        autocomplete="off"
+                        oninput="validateUser()"
+                    >
+                    <div class="input-status" id="input-status"></div>
+                </div>
+                
+                <div class="user-preview" id="user-preview">
+                    <img id="user-avatar" src="" alt="Avatar">
+                    <div class="user-details">
+                        <h4 id="user-name">Loading...</h4>
+                        <p id="user-id-display">ID: </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 4: Summary & Pay -->
+        <section class="section" id="section-summary">
+            <div class="section-header">
+                <div class="section-badge">Step 04</div>
+                <h2 class="section-title">Complete Order</h2>
+                <p class="section-desc">Review and proceed to payment</p>
+            </div>
+            
+            <div class="summary-section">
+                <div class="how-it-works">
+                    <h4>📋 How Payment Works</h4>
+                    <ol>
+                        <li>Click the Pay button below</li>
+                        <li>Complete payment via QRIS, Bank, or E-Wallet</li>
+                        <li>VIP activates automatically in 5 minutes!</li>
+                    </ol>
+                </div>
+                
+                <div class="summary-card">
+                    <div class="summary-header">
+                        <h4>Order Summary</h4>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Platform</span>
+                        <span class="summary-value" id="summary-platform">-</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Duration</span>
+                        <span class="summary-value" id="summary-duration">-</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Roblox Account</span>
+                        <span class="summary-value" id="summary-user">-</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Total</span>
+                        <span class="summary-value summary-total" id="summary-total">Rp 0</span>
+                    </div>
+                </div>
+                
+                <button class="pay-button" id="pay-button" onclick="proceedToPayment()" disabled>
+                    <span class="icon">💳</span>
+                    <span id="pay-button-text">Complete Payment</span>
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <img src="/starship-logo.png" alt="Starship Logo" class="footer-logo">
+        <p>© 2026 Starship. Premium Roblox Experience.</p>
+        <div class="footer-links">
+            <a href="https://discord.gg/BUJuXA8Z" target="_blank">Discord</a>
+            <a href="https://www.tiktok.com/@starshipcore" target="_blank">TikTok</a>
+        </div>
+    </footer>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ============ PRICING ============
+        const PRICING = {
+            mobile: {
+                name: 'Mobile VIP',
+                icon: '📱',
+                durations: {
+                    '7d': { label: '7 Days', price: 25000 },
+                    '14d': { label: '14 Days', price: 40000 },
+                    '30d': { label: '1 Month', price: 65000 },
+                    'lifetime': { label: 'Lifetime', price: 75000, bestValue: true }
+                }
+            },
+            pc: {
+                name: 'PC VIP',
+                icon: '💻',
+                durations: {
+                    'lifetime': { label: 'Lifetime', price: 250000, bestValue: true }
+                }
+            },
+            bundle: {
+                name: 'Bundle (PC + Mobile)',
+                icon: '🎁',
+                durations: {
+                    'lifetime': { label: 'Lifetime', price: 300000, bestValue: true }
+                }
+            }
+        };
+
+        const SAWERIA_USERNAME = 'starshipvip';
+
+        // ============ STATE ============
+        let selectedPlatform = null;
+        let selectedDuration = null;
+        let validatedUserId = null;
+        let validatedUsername = null;
+        let validateTimeout = null;
+
+        // ============ PLATFORM SELECTION ============
+        function selectPlatform(platform) {
+            selectedPlatform = platform;
+            selectedDuration = null;
+
+            document.querySelectorAll('.platform-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            document.querySelector(`[data-platform="${platform}"]`).classList.add('selected');
+
+            updateSteps(2);
+            renderDurations(platform);
+            
+            document.getElementById('section-duration').style.display = 'block';
+            document.getElementById('section-userid').style.display = 'none';
+            document.getElementById('section-summary').style.display = 'none';
+
+            setTimeout(() => {
+                document.getElementById('section-duration').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
+
+        function renderDurations(platform) {
+            const grid = document.getElementById('duration-grid');
+            const durations = PRICING[platform].durations;
+
+            grid.innerHTML = '';
+
+            for (const [key, data] of Object.entries(durations)) {
+                const card = document.createElement('div');
+                card.className = `duration-card ${data.bestValue ? 'best-value' : ''}`;
+                card.dataset.duration = key;
+                card.onclick = () => selectDuration(key);
+                card.innerHTML = `
+                    <div class="duration-time">${data.label}</div>
+                    <div class="duration-price">Rp ${formatNumber(data.price)}</div>
+                `;
+                grid.appendChild(card);
+            }
+        }
+
+        // ============ DURATION SELECTION ============
+        function selectDuration(duration) {
+            selectedDuration = duration;
+
+            document.querySelectorAll('.duration-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            document.querySelector(`[data-duration="${duration}"]`).classList.add('selected');
+
+            updateSteps(3);
+
+            document.getElementById('section-userid').style.display = 'block';
+            document.getElementById('section-summary').style.display = 'none';
+
+            setTimeout(() => {
+                document.getElementById('section-userid').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                document.getElementById('userid-input').focus();
+            }, 100);
+        }
+
+        // ============ USER VALIDATION (supports username OR user ID) ============
+        function validateUser() {
+            const input = document.getElementById('userid-input');
+            const status = document.getElementById('input-status');
+            const preview = document.getElementById('user-preview');
+            const userInput = input.value.trim();
+
+            clearTimeout(validateTimeout);
+
+            if (!userInput) {
+                status.innerHTML = '';
+                preview.classList.remove('visible');
+                validatedUserId = null;
+                validatedUsername = null;
+                updateSummary();
+                return;
+            }
+
+            status.innerHTML = '<div class="spinner"></div>';
+            status.className = 'input-status checking';
+
+            validateTimeout = setTimeout(async () => {
+                try {
+                    // Check if input is numeric (User ID) or text (Username)
+                    const isNumeric = /^\d+$/.test(userInput);
+                    const apiUrl = isNumeric 
+                        ? `/api/roblox-user?userId=${userInput}`
+                        : `/api/roblox-user?username=${encodeURIComponent(userInput)}`;
+
+                    const response = await fetch(apiUrl);
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        
+                        status.innerHTML = '✓ FOUND';
+                        status.className = 'input-status valid';
+                        
+                        validatedUserId = data.id.toString();
+                        validatedUsername = data.name;
+                        
+                        document.getElementById('user-avatar').src = data.avatar;
+                        document.getElementById('user-name').textContent = data.displayName || data.name;
+                        document.getElementById('user-id-display').textContent = `@${data.name} • ID: ${data.id}`;
+                        preview.classList.add('visible');
+
+                        updateSteps(4);
+                        document.getElementById('section-summary').style.display = 'block';
+                        updateSummary();
+
+                        setTimeout(() => {
+                            document.getElementById('section-summary').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 300);
+                    } else {
+                        throw new Error('Not found');
+                    }
+                } catch (error) {
+                    status.innerHTML = '✕ NOT FOUND';
+                    status.className = 'input-status invalid';
+                    preview.classList.remove('visible');
+                    validatedUserId = null;
+                    validatedUsername = null;
+                    updateSummary();
+                }
+            }, 600);
+        }
+
+        // ============ SUMMARY ============
+        function updateSummary() {
+            const platformData = PRICING[selectedPlatform];
+            const durationData = platformData?.durations[selectedDuration];
+
+            document.getElementById('summary-platform').textContent = platformData ? `${platformData.icon} ${platformData.name}` : '-';
+            document.getElementById('summary-duration').textContent = durationData ? durationData.label : '-';
+            document.getElementById('summary-user').textContent = validatedUsername ? `${validatedUsername}` : '-';
+            document.getElementById('summary-total').textContent = durationData ? `Rp ${formatNumber(durationData.price)}` : 'Rp 0';
+
+            const payButton = document.getElementById('pay-button');
+            const payButtonText = document.getElementById('pay-button-text');
+
+            if (selectedPlatform && selectedDuration && validatedUserId) {
+                payButton.disabled = false;
+                payButtonText.textContent = `Pay Rp ${formatNumber(durationData.price)}`;
+            } else {
+                payButton.disabled = true;
+                payButtonText.textContent = 'Complete All Steps';
+            }
+        }
+
+        // ============ PAYMENT ============
+        function proceedToPayment() {
+            if (!selectedPlatform || !selectedDuration || !validatedUserId) {
+                showToast('Complete all steps first!', 'error');
+                return;
+            }
+
+            const platformData = PRICING[selectedPlatform];
+            const durationData = platformData.durations[selectedDuration];
+
+            const message = `${selectedPlatform.toUpperCase()}:${selectedDuration}:${validatedUserId}`;
+            const encodedMessage = encodeURIComponent(message);
+            const amount = durationData.price;
+
+            const saweriaUrl = `https://saweria.co/${SAWERIA_USERNAME}?amount=${amount}&message=${encodedMessage}`;
+
+            showToast('Redirecting to payment...', 'success');
+
+            setTimeout(() => {
+                window.open(saweriaUrl, '_blank');
+            }, 500);
+        }
+
+        // ============ STEPS ============
+        function updateSteps(currentStep) {
+            for (let i = 1; i <= 4; i++) {
+                const dot = document.getElementById(`step${i}`);
+                const line = document.getElementById(`line${i}`);
+
+                if (i < currentStep) {
+                    dot.classList.remove('active');
+                    dot.classList.add('completed');
+                    dot.innerHTML = '✓';
+                    if (line) line.classList.add('completed');
+                } else if (i === currentStep) {
+                    dot.classList.add('active');
+                    dot.classList.remove('completed');
+                    dot.innerHTML = i;
+                } else {
+                    dot.classList.remove('active', 'completed');
+                    dot.innerHTML = i;
+                    if (line) line.classList.remove('completed');
+                }
+            }
+        }
+
+        // ============ UTILITIES ============
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
 </html>
