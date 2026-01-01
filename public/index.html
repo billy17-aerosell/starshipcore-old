@@ -2004,8 +2004,21 @@
             document.body.style.overflow = '';
         }
 
-        function openSaweria() {
+        async function openSaweria() {
             if (pendingPaymentData) {
+                // First check if user is already VIP
+                let wasAlreadyVip = false;
+                let existingVipData = null;
+                
+                try {
+                    const checkResponse = await fetch(`/api/roblox-user?userId=${validatedUserId}&checkVip=true&platform=${selectedPlatform}`);
+                    const checkData = await checkResponse.json();
+                    wasAlreadyVip = checkData.isVip;
+                    existingVipData = checkData;
+                } catch (e) {
+                    console.log('Could not check existing VIP status');
+                }
+
                 // Save pending order to localStorage
                 const pendingOrder = {
                     platform: selectedPlatform,
@@ -2016,7 +2029,9 @@
                     username: validatedUsername,
                     amount: pendingPaymentData.amount,
                     message: pendingPaymentData.message,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    wasAlreadyVip: wasAlreadyVip,
+                    previousUpdatedAt: existingVipData?.updatedAt || null
                 };
                 localStorage.setItem('starship_pending_order', JSON.stringify(pendingOrder));
 
@@ -2147,11 +2162,29 @@
                     const data = await response.json();
 
                     if (data.isVip) {
-                        // Payment confirmed!
-                        clearInterval(pollingInterval);
-                        localStorage.removeItem('starship_pending_order');
-                        showSuccessPage(data);
-                        return;
+                        let shouldShowSuccess = false;
+
+                        if (pendingOrder.wasAlreadyVip) {
+                            // User was already VIP - check if updatedAt changed (renewal)
+                            const currentUpdatedAt = data.updatedAt || data.addedAt;
+                            const previousUpdatedAt = pendingOrder.previousUpdatedAt;
+                            
+                            // If updatedAt is different, a renewal happened
+                            if (currentUpdatedAt && currentUpdatedAt !== previousUpdatedAt) {
+                                shouldShowSuccess = true;
+                            }
+                        } else {
+                            // User was NOT VIP before - any VIP status means new purchase confirmed
+                            shouldShowSuccess = true;
+                        }
+
+                        if (shouldShowSuccess) {
+                            // Payment confirmed!
+                            clearInterval(pollingInterval);
+                            localStorage.removeItem('starship_pending_order');
+                            showSuccessPage(data);
+                            return;
+                        }
                     }
                 } catch (error) {
                     console.error('Polling error:', error);

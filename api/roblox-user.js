@@ -88,6 +88,7 @@ export default async function handler(req, res) {
                 duration: user.duration,
                 status: isExpired ? 'expired' : user.status,
                 addedAt: user.addedAt,
+                updatedAt: user.updatedAt,
                 expiresAt: user.expiresAt,
                 daysRemaining: user.expiresAt ? (isExpired ? 0 : daysRemaining) : 'lifetime',
                 isLifetime: !user.expiresAt
