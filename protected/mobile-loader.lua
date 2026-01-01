@@ -819,8 +819,91 @@ local function loadMobileUI(sessionData, loaderGui, updateStatus)
 	-- Store session data
 	getgenv().StarshipSession = sessionData
 
+	-- ══════════════════════════════════════════════════════════════════
+	-- WATERMARK SYSTEM: Embed unique user identifier for leak tracing
+	-- Multiple hidden locations make it difficult to remove all traces
+	-- ══════════════════════════════════════════════════════════════════
+	local wmUserId = tostring(LocalPlayer.UserId)
+	local wmHWID = pcall(function()
+		return getDeviceHWID()
+	end) and getDeviceHWID() or "MOBILE"
+
+	local function generateWatermark()
+		local wm = {}
+		wm.u = wmUserId -- User ID
+		wm.t = os.time() -- Timestamp
+		wm.h = type(wmHWID) == "string" and wmHWID:sub(1, 8) or "MOBILE" -- First 8 chars of HWID
+		wm.p = "MOBILE" -- Platform
+		wm.v = "1.0" -- Version
+		-- Create encoded signature
+		local sig = wmUserId .. "_" .. os.time() .. "_" .. wm.h
+		wm.s = "" -- Signature (encoded)
+		for i = 1, #sig do
+			wm.s = wm.s .. string.format("%02x", bit32.bxor(string.byte(sig, i), 42))
+		end
+		return wm
+	end
+
+	local _WM = generateWatermark()
+
+	-- Store watermark in multiple hidden locations
+	-- Location 1: Global environment (obfuscated key)
+	getgenv()["_" .. string.char(83, 87, 77)] = _WM
+
+	-- Location 2: Hidden in game services
+	pcall(function()
+		local marker = Instance.new("StringValue")
+		marker.Name = "_mcfg" .. math.random(1000, 9999)
+		marker.Value = HttpService:JSONEncode({ _m = _WM.s, _t = _WM.t })
+		marker.Parent = game:GetService("ReplicatedStorage")
+		-- Auto-cleanup after 60 seconds (but watermark already in memory)
+		task.delay(60, function()
+			pcall(function()
+				marker:Destroy()
+			end)
+		end)
+	end)
+
+	-- Location 3: Attach to session
+	getgenv().StarshipSession._wm = _WM.s
+	getgenv().StarshipSession._wt = _WM.t
+
+	-- Location 4: Hidden table in _G with random key
+	local wmKey = "_mx" .. tostring(_WM.t):sub(-4)
+	_G[wmKey] = { z = _WM.u, y = _WM.h }
+
+	-- Location 5: Store in closure (survives even if globals cleared)
+	local _WATERMARK_DATA = _WM -- This persists in the script's closure
+
 	-- Run the mobile script
 	func()
+
+	-- ══════════════════════════════════════════════════════════════════
+	-- SECURITY CLEANUP: Remove sensitive data from global environment
+	-- This prevents hackers from accessing modules via getgenv()/_G
+	-- ══════════════════════════════════════════════════════════════════
+	task.spawn(function()
+		task.wait(10) -- Wait for script to fully initialize (mobile needs more time)
+
+		-- Clear module references from global scope
+		if getgenv().StarshipModules then
+			getgenv().StarshipModules = nil
+		end
+
+		-- Clear AnimDB reference
+		if _G.StarshipAnimDB then
+			_G.StarshipAnimDB = nil
+		end
+
+		-- Clear temp variables
+		if getgenv().StarshipTemp then
+			getgenv().StarshipTemp = nil
+		end
+
+		-- Note: StarshipSession, StarshipWindow, StarshipWindUI kept for ban system
+		-- They are needed for periodic ban check to function properly
+	end)
+
 	return true
 end
 

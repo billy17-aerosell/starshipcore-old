@@ -70,18 +70,32 @@ local LocalPlayer = Players.LocalPlayer
 -- If you need NoClip, enable it manually through game settings or other scripts
 local FOLDER_NAME = "StarshipCore"
 local ModulesPath = "Modules"
-if not isfolder(FOLDER_NAME) then
-	makefolder(FOLDER_NAME)
+
+-- EXPLOIT COMPATIBILITY CHECK
+local filesystemAvailable = true
+local function SafeCreateFolder(path)
+	if not filesystemAvailable then
+		return false
+	end
+	local success, err = pcall(function()
+		if not isfolder(path) then
+			makefolder(path)
+		end
+	end)
+	if not success then
+		filesystemAvailable = false
+		warn("[StarshipCore] Filesystem not available:", err)
+		warn("[StarshipCore] Recording/Save features will not work in this game")
+	end
+	return success
 end
+
+SafeCreateFolder(FOLDER_NAME)
 
 local WARP_FOLDER = FOLDER_NAME .. "/StarshipWarps"
 local MERGER_FOLDER = FOLDER_NAME .. "/StarshipMerger"
-if not isfolder(WARP_FOLDER) then
-	makefolder(WARP_FOLDER)
-end
-if not isfolder(MERGER_FOLDER) then
-	makefolder(MERGER_FOLDER)
-end
+SafeCreateFolder(WARP_FOLDER)
+SafeCreateFolder(MERGER_FOLDER)
 
 -- --- VARIABLES (Colors consolidated into table to reduce local register usage) ---
 -- CurrentColors stores the active theme colors and is updated when theme changes
@@ -729,6 +743,7 @@ local S = {
 	isPositionBasedPlayback = true, -- New: smoother position-following mode (default ON)
 	isBinding = false,
 	isAutoCloudSync = false, -- NEW: Auto-sync merged files to cloud
+	isOptimizeMerge = true, -- NEW: Optimize merged files (reduce size 50-70%)
 	currentWorkspace = "Default",
 	currentMergerWorkspace = "Default",
 	GlobalKeyDuration = "N/A",
@@ -818,6 +833,144 @@ local function DeepCopy(orig)
 		copy = orig
 	end
 	return copy
+end
+
+-- ═══════════════════════════════════════════════════════════════════
+-- MERGE OPTIMIZATION - Reduce file size by 50-70%
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Round number to specified decimal places
+local function RoundNum(num, decimals)
+	if type(num) ~= "number" then
+		return num
+	end
+	local mult = 10 ^ (decimals or 2)
+	return math.floor(num * mult + 0.5) / mult
+end
+
+-- Optimize a single frame (reduce precision, remove heavy data)
+local function OptimizeFrame(frame)
+	local optimized = {}
+
+	-- Keep timestamp with 2 decimal precision
+	optimized.t = RoundNum(frame.t, 2)
+
+	-- Position: reduce to 1 decimal (studs precision is enough)
+	if frame.pos then
+		optimized.pos = {
+			x = RoundNum(frame.pos.x, 1),
+			y = RoundNum(frame.pos.y, 1),
+			z = RoundNum(frame.pos.z, 1),
+		}
+	end
+
+	-- Rotation: reduce to 1 decimal
+	if frame.rot then
+		optimized.rot = RoundNum(frame.rot, 1)
+	end
+
+	-- Velocity: reduce to 1 decimal
+	if frame.vel then
+		optimized.vel = {
+			x = RoundNum(frame.vel.x, 1),
+			y = RoundNum(frame.vel.y, 1),
+			z = RoundNum(frame.vel.z, 1),
+		}
+	end
+
+	-- State: keep as-is
+	if frame.st then
+		optimized.st = frame.st
+	end
+
+	-- Jump state
+	if frame.jmp ~= nil then
+		optimized.jmp = frame.jmp
+	end
+
+	-- HipHeight: reduce precision
+	if frame.hh then
+		optimized.hh = RoundNum(frame.hh, 1)
+	end
+
+	-- MoveDirection: reduce precision
+	if frame.md then
+		optimized.md = {
+			x = RoundNum(frame.md.x, 2),
+			y = RoundNum(frame.md.y, 2),
+			z = RoundNum(frame.md.z, 2),
+		}
+	end
+
+	-- Standard mode (r) - keep CFrame data
+	if frame.r then
+		optimized.r = frame.r
+	end
+
+	-- Shiftlock / Camera data (keep for accurate playback)
+	if frame.camLook then
+		optimized.camLook = frame.camLook
+	end
+	if frame.shiftlock ~= nil then
+		optimized.shiftlock = frame.shiftlock
+	end
+	if frame.charLook then
+		optimized.charLook = frame.charLook
+	end
+
+	-- Tool state
+	if frame.tool then
+		optimized.tool = frame.tool
+	end
+	if frame.toolTip then
+		optimized.toolTip = frame.toolTip
+	end
+
+	-- NOTE: Skip joint data (frame.j) - this is the BIGGEST size saver!
+	-- Joint data is usually 60-80% of recording size
+
+	return optimized
+end
+
+-- Optimize entire merged recording (reduce frames & precision)
+local function OptimizeMergedData(recordingData)
+	if not recordingData or not recordingData.Frames or #recordingData.Frames == 0 then
+		return recordingData
+	end
+
+	local originalFrameCount = #recordingData.Frames
+	local optimizedFrames = {}
+
+	-- Skip every other frame (60fps -> 30fps) + optimize each frame
+	for i = 1, originalFrameCount, 2 do
+		local frame = recordingData.Frames[i]
+		local optimized = OptimizeFrame(frame)
+		table.insert(optimizedFrames, optimized)
+
+		-- Yield occasionally to prevent freeze
+		if i % 500 == 0 then
+			task.wait()
+		end
+	end
+
+	local result = {
+		Frames = optimizedFrames,
+		FPS = 30, -- Now 30fps (was 60)
+		Mode = recordingData.Mode,
+		RigType = recordingData.RigType,
+	}
+
+	local reduction = (1 - #optimizedFrames / originalFrameCount) * 100
+	warn(
+		string.format(
+			"[Starship] Merge Optimized: %d -> %d frames (%.0f%% frame reduction)",
+			originalFrameCount,
+			#optimizedFrames,
+			reduction
+		)
+	)
+
+	return result
 end
 
 -- Catmull-Rom Spline Interpolation for ultra-smooth curves
@@ -1516,10 +1669,18 @@ local function StopRecording()
 end
 local function StartRecording()
 	if isRecording or isPlaying then
+		ShowToast("Recording", "Already recording or playing", "warning", 2)
 		return
 	end
 	local c = LocalPlayer.Character
 	if not c then
+		ShowToast("Recording Error", "No character found", "error", 2)
+		return
+	end
+
+	local r = c:FindFirstChild("HumanoidRootPart")
+	if not r then
+		ShowToast("Recording Error", "No HumanoidRootPart found", "error", 2)
 		return
 	end
 
@@ -1569,12 +1730,16 @@ local function StartRecording()
 		if isPaused then
 			return
 		end
-		if not c.Parent then
-			StopRecording()
+
+		-- Use fresh character reference (handles respawns)
+		local char = LocalPlayer.Character
+		if not char or not char.Parent then
+			-- Character not available this frame, skip but don't stop
 			return
 		end
-		local r = c:FindFirstChild("HumanoidRootPart")
-		local h = c:FindFirstChild("Humanoid")
+
+		local r = char:FindFirstChild("HumanoidRootPart")
+		local h = char:FindFirstChild("Humanoid")
 		if not r or not h then
 			return
 		end
@@ -1604,27 +1769,77 @@ local function StartRecording()
 			local charLook = r.CFrame.LookVector
 			fd.charLook = { x = charLook.X, y = charLook.Y, z = charLook.Z }
 
-			-- TOOL RECORDING: Record equipped tool name
-			local equippedTool = c:FindFirstChildOfClass("Tool")
+			-- TOOL RECORDING: Record equipped tool with fingerprint for better matching
+			local equippedTool = char:FindFirstChildOfClass("Tool")
 			if equippedTool then
-				fd.tool = equippedTool.Name
+				pcall(function()
+					fd.tool = equippedTool.Name
+					fd.toolTip = equippedTool.ToolTip or ""
+					-- Additional fingerprint for tools with same name+tooltip
+					local handle = equippedTool:FindFirstChild("Handle")
+					if handle and handle:IsA("BasePart") then
+						fd.toolColor = { r = handle.Color.R, g = handle.Color.G, b = handle.Color.B }
+						-- TextureId only exists on MeshPart, use pcall
+						pcall(function()
+							if handle.TextureID and handle.TextureID ~= "" then
+								fd.toolTexture = handle.TextureID
+							end
+						end)
+					end
+					-- Check for Configuration values (common for speed tools)
+					local config = equippedTool:FindFirstChild("Configuration") or equippedTool:FindFirstChild("Config")
+					if config then
+						for _, child in pairs(config:GetChildren()) do
+							if child:IsA("NumberValue") or child:IsA("IntValue") then
+								fd.toolConfig = fd.toolConfig or {}
+								fd.toolConfig[child.Name] = child.Value
+							end
+						end
+					end
+				end)
 			end
 		else
 			-- STRICT MODE: Record Full Pose (Existing Logic)
 			fd.r = CFToTbl(r.CFrame)
 			fd.j = {}
-			for _, m in ipairs(joints) do
+			local currentJoints = GetJoints(char) -- Get fresh joints from current character
+			for _, m in ipairs(currentJoints) do
 				fd.j[m.Name] = CFToTbl(m.Transform)
 			end
 
-			-- TOOL RECORDING: Record equipped tool name (Strict Mode)
-			local equippedTool = c:FindFirstChildOfClass("Tool")
+			-- TOOL RECORDING: Record equipped tool with fingerprint (Strict Mode)
+			local equippedTool = char:FindFirstChildOfClass("Tool")
 			if equippedTool then
-				fd.tool = equippedTool.Name
+				pcall(function()
+					fd.tool = equippedTool.Name
+					fd.toolTip = equippedTool.ToolTip or ""
+					-- Additional fingerprint for tools with same name+tooltip
+					local handle = equippedTool:FindFirstChild("Handle")
+					if handle and handle:IsA("BasePart") then
+						fd.toolColor = { r = handle.Color.R, g = handle.Color.G, b = handle.Color.B }
+						-- TextureId only exists on MeshPart, use pcall
+						pcall(function()
+							if handle.TextureID and handle.TextureID ~= "" then
+								fd.toolTexture = handle.TextureID
+							end
+						end)
+					end
+					-- Check for Configuration values (common for speed tools)
+					local config = equippedTool:FindFirstChild("Configuration") or equippedTool:FindFirstChild("Config")
+					if config then
+						for _, child in pairs(config:GetChildren()) do
+							if child:IsA("NumberValue") or child:IsA("IntValue") then
+								fd.toolConfig = fd.toolConfig or {}
+								fd.toolConfig[child.Name] = child.Value
+							end
+						end
+					end
+				end)
 			end
 		end
 
 		table.insert(recordedData.Frames, fd)
+
 		if isPathEnabled then
 			local cp = r.Position
 			if (cp - lastPathPoint).Magnitude > 0.5 then
@@ -1706,11 +1921,54 @@ local function CutAndResume(cutTime)
 end
 
 local function SaveRecording(fn)
-	if not recordedData.Frames or #recordedData.Frames == 0 then
-		return
+	-- Check if filesystem is available
+	if not filesystemAvailable then
+		ShowToast("Save Error", "Filesystem not available in this game", "error", 4)
+		return false
 	end
+
+	-- Validate recording data
+	if not recordedData then
+		ShowToast("Save Error", "No recording data found", "error", 3)
+		return false
+	end
+
+	if not recordedData.Frames or #recordedData.Frames == 0 then
+		ShowToast("Save Error", "No frames recorded", "error", 3)
+		return false
+	end
+
 	recordedData.Mode = isFlexibleRecording and "Flexible" or "Strict"
-	writefile(GetWorkspacePath() .. "/" .. fn .. ".json", HttpService:JSONEncode(recordedData))
+	recordedData.PlaceId = game.PlaceId -- Save game PlaceId for validation
+
+	-- Try to save with error handling
+	local success, err = pcall(function()
+		local path = GetWorkspacePath()
+		if not path then
+			error("GetWorkspacePath returned nil")
+		end
+
+		local filePath = path .. "/" .. fn .. ".json"
+		local jsonData = HttpService:JSONEncode(recordedData)
+
+		if not jsonData then
+			error("JSONEncode returned nil")
+		end
+
+		-- Check if writefile exists
+		if not writefile then
+			error("writefile function not available (exploit not supported)")
+		end
+
+		writefile(filePath, jsonData)
+	end)
+
+	if not success then
+		ShowToast("Save Error", "Failed: " .. tostring(err), "error", 4)
+		warn("[StarshipCore] SaveRecording failed:", err)
+		return false
+	end
+
 	ClearPath()
 	ShowToast(L("recording_saved"), L("frames_saved", #recordedData.Frames, fn), "success", 2)
 	if RefreshPlayerList then
@@ -1719,6 +1977,7 @@ local function SaveRecording(fn)
 	if UIHandlers.RefreshMergerList then
 		UIHandlers.RefreshMergerList()
 	end -- Auto Refresh Merge UI
+	return true
 end
 -- ZOOM PUNCH EFFECT FUNCTION
 local defaultFOV = 70
@@ -1829,7 +2088,7 @@ local function PausePlayback()
 	end
 end
 
-local MAP_DISTANCE_THRESHOLD = 500 -- Jarak maksimal sebelum warning (dalam studs)
+local MAP_DISTANCE_THRESHOLD = 500 -- Jarak maksimal sebelum block (dalam studs)
 
 -- Cek jarak ke titik TERDEKAT di path (bukan hanya titik awal)
 local function GetDistanceToNearestPathPoint(frames, playerPos)
@@ -1965,33 +2224,40 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		currentFrameData.RootHeight = d.RootHeight -- Cross-rig: ground height at recording
 		currentFrameData.HipHeight = d.HipHeight -- Recorded HipHeight
 		currentFrameData.FPS = d.FPS
+		currentFrameData.PlaceId = d.PlaceId -- Store recorded PlaceId
 
 		currentPlaybackFile = fn
 		currentPlaybackTime = 0
 
-		-- MAP/GAME DISTANCE VALIDATION (Check distance to nearest path point)
+		-- STRICT DISTANCE VALIDATION - Block if too far
 		if not skipDistanceCheck then
 			local c = LocalPlayer.Character
 			local r = c and c:FindFirstChild("HumanoidRootPart")
 			if r and #currentFrameData > 0 then
+				local recordedPlaceId = d.PlaceId
+				local currentPlaceId = game.PlaceId
+				local placeIdMatch = (recordedPlaceId == nil) or (recordedPlaceId == currentPlaceId)
 				local dist = GetDistanceToNearestPathPoint(currentFrameData, r.Position)
 
+				-- BLOCK if distance is too far (regardless of PlaceId)
 				if dist > MAP_DISTANCE_THRESHOLD then
-					-- Show warning toast immediately
-					ShowToast(L("warning_different_map"), L("nearest_path_warning", dist), "warning", 5)
-
-					-- Also show confirmation dialog if ShowConfirm is available
-					if ShowConfirm then
-						ShowConfirm(
-							L("different_map_detected"),
-							L("nearest_path_warning", dist) .. "\n\n" .. L("continue_anyway"),
-							function()
-								-- User confirmed, play with skip flag
-								PlayRecording(fn, true, true)
-							end
-						)
-						return -- Stop current execution, wait for user confirmation
+					ShowLoadingModal(false)
+					if placeIdMatch then
+						ShowToast(L("error_wrong_game"), L("path_far_same_game", dist), "error", 5)
+					else
+						ShowToast(L("error_wrong_game"), L("wrong_game_warning", dist), "error", 5)
 					end
+					return -- BLOCK playback
+				end
+
+				-- Distance is OK - show warning if different PlaceId
+				if not placeIdMatch then
+					ShowToast(
+						L("warning_different_game"),
+						L("different_placeid_nearby", tostring(recordedPlaceId), tostring(currentPlaceId)),
+						"warning",
+						4
+					)
 				end
 			end
 		end
@@ -3022,6 +3288,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		cachedRayParams.IgnoreWater = true
 		local cachedGroundY = nil -- Cache ground Y position
 		local cachedLastStrictState = nil -- Cache humanoid state
+		local cachedIsNearGround = false -- Cache ground proximity for Native Anim
 
 		Connections.Playback = RunService.Stepped:Connect(function(_, dt)
 			strictFrameCounter = strictFrameCounter + 1
@@ -3123,9 +3390,9 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					-- Lower responsiveness allows smoother interpolation, reducing the "floating/stuttering" look
 					local isMovingVertically = math.abs(TblToCF(fB.r).Y - TblToCF(fA.r).Y) > 0.1
 					if isMovingVertically then
-						ap.Responsiveness = 40 -- Very smooth for jumps/slopes
+						ap.Responsiveness = 25 -- Very smooth for jumps/slopes (lowered from 40)
 					else
-						ap.Responsiveness = 80 -- Snappier for flat ground
+						ap.Responsiveness = 60 -- Snappier for flat ground (lowered from 80)
 					end
 
 					ao.RigidityEnabled = false
@@ -3163,8 +3430,8 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 							local hipHeight = h.HipHeight
 							local rootSizeY = r.Size.Y / 2
 
-							-- Detect R6 vs R15
-							local isR6 = (c:FindFirstChild("Torso") ~= nil)
+							-- Detect R6 vs R15 (R15 has LowerTorso, R6 has Torso only)
+							local isR6 = (c:FindFirstChild("Torso") ~= nil and c:FindFirstChild("LowerTorso") == nil)
 							local expectedY
 
 							if isR6 then
@@ -3180,9 +3447,10 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 								end
 
 								-- R6 root is at torso center, so add half torso + leg length
+								-- Subtract 0.2 to push character down slightly (fix floating)
 								local torso = c:FindFirstChild("Torso")
 								local torsoHalfHeight = torso and (torso.Size.Y / 2) or 1
-								expectedY = groundY + legLength + torsoHalfHeight
+								expectedY = groundY + legLength + torsoHalfHeight - 0.2
 							else
 								-- R15: Use HipHeight
 								expectedY = groundY + hipHeight + rootSizeY
@@ -3210,6 +3478,43 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 									finalPosition = Vector3.new(finalPosition.X, snappedY, finalPosition.Z)
 								end
 							end
+						end
+					end
+				end
+
+				-- R6 ALWAYS-ON GROUND CORRECTION (applies in ALL modes)
+				-- This fixes R6 floating when recording was made with R15 or different body
+				local isR6 = (c:FindFirstChild("Torso") ~= nil and c:FindFirstChild("LowerTorso") == nil)
+				if isR6 then
+					-- Do a simple raycast to find ground
+					local rayStart = finalPosition + Vector3.new(0, 5, 0)
+					local footRay = workspace:Raycast(rayStart, Vector3.new(0, -25, 0), cachedRayParams)
+					if footRay then
+						local groundY = footRay.Position.Y
+						local leftLeg = c:FindFirstChild("Left Leg")
+						local legLength = leftLeg and leftLeg.Size.Y or 2
+						local torso = c:FindFirstChild("Torso")
+						local torsoHalfHeight = torso and (torso.Size.Y / 2) or 1
+
+						-- R6: HumanoidRootPart is centered with Torso
+						-- Height from ground = legLength + torsoHalfHeight
+						-- Subtract 1.0 to compensate for physics/recording offset
+						local expectedY = groundY + legLength + torsoHalfHeight - 1.0
+
+						-- Check if not jumping (vertical velocity check)
+						local isJumping = false
+						if fA and fB then
+							local prevY = TblToCF(fA.r).Y
+							local nextY = TblToCF(fB.r).Y
+							local vertVel = math.abs(nextY - prevY) / math.max(deltaT, 0.001)
+							isJumping = vertVel > 5 -- Lowered threshold for better jump detection
+						end
+
+						-- Smooth interpolation to ground instead of instant snap (reduces jitter)
+						if not isJumping then
+							local smoothFactor = 0.3 -- Blend towards expected Y
+							local smoothedY = finalPosition.Y + (expectedY - finalPosition.Y) * smoothFactor
+							finalPosition = Vector3.new(finalPosition.X, smoothedY, finalPosition.Z)
 						end
 					end
 				end
@@ -3256,8 +3561,6 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					-- GROUND CHECK (Raycast)
 					-- Crucial for distinguishing Slopes vs Jumps
 					-- PERFORMANCE: Throttle ground check to every 3 frames, use cached result otherwise
-					local isNearGround = false
-
 					if strictFrameCounter % 3 == 0 then
 						-- Increased length to 12 studs to account for steep slopes/micro-floating
 						local rayResult = workspace:Raycast(r.Position, Vector3.new(0, -12, 0), cachedRayParams)
@@ -3265,11 +3568,12 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						if rayResult then
 							local distToGround = (r.Position - rayResult.Position).Magnitude
 							-- Relaxed threshold: If ground is within 8 studs, consider it walkable/slope
-							if distToGround < 8.0 then
-								isNearGround = true
-							end
+							cachedIsNearGround = distToGround < 8.0
+						else
+							cachedIsNearGround = false
 						end
 					end
+					local isNearGround = cachedIsNearGround
 
 					local flatVel = velocity * Vector3.new(1, 0, 1)
 					local horizSpeed = flatVel.Magnitude
@@ -3313,7 +3617,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						-- For reverse playback: swap jump/freefall states
 
 						-- Dynamic Threshold: Slopes generate vertical velocity, so we raise the bar.
-						local jumpThreshold = math.max(10, 8.0 + (horizSpeed * 0.5))
+						local jumpThreshold = 5 -- Lowered for better animation matching
 
 						-- PERFORMANCE: Cache state once instead of calling GetState multiple times
 						local currentState = h:GetState()
@@ -3368,16 +3672,18 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 								-- 2. Jump Apex (The "Floaty" Part)
 								-- If we are in the air (confirmed by !isNearGround) and velocity is small
-							elseif not isNearGround and math.abs(velocity.Y) <= 5 then
-								if currentState == Enum.HumanoidStateType.Freefall then
-									-- Do nothing
-								else
+							elseif not isNearGround then
+								-- Use RECORDED STATE for correct animation
+								local recordedState = fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
+								if recordedState == "Freefall" and currentState ~= Enum.HumanoidStateType.Freefall then
+									h:ChangeState(Enum.HumanoidStateType.Freefall)
+								elseif
+									recordedState == "Jumping" and currentState ~= Enum.HumanoidStateType.Jumping
+								then
 									h:ChangeState(Enum.HumanoidStateType.Jumping)
+								elseif velocity.Y < -2 and currentState ~= Enum.HumanoidStateType.Freefall then
+									h:ChangeState(Enum.HumanoidStateType.Freefall)
 								end
-
-								-- 3. Freefall (Falling Down)
-							elseif not isNearGround and velocity.Y < -18 then
-								h:ChangeState(Enum.HumanoidStateType.Freefall)
 							end
 						end
 					end
@@ -3412,18 +3718,121 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					end
 				end
 
-				-- TOOL HANDLING: Equip/Unequip tools based on recorded data (Strict Mode)
+				-- TOOL HANDLING: Equip/Unequip tools based on recorded fingerprint
 				if strictFrameCounter % 3 == 0 then -- Throttle to every 3 frames for performance
 					local recordedTool = fA.tool
+					local recordedToolTip = fA.toolTip
+					local recordedToolColor = fA.toolColor
+					local recordedToolTexture = fA.toolTexture
+					local recordedToolConfig = fA.toolConfig
 					local currentTool = c:FindFirstChildOfClass("Tool")
 					local currentToolName = currentTool and currentTool.Name or nil
+					local currentToolTip = currentTool and currentTool.ToolTip or nil
 
+					-- Helper function to check if handle color matches
+					local function ColorMatches(tool, targetColor)
+						if not targetColor then
+							return true
+						end -- No color recorded, skip check
+						local handle = tool:FindFirstChild("Handle")
+						if not handle or not handle:IsA("BasePart") then
+							return true
+						end
+						local tolerance = 0.05
+						return math.abs(handle.Color.R - targetColor.r) < tolerance
+							and math.abs(handle.Color.G - targetColor.g) < tolerance
+							and math.abs(handle.Color.B - targetColor.b) < tolerance
+					end
+
+					-- Helper function to check if config values match
+					local function ConfigMatches(tool, targetConfig)
+						if not targetConfig then
+							return true
+						end -- No config recorded, skip check
+						local config = tool:FindFirstChild("Configuration") or tool:FindFirstChild("Config")
+						if not config then
+							return false
+						end
+						for name, value in pairs(targetConfig) do
+							local child = config:FindFirstChild(name)
+							if child and (child:IsA("NumberValue") or child:IsA("IntValue")) then
+								if child.Value ~= value then
+									return false
+								end
+							else
+								return false
+							end
+						end
+						return true
+					end
+
+					-- Check if tool change is needed
+					local needsChange = false
 					if recordedTool ~= currentToolName then
+						needsChange = true
+					elseif recordedToolTip and currentToolTip and recordedToolTip ~= currentToolTip then
+						needsChange = true
+					elseif recordedToolColor and currentTool then
+						-- Same name+tooltip, but different color (e.g., same "Speed Up" but different speed)
+						if not ColorMatches(currentTool, recordedToolColor) then
+							needsChange = true
+						end
+					end
+
+					if needsChange then
 						if recordedTool then
-							-- Need to equip a tool
 							local backpack = LocalPlayer:FindFirstChild("Backpack")
 							if backpack then
-								local toolToEquip = backpack:FindFirstChild(recordedTool)
+								local toolToEquip = nil
+
+								-- Priority 1: Match name + tooltip + color + config (exact match)
+								if recordedToolTip or recordedToolColor or recordedToolConfig then
+									for _, tool in pairs(backpack:GetChildren()) do
+										if tool:IsA("Tool") and tool.Name == recordedTool then
+											local tipMatch = (not recordedToolTip) or (tool.ToolTip == recordedToolTip)
+											local colorMatch = ColorMatches(tool, recordedToolColor)
+											local configMatch = ConfigMatches(tool, recordedToolConfig)
+											if tipMatch and colorMatch and configMatch then
+												toolToEquip = tool
+												break
+											end
+										end
+									end
+								end
+
+								-- Priority 2: Match name + tooltip (if color not found)
+								if not toolToEquip and recordedToolTip then
+									for _, tool in pairs(backpack:GetChildren()) do
+										if
+											tool:IsA("Tool")
+											and tool.Name == recordedTool
+											and tool.ToolTip == recordedToolTip
+										then
+											toolToEquip = tool
+											break
+										end
+									end
+								end
+
+								-- Priority 3: Match name + color (if tooltip not found)
+								if not toolToEquip and recordedToolColor then
+									for _, tool in pairs(backpack:GetChildren()) do
+										if
+											tool:IsA("Tool")
+											and tool.Name == recordedTool
+											and ColorMatches(tool, recordedToolColor)
+										then
+											toolToEquip = tool
+											break
+										end
+									end
+								end
+
+								-- Priority 4: Fallback to name-only match
+								if not toolToEquip then
+									toolToEquip = backpack:FindFirstChild(recordedTool)
+								end
+
 								if toolToEquip and toolToEquip:IsA("Tool") then
 									h:EquipTool(toolToEquip)
 								end
@@ -3530,15 +3939,35 @@ local function SelectRecording(fn)
 		CreateStartBaseplate(targetPos)
 	end
 
-	-- DISTANCE WARNING ON SELECT (informational only - check nearest path point)
+	-- STRICT DISTANCE VALIDATION - Block if too far
 	local c = LocalPlayer.Character
 	local r = c and c:FindFirstChild("HumanoidRootPart")
 	if r and #currentFrameData > 0 then
+		local recordedPlaceId = d.PlaceId
+		local currentPlaceId = game.PlaceId
+		local placeIdMatch = (recordedPlaceId == nil) or (recordedPlaceId == currentPlaceId)
 		local dist = GetDistanceToNearestPathPoint(currentFrameData, r.Position)
+
+		-- BLOCK if distance is too far (regardless of PlaceId)
 		if dist > MAP_DISTANCE_THRESHOLD then
+			-- Clear selection since we're blocking
+			currentFrameData = nil
+			currentPlaybackFile = nil
+			ClearPath()
+
+			if placeIdMatch then
+				ShowToast(L("error_wrong_game"), L("path_far_same_game", dist), "error", 5)
+			else
+				ShowToast(L("error_wrong_game"), L("wrong_game_warning", dist), "error", 5)
+			end
+			return -- BLOCK selection
+		end
+
+		-- Distance is OK - show warning if different PlaceId
+		if not placeIdMatch then
 			ShowToast(
-				"Different Map Warning",
-				string.format("Nearest path point is %.0f studs away! This may be from a different game/map.", dist),
+				L("warning_different_game"),
+				L("different_placeid_nearby", tostring(recordedPlaceId), tostring(currentPlaceId)),
 				"warning",
 				4
 			)
@@ -6048,6 +6477,9 @@ UIHandlers.RefreshMergerList = function()
 				.. L("total_files")
 		end
 
+		-- Cache files for Select All functionality
+		MergerRefs.cachedFiles = jsonFiles
+
 		local displayIdx = 0
 		for idx, f in ipairs(jsonFiles) do
 			local n = string.match(f, "[^/\\]+$") or f
@@ -6231,9 +6663,77 @@ function UIHandlers.InitMergerUI()
 		UIHandlers.RefreshMergerList()
 	end)
 
+	-- Quick Actions Card (Select All / Deselect All)
+	local QuickActionsCard = Instance.new("Frame", PageMerge)
+	QuickActionsCard.Size = UDim2.new(1, 0, 0, 32)
+	QuickActionsCard.BackgroundColor3 = C_ITEM
+	QuickActionsCard.LayoutOrder = 0.5 -- Between search and file list
+	Instance.new("UICorner", QuickActionsCard).CornerRadius = UDim.new(0, 8)
+	RegisterTheme(QuickActionsCard, "BackgroundColor3", "Item")
+
+	-- Select All Button
+	local BtnSelectAll = Instance.new("TextButton", QuickActionsCard)
+	BtnSelectAll.Text = "✓ Select All"
+	BtnSelectAll.Size = UDim2.new(0.48, 0, 0, 24)
+	BtnSelectAll.Position = UDim2.new(0.01, 0, 0.5, -12)
+	BtnSelectAll.BackgroundColor3 = C_GREEN
+	BtnSelectAll.TextColor3 = Color3.new(1, 1, 1)
+	BtnSelectAll.Font = Enum.Font.GothamBold
+	BtnSelectAll.TextSize = 10
+	Instance.new("UICorner", BtnSelectAll).CornerRadius = UDim.new(0, 6)
+
+	BtnSelectAll.MouseButton1Click:Connect(function()
+		if not MergerRefs.cachedFiles or #MergerRefs.cachedFiles == 0 then
+			if ShowToast then
+				ShowToast("No Files", "No files to select", "error", 2)
+			end
+			return
+		end
+
+		-- Clear current selection
+		MergerRefs.mergeList = {}
+
+		-- Add all files in order (respecting search filter)
+		local searchFilter = MergerRefs.SearchFilter or ""
+		local count = 0
+		for _, f in ipairs(MergerRefs.cachedFiles) do
+			local n = string.match(f, "[^/\\]+$") or f
+			local displayName = n:gsub("%.json$", "")
+			local shouldInclude = searchFilter == "" or displayName:lower():find(searchFilter, 1, true)
+			if shouldInclude then
+				table.insert(MergerRefs.mergeList, { n = n, p = f })
+				count = count + 1
+			end
+		end
+
+		UIHandlers.RefreshMergerList()
+		if ShowToast then
+			ShowToast("✓ Selected All", count .. " files selected in order", "success", 2)
+		end
+	end)
+
+	-- Deselect All Button
+	local BtnDeselectAll = Instance.new("TextButton", QuickActionsCard)
+	BtnDeselectAll.Text = "✗ Deselect All"
+	BtnDeselectAll.Size = UDim2.new(0.48, 0, 0, 24)
+	BtnDeselectAll.Position = UDim2.new(0.51, 0, 0.5, -12)
+	BtnDeselectAll.BackgroundColor3 = C_RED
+	BtnDeselectAll.TextColor3 = Color3.new(1, 1, 1)
+	BtnDeselectAll.Font = Enum.Font.GothamBold
+	BtnDeselectAll.TextSize = 10
+	Instance.new("UICorner", BtnDeselectAll).CornerRadius = UDim.new(0, 6)
+
+	BtnDeselectAll.MouseButton1Click:Connect(function()
+		MergerRefs.mergeList = {}
+		UIHandlers.RefreshMergerList()
+		if ShowToast then
+			ShowToast("✗ Deselected All", "Selection cleared", "info", 2)
+		end
+	end)
+
 	-- 1. Selection Browser
 	local MergeCard = Instance.new("Frame", PageMerge)
-	MergeCard.Size = UDim2.new(1, 0, 1, -115)
+	MergeCard.Size = UDim2.new(1, 0, 1, -190) -- Adjusted for QuickActions + ActionCard with Optimize toggle
 	MergeCard.BackgroundColor3 = C_ITEM
 	MergeCard.LayoutOrder = 1
 	Instance.new("UICorner", MergeCard).CornerRadius = UDim.new(0, 8)
@@ -6443,16 +6943,45 @@ function UIHandlers.InitMergerUI()
 
 	-- 2. Merge Actions
 	local ActionCard = Instance.new("Frame", PageMerge)
-	ActionCard.Size = UDim2.new(1, 0, 0, 60) -- Reduced height
+	ActionCard.Size = UDim2.new(1, 0, 0, 95) -- Increased for toggle row
 	ActionCard.BackgroundColor3 = C_ITEM
 	ActionCard.LayoutOrder = 2
 	Instance.new("UICorner", ActionCard).CornerRadius = UDim.new(0, 8)
 	RegisterTheme(ActionCard, "BackgroundColor3", "Item")
 
+	-- Optimize Toggle Button
+	local OptimizeBtn = Instance.new("TextButton", ActionCard)
+	OptimizeBtn.Text = "⚡ Optimize: " .. (S.isOptimizeMerge and "ON" or "OFF")
+	OptimizeBtn.Size = UDim2.new(0.9, 0, 0, 28)
+	OptimizeBtn.Position = UDim2.new(0.05, 0, 0, 6)
+	OptimizeBtn.BackgroundColor3 = S.isOptimizeMerge and C_ACCENT or C_MAIN
+	OptimizeBtn.TextColor3 = S.isOptimizeMerge and Color3.new(1, 1, 1) or C_TEXT_DIM
+	OptimizeBtn.Font = Enum.Font.GothamBold
+	OptimizeBtn.TextSize = 11
+	Instance.new("UICorner", OptimizeBtn).CornerRadius = UDim.new(0, 6)
+	if not S.isOptimizeMerge then
+		RegisterTheme(OptimizeBtn, "BackgroundColor3", "Main")
+	end
+
+	OptimizeBtn.MouseButton1Click:Connect(function()
+		S.isOptimizeMerge = not S.isOptimizeMerge
+		OptimizeBtn.Text = "⚡ Optimize: " .. (S.isOptimizeMerge and "ON" or "OFF")
+		OptimizeBtn.BackgroundColor3 = S.isOptimizeMerge and C_ACCENT or C_MAIN
+		OptimizeBtn.TextColor3 = S.isOptimizeMerge and Color3.new(1, 1, 1) or C_TEXT_DIM
+		if ShowToast then
+			ShowToast(
+				"⚡ Optimize Merge",
+				S.isOptimizeMerge and "ON: Files will be 50-70% smaller (30 FPS)" or "OFF: Full quality (60 FPS)",
+				S.isOptimizeMerge and "success" or "info",
+				2
+			)
+		end
+	end)
+
 	MMergeBtn = Instance.new("TextButton", ActionCard)
 	MMergeBtn.Text = L("merge_selected")
 	MMergeBtn.Size = UDim2.new(0.9, 0, 0, 40)
-	MMergeBtn.Position = UDim2.new(0.05, 0, 0, 10)
+	MMergeBtn.Position = UDim2.new(0.05, 0, 0, 42)
 	MMergeBtn.BackgroundColor3 = C_ACCENT
 	MMergeBtn.TextColor3 = Color3.new(1, 1, 1)
 	MMergeBtn.Font = Enum.Font.GothamBold
@@ -6594,6 +7123,24 @@ function UIHandlers.InitMergerUI()
 				-- Prepare final data
 				local finalData = { FPS = 60, Frames = finalFrames }
 
+				-- Apply optimization if enabled (reduces size by 50-70%)
+				if S.isOptimizeMerge then
+					ShowLoadingModal(true, "Optimizing...", 0.85)
+					task.wait(0.1)
+					local originalSize = #HttpService:JSONEncode(finalData)
+					finalData = OptimizeMergedData(finalData)
+					local optimizedSize = #HttpService:JSONEncode(finalData)
+					local savedPercent = math.floor((1 - optimizedSize / originalSize) * 100)
+					warn(
+						string.format(
+							"[Starship] Size: %.1f MB -> %.1f MB (%d%% saved)",
+							originalSize / 1024 / 1024,
+							optimizedSize / 1024 / 1024,
+							savedPercent
+						)
+					)
+				end
+
 				-- Saving (90% to 100%)
 				ShowLoadingModal(true, L("saving_file"), 0.95)
 				task.wait(0.1)
@@ -6715,6 +7262,47 @@ function UIHandlers.SetupListMapUI()
 	RegisterTheme(BtnRefresh, "BackgroundColor3", "Main")
 	RegisterTheme(BtnRefresh, "TextColor3", "Text")
 
+	-- Cloud Sync Toggle (Only for Owner/Developer) - in HeaderCard near Refresh
+	do
+		local cloudOK = getgenv
+			and getgenv().StarshipSession
+			and (
+				(getgenv().StarshipSession.Role or ""):upper() == "OWNER"
+				or (getgenv().StarshipSession.Role or ""):upper() == "DEVELOPER"
+			)
+		if cloudOK then
+			-- Adjust Refresh button position to make room
+			BtnRefresh.Position = UDim2.new(1, -10, 0.5, 0)
+
+			local BtnCloud = Instance.new("TextButton", HeaderCard)
+			BtnCloud.Text = "☁️ " .. (S.isAutoCloudSync and "ON" or "OFF")
+			BtnCloud.Size = UDim2.new(0, 50, 0, 24)
+			BtnCloud.AnchorPoint = Vector2.new(1, 0.5)
+			BtnCloud.Position = UDim2.new(1, -75, 0.5, 0) -- Left of Refresh
+			BtnCloud.BackgroundColor3 = S.isAutoCloudSync and C_ACCENT or C_MAIN
+			BtnCloud.TextColor3 = C_TEXT
+			BtnCloud.Font = Enum.Font.GothamBold
+			BtnCloud.TextSize = 9
+			Instance.new("UICorner", BtnCloud).CornerRadius = UDim.new(0, 4)
+			if not S.isAutoCloudSync then
+				RegisterTheme(BtnCloud, "BackgroundColor3", "Main")
+			end
+			RegisterTheme(BtnCloud, "TextColor3", "Text")
+
+			BtnCloud.MouseButton1Click:Connect(function()
+				S.isAutoCloudSync = not S.isAutoCloudSync
+				BtnCloud.Text = "☁️ " .. (S.isAutoCloudSync and "ON" or "OFF")
+				BtnCloud.BackgroundColor3 = S.isAutoCloudSync and C_ACCENT or C_MAIN
+				ShowToast(
+					"☁️ Auto Sync",
+					S.isAutoCloudSync and "Auto-upload enabled" or "Disabled",
+					S.isAutoCloudSync and "success" or "info",
+					2
+				)
+			end)
+		end
+	end
+
 	-- Check if user is Owner/Developer for cloud features
 	local isCloudEnabled = false
 	if getgenv and getgenv().StarshipSession then
@@ -6738,11 +7326,13 @@ function UIHandlers.SetupListMapUI()
 	Instance.new("UICorner", SearchFrame).CornerRadius = UDim.new(0, 6)
 	RegisterTheme(SearchFrame, "BackgroundColor3", "Item")
 
+	--[[ DISABLED: SettingsRow - all buttons moved/hidden
 	-- Settings Row (Native Anim & Strict Retarget & Cloud Sync)
 	local SettingsRow = Instance.new("Frame", HeaderArea)
 	SettingsRow.Size = UDim2.new(0.96, 0, 0, 35)
 	SettingsRow.BackgroundTransparency = 1
 	SettingsRow.LayoutOrder = 2
+	]]
 
 	-- Check cloud access inline (avoid extra local)
 	do
@@ -6752,6 +7342,7 @@ function UIHandlers.SetupListMapUI()
 			or (getgenv and getgenv().StarshipSession and (getgenv().StarshipSession.Role or ""):upper() == "DEVELOPER")
 		local bw = cloudOK and 0.32 or 0.48
 
+		--[[ DISABLED: Strict Retarget toggle - kept for future use
 		local BtnStrict = Instance.new("TextButton", SettingsRow)
 		BtnStrict.Text = L("strict_retarget") .. ": " .. L("off")
 		RegisterDynamicUI(BtnStrict, function(el)
@@ -6765,7 +7356,9 @@ function UIHandlers.SetupListMapUI()
 		BtnStrict.TextSize = 8
 		Instance.new("UICorner", BtnStrict).CornerRadius = UDim.new(0, 6)
 		RegisterTheme(BtnStrict, "BackgroundColor3", "Item")
+		]]
 
+		--[[ DISABLED: Native Anim toggle - kept for future use
 		local BtnNative = Instance.new("TextButton", SettingsRow)
 		BtnNative.Text = L("native_anim") .. ": " .. L("off")
 		RegisterDynamicUI(BtnNative, function(el)
@@ -6779,13 +7372,15 @@ function UIHandlers.SetupListMapUI()
 		BtnNative.TextSize = 8
 		Instance.new("UICorner", BtnNative).CornerRadius = UDim.new(0, 6)
 		RegisterTheme(BtnNative, "BackgroundColor3", "Item")
+		]]
 
+		--[[ MOVED: Cloud Sync moved to HeaderCard near Refresh button
 		-- Cloud Sync Toggle (Only for Owner/Developer)
 		if cloudOK then
 			local BtnCloud = Instance.new("TextButton", SettingsRow)
 			BtnCloud.Text = "☁️ Sync: " .. (S.isAutoCloudSync and "ON" or "OFF")
-			BtnCloud.Size = UDim2.new(0.32, -3, 1, 0)
-			BtnCloud.Position = UDim2.new(0.68, 0, 0, 0)
+			BtnCloud.Size = UDim2.new(1, 0, 1, 0)
+			BtnCloud.Position = UDim2.new(0, 0, 0, 0)
 			BtnCloud.BackgroundColor3 = S.isAutoCloudSync and C_ACCENT or C_ITEM
 			BtnCloud.TextColor3 = S.isAutoCloudSync and Color3.new(1, 1, 1) or C_TEXT_DIM
 			BtnCloud.Font = Enum.Font.GothamBold
@@ -6808,7 +7403,9 @@ function UIHandlers.SetupListMapUI()
 				)
 			end)
 		end
+		]]
 
+		--[[ DISABLED: Click handlers for hidden buttons
 		-- Button click handlers
 		BtnStrict.MouseButton1Click:Connect(function()
 			isStrictRetarget = not isStrictRetarget
@@ -6821,6 +7418,7 @@ function UIHandlers.SetupListMapUI()
 			BtnNative.Text = L("native_anim") .. ": " .. (isNativeAnim and L("on") or L("off"))
 			BtnNative.TextColor3 = isNativeAnim and C_GREEN or C_TEXT_DIM
 		end)
+		]]
 	end
 
 	local SearchIcon = Instance.new("ImageLabel", SearchFrame)
@@ -7765,10 +8363,13 @@ function UIHandlers.SetupListMapUI()
 						ShowLoadingModal(false)
 						task.wait() -- Ensure loading modal is fully hidden before showing popup
 
-						-- DISTANCE VALIDATION CHECK (to nearest path point)
+						-- STRICT DISTANCE VALIDATION - Block if too far
 						local frames = data.Frames or data
-						local needsConfirmation = false
+						local recordedPlaceId = data.PlaceId
+						local currentPlaceId = game.PlaceId
+						local placeIdMatch = (recordedPlaceId == nil) or (recordedPlaceId == currentPlaceId)
 						local distanceToNearest = 0
+						local isTooFar = false
 
 						if frames and #frames > 0 then
 							local c = LocalPlayer.Character
@@ -7776,12 +8377,29 @@ function UIHandlers.SetupListMapUI()
 							if r then
 								distanceToNearest = GetDistanceToNearestPathPoint(frames, r.Position)
 								if distanceToNearest > MAP_DISTANCE_THRESHOLD then
-									needsConfirmation = true
+									isTooFar = true
 								end
 							end
 						end
 
-						-- Function to proceed with selection
+						-- BLOCK if distance is too far (regardless of PlaceId)
+						if isTooFar then
+							-- Restore card appearance
+							FileCard.Text = originalText
+							FileCard.BackgroundColor3 = originalColor
+
+							-- Show error toast with details
+							if placeIdMatch then
+								-- Same game but too far
+								ShowToast(L("error_wrong_game"), L("path_far_same_game", distanceToNearest), "error", 5)
+							else
+								-- Different game AND too far
+								ShowToast(L("error_wrong_game"), L("wrong_game_warning", distanceToNearest), "error", 5)
+							end
+							return -- DON'T show playback popup
+						end
+
+						-- Function to proceed with selection (only called if distance is OK)
 						local function proceedWithSelection()
 							currentPlaybackFile = fileName
 							currentPlaybackSource = "Merger"
@@ -7802,33 +8420,25 @@ function UIHandlers.SetupListMapUI()
 
 								-- Pre-set currentFrameData so PlayRecording doesn't need to reload
 								currentFrameData = frames
+								currentFrameData.PlaceId = recordedPlaceId -- Store recorded PlaceId
 							else
 								PTimeLbl.Text = "0.0s / 0.0s"
 								currentFrameData = nil
 							end
+
+							-- Show warning if different PlaceId but path is nearby
+							if not placeIdMatch then
+								ShowToast(
+									L("warning_different_game"),
+									L("different_placeid_nearby", tostring(recordedPlaceId), tostring(currentPlaceId)),
+									"warning",
+									4
+								)
+							end
 						end
 
-						-- Show confirmation if distance is too far
-						if needsConfirmation and ShowConfirm then
-							-- Restore card appearance while waiting for confirmation
-							FileCard.Text = originalText
-							FileCard.BackgroundColor3 = originalColor
-
-							ShowConfirm(
-								"DIFFERENT LOCATION DETECTED",
-								string.format(
-									"Nearest path point is %.0f studs away!\n\nThis recording might be from a different location/map.\n\nContinue anyway?",
-									distanceToNearest
-								),
-								function()
-									-- User confirmed, proceed with selection
-									proceedWithSelection()
-								end
-							)
-						else
-							-- No confirmation needed, proceed directly
-							proceedWithSelection()
-						end
+						-- Distance is within threshold, proceed with selection
+						proceedWithSelection()
 					else
 						-- Restore card appearance on error
 						FileCard.Text = originalText
@@ -8019,30 +8629,24 @@ function UIHandlers.SetupListMapUI()
 		if isPlaying and currentPlaybackSource == "Merger" then
 			PausePlayback()
 		elseif currentPlaybackFile then
-			-- DISTANCE VALIDATION BEFORE PLAY (check nearest path point)
+			-- STRICT DISTANCE VALIDATION BEFORE PLAY
 			if currentFrameData and #currentFrameData > 0 then
 				local c = LocalPlayer.Character
 				local r = c and c:FindFirstChild("HumanoidRootPart")
 				if r then
+					local recordedPlaceId = currentFrameData.PlaceId
+					local currentPlaceId = game.PlaceId
+					local placeIdMatch = (recordedPlaceId == nil) or (recordedPlaceId == currentPlaceId)
 					local dist = GetDistanceToNearestPathPoint(currentFrameData, r.Position)
+
+					-- BLOCK if distance is too far (regardless of PlaceId)
 					if dist > MAP_DISTANCE_THRESHOLD then
-						-- Show confirmation before playing
-						if ShowConfirm then
-							ShowConfirm(
-								"DIFFERENT MAP DETECTED",
-								string.format(
-									"Nearest path point is %.0f studs away!\n\nThis may be from a different game/map.\n\nContinue anyway?",
-									dist
-								),
-								function()
-									-- User confirmed, play now
-									if isfile(MERGER_FOLDER .. "/" .. currentPlaybackFile) then
-										UIHandlers.PlayMergerRecording(currentPlaybackFile, false, true) -- skipDistanceCheck = true
-									end
-								end
-							)
-							return -- Stop here, wait for user confirmation
+						if placeIdMatch then
+							ShowToast(L("error_wrong_game"), L("path_far_same_game", dist), "error", 5)
+						else
+							ShowToast(L("error_wrong_game"), L("wrong_game_warning", dist), "error", 5)
 						end
+						return -- BLOCK playback
 					end
 				end
 			end

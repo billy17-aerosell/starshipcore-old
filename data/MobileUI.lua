@@ -3038,6 +3038,148 @@ local function StopPlayback()
 end
 
 -- ═══════════════════════════════════════════════════════════════════
+-- TOOL HANDLING (With Fingerprint matching for duplicate names)
+-- Supports: Name, ToolTip, Handle Color, Configuration values
+-- ═══════════════════════════════════════════════════════════════════
+local lastToolEquipTime = 0
+local TOOL_THROTTLE_INTERVAL = 0.1 -- Throttle tool changes to every 0.1 seconds
+
+-- Helper function to check if handle color matches
+local function ColorMatches(tool, targetColor)
+	if not targetColor then
+		return true
+	end -- No color recorded, skip check
+	local handle = tool:FindFirstChild("Handle")
+	if not handle or not handle:IsA("BasePart") then
+		return true
+	end
+	local tolerance = 0.05
+	return math.abs(handle.Color.R - targetColor.r) < tolerance
+		and math.abs(handle.Color.G - targetColor.g) < tolerance
+		and math.abs(handle.Color.B - targetColor.b) < tolerance
+end
+
+-- Helper function to check if config values match
+local function ConfigMatches(tool, targetConfig)
+	if not targetConfig then
+		return true
+	end -- No config recorded, skip check
+	local config = tool:FindFirstChild("Configuration") or tool:FindFirstChild("Config")
+	if not config then
+		return false
+	end
+	for name, value in pairs(targetConfig) do
+		local child = config:FindFirstChild(name)
+		if child and (child:IsA("NumberValue") or child:IsA("IntValue")) then
+			if child.Value ~= value then
+				return false
+			end
+		else
+			return false
+		end
+	end
+	return true
+end
+
+local function UpdateTool(char, recordedToolName, recordedToolTip, recordedToolColor, recordedToolConfig)
+	if not char then
+		return
+	end
+
+	-- Throttle tool changes to prevent spam
+	local now = os.clock()
+	if now - lastToolEquipTime < TOOL_THROTTLE_INTERVAL then
+		return
+	end
+
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum then
+		return
+	end
+
+	local currentTool = char:FindFirstChildOfClass("Tool")
+	local currentToolName = currentTool and currentTool.Name or nil
+	local currentToolTip = currentTool and currentTool.ToolTip or nil
+
+	-- Check if tool change is needed
+	local needsChange = false
+	if recordedToolName ~= currentToolName then
+		needsChange = true
+	elseif recordedToolTip and currentToolTip and recordedToolTip ~= currentToolTip then
+		needsChange = true
+	elseif recordedToolColor and currentTool then
+		-- Same name+tooltip, but different color (e.g., same "Speed Up" but different speed)
+		if not ColorMatches(currentTool, recordedToolColor) then
+			needsChange = true
+		end
+	end
+
+	if needsChange then
+		lastToolEquipTime = now
+
+		if recordedToolName then
+			local backpack = LocalPlayer:FindFirstChild("Backpack")
+			if backpack then
+				local toolToEquip = nil
+
+				-- Priority 1: Match name + tooltip + color + config (exact match)
+				if recordedToolTip or recordedToolColor or recordedToolConfig then
+					for _, tool in pairs(backpack:GetChildren()) do
+						if tool:IsA("Tool") and tool.Name == recordedToolName then
+							local tipMatch = (not recordedToolTip) or (tool.ToolTip == recordedToolTip)
+							local colorMatch = ColorMatches(tool, recordedToolColor)
+							local configMatch = ConfigMatches(tool, recordedToolConfig)
+							if tipMatch and colorMatch and configMatch then
+								toolToEquip = tool
+								break
+							end
+						end
+					end
+				end
+
+				-- Priority 2: Match name + tooltip (if color not found)
+				if not toolToEquip and recordedToolTip then
+					for _, tool in pairs(backpack:GetChildren()) do
+						if tool:IsA("Tool") and tool.Name == recordedToolName and tool.ToolTip == recordedToolTip then
+							toolToEquip = tool
+							break
+						end
+					end
+				end
+
+				-- Priority 3: Match name + color (if tooltip not found)
+				if not toolToEquip and recordedToolColor then
+					for _, tool in pairs(backpack:GetChildren()) do
+						if
+							tool:IsA("Tool")
+							and tool.Name == recordedToolName
+							and ColorMatches(tool, recordedToolColor)
+						then
+							toolToEquip = tool
+							break
+						end
+					end
+				end
+
+				-- Priority 4: Fallback to name-only match
+				if not toolToEquip then
+					toolToEquip = backpack:FindFirstChild(recordedToolName)
+				end
+
+				if toolToEquip and toolToEquip:IsA("Tool") then
+					hum:EquipTool(toolToEquip)
+				end
+			end
+		else
+			-- Need to unequip current tool
+			if currentTool then
+				hum:UnequipTools()
+			end
+		end
+	end
+end
+
+-- ═══════════════════════════════════════════════════════════════════
 -- PATH VISUALIZATION (PREMIUM ENHANCED)
 -- ═══════════════════════════════════════════════════════════════════
 local isPathVisualsEnabled = false
@@ -3921,8 +4063,8 @@ local function PlayRecording(fileName, force)
 					alpha = (PlaybackState.currentTime - fA.t) / deltaT
 				end
 
-				-- Tool Replication
-				UpdateTool(GetCharacter(), fA.tool)
+				-- Tool Replication (with fingerprint matching for duplicate names)
+				UpdateTool(GetCharacter(), fA.tool, fA.toolTip, fA.toolColor, fA.toolConfig)
 
 				-- 1. Check current state for special handling
 				local isCurrentlyClimbing = false
@@ -4445,8 +4587,8 @@ local function PlayRecording(fileName, force)
 					alpha = (PlaybackState.currentTime - fA.t) / deltaT
 				end
 
-				-- Tool Replication
-				UpdateTool(GetCharacter(), fA.tool)
+				-- Tool Replication (with fingerprint matching for duplicate names)
+				UpdateTool(GetCharacter(), fA.tool, fA.toolTip, fA.toolColor, fA.toolConfig)
 
 				-- Interpolate CFrame
 				if fA.r and fB.r then
@@ -6166,7 +6308,7 @@ SocialTab:Paragraph({
 	Desc = "Version 1.0 • Made with 💜\n\nThank you for using Starship Mobile!\nJoin our Discord for updates and support.",
 })
 
--- ══════════════════════════════════════════════════════════════════
+-- ═══════���════════════════════════════════════��═════════════════════
 -- ⚙️ SETTINGS TAB
 -- ══════════════════════════════════════════════════════════════════
 local SettingsTab = Window:Tab({

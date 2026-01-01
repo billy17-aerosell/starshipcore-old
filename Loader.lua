@@ -799,6 +799,57 @@ local function main()
 		Expiry = data.expiry, -- Timestamp expiry (bisa nil jika LIFETIME)
 	}
 
+	-- ══════════════════════════════════════════════════════════════════
+	-- WATERMARK SYSTEM: Embed unique user identifier for leak tracing
+	-- Multiple hidden locations make it difficult to remove all traces
+	-- ══════════════════════════════════════════════════════════════════
+	local function generateWatermark()
+		local wm = {}
+		wm.u = userId -- User ID
+		wm.t = os.time() -- Timestamp
+		wm.h = deviceHWID:sub(1, 8) -- First 8 chars of HWID
+		wm.p = "PC" -- Platform
+		wm.v = "1.0" -- Version
+		-- Create encoded signature
+		local sig = userId .. "_" .. os.time() .. "_" .. wm.h
+		wm.s = "" -- Signature (encoded)
+		for i = 1, #sig do
+			wm.s = wm.s .. string.format("%02x", bit32.bxor(string.byte(sig, i), 42))
+		end
+		return wm
+	end
+
+	local _WM = generateWatermark()
+
+	-- Store watermark in multiple hidden locations
+	-- Location 1: Global environment (obfuscated key)
+	getgenv()["_" .. string.char(83, 87, 77)] = _WM
+
+	-- Location 2: Hidden in game services
+	pcall(function()
+		local marker = Instance.new("StringValue")
+		marker.Name = "_cfg" .. math.random(1000, 9999)
+		marker.Value = HttpService:JSONEncode({ _m = _WM.s, _t = _WM.t })
+		marker.Parent = game:GetService("ReplicatedStorage")
+		-- Auto-cleanup after 60 seconds (but watermark already in memory)
+		task.delay(60, function()
+			pcall(function()
+				marker:Destroy()
+			end)
+		end)
+	end)
+
+	-- Location 3: Attach to session
+	getgenv().StarshipSession._wm = _WM.s
+	getgenv().StarshipSession._wt = _WM.t
+
+	-- Location 4: Hidden table in _G with random key
+	local wmKey = "_x" .. tostring(_WM.t):sub(-4)
+	_G[wmKey] = { z = _WM.u, y = _WM.h }
+
+	-- Location 5: Store in closure (survives even if globals cleared)
+	local _WATERMARK_DATA = _WM -- This persists in the script's closure
+
 	-- 6. Execute with Smooth Transition
 	updateStatus("Launching Starship...", 1.0)
 	task.wait(0.3)
@@ -854,6 +905,36 @@ local function main()
 	end
 
 	func()
+
+	-- ══════════════════════════════════════════════════════════════════
+	-- SECURITY CLEANUP: Remove sensitive data from global environment
+	-- This prevents hackers from accessing modules via getgenv()/G
+	-- ══════════════════════════════════════════════════════════════════
+	task.spawn(function()
+		task.wait(5) -- Wait for script to fully initialize
+
+		-- Clear module references from global scope
+		if getgenv().StarshipModules then
+			-- Modules are already referenced internally, safe to clear global
+			getgenv().StarshipModules = nil
+		end
+
+		-- Clear AnimDB reference
+		if _G.StarshipAnimDB then
+			_G.StarshipAnimDB = nil
+		end
+
+		-- Note: StarshipSession is kept for legitimate auth checks
+		-- Note: StarshipIntroComplete is just a boolean, low risk
+
+		-- Additional cleanup: Clear any temp variables
+		if getgenv().StarshipTemp then
+			getgenv().StarshipTemp = nil
+		end
+
+		-- Debug log (remove in production if needed)
+		-- print("[StarshipCore] Security cleanup completed - globals cleared")
+	end)
 end
 
 main()

@@ -2590,7 +2590,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 	StyleBtn(BtnOpenFollow, C_ACCENT)
 
 	-- Create Auto Follow Window
-	local FollowWindow, FollowContent = CreateWindow("AUTO FOLLOW", 290)
+	local FollowWindow, FollowContent = CreateWindow("AUTO FOLLOW", 350)
 	FollowContent.ScrollBarThickness = 0
 	FollowContent.ScrollingEnabled = false
 
@@ -2607,6 +2607,241 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 	local function getHum(c)
 		return c and c:FindFirstChild("Humanoid")
 	end
+	local function getAnimator(c)
+		local hum = getHum(c)
+		return hum and hum:FindFirstChildOfClass("Animator")
+	end
+
+	-- Animation Mirror Variables
+	local mirrorAnimEnabled = true
+	local mirrorAnimLoop = nil
+	local myPlayingTracks = {} -- Track animation tracks we're playing
+	local lastTargetAnimIds = {} -- Track what animations target is playing
+
+	-- Function to get current playing animations from target
+	local function getTargetAnimations(targetChar)
+		local anims = {}
+		local animator = getAnimator(targetChar)
+		if animator then
+			for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+				if track.Animation then
+					table.insert(anims, {
+						id = track.Animation.AnimationId,
+						speed = track.Speed,
+						weight = track.WeightCurrent,
+						priority = track.Priority,
+						looped = track.Looped,
+						timePos = track.TimePosition,
+						length = track.Length,
+					})
+				end
+			end
+		end
+		return anims
+	end
+
+	-- Function to play animation on our character
+	local function playAnimOnSelf(animId, speed, weight, priority, timePos)
+		local myChar = LocalPlayer.Character
+		local animator = getAnimator(myChar)
+		if not animator then
+			return nil
+		end
+
+		-- Check if we already have this animation playing
+		if myPlayingTracks[animId] then
+			local track = myPlayingTracks[animId]
+			if track.IsPlaying then
+				-- Adjust speed if different
+				if math.abs(track.Speed - speed) > 0.1 then
+					track:AdjustSpeed(speed)
+				end
+				-- Sync time position for more accurate mirroring (with small tolerance)
+				if timePos and track.Length > 0 then
+					local timeDiff = math.abs(track.TimePosition - timePos)
+					if timeDiff > 0.1 then -- Only sync if difference is significant
+						track.TimePosition = timePos
+					end
+				end
+				return track
+			end
+		end
+
+		-- Create and play new animation
+		local anim = Instance.new("Animation")
+		anim.AnimationId = animId
+
+		local success, track = pcall(function()
+			return animator:LoadAnimation(anim)
+		end)
+
+		if success and track then
+			track.Priority = priority or Enum.AnimationPriority.Action
+			track:Play()
+			track:AdjustSpeed(speed or 1)
+			track:AdjustWeight(weight or 1)
+			-- Sync to target's time position
+			if timePos and track.Length > 0 then
+				track.TimePosition = timePos
+			end
+			myPlayingTracks[animId] = track
+
+			-- Clean up when animation stops
+			track.Stopped:Connect(function()
+				myPlayingTracks[animId] = nil
+				anim:Destroy()
+			end)
+
+			return track
+		end
+
+		anim:Destroy()
+		return nil
+	end
+
+	-- Function to stop animation on self
+	local function stopAnimOnSelf(animId)
+		if myPlayingTracks[animId] then
+			pcall(function()
+				myPlayingTracks[animId]:Stop()
+			end)
+			myPlayingTracks[animId] = nil
+		end
+	end
+
+	-- Function to stop all mirrored animations
+	local function stopAllMirroredAnims()
+		for animId, track in pairs(myPlayingTracks) do
+			pcall(function()
+				track:Stop()
+			end)
+		end
+		myPlayingTracks = {}
+		lastTargetAnimIds = {}
+	end
+
+	-- NEW APPROACH: Direct Joint/Motor6D Transform Copying
+	-- This bypasses animation permission issues by copying joint transforms directly
+
+	local function getMotor6Ds(character)
+		local motors = {}
+		for _, descendant in pairs(character:GetDescendants()) do
+			if descendant:IsA("Motor6D") then
+				motors[descendant.Name] = descendant
+			end
+		end
+		return motors
+	end
+
+	local function copyJointTransforms(targetChar, myChar)
+		local targetMotors = getMotor6Ds(targetChar)
+		local myMotors = getMotor6Ds(myChar)
+
+		for motorName, targetMotor in pairs(targetMotors) do
+			local myMotor = myMotors[motorName]
+			if myMotor then
+				-- Copy the transform (C0 and C1 define the joint positions)
+				-- Transform is the animated offset from the base pose
+				pcall(function()
+					myMotor.Transform = targetMotor.Transform
+				end)
+			end
+		end
+	end
+
+	-- Alternative: Copy individual part CFrames relative to HRP
+	local function copyPartPoses(targetChar, myChar)
+		local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+		local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+		if not (targetHRP and myHRP) then
+			return
+		end
+
+		local partsToMirror = {
+			"Head",
+			"UpperTorso",
+			"LowerTorso",
+			"LeftUpperArm",
+			"LeftLowerArm",
+			"LeftHand",
+			"RightUpperArm",
+			"RightLowerArm",
+			"RightHand",
+			"LeftUpperLeg",
+			"LeftLowerLeg",
+			"LeftFoot",
+			"RightUpperLeg",
+			"RightLowerLeg",
+			"RightFoot",
+			-- R6 parts
+			"Torso",
+			"Left Arm",
+			"Right Arm",
+			"Left Leg",
+			"Right Leg",
+		}
+
+		for _, partName in ipairs(partsToMirror) do
+			local targetPart = targetChar:FindFirstChild(partName)
+			local myPart = myChar:FindFirstChild(partName)
+			if targetPart and myPart then
+				pcall(function()
+					-- Get the relative CFrame from target's HRP
+					local relativeCF = targetHRP.CFrame:ToObjectSpace(targetPart.CFrame)
+					-- Apply to our part
+					myPart.CFrame = myHRP.CFrame:ToWorldSpace(relativeCF)
+				end)
+			end
+		end
+	end
+
+	-- Function to mirror pose from target (using Motor6D transforms)
+	local function mirrorPoseFromTarget()
+		if not followTarget or not mirrorAnimEnabled then
+			return
+		end
+
+		local targetChar = followTarget.Character
+		local myChar = LocalPlayer.Character
+		if not (targetChar and myChar) then
+			return
+		end
+
+		local targetHum = getHum(targetChar)
+		local myHum = getHum(myChar)
+
+		-- Copy humanoid state (sitting, jumping, falling, etc)
+		if targetHum and myHum then
+			local targetState = targetHum:GetState()
+			-- Some states we shouldn't copy
+			if targetState ~= Enum.HumanoidStateType.Dead then
+				pcall(function()
+					myHum:ChangeState(targetState)
+				end)
+			end
+		end
+
+		-- Primary method: Copy Motor6D transforms (works for both R6 and R15)
+		copyJointTransforms(targetChar, myChar)
+
+		-- Also copy face/head orientation if exists
+		local targetHead = targetChar:FindFirstChild("Head")
+		local myHead = myChar:FindFirstChild("Head")
+		if targetHead and myHead then
+			local targetNeck = targetHead:FindFirstChild("Neck") or targetChar:FindFirstChild("Neck", true)
+			local myNeck = myHead:FindFirstChild("Neck") or myChar:FindFirstChild("Neck", true)
+			if targetNeck and myNeck and targetNeck:IsA("Motor6D") and myNeck:IsA("Motor6D") then
+				pcall(function()
+					myNeck.Transform = targetNeck.Transform
+				end)
+			end
+		end
+	end
+
+	-- Keep the old function name for compatibility but use new implementation
+	local function mirrorAnimationsFromTarget()
+		mirrorPoseFromTarget()
+	end
 
 	local function smoothAlpha(speed, dt)
 		return math.clamp(1 - math.exp(-speed * dt), 0, 1)
@@ -2617,6 +2852,50 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		local behindPos = targetHRP.Position - (look * 4) + Vector3.new(0, 2, 0)
 		local frontPoint = behindPos + look
 		return CFrame.new(behindPos, frontPoint)
+	end
+
+	-- New: Exact position copy (for true mirroring)
+	local function computeExactPosition(targetHRP)
+		return targetHRP.CFrame
+	end
+
+	-- Mode: true = exact copy, false = behind
+	local exactCopyMode = true
+
+	-- Function to stop/disable default animations on our character
+	local defaultAnimScript = nil
+	local function disableDefaultAnims()
+		local myChar = LocalPlayer.Character
+		if not myChar then
+			return
+		end
+
+		-- Find and disable Animate script
+		local animate = myChar:FindFirstChild("Animate")
+		if animate and animate:IsA("LocalScript") then
+			defaultAnimScript = animate
+			animate.Disabled = true
+		end
+
+		-- Stop all current playing animations on our character
+		local animator = getAnimator(myChar)
+		if animator then
+			for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+				-- Only stop if it's not one we're mirroring
+				if not myPlayingTracks[track.Animation and track.Animation.AnimationId] then
+					pcall(function()
+						track:Stop(0)
+					end)
+				end
+			end
+		end
+	end
+
+	local function enableDefaultAnims()
+		if defaultAnimScript then
+			defaultAnimScript.Disabled = false
+			defaultAnimScript = nil
+		end
 	end
 
 	local function tweenPlaceBehind(myHRP, targetHRP)
@@ -2760,6 +3039,34 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 	FollowStatus.TextSize = 10
 	FollowStatus.ZIndex = 205
 
+	-- Exact Copy Mode Toggle (position same as target vs behind)
+	local BtnExactCopy = Instance.new("TextButton", FollowContent)
+	BtnExactCopy.Text = "📍 Exact Position: ON"
+	BtnExactCopy.Size = UDim2.new(0.94, 0, 0, 30)
+	BtnExactCopy.BackgroundColor3 = C_GREEN
+	BtnExactCopy.TextColor3 = C_TEXT
+	BtnExactCopy.Font = Enum.Font.GothamBold
+	BtnExactCopy.TextSize = 11
+	BtnExactCopy.BorderSizePixel = 0
+	BtnExactCopy.ZIndex = 205
+	Instance.new("UICorner", BtnExactCopy).CornerRadius = UDim.new(0, 6)
+	local exactStroke = Instance.new("UIStroke", BtnExactCopy)
+	exactStroke.Color = C_GREEN
+	exactStroke.Thickness = 1
+
+	BtnExactCopy.MouseButton1Click:Connect(function()
+		exactCopyMode = not exactCopyMode
+		if exactCopyMode then
+			BtnExactCopy.Text = "📍 Exact Position: ON"
+			BtnExactCopy.BackgroundColor3 = C_GREEN
+			exactStroke.Color = C_GREEN
+		else
+			BtnExactCopy.Text = "📍 Exact Position: OFF (Behind)"
+			BtnExactCopy.BackgroundColor3 = C_ACCENT
+			exactStroke.Color = C_ACCENT
+		end
+	end)
+
 	-- Open Window Button Click
 	BtnOpenFollow.MouseButton1Click:Connect(function()
 		UpdateFollowPlayerList()
@@ -2786,6 +3093,15 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		local h = getHum(c)
 		if h then
 			h.PlatformStand = false
+			h:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end
+
+		-- Stop all mirrored animations and re-enable default anims
+		stopAllMirroredAnims()
+		enableDefaultAnims()
+		if mirrorAnimLoop then
+			mirrorAnimLoop:Disconnect()
+			mirrorAnimLoop = nil
 		end
 
 		local cam = workspace.CurrentCamera
@@ -2816,8 +3132,8 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		FollowStatus.Text = "Following " .. followTarget.DisplayName
 		FollowStatus.TextColor3 = C_GREEN
 
-		local lastTpTick = 0
-		followLoop = RunService.Heartbeat:Connect(function(dt)
+		-- Main follow loop - using RenderStepped for smoother updates
+		followLoop = RunService.RenderStepped:Connect(function(dt)
 			if not isFollowing or not followTarget then
 				StopFollow()
 				return
@@ -2835,12 +3151,67 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 				return
 			end
 
-			lastTpTick = lastTpTick + dt
-			if lastTpTick >= 0.01 then
-				lastTpTick = 0
-				pcall(function()
+			pcall(function()
+				if exactCopyMode then
+					-- Exact copy mode - same position and rotation as target
+					-- Copy CFrame (position + rotation)
+					myHRP.CFrame = tHRP.CFrame
+
+					-- Let Humanoid handle movement naturally for proper walking animation
 					myHum.PlatformStand = false
-					tweenPlaceBehind(myHRP, tHRP)
+
+					-- Copy velocity for smooth movement
+					myHRP.Velocity = tHRP.Velocity
+				else
+					-- Behind mode - stay behind target with lerp
+					local desiredCf = computeIdealBehind(tHRP)
+					myHRP.CFrame = myHRP.CFrame:Lerp(desiredCf, 0.5)
+					myHum.PlatformStand = false
+				end
+			end)
+		end)
+
+		-- Animation trigger loop - make our character's default animations play based on target movement
+		mirrorAnimLoop = RunService.Heartbeat:Connect(function()
+			if not isFollowing or not followTarget then
+				return
+			end
+
+			local myChar = LocalPlayer.Character
+			local tChar = followTarget.Character
+			if not (myChar and tChar) then
+				return
+			end
+
+			local myHum = getHum(myChar)
+			local tHum = getHum(tChar)
+			local tHRP = getHRP(tChar)
+
+			if myHum and tHum and tHRP then
+				pcall(function()
+					-- Check if target is moving
+					local targetMoveDir = tHum.MoveDirection
+					local isMoving = targetMoveDir.Magnitude > 0.1
+
+					if isMoving then
+						-- Tell our humanoid to "move" in the target's direction
+						-- This triggers the walking animation
+						myHum:Move(targetMoveDir, false)
+					else
+						-- Not moving - stop movement to trigger idle animation
+						myHum:Move(Vector3.new(0, 0, 0), false)
+					end
+
+					-- Copy jump if target is jumping
+					local tState = tHum:GetState()
+					if tState == Enum.HumanoidStateType.Jumping then
+						myHum.Jump = true
+					elseif tState == Enum.HumanoidStateType.Freefall then
+						myHum:ChangeState(Enum.HumanoidStateType.Freefall)
+					elseif tState == Enum.HumanoidStateType.Seated then
+						-- If target is sitting, try to sit
+						myHum.Sit = true
+					end
 				end)
 			end
 		end)
@@ -2849,6 +3220,12 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 			if not isFollowing or not followTarget then
 				return
 			end
+
+			-- Skip camera assist in exact copy mode - use default camera
+			if exactCopyMode then
+				return
+			end
+
 			local cam = workspace.CurrentCamera
 			local tChar = followTarget.Character
 			local tHRP = getHRP(tChar)
@@ -2902,6 +3279,601 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		end
 	end)
 
+	-- ==================== CLONE PLAYER APPEARANCE ====================
+	local CardClone = CreateCard("Clone Player", 70, 11)
+
+	local BtnOpenClone = Instance.new("TextButton", CardClone)
+	BtnOpenClone.Text = "🎭 OPEN CLONE PLAYER"
+	BtnOpenClone.Size = UDim2.new(0.94, 0, 0, 35)
+	BtnOpenClone.Position = UDim2.new(0.03, 0, 0, 35)
+	StyleBtn(BtnOpenClone, C_ACCENT)
+
+	-- Create Clone Player Window
+	local CloneWindow, CloneContent = CreateWindow("CLONE PLAYER", 320)
+	CloneContent.ScrollBarThickness = 0
+	CloneContent.ScrollingEnabled = false
+
+	local cloneTarget = nil
+	local originalAppearance = nil -- Store original appearance for restore
+
+	-- Clone Target Selection Label
+	local CloneTargetLabel = Instance.new("TextLabel", CloneContent)
+	CloneTargetLabel.Text = "SELECT PLAYER TO CLONE"
+	CloneTargetLabel.Size = UDim2.new(0.94, 0, 0, 20)
+	CloneTargetLabel.BackgroundTransparency = 1
+	CloneTargetLabel.TextColor3 = C_TEXT
+	CloneTargetLabel.Font = Enum.Font.GothamBold
+	CloneTargetLabel.TextSize = 11
+	CloneTargetLabel.ZIndex = 205
+
+	-- Player List Frame
+	local ClonePlayerListFrame = Instance.new("Frame", CloneContent)
+	ClonePlayerListFrame.Size = UDim2.new(0.94, 0, 0, 100)
+	ClonePlayerListFrame.BackgroundColor3 = C_ITEM
+	ClonePlayerListFrame.BorderSizePixel = 0
+	ClonePlayerListFrame.ZIndex = 205
+	Instance.new("UICorner", ClonePlayerListFrame).CornerRadius = UDim.new(0, 6)
+
+	local ClonePlayerListScroll = Instance.new("ScrollingFrame", ClonePlayerListFrame)
+	ClonePlayerListScroll.Size = UDim2.new(1, -4, 1, -4)
+	ClonePlayerListScroll.Position = UDim2.new(0, 2, 0, 2)
+	ClonePlayerListScroll.BackgroundTransparency = 1
+	ClonePlayerListScroll.BorderSizePixel = 0
+	ClonePlayerListScroll.ScrollBarThickness = 4
+	ClonePlayerListScroll.ScrollBarImageColor3 = C_ACCENT
+	ClonePlayerListScroll.ZIndex = 206
+	ClonePlayerListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+	ClonePlayerListScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+	local ClonePlayerListLayout = Instance.new("UIListLayout", ClonePlayerListScroll)
+	ClonePlayerListLayout.Padding = UDim.new(0, 3)
+	ClonePlayerListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+	-- Selected Target Display
+	local CloneSelectedDisplay = Instance.new("TextLabel", CloneContent)
+	CloneSelectedDisplay.Text = "Target: None"
+	CloneSelectedDisplay.Size = UDim2.new(0.94, 0, 0, 25)
+	CloneSelectedDisplay.BackgroundColor3 = C_SIDE
+	CloneSelectedDisplay.TextColor3 = C_TEXT_DIM
+	CloneSelectedDisplay.Font = Enum.Font.GothamBold
+	CloneSelectedDisplay.TextSize = 11
+	CloneSelectedDisplay.ZIndex = 205
+	Instance.new("UICorner", CloneSelectedDisplay).CornerRadius = UDim.new(0, 6)
+
+	-- Function to update player list
+	local function UpdateClonePlayerList()
+		for _, child in pairs(ClonePlayerListScroll:GetChildren()) do
+			if child:IsA("TextButton") then
+				child:Destroy()
+			end
+		end
+
+		for _, player in pairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer then
+				local btn = Instance.new("TextButton", ClonePlayerListScroll)
+				btn.Text = player.DisplayName .. " (@" .. player.Name .. ")"
+				btn.Size = UDim2.new(1, -8, 0, 28)
+				btn.BackgroundColor3 = (cloneTarget == player) and C_ACCENT or C_SIDE
+				btn.TextColor3 = (cloneTarget == player) and C_TEXT or C_TEXT_DIM
+				btn.Font = Enum.Font.Gotham
+				btn.TextSize = 11
+				btn.BorderSizePixel = 0
+				btn.ZIndex = 207
+				Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+				btn.MouseButton1Click:Connect(function()
+					cloneTarget = player
+					CloneSelectedDisplay.Text = "Target: " .. player.DisplayName
+					CloneSelectedDisplay.TextColor3 = C_GREEN
+					UpdateClonePlayerList()
+				end)
+
+				btn.MouseEnter:Connect(function()
+					if cloneTarget ~= player then
+						btn.BackgroundColor3 = C_ACCENT
+						btn.TextColor3 = C_TEXT
+					end
+				end)
+
+				btn.MouseLeave:Connect(function()
+					if cloneTarget ~= player then
+						btn.BackgroundColor3 = C_SIDE
+						btn.TextColor3 = C_TEXT_DIM
+					end
+				end)
+			end
+		end
+	end
+
+	-- Function to clone player appearance using HumanoidDescription (BEST METHOD)
+	local function ClonePlayerAppearance()
+		if not cloneTarget or not cloneTarget.Character then
+			return false, "No valid target"
+		end
+
+		local myChar = LocalPlayer.Character
+		local targetChar = cloneTarget.Character
+		if not myChar then
+			return false, "No character"
+		end
+
+		local myHum = myChar:FindFirstChildOfClass("Humanoid")
+		local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
+		if not myHum or not targetHum then
+			return false, "No humanoid"
+		end
+
+		-- Method 1: Try using HumanoidDescription from UserId (BEST - copies everything)
+		local success1 = pcall(function()
+			local targetDescription = Players:GetHumanoidDescriptionFromUserId(cloneTarget.UserId)
+			myHum:ApplyDescription(targetDescription)
+		end)
+
+		if success1 then
+			return true, "Cloned!"
+		end
+
+		-- Method 2: Try getting description from current character
+		local success2 = pcall(function()
+			local targetDescription = targetHum:GetAppliedDescription()
+			if targetDescription then
+				myHum:ApplyDescription(targetDescription)
+			end
+		end)
+
+		if success2 then
+			return true, "Cloned!"
+		end
+
+		-- Method 3: Manual fallback continues below...
+
+		-- Store original appearance for restore (only first time)
+		if not originalAppearance then
+			originalAppearance = {
+				bodyColors = {},
+				accessories = {},
+				clothing = {},
+				face = nil,
+			}
+
+			-- Store body colors
+			local myBodyColors = myChar:FindFirstChildOfClass("BodyColors")
+			if myBodyColors then
+				originalAppearance.bodyColors = {
+					HeadColor3 = myBodyColors.HeadColor3,
+					TorsoColor3 = myBodyColors.TorsoColor3,
+					LeftArmColor3 = myBodyColors.LeftArmColor3,
+					RightArmColor3 = myBodyColors.RightArmColor3,
+					LeftLegColor3 = myBodyColors.LeftLegColor3,
+					RightLegColor3 = myBodyColors.RightLegColor3,
+				}
+			end
+		end
+
+		-- Clone Body Colors (BodyColors object for R6)
+		local targetBodyColors = targetChar:FindFirstChildOfClass("BodyColors")
+		local myBodyColors = myChar:FindFirstChildOfClass("BodyColors")
+		if targetBodyColors and myBodyColors then
+			pcall(function()
+				myBodyColors.HeadColor3 = targetBodyColors.HeadColor3
+				myBodyColors.TorsoColor3 = targetBodyColors.TorsoColor3
+				myBodyColors.LeftArmColor3 = targetBodyColors.LeftArmColor3
+				myBodyColors.RightArmColor3 = targetBodyColors.RightArmColor3
+				myBodyColors.LeftLegColor3 = targetBodyColors.LeftLegColor3
+				myBodyColors.RightLegColor3 = targetBodyColors.RightLegColor3
+			end)
+		end
+
+		-- Clone Body Part Colors for R15 (part colors directly on MeshParts)
+		local r15Parts = {
+			"Head",
+			"UpperTorso",
+			"LowerTorso",
+			"LeftUpperArm",
+			"LeftLowerArm",
+			"LeftHand",
+			"RightUpperArm",
+			"RightLowerArm",
+			"RightHand",
+			"LeftUpperLeg",
+			"LeftLowerLeg",
+			"LeftFoot",
+			"RightUpperLeg",
+			"RightLowerLeg",
+			"RightFoot",
+		}
+
+		for _, partName in ipairs(r15Parts) do
+			local targetPart = targetChar:FindFirstChild(partName)
+			local myPart = myChar:FindFirstChild(partName)
+			if targetPart and myPart then
+				pcall(function()
+					myPart.Color = targetPart.Color
+					myPart.BrickColor = targetPart.BrickColor
+				end)
+			end
+		end
+
+		-- Clone CharacterMesh (for R6 body packages)
+		for _, child in pairs(myChar:GetChildren()) do
+			if child:IsA("CharacterMesh") then
+				child:Destroy()
+			end
+		end
+		for _, child in pairs(targetChar:GetChildren()) do
+			if child:IsA("CharacterMesh") then
+				pcall(function()
+					local cloned = child:Clone()
+					cloned.Parent = myChar
+				end)
+			end
+		end
+
+		-- Remove my current accessories
+		for _, child in pairs(myChar:GetChildren()) do
+			if child:IsA("Accessory") or child:IsA("Hat") then
+				child:Destroy()
+			end
+		end
+
+		-- Clone Accessories (Hats, Hair, etc) - Manual method (most reliable for exploits)
+		local accessoryCount = 0
+
+		-- Accessories to skip (can cause visual glitches)
+		local skipAccessoryTypes = {
+			["FaceFrontAttachment"] = true, -- Face accessories often cause issues
+			["FaceCenterAttachment"] = true,
+		}
+
+		for _, accessory in pairs(targetChar:GetChildren()) do
+			if accessory:IsA("Accessory") or accessory:IsA("Hat") then
+				local cloneSuccess = pcall(function()
+					local clonedAccessory = accessory:Clone()
+					local handle = clonedAccessory:FindFirstChild("Handle")
+
+					if not handle then
+						clonedAccessory:Destroy()
+						return
+					end
+
+					-- Check if this is a face accessory we should skip
+					local handleAttachmentCheck = handle:FindFirstChildOfClass("Attachment")
+					if handleAttachmentCheck and skipAccessoryTypes[handleAttachmentCheck.Name] then
+						clonedAccessory:Destroy()
+						return -- Skip this accessory
+					end
+
+					-- Remove any existing welds/constraints
+					for _, child in pairs(handle:GetChildren()) do
+						if
+							child:IsA("Weld")
+							or child:IsA("Motor6D")
+							or child:IsA("WeldConstraint")
+							or child:IsA("RigidConstraint")
+						then
+							child:Destroy()
+						end
+					end
+
+					-- Set handle properties
+					handle.Anchored = false
+					handle.CanCollide = false
+					handle.Massless = true
+
+					-- Parent accessory to character first
+					clonedAccessory.Parent = myChar
+
+					-- Find the attachment point on handle
+					local handleAttachment = handle:FindFirstChildOfClass("Attachment")
+					local attachName = handleAttachment and handleAttachment.Name or "HatAttachment"
+
+					-- Common attachment names -> body part mapping
+					local attachmentToPartMap = {
+						["HatAttachment"] = "Head",
+						["HairAttachment"] = "Head",
+						["FaceFrontAttachment"] = "Head",
+						["FaceCenterAttachment"] = "Head",
+						["NeckAttachment"] = "Head",
+						["LeftShoulderAttachment"] = "LeftUpperArm",
+						["RightShoulderAttachment"] = "RightUpperArm",
+						["BodyFrontAttachment"] = "UpperTorso",
+						["BodyBackAttachment"] = "UpperTorso",
+						["WaistFrontAttachment"] = "LowerTorso",
+						["WaistBackAttachment"] = "LowerTorso",
+						["WaistCenterAttachment"] = "LowerTorso",
+						["LeftGripAttachment"] = "LeftHand",
+						["RightGripAttachment"] = "RightHand",
+					}
+
+					-- Find matching attachment on our character
+					local targetAttachment = nil
+					local targetPart = nil
+
+					for _, part in pairs(myChar:GetDescendants()) do
+						if part:IsA("Attachment") and part.Name == attachName then
+							targetAttachment = part
+							targetPart = part.Parent
+							break
+						end
+					end
+
+					-- If no matching attachment found, try using the mapping
+					if not targetAttachment then
+						local partName = attachmentToPartMap[attachName] or "Head"
+						targetPart = myChar:FindFirstChild(partName) or myChar:FindFirstChild("Head")
+					end
+
+					if targetPart then
+						-- Position handle at the correct location
+						if targetAttachment and handleAttachment then
+							-- Calculate correct position using attachment offsets
+							handle.CFrame = targetPart.CFrame
+								* targetAttachment.CFrame
+								* handleAttachment.CFrame:Inverse()
+						else
+							-- Default: position on top of head
+							if targetPart.Name == "Head" then
+								handle.CFrame = targetPart.CFrame * CFrame.new(0, targetPart.Size.Y / 2 + 0.1, 0)
+							else
+								handle.CFrame = targetPart.CFrame
+							end
+						end
+
+						-- Create weld
+						local weld = Instance.new("Weld")
+						weld.Name = "AccessoryWeld"
+						weld.Part0 = targetPart
+						weld.Part1 = handle
+						weld.C0 = targetPart.CFrame:ToObjectSpace(handle.CFrame)
+						weld.C1 = CFrame.new()
+						weld.Parent = handle
+					end
+
+					accessoryCount = accessoryCount + 1
+				end)
+
+				if not cloneSuccess then
+					-- Silent fail, continue to next accessory
+				end
+			end
+		end
+
+		-- Clone Shirt
+		local myShirt = myChar:FindFirstChildOfClass("Shirt")
+		local targetShirt = targetChar:FindFirstChildOfClass("Shirt")
+		if targetShirt then
+			if not myShirt then
+				myShirt = Instance.new("Shirt", myChar)
+			end
+			pcall(function()
+				myShirt.ShirtTemplate = targetShirt.ShirtTemplate
+			end)
+		elseif myShirt then
+			myShirt:Destroy()
+		end
+
+		-- Clone Pants
+		local myPants = myChar:FindFirstChildOfClass("Pants")
+		local targetPants = targetChar:FindFirstChildOfClass("Pants")
+		if targetPants then
+			if not myPants then
+				myPants = Instance.new("Pants", myChar)
+			end
+			pcall(function()
+				myPants.PantsTemplate = targetPants.PantsTemplate
+			end)
+		elseif myPants then
+			myPants:Destroy()
+		end
+
+		-- Clone Face (comprehensive - handles all face types)
+		local myHead = myChar:FindFirstChild("Head")
+		local targetHead = targetChar:FindFirstChild("Head")
+		local faceCloned = false
+		if myHead and targetHead then
+			-- Check if head types are compatible (same type = can copy face)
+			local function getHeadType(head)
+				if head:IsA("MeshPart") then
+					return "MeshPart", head.MeshId or ""
+				else
+					local mesh = head:FindFirstChildOfClass("SpecialMesh")
+					if mesh then
+						return "SpecialMesh", mesh.MeshId or ""
+					else
+						return "Part", ""
+					end
+				end
+			end
+
+			local myHeadType, myMeshId = getHeadType(myHead)
+			local targetHeadType, targetMeshId = getHeadType(targetHead)
+
+			-- Only clone face if head types are similar
+			local headTypesMatch = (myHeadType == targetHeadType)
+			local meshIdsMatch = (myMeshId == targetMeshId) or (myMeshId == "" and targetMeshId == "")
+
+			if not headTypesMatch then
+				-- Different head types - skip face cloning, keep original
+				-- Just copy head color
+				pcall(function()
+					myHead.Color = targetHead.Color
+					myHead.BrickColor = targetHead.BrickColor
+				end)
+			else
+				-- Same head type - can safely copy face
+				faceCloned = true
+
+				-- 1. Remove ALL existing face-related things from our head
+				for _, child in pairs(myHead:GetChildren()) do
+					if child:IsA("Decal") or child:IsA("Texture") or child:IsA("SurfaceAppearance") then
+						child:Destroy()
+					end
+				end
+
+				-- 2. Copy all Decals from target head
+				for _, child in pairs(targetHead:GetChildren()) do
+					if child:IsA("Decal") then
+						pcall(function()
+							local newDecal = child:Clone()
+							newDecal.Parent = myHead
+						end)
+					end
+				end
+
+				-- 3. Copy all Textures from target head
+				for _, child in pairs(targetHead:GetChildren()) do
+					if child:IsA("Texture") then
+						pcall(function()
+							local newTexture = child:Clone()
+							newTexture.Parent = myHead
+						end)
+					end
+				end
+
+				-- 4. Copy SurfaceAppearance (for modern PBR textures)
+				local targetSA = targetHead:FindFirstChildOfClass("SurfaceAppearance")
+				if targetSA then
+					pcall(function()
+						local newSA = targetSA:Clone()
+						newSA.Parent = myHead
+					end)
+				end
+
+				-- 5. Try to copy MeshPart texture (if head is MeshPart)
+				if myHead:IsA("MeshPart") and targetHead:IsA("MeshPart") then
+					pcall(function()
+						myHead.TextureID = targetHead.TextureID
+					end)
+				end
+
+				-- 6. Try to copy SpecialMesh properties (classic heads)
+				pcall(function()
+					local targetMesh = targetHead:FindFirstChildOfClass("SpecialMesh")
+					local myMesh = myHead:FindFirstChildOfClass("SpecialMesh")
+					if targetMesh then
+						if not myMesh then
+							myMesh = Instance.new("SpecialMesh", myHead)
+						end
+						myMesh.MeshId = targetMesh.MeshId
+						myMesh.TextureId = targetMesh.TextureId
+						myMesh.Scale = targetMesh.Scale
+						myMesh.Offset = targetMesh.Offset
+						myMesh.MeshType = targetMesh.MeshType
+					end
+				end)
+
+				-- 7. Copy head color
+				pcall(function()
+					myHead.Color = targetHead.Color
+					myHead.BrickColor = targetHead.BrickColor
+					if myHead:IsA("MeshPart") and targetHead:IsA("MeshPart") then
+						myHead.Material = targetHead.Material
+					end
+				end)
+
+				-- 8. Copy FaceControls (for dynamic/animated heads)
+				local targetFaceControls = targetHead:FindFirstChild("FaceControls")
+				if targetFaceControls then
+					local myFaceControls = myHead:FindFirstChild("FaceControls")
+					if myFaceControls then
+						pcall(function()
+							-- Copy facial expression properties
+							for _, prop in pairs({ "MouthOpen", "LeftBrowLower", "RightBrowLower" }) do
+								if targetFaceControls[prop] then
+									myFaceControls[prop] = targetFaceControls[prop]
+								end
+							end
+						end)
+					end
+				end
+			end -- end of else (same head type)
+		end
+
+		-- Clone T-Shirt
+		local myTShirt = myChar:FindFirstChildOfClass("ShirtGraphic")
+		local targetTShirt = targetChar:FindFirstChildOfClass("ShirtGraphic")
+		if targetTShirt then
+			if not myTShirt then
+				myTShirt = Instance.new("ShirtGraphic", myChar)
+			end
+			pcall(function()
+				myTShirt.Graphic = targetTShirt.Graphic
+			end)
+		elseif myTShirt then
+			myTShirt:Destroy()
+		end
+
+		local faceStatus = faceCloned and "face: ✓" or "face: kept original"
+		return true, "Cloned! (" .. accessoryCount .. " acc, " .. faceStatus .. ")"
+	end
+
+	-- Clone Button
+	local BtnClone = Instance.new("TextButton", CloneContent)
+	BtnClone.Text = "🎭 CLONE APPEARANCE"
+	BtnClone.Size = UDim2.new(0.94, 0, 0, 35)
+	BtnClone.BackgroundColor3 = C_GREEN
+	BtnClone.TextColor3 = C_TEXT
+	BtnClone.Font = Enum.Font.GothamBold
+	BtnClone.TextSize = 12
+	BtnClone.BorderSizePixel = 0
+	BtnClone.ZIndex = 205
+	Instance.new("UICorner", BtnClone).CornerRadius = UDim.new(0, 6)
+	local cloneStroke = Instance.new("UIStroke", BtnClone)
+	cloneStroke.Color = C_GREEN
+	cloneStroke.Thickness = 1
+
+	-- Status Label
+	local CloneStatus = Instance.new("TextLabel", CloneContent)
+	CloneStatus.Text = "Select a player and click Clone"
+	CloneStatus.Size = UDim2.new(0.94, 0, 0, 20)
+	CloneStatus.BackgroundTransparency = 1
+	CloneStatus.TextColor3 = C_TEXT_DIM
+	CloneStatus.Font = Enum.Font.Code
+	CloneStatus.TextSize = 10
+	CloneStatus.ZIndex = 205
+
+	-- Info Label
+	local CloneInfo = Instance.new("TextLabel", CloneContent)
+	CloneInfo.Text = "⚠️ Client-side only (only you see it)"
+	CloneInfo.Size = UDim2.new(0.94, 0, 0, 18)
+	CloneInfo.BackgroundTransparency = 1
+	CloneInfo.TextColor3 = C_TEXT_DIM
+	CloneInfo.Font = Enum.Font.Code
+	CloneInfo.TextSize = 9
+	CloneInfo.ZIndex = 205
+
+	BtnOpenClone.MouseButton1Click:Connect(function()
+		UpdateClonePlayerList()
+		CloneWindow.Visible = true
+	end)
+
+	BtnClone.MouseButton1Click:Connect(function()
+		if not cloneTarget then
+			CloneStatus.Text = "Please select a player first!"
+			CloneStatus.TextColor3 = C_RED
+			return
+		end
+
+		if not cloneTarget.Parent then
+			CloneStatus.Text = "Player left the game!"
+			CloneStatus.TextColor3 = C_RED
+			cloneTarget = nil
+			CloneSelectedDisplay.Text = "Target: None"
+			CloneSelectedDisplay.TextColor3 = C_TEXT_DIM
+			UpdateClonePlayerList()
+			return
+		end
+
+		local success, msg = ClonePlayerAppearance()
+		if success then
+			CloneStatus.Text = "✅ " .. msg
+			CloneStatus.TextColor3 = C_GREEN
+		else
+			CloneStatus.Text = "❌ Failed: " .. (msg or "Unknown error")
+			CloneStatus.TextColor3 = C_RED
+		end
+	end)
+
 	-- Cleanup Hook
 	local oldCleanup = UIHandlers.CleanupTools
 	UIHandlers.CleanupTools = function()
@@ -2947,12 +3919,23 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		if ManipWindow then
 			ManipWindow:Destroy()
 		end
+		if FollowWindow then
+			FollowWindow:Destroy()
+		end
+		if CloneWindow then
+			CloneWindow:Destroy()
+		end
 		if followLoop then
 			followLoop:Disconnect()
 		end
 		if camAssistLoop then
 			camAssistLoop:Disconnect()
 		end
+		if mirrorAnimLoop then
+			mirrorAnimLoop:Disconnect()
+			mirrorAnimLoop = nil
+		end
+		stopAllMirroredAnims()
 		if auraLoop then
 			auraLoop:Disconnect()
 			auraLoop = nil
