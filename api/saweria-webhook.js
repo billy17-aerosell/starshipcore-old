@@ -214,9 +214,9 @@ export default async function handler(req, res) {
     const urlToken = req.query.token;
     const hasValidToken = WEBHOOK_SECRET && urlToken === WEBHOOK_SECRET;
     
-    // 2. IP Whitelist Check (SECONDARY)
+    // 2. IP Whitelist Check (SECONDARY - for when no secret is configured)
     const SAWERIA_ALLOWED_IPS = [
-        '157.230.37.7',     // Saweria Singapore
+        '157.230.37.7',     // Saweria Singapore (confirmed)
         '157.230.37.0/24',  // Saweria IP range
     ];
     
@@ -232,16 +232,10 @@ export default async function handler(req, res) {
         return clientIP === ip;
     });
 
-    // 3. User-Agent Check (TERTIARY)
-    const userAgent = req.headers['user-agent'] || '';
-    const isSaweriaAgent = userAgent.includes('Saweria');
-
-    // Pass if ANY of these is true:
-    // - Has valid secret token
-    // - IP is whitelisted
-    // - User-Agent is Saweria
-    if (!hasValidToken && !isAllowedIP && !isSaweriaAgent) {
-        console.warn(`⚠️ Blocked webhook - IP: ${clientIP}, Token: ${urlToken ? 'provided' : 'missing'}, UA: ${userAgent}`);
+    // SECURITY: Only pass if has valid token OR IP is whitelisted
+    // User-Agent is NOT checked because it can be easily spoofed!
+    if (!hasValidToken && !isAllowedIP) {
+        console.warn(`🚫 BLOCKED webhook attempt - IP: ${clientIP}, Token: ${urlToken ? 'invalid' : 'missing'}`);
         return res.status(403).json({ error: 'Forbidden - Unauthorized source' });
     }
 
