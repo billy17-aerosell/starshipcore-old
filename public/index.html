@@ -1037,6 +1037,191 @@
         #section-summary {
             display: none;
         }
+
+        /* ============ WAITING CARD ============ */
+        .waiting-card, .success-card {
+            max-width: 500px;
+            margin: 0 auto;
+            background: var(--white);
+            border: var(--border-thick);
+            box-shadow: var(--shadow);
+            padding: 40px 30px;
+            text-align: center;
+        }
+
+        .waiting-icon, .success-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            animation: bounce 1s ease infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .waiting-card h2, .success-card h2 {
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .waiting-card > p, .success-card > p {
+            color: #666;
+            margin-bottom: 25px;
+        }
+
+        .waiting-details, .success-details {
+            background: var(--bg-alt);
+            border: var(--border);
+            padding: 20px;
+            margin-bottom: 25px;
+            text-align: left;
+        }
+
+        .waiting-row, .success-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 2px dashed var(--black);
+        }
+
+        .waiting-row:last-child, .success-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .waiting-row span, .success-row span {
+            color: #666;
+        }
+
+        .waiting-progress {
+            margin-bottom: 25px;
+        }
+
+        .progress-bar {
+            height: 12px;
+            background: var(--bg-alt);
+            border: var(--border);
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent-3);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .waiting-status {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .cancel-btn {
+            background: var(--white);
+            border: var(--border);
+            padding: 12px 25px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .cancel-btn:hover {
+            background: var(--accent-1);
+            color: var(--white);
+        }
+
+        /* ============ SUCCESS CARD ============ */
+        .success-card {
+            background: linear-gradient(135deg, #e8f5e9 0%, var(--white) 100%);
+        }
+
+        .success-icon {
+            animation: celebrate 0.5s ease;
+        }
+
+        @keyframes celebrate {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .success-status-badge {
+            background: var(--accent-3);
+            padding: 5px 12px;
+            border: 2px solid var(--black);
+        }
+
+        .success-instructions {
+            background: var(--accent-5);
+            border: var(--border);
+            padding: 20px;
+            margin-bottom: 25px;
+            text-align: left;
+        }
+
+        .success-instructions h4 {
+            margin-bottom: 15px;
+        }
+
+        .success-instructions ol {
+            padding-left: 20px;
+            line-height: 1.8;
+        }
+
+        .success-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .success-btn {
+            flex: 1;
+            min-width: 150px;
+            padding: 15px 20px;
+            border: var(--border);
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 0.95rem;
+            text-decoration: none;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .success-btn.discord {
+            background: var(--accent-2);
+            color: var(--white);
+        }
+
+        .success-btn.primary {
+            background: var(--accent-3);
+            color: var(--black);
+        }
+
+        .success-btn:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: var(--shadow);
+        }
+
+        @media (max-width: 500px) {
+            .waiting-card, .success-card {
+                padding: 30px 20px;
+            }
+
+            .waiting-icon, .success-icon {
+                font-size: 3rem;
+            }
+
+            .success-buttons {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1235,6 +1420,85 @@
                     <span class="icon">💳</span>
                     <span id="pay-button-text">Complete Payment</span>
                 </button>
+            </div>
+        </section>
+
+        <!-- Waiting for Payment Section -->
+        <section class="section" id="section-waiting" style="display: none;">
+            <div class="waiting-card">
+                <div class="waiting-icon">⏳</div>
+                <h2>Menunggu Konfirmasi Pembayaran</h2>
+                <p>Kami sedang mengecek status pembayaran Anda...</p>
+                
+                <div class="waiting-details">
+                    <div class="waiting-row">
+                        <span>Platform:</span>
+                        <strong id="waiting-platform">-</strong>
+                    </div>
+                    <div class="waiting-row">
+                        <span>Duration:</span>
+                        <strong id="waiting-duration">-</strong>
+                    </div>
+                    <div class="waiting-row">
+                        <span>Roblox ID:</span>
+                        <strong id="waiting-userid">-</strong>
+                    </div>
+                </div>
+                
+                <div class="waiting-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <p class="waiting-status" id="waiting-status">Mengecek status... <span id="check-count">0</span>/20</p>
+                </div>
+                
+                <button class="cancel-btn" onclick="cancelWaiting()">Batalkan & Mulai Ulang</button>
+            </div>
+        </section>
+
+        <!-- Success Section -->
+        <section class="section" id="section-success" style="display: none;">
+            <div class="success-card">
+                <div class="success-icon">🎉</div>
+                <h2>VIP Berhasil Diaktifkan!</h2>
+                <p>Selamat! Akun Anda sekarang sudah VIP.</p>
+                
+                <div class="success-details">
+                    <div class="success-row">
+                        <span>Username:</span>
+                        <strong id="success-username">-</strong>
+                    </div>
+                    <div class="success-row">
+                        <span>Platform:</span>
+                        <strong id="success-platform">-</strong>
+                    </div>
+                    <div class="success-row">
+                        <span>Duration:</span>
+                        <strong id="success-duration">-</strong>
+                    </div>
+                    <div class="success-row">
+                        <span>Status:</span>
+                        <strong class="success-status-badge">✅ ACTIVE</strong>
+                    </div>
+                    <div class="success-row" id="success-expires-row">
+                        <span>Expires:</span>
+                        <strong id="success-expires">-</strong>
+                    </div>
+                </div>
+                
+                <div class="success-instructions">
+                    <h4>📖 Cara Menggunakan:</h4>
+                    <ol>
+                        <li>Buka Roblox dan jalankan game</li>
+                        <li>Execute script Starship</li>
+                        <li>VIP features sudah aktif otomatis!</li>
+                    </ol>
+                </div>
+                
+                <div class="success-buttons">
+                    <a href="https://discord.gg/BUJuXA8Z" target="_blank" class="success-btn discord">💬 Join Discord</a>
+                    <button class="success-btn primary" onclick="resetToHome()">🏠 Kembali ke Home</button>
+                </div>
             </div>
         </section>
     </div>
@@ -1741,10 +2005,29 @@
 
         function openSaweria() {
             if (pendingPaymentData) {
+                // Save pending order to localStorage
+                const pendingOrder = {
+                    platform: selectedPlatform,
+                    platformName: PRICING[selectedPlatform].name,
+                    duration: selectedDuration,
+                    durationLabel: PRICING[selectedPlatform].durations[selectedDuration].label,
+                    userId: validatedUserId,
+                    username: validatedUsername,
+                    amount: pendingPaymentData.amount,
+                    message: pendingPaymentData.message,
+                    timestamp: new Date().toISOString()
+                };
+                localStorage.setItem('starship_pending_order', JSON.stringify(pendingOrder));
+
+                // Open Saweria
                 window.open(pendingPaymentData.saweriaUrl, '_blank');
-                showToast('Jangan lupa paste nominal & pesan!', 'success');
+                
+                // Close modal and show waiting page
+                closePaymentModal();
+                showWaitingPage();
+                
+                showToast('Jangan lupa paste nominal & pesan di Saweria!', 'success');
             }
-            closePaymentModal();
         }
 
         function copyToClipboard(type) {
@@ -1821,6 +2104,158 @@
                 }
             }
         }
+
+        // ============ WAITING & POLLING ============
+        let pollingInterval = null;
+        let checkCount = 0;
+        const MAX_CHECKS = 20;
+        const CHECK_INTERVAL = 5000; // 5 seconds
+
+        function showWaitingPage() {
+            const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
+            if (!pendingOrder) return;
+
+            // Hide all other sections
+            document.getElementById('section-platform').style.display = 'none';
+            document.getElementById('section-duration').style.display = 'none';
+            document.getElementById('section-userid').style.display = 'none';
+            document.getElementById('section-summary').style.display = 'none';
+            document.querySelector('.steps-tracker').style.display = 'none';
+            document.querySelector('.features-bar').style.display = 'none';
+
+            // Show waiting section
+            document.getElementById('section-waiting').style.display = 'block';
+            document.getElementById('waiting-platform').textContent = pendingOrder.platformName;
+            document.getElementById('waiting-duration').textContent = pendingOrder.durationLabel;
+            document.getElementById('waiting-userid').textContent = pendingOrder.userId;
+
+            // Start polling
+            startPolling(pendingOrder);
+        }
+
+        function startPolling(pendingOrder) {
+            checkCount = 0;
+            updatePollingProgress();
+
+            pollingInterval = setInterval(async () => {
+                checkCount++;
+                updatePollingProgress();
+
+                try {
+                    const response = await fetch(`/api/roblox-user?userId=${pendingOrder.userId}&checkVip=true&platform=${pendingOrder.platform}`);
+                    const data = await response.json();
+
+                    if (data.isVip) {
+                        // Payment confirmed!
+                        clearInterval(pollingInterval);
+                        localStorage.removeItem('starship_pending_order');
+                        showSuccessPage(data);
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+
+                if (checkCount >= MAX_CHECKS) {
+                    clearInterval(pollingInterval);
+                    document.getElementById('waiting-status').innerHTML = 
+                        '⚠️ Belum dikonfirmasi. <a href="#" onclick="restartPolling()">Cek lagi</a> atau hubungi admin.';
+                }
+            }, CHECK_INTERVAL);
+        }
+
+        function updatePollingProgress() {
+            const progress = (checkCount / MAX_CHECKS) * 100;
+            document.getElementById('progress-fill').style.width = `${progress}%`;
+            document.getElementById('check-count').textContent = checkCount;
+        }
+
+        function restartPolling() {
+            const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
+            if (pendingOrder) {
+                startPolling(pendingOrder);
+            }
+            return false;
+        }
+
+        function cancelWaiting() {
+            if (pollingInterval) clearInterval(pollingInterval);
+            localStorage.removeItem('starship_pending_order');
+            resetToHome();
+        }
+
+        // ============ SUCCESS PAGE ============
+        function showSuccessPage(vipData) {
+            // Hide waiting
+            document.getElementById('section-waiting').style.display = 'none';
+
+            // Update success content
+            document.getElementById('success-username').textContent = vipData.username;
+            document.getElementById('success-platform').textContent = vipData.platform.toUpperCase();
+            document.getElementById('success-duration').textContent = vipData.duration;
+
+            if (vipData.isLifetime) {
+                document.getElementById('success-expires-row').style.display = 'none';
+            } else {
+                document.getElementById('success-expires').textContent = 
+                    vipData.expiresAt ? new Date(vipData.expiresAt).toLocaleDateString('id-ID') : '-';
+            }
+
+            // Show success section
+            document.getElementById('section-success').style.display = 'block';
+            document.getElementById('section-success').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            showToast('🎉 VIP berhasil diaktifkan!', 'success');
+        }
+
+        function resetToHome() {
+            if (pollingInterval) clearInterval(pollingInterval);
+            localStorage.removeItem('starship_pending_order');
+
+            // Reset state
+            selectedPlatform = null;
+            selectedDuration = null;
+            validatedUserId = null;
+            validatedUsername = null;
+
+            // Show all sections again
+            document.querySelector('.steps-tracker').style.display = 'flex';
+            document.querySelector('.features-bar').style.display = 'flex';
+            document.getElementById('section-platform').style.display = 'block';
+            document.getElementById('section-duration').style.display = 'none';
+            document.getElementById('section-userid').style.display = 'none';
+            document.getElementById('section-summary').style.display = 'none';
+            document.getElementById('section-waiting').style.display = 'none';
+            document.getElementById('section-success').style.display = 'none';
+
+            // Reset UI
+            document.querySelectorAll('.platform-card').forEach(c => c.classList.remove('selected'));
+            document.getElementById('userid-input').value = '';
+            document.getElementById('user-preview').classList.remove('visible');
+            updateSteps(1);
+
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // ============ PAGE LOAD - CHECK PENDING ORDER ============
+        document.addEventListener('DOMContentLoaded', () => {
+            const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
+            
+            if (pendingOrder) {
+                // Check if order is not too old (max 30 minutes)
+                const orderTime = new Date(pendingOrder.timestamp);
+                const now = new Date();
+                const minutesElapsed = (now - orderTime) / (1000 * 60);
+
+                if (minutesElapsed < 30) {
+                    showWaitingPage();
+                } else {
+                    // Order too old, clear it
+                    localStorage.removeItem('starship_pending_order');
+                }
+            }
+        });
 
         // ============ UTILITIES ============
         function formatNumber(num) {

@@ -1,4 +1,27 @@
 // Proxy API for Roblox User validation (bypasses CORS)
+// Also supports VIP status check with ?checkVip=true&platform=mobile
+
+let redis = null;
+let redisInitAttempted = false;
+
+async function getRedis() {
+    if (!redisInitAttempted) {
+        try {
+            const redisModule = await import('../lib/redis.js');
+            redis = redisModule.default;
+        } catch (error) {
+            console.error('Redis module load failed:', error.message);
+            redis = null;
+        }
+        redisInitAttempted = true;
+    }
+    return redis;
+}
+
+const PLATFORM_CONFIG = {
+    pc: { whitelistKey: 'starship:whitelist' },
+    mobile: { whitelistKey: 'starship:mobile_whitelist' }
+};
 
 export default async function handler(req, res) {
     // Set CORS headers
@@ -14,8 +37,69 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { userId, username } = req.query;
+    const { userId, username, checkVip, platform = 'mobile' } = req.query;
 
+    // ============ VIP CHECK MODE ============
+    if (checkVip === 'true' && userId) {
+        try {
+            const redisClient = await getRedis();
+            if (!redisClient) {
+                return res.status(503).json({ error: 'Database unavailable' });
+            }
+
+            if (!['mobile', 'pc'].includes(platform)) {
+                return res.status(400).json({ error: 'Invalid platform' });
+            }
+
+            const config = PLATFORM_CONFIG[platform];
+            const whitelistData = await redisClient.get(config.whitelistKey);
+            const whitelist = whitelistData ? JSON.parse(whitelistData) : {};
+
+            const user = whitelist[userId];
+
+            if (!user) {
+                return res.status(200).json({
+                    found: false,
+                    isVip: false,
+                    message: 'User not found in VIP list'
+                });
+            }
+
+            // Check if expired
+            let isExpired = false;
+            let daysRemaining = null;
+
+            if (user.expiresAt) {
+                const expiryDate = new Date(user.expiresAt);
+                const now = new Date();
+                isExpired = expiryDate < now;
+                
+                if (!isExpired) {
+                    daysRemaining = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
+                }
+            }
+
+            return res.status(200).json({
+                found: true,
+                isVip: user.status === 'active' && !isExpired,
+                userId: user.userId,
+                username: user.username,
+                platform: user.platform,
+                duration: user.duration,
+                status: isExpired ? 'expired' : user.status,
+                addedAt: user.addedAt,
+                expiresAt: user.expiresAt,
+                daysRemaining: user.expiresAt ? (isExpired ? 0 : daysRemaining) : 'lifetime',
+                isLifetime: !user.expiresAt
+            });
+
+        } catch (error) {
+            console.error('Check VIP error:', error);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+
+    // ============ ROBLOX USER LOOKUP MODE ============
     try {
         let userData = null;
 
