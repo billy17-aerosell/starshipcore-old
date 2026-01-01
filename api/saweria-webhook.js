@@ -44,7 +44,7 @@ const PRICING = {
             '3d': { label: '3 Days', price: 5000, days: 3 },
             '7d': { label: '7 Days', price: 10000, days: 7 },
             '14d': { label: '14 Days', price: 25000, days: 14 },
-            'lifetime': { label: 'Lifetime', price: 75000, days: null }
+            'lifetime': { label: 'Lifetime', price: 100000, days: null }
         }
     },
     pc: {
