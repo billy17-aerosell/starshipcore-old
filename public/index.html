@@ -1252,6 +1252,270 @@
     <!-- Toast Notification -->
     <div class="toast" id="toast"></div>
 
+    <!-- Payment Instruction Modal -->
+    <div class="modal-overlay" id="payment-modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📋 Instruksi Pembayaran</h3>
+                <button class="modal-close" onclick="closePaymentModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-subtitle">Karena Saweria tidak support auto-fill, silakan copy informasi berikut:</p>
+                
+                <div class="copy-section">
+                    <label>1️⃣ Nominal Pembayaran:</label>
+                    <div class="copy-box">
+                        <span id="modal-amount">Rp 0</span>
+                        <button class="copy-btn" onclick="copyToClipboard('amount')">📋 Copy</button>
+                    </div>
+                </div>
+                
+                <div class="copy-section">
+                    <label>2️⃣ Pesan (WAJIB diisi persis):</label>
+                    <div class="copy-box message-box">
+                        <code id="modal-message">-</code>
+                        <button class="copy-btn" onclick="copyToClipboard('message')">📋 Copy</button>
+                    </div>
+                </div>
+                
+                <div class="modal-warning">
+                    ⚠️ <strong>PENTING:</strong> Paste pesan di atas ke kolom "Pesan" di Saweria agar VIP otomatis aktif!
+                </div>
+                
+                <div class="modal-steps">
+                    <p><strong>Langkah:</strong></p>
+                    <ol>
+                        <li>Copy nominal & pesan di atas</li>
+                        <li>Klik "Buka Saweria" di bawah</li>
+                        <li>Paste nominal ke kolom "Nominal"</li>
+                        <li>Paste pesan ke kolom "Pesan"</li>
+                        <li>Selesaikan pembayaran</li>
+                        <li>VIP aktif dalam 5 menit! 🎉</li>
+                    </ol>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn secondary" onclick="closePaymentModal()">Batal</button>
+                <button class="modal-btn primary" onclick="openSaweria()">🚀 Buka Saweria</button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        
+        .modal-content {
+            background: var(--white);
+            border: var(--border-thick);
+            box-shadow: 10px 10px 0 var(--black);
+            max-width: 500px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: var(--border);
+            background: var(--accent-4);
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.3rem;
+            text-transform: uppercase;
+        }
+        
+        .modal-close {
+            background: var(--black);
+            color: var(--white);
+            border: none;
+            width: 35px;
+            height: 35px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-close:hover {
+            background: var(--accent-1);
+        }
+        
+        .modal-body {
+            padding: 25px;
+        }
+        
+        .modal-subtitle {
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+            color: #666;
+        }
+        
+        .copy-section {
+            margin-bottom: 20px;
+        }
+        
+        .copy-section label {
+            display: block;
+            font-weight: 700;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .copy-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-alt);
+            border: var(--border);
+            padding: 12px 15px;
+        }
+        
+        .copy-box span, .copy-box code {
+            flex: 1;
+            font-family: 'Space Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+        
+        .copy-box code {
+            color: var(--accent-2);
+            word-break: break-all;
+        }
+        
+        .copy-btn {
+            background: var(--accent-3);
+            border: 2px solid var(--black);
+            padding: 8px 12px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+        
+        .copy-btn:hover {
+            background: var(--accent-4);
+            transform: translate(-2px, -2px);
+            box-shadow: 3px 3px 0 var(--black);
+        }
+        
+        .copy-btn.copied {
+            background: var(--accent-3);
+        }
+        
+        .modal-warning {
+            background: var(--accent-1);
+            color: var(--white);
+            padding: 15px;
+            border: var(--border);
+            margin: 20px 0;
+            font-size: 0.9rem;
+        }
+        
+        .modal-steps {
+            background: var(--bg-alt);
+            border: var(--border);
+            padding: 15px 15px 15px 20px;
+        }
+        
+        .modal-steps p {
+            margin: 0 0 10px 0;
+            font-size: 0.9rem;
+        }
+        
+        .modal-steps ol {
+            margin: 0;
+            padding-left: 20px;
+            font-size: 0.85rem;
+            line-height: 1.8;
+        }
+        
+        .modal-footer {
+            display: flex;
+            gap: 15px;
+            padding: 20px;
+            border-top: var(--border);
+            background: var(--bg-alt);
+        }
+        
+        .modal-btn {
+            flex: 1;
+            padding: 15px;
+            border: var(--border);
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        
+        .modal-btn.secondary {
+            background: var(--white);
+            color: var(--black);
+        }
+        
+        .modal-btn.primary {
+            background: var(--accent-1);
+            color: var(--white);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .modal-btn:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: var(--shadow);
+        }
+        
+        @media (max-width: 500px) {
+            .modal-content {
+                max-height: 85vh;
+            }
+            
+            .modal-header h3 {
+                font-size: 1.1rem;
+            }
+            
+            .modal-body {
+                padding: 20px;
+            }
+            
+            .copy-box {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+            
+            .copy-btn {
+                text-align: center;
+            }
+            
+            .modal-footer {
+                flex-direction: column;
+            }
+        }
+    </style>
+
     <script>
         // ============ PRICING ============
         const PRICING = {
@@ -1442,6 +1706,8 @@
         }
 
         // ============ PAYMENT ============
+        let pendingPaymentData = null;
+
         function proceedToPayment() {
             if (!selectedPlatform || !selectedDuration || !validatedUserId) {
                 showToast('Complete all steps first!', 'error');
@@ -1452,17 +1718,88 @@
             const durationData = platformData.durations[selectedDuration];
 
             const message = `${selectedPlatform.toUpperCase()}:${selectedDuration}:${validatedUserId}`;
-            const encodedMessage = encodeURIComponent(message);
             const amount = durationData.price;
 
-            const saweriaUrl = `https://saweria.co/${SAWERIA_USERNAME}?amount=${amount}&message=${encodedMessage}`;
+            // Store payment data for modal
+            pendingPaymentData = {
+                message: message,
+                amount: amount,
+                saweriaUrl: `https://saweria.co/${SAWERIA_USERNAME}`
+            };
 
-            showToast('Redirecting to payment...', 'success');
+            // Update modal content
+            document.getElementById('modal-amount').textContent = `Rp ${formatNumber(amount)}`;
+            document.getElementById('modal-message').textContent = message;
 
-            setTimeout(() => {
-                window.open(saweriaUrl, '_blank');
-            }, 500);
+            // Show modal
+            document.getElementById('payment-modal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
         }
+
+        function closePaymentModal() {
+            document.getElementById('payment-modal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        function openSaweria() {
+            if (pendingPaymentData) {
+                window.open(pendingPaymentData.saweriaUrl, '_blank');
+                showToast('Jangan lupa paste nominal & pesan!', 'success');
+            }
+            closePaymentModal();
+        }
+
+        function copyToClipboard(type) {
+            if (!pendingPaymentData) return;
+
+            let textToCopy = '';
+            let buttonSelector = '';
+
+            if (type === 'amount') {
+                textToCopy = pendingPaymentData.amount.toString();
+                buttonSelector = '.copy-section:first-of-type .copy-btn';
+            } else {
+                textToCopy = pendingPaymentData.message;
+                buttonSelector = '.copy-section:last-of-type .copy-btn';
+            }
+
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const btn = document.querySelector(buttonSelector);
+                const originalText = btn.textContent;
+                btn.textContent = '✓ Copied!';
+                btn.classList.add('copied');
+
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 1500);
+
+                showToast(`${type === 'amount' ? 'Nominal' : 'Pesan'} berhasil di-copy!`, 'success');
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = textToCopy;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showToast(`${type === 'amount' ? 'Nominal' : 'Pesan'} berhasil di-copy!`, 'success');
+            });
+        }
+
+        // Close modal on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closePaymentModal();
+            }
+        });
+
+        // Close modal on backdrop click
+        document.getElementById('payment-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'payment-modal') {
+                closePaymentModal();
+            }
+        });
 
         // ============ STEPS ============
         function updateSteps(currentStep) {
