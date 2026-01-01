@@ -2200,13 +2200,21 @@
 
         function updatePollingProgress() {
             const progress = (checkCount / MAX_CHECKS) * 100;
-            document.getElementById('progress-fill').style.width = `${progress}%`;
-            document.getElementById('check-count').textContent = checkCount;
+            const progressFill = document.getElementById('progress-fill');
+            const checkCountEl = document.getElementById('check-count');
+            
+            if (progressFill) progressFill.style.width = `${progress}%`;
+            if (checkCountEl) checkCountEl.textContent = checkCount;
         }
 
         function restartPolling() {
             const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
             if (pendingOrder) {
+                // Reset the status text first
+                const waitingStatus = document.getElementById('waiting-status');
+                if (waitingStatus) {
+                    waitingStatus.innerHTML = 'Mengecek status... <span id="check-count">0</span>/20';
+                }
                 startPolling(pendingOrder);
             }
             return false;
