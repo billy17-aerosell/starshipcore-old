@@ -207,8 +207,36 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    console.log('📥 Saweria webhook received');
-    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    // IP Whitelist Security - Only accept from Saweria servers
+    const SAWERIA_ALLOWED_IPS = [
+        '157.230.37.7',     // Saweria Singapore
+        '157.230.37.0/24',  // Saweria IP range (allow subnet)
+    ];
+    
+    const clientIP = req.headers['x-real-ip'] || 
+                     req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     'unknown';
+    
+    // Simple IP check (exact match or starts with subnet base)
+    const isAllowedIP = SAWERIA_ALLOWED_IPS.some(ip => {
+        if (ip.includes('/')) {
+            // Subnet check (simplified - just check prefix)
+            const baseIP = ip.split('/')[0].split('.').slice(0, 3).join('.');
+            return clientIP.startsWith(baseIP);
+        }
+        return clientIP === ip;
+    });
+
+    // Also check for Saweria user-agent as additional verification
+    const userAgent = req.headers['user-agent'] || '';
+    const isSaweriaAgent = userAgent.includes('Saweria');
+
+    if (!isAllowedIP && !isSaweriaAgent) {
+        console.warn(`⚠️ Blocked webhook from unauthorized IP: ${clientIP}`);
+        return res.status(403).json({ error: 'Forbidden - Unauthorized source' });
+    }
+
+    console.log('📥 Saweria webhook received from:', clientIP);
     console.log('Body:', JSON.stringify(req.body, null, 2));
 
     try {
