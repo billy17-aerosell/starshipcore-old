@@ -440,6 +440,172 @@
                 gap: 15px;
             }
 
+            /* Table View Styles */
+            .users-table-container {
+                overflow-x: auto;
+            }
+
+            .users-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 13px;
+            }
+
+            .users-table th,
+            .users-table td {
+                padding: 12px 10px;
+                text-align: left;
+                border-bottom: 1px solid #e0e0e0;
+            }
+
+            .users-table th {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                font-weight: 600;
+                position: sticky;
+                top: 0;
+                white-space: nowrap;
+            }
+
+            .users-table tr:hover {
+                background: rgba(102, 126, 234, 0.05);
+            }
+
+            .users-table .status-badge {
+                padding: 4px 10px;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: 600;
+                text-transform: uppercase;
+            }
+
+            .users-table .status-badge.active {
+                background: #d4edda;
+                color: #155724;
+            }
+
+            .users-table .status-badge.suspended {
+                background: #f8d7da;
+                color: #721c24;
+            }
+
+            .users-table .status-badge.expired {
+                background: #fff3cd;
+                color: #856404;
+            }
+
+            .users-table .type-badge {
+                padding: 4px 10px;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: 600;
+                text-transform: uppercase;
+                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                color: white;
+            }
+
+            .users-table .type-badge.owner {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            }
+
+            .users-table .action-btns {
+                display: flex;
+                gap: 5px;
+                flex-wrap: nowrap;
+            }
+
+            .users-table .action-btn {
+                padding: 5px 8px;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 11px;
+                white-space: nowrap;
+            }
+
+            .users-table .action-btn.reset { background: #667eea; color: white; }
+            .users-table .action-btn.suspend { background: #f5576c; color: white; }
+            .users-table .action-btn.activate { background: #38ef7d; color: white; }
+            .users-table .action-btn.remove { background: #dc3545; color: white; }
+
+            /* Search and Controls */
+            .list-controls {
+                display: flex;
+                gap: 15px;
+                margin-bottom: 15px;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+
+            .search-box {
+                flex: 1;
+                min-width: 200px;
+                padding: 10px 15px;
+                border: 2px solid #e0e0e0;
+                border-radius: 10px;
+                font-size: 14px;
+            }
+
+            .search-box:focus {
+                outline: none;
+                border-color: #667eea;
+            }
+
+            .view-toggle {
+                display: flex;
+                gap: 5px;
+            }
+
+            .view-btn {
+                padding: 8px 15px;
+                border: 2px solid #e0e0e0;
+                background: white;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 13px;
+            }
+
+            .view-btn.active {
+                border-color: #667eea;
+                background: #667eea;
+                color: white;
+            }
+
+            /* Pagination */
+            .pagination {
+                display: flex;
+                justify-content: center;
+                gap: 5px;
+                margin-top: 20px;
+                flex-wrap: wrap;
+            }
+
+            .pagination button {
+                padding: 8px 12px;
+                border: 2px solid #e0e0e0;
+                background: white;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 13px;
+            }
+
+            .pagination button.active {
+                border-color: #667eea;
+                background: #667eea;
+                color: white;
+            }
+
+            .pagination button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            .page-info {
+                padding: 8px 15px;
+                font-size: 13px;
+                color: #666;
+            }
+
             @media (max-width: 768px) {
                 .platform-tabs {
                     flex-direction: column;
@@ -452,6 +618,19 @@
                 .user-header {
                     flex-direction: column;
                     align-items: flex-start;
+                }
+
+                .users-table {
+                    font-size: 11px;
+                }
+
+                .users-table th,
+                .users-table td {
+                    padding: 8px 5px;
+                }
+
+                .list-controls {
+                    flex-direction: column;
                 }
             }
         </style>
@@ -667,10 +846,21 @@
                     <h2>👥 Whitelisted Users</h2>
                     <span class="badge pc" id="listBadge">💻 PC</span>
                 </div>
+                
+                <!-- Search and View Controls -->
+                <div class="list-controls">
+                    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search by username or ID..." oninput="filterAndDisplayUsers()">
+                    <div class="view-toggle">
+                        <button class="view-btn active" id="tableViewBtn" onclick="setView('table')">📊 Table</button>
+                        <button class="view-btn" id="cardViewBtn" onclick="setView('cards')">📋 Cards</button>
+                    </div>
+                </div>
+                
                 <div id="loadingIndicator" class="loading hidden">
                     Loading users...
                 </div>
                 <div id="usersList"></div>
+                <div id="pagination" class="pagination"></div>
             </div>
         </div>
 
@@ -681,6 +871,12 @@
             let currentPlatform = "pc";
             let pcUsers = {};
             let mobileUsers = {};
+            
+            // View and pagination state
+            let currentView = "table"; // 'table' or 'cards'
+            let currentPage = 1;
+            let itemsPerPage = 15;
+            let searchQuery = "";
 
             // Initialize on page load
             document.addEventListener("DOMContentLoaded", () => {
@@ -925,81 +1121,220 @@
             }
 
             function displayUsers() {
+                filterAndDisplayUsers();
+            }
+
+            function filterAndDisplayUsers() {
                 const container = document.getElementById("usersList");
+                const paginationEl = document.getElementById("pagination");
                 const users = currentPlatform === "pc" ? pcUsers : mobileUsers;
+                searchQuery = document.getElementById("searchBox").value.toLowerCase().trim();
 
                 if (!users || Object.keys(users).length === 0) {
                     container.innerHTML = `<p style="text-align: center; color: #999; padding: 40px;">No ${currentPlatform.toUpperCase()} users found</p>`;
+                    paginationEl.innerHTML = "";
                     return;
                 }
 
+                // Filter users by search query
+                let filteredUsers = Object.entries(users);
+                if (searchQuery) {
+                    filteredUsers = filteredUsers.filter(([userId, user]) => {
+                        const username = (user.username || "").toLowerCase();
+                        return username.includes(searchQuery) || userId.includes(searchQuery);
+                    });
+                }
+
+                // Sort by addedAt (newest first)
+                filteredUsers.sort((a, b) => {
+                    const dateA = a[1].addedAt ? new Date(a[1].addedAt) : new Date(0);
+                    const dateB = b[1].addedAt ? new Date(b[1].addedAt) : new Date(0);
+                    return dateB - dateA;
+                });
+
+                // Pagination
+                const totalUsers = filteredUsers.length;
+                const totalPages = Math.ceil(totalUsers / itemsPerPage);
+                currentPage = Math.min(currentPage, totalPages) || 1;
+                const startIndex = (currentPage - 1) * itemsPerPage;
+                const endIndex = startIndex + itemsPerPage;
+                const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
+
+                if (paginatedUsers.length === 0) {
+                    container.innerHTML = `<p style="text-align: center; color: #999; padding: 40px;">No users match your search</p>`;
+                    paginationEl.innerHTML = "";
+                    return;
+                }
+
+                // Render based on view mode
+                if (currentView === "table") {
+                    renderTableView(container, paginatedUsers);
+                } else {
+                    renderCardView(container, paginatedUsers);
+                }
+
+                // Render pagination
+                renderPagination(paginationEl, totalPages, totalUsers);
+            }
+
+            function renderTableView(container, users) {
+                const platformIcon = currentPlatform === "pc" ? "💻" : "📱";
+                
+                let html = `
+                    <div class="users-table-container">
+                        <table class="users-table">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>User ID</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Expires</th>
+                                    <th>Added</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                users.forEach(([userId, user]) => {
+                    const userType = user.type || "vip";
+                    const addedAt = user.addedAt ? new Date(user.addedAt).toLocaleDateString() : "-";
+                    const expiresAt = user.expiresAt ? new Date(user.expiresAt).toLocaleDateString() : "♾️";
+                    const isExpired = user.expiresAt && new Date(user.expiresAt) < new Date();
+                    const status = isExpired ? "expired" : (user.status || "active");
+                    const isOwner = userType.toLowerCase().includes("owner");
+
+                    html += `
+                        <tr>
+                            <td><strong>${user.username || "Unknown"}</strong></td>
+                            <td style="font-family: monospace; font-size: 11px;">${userId}</td>
+                            <td><span class="type-badge ${isOwner ? 'owner' : ''}">${userType}</span></td>
+                            <td><span class="status-badge ${status}">${status}</span></td>
+                            <td>${expiresAt} ${isExpired ? '⚠️' : ''}</td>
+                            <td>${addedAt}</td>
+                            <td>
+                                <div class="action-btns">
+                                    <button class="action-btn reset" onclick="resetHWID('${userId}', '${user.username || "Unknown"}')">🔄</button>
+                                    ${status === "active" && !isOwner 
+                                        ? `<button class="action-btn suspend" onclick="suspendUser('${userId}')">⏸️</button>` 
+                                        : status === "suspended" 
+                                            ? `<button class="action-btn activate" onclick="reactivateUser('${userId}')">▶️</button>` 
+                                            : ''}
+                                    ${!isOwner ? `<button class="action-btn remove" onclick="removeUser('${userId}', '${user.username || "Unknown"}')">🗑️</button>` : ''}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                container.innerHTML = html;
+            }
+
+            function renderCardView(container, users) {
                 const platformIcon = currentPlatform === "pc" ? "💻" : "📱";
                 const platformClass = currentPlatform;
 
-                container.innerHTML = Object.entries(users)
-                    .map(([userId, user]) => {
-                        const userType = user.type || "vip";
-                        const addedAt = user.addedAt
-                            ? new Date(user.addedAt).toLocaleDateString()
-                            : "Unknown";
-                        const expiresAt = user.expiresAt
-                            ? new Date(user.expiresAt).toLocaleDateString()
-                            : "Never";
-                        const isExpired =
-                            user.expiresAt &&
-                            new Date(user.expiresAt) < new Date();
-                        const status = isExpired
-                            ? "expired"
-                            : user.status || "active";
+                container.innerHTML = users.map(([userId, user]) => {
+                    const userType = user.type || "vip";
+                    const addedAt = user.addedAt ? new Date(user.addedAt).toLocaleDateString() : "Unknown";
+                    const expiresAt = user.expiresAt ? new Date(user.expiresAt).toLocaleDateString() : "Never";
+                    const isExpired = user.expiresAt && new Date(user.expiresAt) < new Date();
+                    const status = isExpired ? "expired" : (user.status || "active");
 
-                        return `
-                <div class="user-card ${platformClass}">
-                    <div class="user-header">
-                        <div>
-                            <div class="user-name">${user.username || "Unknown"}</div>
-                            <div style="color: #666; font-size: 12px; margin-top: 3px;">ID: ${userId}</div>
+                    return `
+                        <div class="user-card ${platformClass}">
+                            <div class="user-header">
+                                <div>
+                                    <div class="user-name">${user.username || "Unknown"}</div>
+                                    <div style="color: #666; font-size: 12px; margin-top: 3px;">ID: ${userId}</div>
+                                </div>
+                                <div class="user-badges">
+                                    <span class="platform-badge ${platformClass}">${platformIcon} ${currentPlatform.toUpperCase()}</span>
+                                    <span class="user-type type-${userType.toLowerCase()}">${userType}</span>
+                                </div>
+                            </div>
+                            <div class="user-details">
+                                <div class="detail-item">
+                                    <span class="detail-label">Status:</span>
+                                    <span class="status-${status}">${status.toUpperCase()}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">HWID:</span> 
+                                    <button class="btn" style="padding: 3px 10px; font-size: 11px; background: #667eea;" onclick="resetHWID('${userId}', '${user.username || "Unknown"}')">🔄 Reset</button>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Expires:</span> ${expiresAt} ${isExpired ? "⚠️" : ""}
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Added:</span> ${addedAt}
+                                </div>
+                            </div>
+                            ${user.notes || user.note ? `<div style="color: #666; font-size: 13px; margin-top: 10px; font-style: italic;">📝 ${user.notes || user.note}</div>` : ""}
+                            <div style="margin-top: 15px;">
+                                ${status === "active" && !userType.toLowerCase().includes("owner")
+                                    ? `<button class="btn btn-warning" onclick="suspendUser('${userId}')">⏸️ Suspend</button>`
+                                    : status === "suspended"
+                                        ? `<button class="btn btn-success" onclick="reactivateUser('${userId}')">▶️ Reactivate</button>`
+                                        : ""}
+                                ${!userType.toLowerCase().includes("owner")
+                                    ? `<button class="btn btn-danger" onclick="removeUser('${userId}', '${user.username || "Unknown"}')">🗑️ Remove</button>`
+                                    : ""}
+                            </div>
                         </div>
-                        <div class="user-badges">
-                            <span class="platform-badge ${platformClass}">${platformIcon} ${currentPlatform.toUpperCase()}</span>
-                            <span class="user-type type-${userType.toLowerCase()}">${userType}</span>
-                        </div>
-                    </div>
-                    <div class="user-details">
-                        <div class="detail-item">
-                            <span class="detail-label">Status:</span>
-                            <span class="status-${status}">${status.toUpperCase()}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">HWID:</span> 
-                            <button class="btn" style="padding: 3px 10px; font-size: 11px; background: #667eea;" onclick="resetHWID('${userId}', '${user.username || "Unknown"}')">🔄 Reset HWID</button>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Expires:</span> ${expiresAt} ${isExpired ? "⚠️" : ""}
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Added:</span> ${addedAt}
-                        </div>
-                    </div>
-                    ${user.notes || user.note ? `<div style="color: #666; font-size: 13px; margin-top: 10px; font-style: italic;">📝 ${user.notes || user.note}</div>` : ""}
-                    <div style="margin-top: 15px;">
-                        ${
-                            status === "active" &&
-                            !userType.toLowerCase().includes("owner")
-                                ? `<button class="btn btn-warning" onclick="suspendUser('${userId}')">⏸️ Suspend</button>`
-                                : status === "suspended"
-                                  ? `<button class="btn btn-success" onclick="reactivateUser('${userId}')">▶️ Reactivate</button>`
-                                  : ""
-                        }
-                        ${
-                            !userType.toLowerCase().includes("owner")
-                                ? `<button class="btn btn-danger" onclick="removeUser('${userId}', '${user.username || "Unknown"}')">🗑️ Remove</button>`
-                                : ""
-                        }
-                    </div>
-                </div>
-            `;
-                    })
-                    .join("");
+                    `;
+                }).join("");
+            }
+
+            function renderPagination(container, totalPages, totalUsers) {
+                if (totalPages <= 1) {
+                    container.innerHTML = `<span class="page-info">Showing ${totalUsers} users</span>`;
+                    return;
+                }
+
+                let html = `
+                    <button onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''}>&laquo;</button>
+                    <button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>&lsaquo;</button>
+                `;
+
+                // Show page numbers
+                const maxButtons = 5;
+                let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+                let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+                
+                if (endPage - startPage < maxButtons - 1) {
+                    startPage = Math.max(1, endPage - maxButtons + 1);
+                }
+
+                for (let i = startPage; i <= endPage; i++) {
+                    html += `<button onclick="goToPage(${i})" class="${i === currentPage ? 'active' : ''}">${i}</button>`;
+                }
+
+                html += `
+                    <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>&rsaquo;</button>
+                    <button onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>&raquo;</button>
+                    <span class="page-info">${totalUsers} users</span>
+                `;
+
+                container.innerHTML = html;
+            }
+
+            function goToPage(page) {
+                currentPage = page;
+                filterAndDisplayUsers();
+            }
+
+            function setView(view) {
+                currentView = view;
+                document.getElementById("tableViewBtn").classList.toggle("active", view === "table");
+                document.getElementById("cardViewBtn").classList.toggle("active", view === "cards");
+                filterAndDisplayUsers();
             }
 
             async function addUser() {
