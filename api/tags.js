@@ -1,50 +1,201 @@
-import fs from 'fs';
-import path from 'path';
+// Discord VIP Verification API
+// Usage: POST /api/tags with { robloxId, discordId, action: 'verify' }
+// Returns VIP status and can trigger role assignment
 
-export default function handler(req, res) {
-  // 1. Validasi Method (Hanya POST yang boleh agar bisa kirim banyak ID)
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
+const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
+const GUILD_ID = '1449716046905737310';
+const ROLE_IDS = {
+    mobile: '1451997436707864648',
+    pc: '1451997324451647642'
+};
 
-  try {
-    // 2. Ambil daftar ID dari request body
-    const { userIds } = req.body;
+let redis = null;
+let redisInitAttempted = false;
 
-    if (!userIds || !Array.isArray(userIds)) {
-      return res.status(400).json({ error: 'Invalid userIds format. Must be an array.' });
+async function getRedis() {
+    if (!redisInitAttempted) {
+        try {
+            const redisModule = await import('../lib/redis.js');
+            redis = redisModule.default;
+        } catch (error) {
+            console.error('Redis module load failed:', error.message);
+            redis = null;
+        }
+        redisInitAttempted = true;
+    }
+    return redis;
+}
+
+const PLATFORM_CONFIG = {
+    pc: { whitelistKey: 'starship:whitelist' },
+    mobile: { whitelistKey: 'starship:mobile_whitelist' }
+};
+
+// Add role to Discord user
+async function addDiscordRole(discordId, roleId) {
+    if (!DISCORD_BOT_TOKEN) {
+        console.error('DISCORD_BOT_TOKEN not set');
+        return { success: false, error: 'Bot token not configured' };
     }
 
-    // 3. Baca Database dari keys.json (CONSOLIDATED)
-    const keysPath = path.join(process.cwd(), 'data', 'keys.json');
-    const keysData = fs.readFileSync(keysPath, 'utf8');
-    const data = JSON.parse(keysData);
-    
-    // Get whitelist from consolidated keys.json
-    const whitelist = data.whitelist || {};
+    try {
+        const response = await fetch(
+            `https://discord.com/api/v10/guilds/${GUILD_ID}/members/${discordId}/roles/${roleId}`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bot ${DISCORD_BOT_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
 
-    // 4. Filter User yang Cocok
-    const results = {};
+        if (response.ok || response.status === 204) {
+            return { success: true };
+        } else {
+            const error = await response.text();
+            console.error('Discord API error:', error);
+            return { success: false, error };
+        }
+    } catch (error) {
+        console.error('Failed to add Discord role:', error);
+        return { success: false, error: error.message };
+    }
+}
 
-    userIds.forEach(id => {
-      const strId = String(id);
-      if (whitelist[strId]) {
-        // Hanya kirim Role/Tag. JANGAN kirim data sensitif lain.
-        results[strId] = {
-          role: whitelist[strId].type || whitelist[strId].role || "VIP",
-          tag: whitelist[strId].tag || whitelist[strId].type || whitelist[strId].role || "VIP"
-        };
-      }
-    });
+// Check VIP status for a Roblox user
+async function checkVipStatus(robloxId) {
+    const redisClient = await getRedis();
+    if (!redisClient) {
+        return { error: 'Database unavailable' };
+    }
 
-    // 5. Kirim Hasil
-    res.status(200).json({
-      status: 'success',
-      tags: results
-    });
+    const results = {
+        mobile: null,
+        pc: null
+    };
 
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
+    for (const [platform, config] of Object.entries(PLATFORM_CONFIG)) {
+        const whitelistData = await redisClient.get(config.whitelistKey);
+        const whitelist = whitelistData ? JSON.parse(whitelistData) : {};
+        
+        const user = whitelist[robloxId];
+        if (user) {
+            let isExpired = false;
+            if (user.expiresAt) {
+                isExpired = new Date(user.expiresAt) < new Date();
+            }
+            
+            results[platform] = {
+                isVip: user.status === 'active' && !isExpired,
+                username: user.username,
+                duration: user.duration,
+                expiresAt: user.expiresAt,
+                isLifetime: !user.expiresAt
+            };
+        }
+    }
+
+    return results;
+}
+
+export default async function handler(req, res) {
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method Not Allowed' });
+    }
+
+    const { robloxId, discordId, action } = req.body;
+
+    // ============ VERIFY ACTION ============
+    if (action === 'verify') {
+        if (!robloxId) {
+            return res.status(400).json({ error: 'robloxId is required' });
+        }
+
+        // Check VIP status
+        const vipStatus = await checkVipStatus(robloxId);
+        
+        if (vipStatus.error) {
+            return res.status(503).json({ error: vipStatus.error });
+        }
+
+        const isMobileVip = vipStatus.mobile?.isVip || false;
+        const isPcVip = vipStatus.pc?.isVip || false;
+
+        if (!isMobileVip && !isPcVip) {
+            return res.status(200).json({
+                success: false,
+                message: 'Roblox ID not found in VIP list',
+                robloxId
+            });
+        }
+
+        // If discordId provided, try to assign roles
+        let rolesAssigned = [];
+        if (discordId && DISCORD_BOT_TOKEN) {
+            if (isMobileVip) {
+                const result = await addDiscordRole(discordId, ROLE_IDS.mobile);
+                if (result.success) rolesAssigned.push('Mobile VIP');
+            }
+            if (isPcVip) {
+                const result = await addDiscordRole(discordId, ROLE_IDS.pc);
+                if (result.success) rolesAssigned.push('PC VIP');
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            robloxId,
+            discordId,
+            vipStatus: {
+                mobile: isMobileVip ? vipStatus.mobile : null,
+                pc: isPcVip ? vipStatus.pc : null
+            },
+            rolesAssigned,
+            message: rolesAssigned.length > 0 
+                ? `Verified! Roles assigned: ${rolesAssigned.join(', ')}`
+                : 'Verified! VIP status confirmed.'
+        });
+    }
+
+    // ============ LEGACY: BATCH TAG CHECK ============
+    const { userIds } = req.body;
+    if (userIds && Array.isArray(userIds)) {
+        const redisClient = await getRedis();
+        const results = {};
+
+        if (redisClient) {
+            for (const [platform, config] of Object.entries(PLATFORM_CONFIG)) {
+                const whitelistData = await redisClient.get(config.whitelistKey);
+                const whitelist = whitelistData ? JSON.parse(whitelistData) : {};
+                
+                userIds.forEach(id => {
+                    const strId = String(id);
+                    if (whitelist[strId]) {
+                        results[strId] = {
+                            role: whitelist[strId].type || 'VIP',
+                            tag: `${platform.toUpperCase()} VIP`,
+                            platform
+                        };
+                    }
+                });
+            }
+        }
+
+        return res.status(200).json({
+            status: 'success',
+            tags: results
+        });
+    }
+
+    return res.status(400).json({ error: 'Invalid request' });
 }
