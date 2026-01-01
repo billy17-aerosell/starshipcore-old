@@ -60,11 +60,12 @@ const PRICING = {
     }
 };
 
-// Discord notification helper
+// Discord notification helper - Uses separate webhook for VIP purchases
 async function sendDiscordNotification(embed) {
-    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    // Use dedicated VIP webhook, fallback to general webhook
+    const webhookUrl = process.env.DISCORD_VIP_WEBHOOK_URL || process.env.DISCORD_WEBHOOK_URL;
     if (!webhookUrl) {
-        console.log('⚠️ Discord webhook not configured');
+        console.log('⚠️ Discord webhook not configured (set DISCORD_VIP_WEBHOOK_URL)');
         return;
     }
 
@@ -74,7 +75,7 @@ async function sendDiscordNotification(embed) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ embeds: [embed] })
         });
-        console.log('✅ Discord notification sent');
+        console.log('✅ Discord VIP notification sent');
     } catch (error) {
         console.error('❌ Discord notification failed:', error.message);
     }
