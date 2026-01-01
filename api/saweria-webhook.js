@@ -40,7 +40,6 @@ const PRICING = {
     mobile: {
         name: 'Mobile VIP',
         durations: {
-            '1d': { label: '1 Day (Test)', price: 1000, days: 1 },
             '3d': { label: '3 Days', price: 5000, days: 3 },
             '7d': { label: '7 Days', price: 10000, days: 7 },
             '14d': { label: '14 Days', price: 25000, days: 14 },
