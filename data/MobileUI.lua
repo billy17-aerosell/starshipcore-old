@@ -1000,7 +1000,7 @@ DashboardTab:Button({
 	Desc = "Get Starship Discord link",
 	Callback = function()
 		if setclipboard then
-			setclipboard("https://discord.gg/BUJuXA8Z")
+			setclipboard("https://discord.gg/BjEJnaVe")
 			WindUI:Notify({ Title = "Copied!", Content = "Discord link copied!", Duration = 2 })
 		end
 	end,
@@ -6272,10 +6272,10 @@ SocialTab:Button({
 	Desc = "Get updates, support & community",
 	Callback = function()
 		if setclipboard then
-			setclipboard("https://discord.gg/BUJuXA8Z")
+			setclipboard("https://discord.gg/BjEJnaVe")
 			WindUI:Notify({ Title = "✅ Copied!", Content = "Discord invite link copied to clipboard!", Duration = 3 })
 		else
-			WindUI:Notify({ Title = "Discord", Content = "https://discord.gg/BUJuXA8Z", Duration = 5 })
+			WindUI:Notify({ Title = "Discord", Content = "https://discord.gg/BjEJnaVe", Duration = 5 })
 		end
 	end,
 })
