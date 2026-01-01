@@ -113,7 +113,62 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    const { robloxId, discordId, action } = req.body;
+    const { robloxId, discordId, action, code, redirectUri } = req.body;
+
+    // ============ DISCORD OAUTH EXCHANGE ============
+    if (action === 'discord_oauth' && code) {
+        const CLIENT_ID = '1456290071337762892';
+        const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+
+        if (!CLIENT_SECRET) {
+            return res.status(500).json({ success: false, error: 'OAuth not configured' });
+        }
+
+        try {
+            // Exchange code for access token
+            const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    client_id: CLIENT_ID,
+                    client_secret: CLIENT_SECRET,
+                    grant_type: 'authorization_code',
+                    code: code,
+                    redirect_uri: redirectUri
+                })
+            });
+
+            const tokenData = await tokenResponse.json();
+
+            if (!tokenData.access_token) {
+                console.error('Token error:', tokenData);
+                return res.status(400).json({ success: false, error: 'Failed to get access token' });
+            }
+
+            // Get user info
+            const userResponse = await fetch('https://discord.com/api/users/@me', {
+                headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
+            });
+
+            const user = await userResponse.json();
+
+            if (!user.id) {
+                return res.status(400).json({ success: false, error: 'Failed to get user info' });
+            }
+
+            return res.status(200).json({
+                success: true,
+                user: {
+                    id: user.id,
+                    username: user.global_name || user.username,
+                    avatar: user.avatar
+                }
+            });
+        } catch (error) {
+            console.error('OAuth error:', error);
+            return res.status(500).json({ success: false, error: 'OAuth failed' });
+        }
+    }
 
     // ============ VERIFY ACTION ============
     if (action === 'verify') {
