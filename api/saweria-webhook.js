@@ -95,7 +95,7 @@ async function getRobloxUsername(userId) {
     return `User_${userId}`;
 }
 
-// Add user to whitelist
+// Add user to whitelist (with expiry extension for renewals)
 async function addToWhitelist(redisClient, platform, userId, username, duration, daysUntilExpiry) {
     const config = PLATFORM_CONFIG[platform];
     
@@ -103,15 +103,37 @@ async function addToWhitelist(redisClient, platform, userId, username, duration,
     const whitelistData = await redisClient.get(config.whitelistKey);
     const whitelist = whitelistData ? JSON.parse(whitelistData) : {};
 
-    // Calculate expiry date
-    let expiresAt = null;
-    if (daysUntilExpiry) {
-        expiresAt = new Date(Date.now() + daysUntilExpiry * 24 * 60 * 60 * 1000).toISOString();
-    }
-
     // Check if user already exists
     const isExisting = !!whitelist[userId];
     const previousData = whitelist[userId];
+
+    // Calculate expiry date with EXTENSION logic
+    let expiresAt = null;
+    let extendedDays = 0;
+    
+    if (daysUntilExpiry) {
+        if (isExisting && previousData.expiresAt) {
+            const currentExpiry = new Date(previousData.expiresAt);
+            const now = new Date();
+            
+            // If current VIP is still active (not expired), EXTEND from current expiry
+            if (currentExpiry > now) {
+                expiresAt = new Date(currentExpiry.getTime() + daysUntilExpiry * 24 * 60 * 60 * 1000).toISOString();
+                extendedDays = Math.ceil((currentExpiry - now) / (24 * 60 * 60 * 1000));
+                console.log(`📅 Extended VIP: ${extendedDays} remaining + ${daysUntilExpiry} new = ${extendedDays + daysUntilExpiry} total days`);
+            } else {
+                // Expired, start fresh from now
+                expiresAt = new Date(Date.now() + daysUntilExpiry * 24 * 60 * 60 * 1000).toISOString();
+            }
+        } else {
+            // New user, start from now
+            expiresAt = new Date(Date.now() + daysUntilExpiry * 24 * 60 * 60 * 1000).toISOString();
+        }
+    } else if (isExisting && previousData.expiresAt) {
+        // Lifetime purchase - remove expiry if they had one
+        expiresAt = null;
+        console.log(`♾️ Upgraded to Lifetime - removed expiry`);
+    }
 
     // Create/Update user entry
     whitelist[userId] = {
@@ -135,7 +157,18 @@ async function addToWhitelist(redisClient, platform, userId, username, duration,
             noLogging: false
         },
         platform,
-        notes: `Auto-whitelisted via Saweria payment on ${new Date().toLocaleDateString('id-ID')}`
+        notes: isExisting 
+            ? `Renewed via Saweria on ${new Date().toLocaleDateString('id-ID')}${extendedDays > 0 ? ` (+${daysUntilExpiry} days extended)` : ''}`
+            : `Auto-whitelisted via Saweria payment on ${new Date().toLocaleDateString('id-ID')}`,
+        // Track purchase history
+        purchaseHistory: [
+            ...(previousData?.purchaseHistory || []),
+            {
+                date: new Date().toISOString(),
+                duration: duration,
+                daysAdded: daysUntilExpiry || 'lifetime'
+            }
+        ]
     };
 
     // Save to Redis
