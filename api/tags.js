@@ -321,13 +321,12 @@ export default async function handler(req, res) {
             });
         }
 
-        // Update Discord webhook (send embed message)
-        const discordWebhookUrl = process.env.DISCORD_STATUS_WEBHOOK_URL;
-        let discordMessageId = null;
-        
-        if (discordWebhookUrl) {
-            discordMessageId = await sendDiscordStatusUpdate(status, message, discordWebhookUrl);
-        }
+        // Webhook embed disabled - using channel rename only
+        // const discordWebhookUrl = process.env.DISCORD_STATUS_WEBHOOK_URL;
+        // let discordMessageId = null;
+        // if (discordWebhookUrl) {
+        //     discordMessageId = await sendDiscordStatusUpdate(status, message, discordWebhookUrl);
+        // }
 
         // Update Discord channel name (🔒 🟢 | LIVE format)
         const channelUpdated = await updateDiscordChannelName(status);
@@ -335,8 +334,7 @@ export default async function handler(req, res) {
         const newStatus = {
             status,
             message: message || STATUS_TYPES[status].description,
-            lastUpdated: new Date().toISOString(),
-            discordMessageId
+            lastUpdated: new Date().toISOString()
         };
         
         await saveStatus(newStatus);
@@ -349,7 +347,6 @@ export default async function handler(req, res) {
             emoji: statusInfo.emoji,
             message: newStatus.message,
             lastUpdated: newStatus.lastUpdated,
-            discordWebhookUpdated: !!discordMessageId,
             discordChannelUpdated: channelUpdated,
             channelName: STATUS_CHANNEL_NAMES[status]
         });

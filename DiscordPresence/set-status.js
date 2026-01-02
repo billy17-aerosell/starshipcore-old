@@ -118,7 +118,7 @@ async function setStatus(status, message) {
                         console.log(`\n✅ Status updated successfully!`);
                         console.log(`   Status: ${result.emoji} ${result.label}`);
                         console.log(`   Message: ${result.message}`);
-                        console.log(`   Discord: ${result.discordUpdated ? '✅ Updated' : '❌ Not configured'}`);
+                        console.log(`   Discord Channel: ${result.discordChannelUpdated ? '✅ ' + result.channelName : '❌ Not configured'}`);
                         console.log(`   Updated: ${new Date(result.lastUpdated).toLocaleString()}\n`);
                         resolve(result);
                     } else {
