@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Starship VIP Store - Premium Roblox Script</title>
-    <meta name="description" content="Get VIP access to Starship - Premium Roblox Script Platform">
+    <title>Starship VIP Store - Skrip Premium Roblox</title>
+    <meta name="description" content="Dapatkan akses VIP ke Starship - Platform Skrip Premium Roblox">
     <link rel="icon" type="image/png" href="/starship-logo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1360,16 +1360,71 @@
                 flex-direction: column;
             }
         }
+
+        /* ============ LANGUAGE SWITCHER ============ */
+        .lang-switcher {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            display: flex;
+            gap: 0;
+            background: var(--white);
+            border: var(--border);
+            box-shadow: var(--shadow-sm);
+            z-index: 1000;
+        }
+
+        .lang-btn {
+            padding: 10px 15px;
+            border: none;
+            background: transparent;
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-transform: uppercase;
+        }
+
+        .lang-btn:first-child {
+            border-right: var(--border);
+        }
+
+        .lang-btn:hover {
+            background: var(--bg-alt);
+        }
+
+        .lang-btn.active {
+            background: var(--accent-2);
+            color: var(--white);
+        }
+
+        @media (max-width: 768px) {
+            .lang-switcher {
+                top: 10px;
+                right: 10px;
+            }
+            .lang-btn {
+                padding: 8px 12px;
+                font-size: 0.7rem;
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- Language Switcher -->
+    <div class="lang-switcher">
+        <button class="lang-btn active" onclick="setLanguage('id')" id="lang-id">🇮🇩 ID</button>
+        <button class="lang-btn" onclick="setLanguage('en')" id="lang-en">🇬🇧 EN</button>
+    </div>
+
     <!-- Marquee -->
     <div class="marquee-wrapper">
         <div class="marquee">
-            <span>★ VIP ACCESS ★ CLOUD RECORDING ★ ANTI-DETECTION ★ AUTO UPDATES ★ MULTI-LANGUAGE ★ 24/7 SUPPORT ★</span>
-            <span>★ VIP ACCESS ★ CLOUD RECORDING ★ ANTI-DETECTION ★ AUTO UPDATES ★ MULTI-LANGUAGE ★ 24/7 SUPPORT ★</span>
-            <span>★ VIP ACCESS ★ CLOUD RECORDING ★ ANTI-DETECTION ★ AUTO UPDATES ★ MULTI-LANGUAGE ★ 24/7 SUPPORT ★</span>
-            <span>★ VIP ACCESS ★ CLOUD RECORDING ★ ANTI-DETECTION ★ AUTO UPDATES ★ MULTI-LANGUAGE ★ 24/7 SUPPORT ★</span>
+            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★ DUKUNGAN 24/7 ★</span>
+            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★ DUKUNGAN 24/7 ★</span>
+            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★ DUKUNGAN 24/7 ★</span>
+            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★ DUKUNGAN 24/7 ★</span>
         </div>
     </div>
 
@@ -1383,14 +1438,14 @@
                 <div class="status-badge loading" id="status-badge" title="Loading status...">
                     <div class="status-indicator"></div>
                     <div class="status-text">
-                        <span class="status-label">System Status</span>
-                        <span class="status-value" id="status-value">Loading...</span>
+                        <span class="status-label" data-i18n="system_status">Status Sistem</span>
+                        <span class="status-value" id="status-value" data-i18n="loading">Memuat...</span>
                     </div>
                 </div>
             </div>
             
             <h1>STARSHIP <span>VIP</span></h1>
-            <p>Unlock premium features for your Roblox experience. No limits. Full power.</p>
+            <p data-i18n="hero_desc">Buka fitur premium untuk pengalaman Roblox Anda. Tanpa batas. Kekuatan penuh.</p>
             
             <div class="hero-socials">
                 <a href="https://www.tiktok.com/@starshipcore" class="social-link tiktok" target="_blank">
@@ -1406,19 +1461,19 @@
         <div class="features-bar">
             <div class="feature-box">
                 <div class="icon">☁️</div>
-                <span>Cloud Recording</span>
+                <span data-i18n="feature_cloud">Rekam Cloud</span>
             </div>
             <div class="feature-box">
                 <div class="icon">🔄</div>
-                <span>Auto Updates</span>
+                <span data-i18n="feature_updates">Update Otomatis</span>
             </div>
             <div class="feature-box">
                 <div class="icon">🛡️</div>
-                <span>Anti-Detection</span>
+                <span data-i18n="feature_antidetect">Anti-Deteksi</span>
             </div>
             <div class="feature-box">
                 <div class="icon">🌍</div>
-                <span>Multi-Language</span>
+                <span data-i18n="feature_multilang">Multi-Bahasa</span>
             </div>
         </div>
 
@@ -1426,31 +1481,31 @@
         <div class="steps-tracker">
             <div class="step-box">
                 <div class="step-number active" id="step1">1</div>
-                <span class="step-text">Platform</span>
+                <span class="step-text" data-i18n="step_platform">Platform</span>
             </div>
             <div class="step-connector" id="line1"></div>
             <div class="step-box">
                 <div class="step-number" id="step2">2</div>
-                <span class="step-text">Duration</span>
+                <span class="step-text" data-i18n="step_duration">Durasi</span>
             </div>
             <div class="step-connector" id="line2"></div>
             <div class="step-box">
                 <div class="step-number" id="step3">3</div>
-                <span class="step-text">Account</span>
+                <span class="step-text" data-i18n="step_account">Akun</span>
             </div>
             <div class="step-connector" id="line3"></div>
             <div class="step-box">
                 <div class="step-number" id="step4">4</div>
-                <span class="step-text">Pay</span>
+                <span class="step-text" data-i18n="step_pay">Bayar</span>
             </div>
         </div>
 
         <!-- Step 1: Platform Selection -->
         <section class="section" id="section-platform">
             <div class="section-header">
-                <div class="section-badge">Step 01</div>
-                <h2 class="section-title">Choose Your Platform</h2>
-                <p class="section-desc">Select where you want to use Starship VIP</p>
+                <div class="section-badge" data-i18n="step_01">Langkah 01</div>
+                <h2 class="section-title" data-i18n="choose_platform">Pilih Platform Anda</h2>
+                <p class="section-desc" data-i18n="choose_platform_desc">Pilih di mana Anda ingin menggunakan Starship VIP</p>
             </div>
             
             <div class="platform-grid">
@@ -1458,25 +1513,25 @@
                     <div class="platform-accent"></div>
                     <div class="platform-icon">📱</div>
                     <h3 class="platform-name">Mobile VIP</h3>
-                    <p class="platform-desc">For Android & iOS devices with mobile executors</p>
-                    <p class="platform-price">From <strong>Rp 5K</strong></p>
+                    <p class="platform-desc" data-i18n="mobile_desc">Untuk perangkat Android & iOS dengan executor mobile</p>
+                    <p class="platform-price" data-i18n="mobile_price">Mulai dari <strong>Rp 5K</strong></p>
                 </div>
                 
                 <div class="platform-card pc" data-platform="pc" onclick="selectPlatform('pc')">
                     <div class="platform-accent"></div>
                     <div class="platform-icon">💻</div>
                     <h3 class="platform-name">PC VIP</h3>
-                    <p class="platform-desc">For Windows with desktop executors</p>
-                    <p class="platform-price">Lifetime <strong>Rp 250K</strong></p>
+                    <p class="platform-desc" data-i18n="pc_desc">Untuk Windows dengan executor desktop</p>
+                    <p class="platform-price" data-i18n="pc_price">Selamanya <strong>Rp 250K</strong></p>
                 </div>
                 
                 <div class="platform-card bundle" data-platform="bundle" onclick="selectPlatform('bundle')">
                     <div class="platform-accent"></div>
-                    <span class="platform-badge">Save 20%</span>
+                    <span class="platform-badge" data-i18n="save_20">Hemat 20%</span>
                     <div class="platform-icon">🎁</div>
-                    <h3 class="platform-name">Bundle Pack</h3>
-                    <p class="platform-desc">Get both Mobile + PC access combined</p>
-                    <p class="platform-price">Lifetime <strong>Rp 300K</strong></p>
+                    <h3 class="platform-name" data-i18n="bundle_name">Paket Bundle</h3>
+                    <p class="platform-desc" data-i18n="bundle_desc">Dapatkan akses Mobile + PC sekaligus</p>
+                    <p class="platform-price" data-i18n="bundle_price">Selamanya <strong>Rp 300K</strong></p>
                 </div>
             </div>
         </section>
@@ -1484,9 +1539,9 @@
         <!-- Step 2: Duration Selection -->
         <section class="section" id="section-duration">
             <div class="section-header">
-                <div class="section-badge">Step 02</div>
-                <h2 class="section-title">Select Duration</h2>
-                <p class="section-desc">How long do you need VIP access?</p>
+                <div class="section-badge" data-i18n="step_02">Langkah 02</div>
+                <h2 class="section-title" data-i18n="select_duration">Pilih Durasi</h2>
+                <p class="section-desc" data-i18n="select_duration_desc">Berapa lama Anda butuh akses VIP?</p>
             </div>
             
             <div class="duration-grid" id="duration-grid">
@@ -1497,9 +1552,9 @@
         <!-- Step 3: User ID -->
         <section class="section" id="section-userid">
             <div class="section-header">
-                <div class="section-badge">Step 03</div>
-                <h2 class="section-title">Enter Roblox Account</h2>
-                <p class="section-desc">Enter your Username or User ID</p>
+                <div class="section-badge" data-i18n="step_03">Langkah 03</div>
+                <h2 class="section-title" data-i18n="enter_roblox">Masukkan Akun Roblox</h2>
+                <p class="section-desc" data-i18n="enter_roblox_desc">Masukkan Username atau User ID Anda</p>
             </div>
             
             <div class="input-wrapper">
@@ -1508,7 +1563,8 @@
                         type="text" 
                         class="input-field"
                         id="userid-input" 
-                        placeholder="Username or User ID"
+                        placeholder="Username atau User ID"
+                        data-i18n-placeholder="input_placeholder"
                         autocomplete="off"
                         oninput="validateUser()"
                     >
@@ -1518,7 +1574,7 @@
                 <div class="user-preview" id="user-preview">
                     <img id="user-avatar" src="" alt="Avatar">
                     <div class="user-details">
-                        <h4 id="user-name">Loading...</h4>
+                        <h4 id="user-name" data-i18n="loading">Memuat...</h4>
                         <p id="user-id-display">ID: </p>
                     </div>
                 </div>
@@ -1528,46 +1584,46 @@
         <!-- Step 4: Summary & Pay -->
         <section class="section" id="section-summary">
             <div class="section-header">
-                <div class="section-badge">Step 04</div>
-                <h2 class="section-title">Complete Order</h2>
-                <p class="section-desc">Review and proceed to payment</p>
+                <div class="section-badge" data-i18n="step_04">Langkah 04</div>
+                <h2 class="section-title" data-i18n="complete_order">Selesaikan Pesanan</h2>
+                <p class="section-desc" data-i18n="complete_order_desc">Periksa dan lanjutkan ke pembayaran</p>
             </div>
             
             <div class="summary-section">
                 <div class="how-it-works">
-                    <h4>📋 How Payment Works</h4>
+                    <h4 data-i18n="how_payment_works">📋 Cara Pembayaran</h4>
                     <ol>
-                        <li>Click the Pay button below</li>
-                        <li>Complete payment via QRIS, Bank, or E-Wallet</li>
-                        <li>VIP activates automatically in 5 minutes!</li>
+                        <li data-i18n="payment_step1">Klik tombol Bayar di bawah</li>
+                        <li data-i18n="payment_step2">Selesaikan pembayaran via QRIS, Bank, atau E-Wallet</li>
+                        <li data-i18n="payment_step3">VIP aktif otomatis dalam 5 menit!</li>
                     </ol>
                 </div>
                 
                 <div class="summary-card">
                     <div class="summary-header">
-                        <h4>Order Summary</h4>
+                        <h4 data-i18n="order_summary">Ringkasan Pesanan</h4>
                     </div>
                     <div class="summary-row">
-                        <span class="summary-label">Platform</span>
+                        <span class="summary-label" data-i18n="summary_platform">Platform</span>
                         <span class="summary-value" id="summary-platform">-</span>
                     </div>
                     <div class="summary-row">
-                        <span class="summary-label">Duration</span>
+                        <span class="summary-label" data-i18n="summary_duration">Durasi</span>
                         <span class="summary-value" id="summary-duration">-</span>
                     </div>
                     <div class="summary-row">
-                        <span class="summary-label">Roblox Account</span>
+                        <span class="summary-label" data-i18n="summary_account">Akun Roblox</span>
                         <span class="summary-value" id="summary-user">-</span>
                     </div>
                     <div class="summary-row">
-                        <span class="summary-label">Total</span>
+                        <span class="summary-label" data-i18n="summary_total">Total</span>
                         <span class="summary-value summary-total" id="summary-total">Rp 0</span>
                     </div>
                 </div>
                 
                 <button class="pay-button" id="pay-button" onclick="proceedToPayment()" disabled>
                     <span class="icon">💳</span>
-                    <span id="pay-button-text">Complete Payment</span>
+                    <span id="pay-button-text" data-i18n="complete_payment">Selesaikan Pembayaran</span>
                 </button>
             </div>
         </section>
@@ -1601,7 +1657,7 @@
                     <p class="waiting-status" id="waiting-status">Mengecek status... <span id="check-count">0</span>/20</p>
                 </div>
                 
-                <button class="cancel-btn" onclick="cancelWaiting()">Batalkan & Mulai Ulang</button>
+                <button class="cancel-btn" onclick="cancelWaiting()" data-i18n="cancel_restart">Batalkan & Mulai Ulang</button>
             </div>
         </section>
 
@@ -1645,9 +1701,9 @@
                 </div>
                 
                 <div class="success-buttons">
-                    <a href="/verify.html" class="success-btn verify">🔗 Verify & Get Discord Role</a>
-                    <a href="https://discord.gg/BjEJnaVe" target="_blank" class="success-btn discord">💬 Join Discord</a>
-                    <button class="success-btn primary" onclick="resetToHome()">🏠 Kembali ke Home</button>
+                    <a href="/verify.html" class="success-btn verify" data-i18n="verify_discord">🔗 Verifikasi & Dapatkan Role Discord</a>
+                    <a href="https://discord.gg/BjEJnaVe" target="_blank" class="success-btn discord" data-i18n="join_discord">💬 Gabung Discord</a>
+                    <button class="success-btn primary" onclick="resetToHome()" data-i18n="back_home">🏠 Kembali ke Home</button>
                 </div>
             </div>
         </section>
@@ -1931,30 +1987,195 @@
     </style>
 
     <script>
+        // ============ TRANSLATIONS ============
+        const translations = {
+            id: {
+                marquee: '★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★ DUKUNGAN 24/7 ★',
+                system_status: 'Status Sistem',
+                loading: 'Memuat...',
+                hero_desc: 'Buka fitur premium untuk pengalaman Roblox Anda. Tanpa batas. Kekuatan penuh.',
+                feature_cloud: 'Rekam Cloud',
+                feature_updates: 'Update Otomatis',
+                feature_antidetect: 'Anti-Deteksi',
+                feature_multilang: 'Multi-Bahasa',
+                step_platform: 'Platform',
+                step_duration: 'Durasi',
+                step_account: 'Akun',
+                step_pay: 'Bayar',
+                step_01: 'Langkah 01',
+                step_02: 'Langkah 02',
+                step_03: 'Langkah 03',
+                step_04: 'Langkah 04',
+                choose_platform: 'Pilih Platform Anda',
+                choose_platform_desc: 'Pilih di mana Anda ingin menggunakan Starship VIP',
+                mobile_desc: 'Untuk perangkat Android & iOS dengan executor mobile',
+                mobile_price: 'Mulai dari <strong>Rp 5K</strong>',
+                pc_desc: 'Untuk Windows dengan executor desktop',
+                pc_price: 'Selamanya <strong>Rp 250K</strong>',
+                save_20: 'Hemat 20%',
+                bundle_name: 'Paket Bundle',
+                bundle_desc: 'Dapatkan akses Mobile + PC sekaligus',
+                bundle_price: 'Selamanya <strong>Rp 300K</strong>',
+                select_duration: 'Pilih Durasi',
+                select_duration_desc: 'Berapa lama Anda butuh akses VIP?',
+                enter_roblox: 'Masukkan Akun Roblox',
+                enter_roblox_desc: 'Masukkan Username atau User ID Anda',
+                input_placeholder: 'Username atau User ID',
+                complete_order: 'Selesaikan Pesanan',
+                complete_order_desc: 'Periksa dan lanjutkan ke pembayaran',
+                how_payment_works: '📋 Cara Pembayaran',
+                payment_step1: 'Klik tombol Bayar di bawah',
+                payment_step2: 'Selesaikan pembayaran via QRIS, Bank, atau E-Wallet',
+                payment_step3: 'VIP aktif otomatis dalam 5 menit!',
+                order_summary: 'Ringkasan Pesanan',
+                summary_platform: 'Platform',
+                summary_duration: 'Durasi',
+                summary_account: 'Akun Roblox',
+                summary_total: 'Total',
+                complete_payment: 'Selesaikan Pembayaran',
+                complete_all_steps: 'Selesaikan Semua Langkah',
+                cancel_restart: 'Batalkan & Mulai Ulang',
+                verify_discord: '🔗 Verifikasi & Dapatkan Role Discord',
+                join_discord: '💬 Gabung Discord',
+                back_home: '🏠 Kembali ke Home',
+                found: '✓ DITEMUKAN',
+                not_found: '✕ TIDAK DITEMUKAN',
+                complete_steps_first: 'Selesaikan semua langkah dulu!',
+                copy_success_amount: 'Nominal berhasil di-copy!',
+                copy_success_msg: 'Pesan berhasil di-copy!',
+                dont_forget_paste: 'Jangan lupa paste nominal & pesan di Saweria!',
+                vip_activated: '🎉 VIP berhasil diaktifkan!',
+                duration_3d: '3 Hari',
+                duration_7d: '7 Hari',
+                duration_14d: '14 Hari',
+                duration_lifetime: 'Selamanya'
+            },
+            en: {
+                marquee: '★ VIP ACCESS ★ CLOUD RECORDING ★ ANTI-DETECTION ★ AUTO UPDATES ★ MULTI-LANGUAGE ★ 24/7 SUPPORT ★',
+                system_status: 'System Status',
+                loading: 'Loading...',
+                hero_desc: 'Unlock premium features for your Roblox experience. No limits. Full power.',
+                feature_cloud: 'Cloud Recording',
+                feature_updates: 'Auto Updates',
+                feature_antidetect: 'Anti-Detection',
+                feature_multilang: 'Multi-Language',
+                step_platform: 'Platform',
+                step_duration: 'Duration',
+                step_account: 'Account',
+                step_pay: 'Pay',
+                step_01: 'Step 01',
+                step_02: 'Step 02',
+                step_03: 'Step 03',
+                step_04: 'Step 04',
+                choose_platform: 'Choose Your Platform',
+                choose_platform_desc: 'Select where you want to use Starship VIP',
+                mobile_desc: 'For Android & iOS devices with mobile executors',
+                mobile_price: 'From <strong>Rp 5K</strong>',
+                pc_desc: 'For Windows with desktop executors',
+                pc_price: 'Lifetime <strong>Rp 250K</strong>',
+                save_20: 'Save 20%',
+                bundle_name: 'Bundle Pack',
+                bundle_desc: 'Get both Mobile + PC access combined',
+                bundle_price: 'Lifetime <strong>Rp 300K</strong>',
+                select_duration: 'Select Duration',
+                select_duration_desc: 'How long do you need VIP access?',
+                enter_roblox: 'Enter Roblox Account',
+                enter_roblox_desc: 'Enter your Username or User ID',
+                input_placeholder: 'Username or User ID',
+                complete_order: 'Complete Order',
+                complete_order_desc: 'Review and proceed to payment',
+                how_payment_works: '📋 How Payment Works',
+                payment_step1: 'Click the Pay button below',
+                payment_step2: 'Complete payment via QRIS, Bank, or E-Wallet',
+                payment_step3: 'VIP activates automatically in 5 minutes!',
+                order_summary: 'Order Summary',
+                summary_platform: 'Platform',
+                summary_duration: 'Duration',
+                summary_account: 'Roblox Account',
+                summary_total: 'Total',
+                complete_payment: 'Complete Payment',
+                complete_all_steps: 'Complete All Steps',
+                cancel_restart: 'Cancel & Start Over',
+                verify_discord: '🔗 Verify & Get Discord Role',
+                join_discord: '💬 Join Discord',
+                back_home: '🏠 Back to Home',
+                found: '✓ FOUND',
+                not_found: '✕ NOT FOUND',
+                complete_steps_first: 'Complete all steps first!',
+                copy_success_amount: 'Amount copied!',
+                copy_success_msg: 'Message copied!',
+                dont_forget_paste: "Don't forget to paste amount & message in Saweria!",
+                vip_activated: '🎉 VIP successfully activated!',
+                duration_3d: '3 Days',
+                duration_7d: '7 Days',
+                duration_14d: '14 Days',
+                duration_lifetime: 'Lifetime'
+            }
+        };
+
+        let currentLang = localStorage.getItem('starship_lang') || 'id';
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('starship_lang', lang);
+            
+            // Update buttons
+            document.getElementById('lang-id').classList.toggle('active', lang === 'id');
+            document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+            
+            // Update all translatable elements
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[lang][key]) {
+                    el.innerHTML = translations[lang][key];
+                }
+            });
+            
+            // Update placeholders
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                if (translations[lang][key]) {
+                    el.placeholder = translations[lang][key];
+                }
+            });
+
+            // Update page title
+            document.title = lang === 'id' ? 'Starship VIP Store - Skrip Premium Roblox' : 'Starship VIP Store - Premium Roblox Script';
+
+            // Re-render durations if platform selected
+            if (selectedPlatform) {
+                renderDurations(selectedPlatform);
+            }
+        }
+
+        function t(key) {
+            return translations[currentLang][key] || translations['id'][key] || key;
+        }
+
         // ============ PRICING ============
         const PRICING = {
             mobile: {
                 name: 'Mobile VIP',
                 icon: '📱',
                 durations: {
-                    '3d': { label: '3 Days', price: 5000 },
-                    '7d': { label: '7 Days', price: 10000 },
-                    '14d': { label: '14 Days', price: 25000 },
-                    'lifetime': { label: 'Lifetime', price: 100000, bestValue: true }
+                    '3d': { labelKey: 'duration_3d', price: 5000 },
+                    '7d': { labelKey: 'duration_7d', price: 10000 },
+                    '14d': { labelKey: 'duration_14d', price: 25000 },
+                    'lifetime': { labelKey: 'duration_lifetime', price: 100000, bestValue: true }
                 }
             },
             pc: {
                 name: 'PC VIP',
                 icon: '💻',
                 durations: {
-                    'lifetime': { label: 'Lifetime', price: 250000, bestValue: true }
+                    'lifetime': { labelKey: 'duration_lifetime', price: 250000, bestValue: true }
                 }
             },
             bundle: {
                 name: 'Bundle (PC + Mobile)',
                 icon: '🎁',
                 durations: {
-                    'lifetime': { label: 'Lifetime', price: 300000, bestValue: true }
+                    'lifetime': { labelKey: 'duration_lifetime', price: 300000, bestValue: true }
                 }
             }
         };
@@ -2001,8 +2222,9 @@
                 card.className = `duration-card ${data.bestValue ? 'best-value' : ''}`;
                 card.dataset.duration = key;
                 card.onclick = () => selectDuration(key);
+                const label = t(data.labelKey) || data.labelKey;
                 card.innerHTML = `
-                    <div class="duration-time">${data.label}</div>
+                    <div class="duration-time">${label}</div>
                     <div class="duration-price">Rp ${formatNumber(data.price)}</div>
                 `;
                 grid.appendChild(card);
@@ -2063,7 +2285,7 @@
                     if (response.ok) {
                         const data = await response.json();
                         
-                        status.innerHTML = '✓ FOUND';
+                        status.innerHTML = t('found');
                         status.className = 'input-status valid';
                         
                         validatedUserId = data.id.toString();
@@ -2085,7 +2307,7 @@
                         throw new Error('Not found');
                     }
                 } catch (error) {
-                    status.innerHTML = '✕ NOT FOUND';
+                    status.innerHTML = t('not_found');
                     status.className = 'input-status invalid';
                     preview.classList.remove('visible');
                     validatedUserId = null;
@@ -2101,7 +2323,7 @@
             const durationData = platformData?.durations[selectedDuration];
 
             document.getElementById('summary-platform').textContent = platformData ? `${platformData.icon} ${platformData.name}` : '-';
-            document.getElementById('summary-duration').textContent = durationData ? durationData.label : '-';
+            document.getElementById('summary-duration').textContent = durationData ? t(durationData.labelKey) : '-';
             document.getElementById('summary-user').textContent = validatedUsername ? `${validatedUsername}` : '-';
             document.getElementById('summary-total').textContent = durationData ? `Rp ${formatNumber(durationData.price)}` : 'Rp 0';
 
@@ -2110,10 +2332,11 @@
 
             if (selectedPlatform && selectedDuration && validatedUserId) {
                 payButton.disabled = false;
-                payButtonText.textContent = `Pay Rp ${formatNumber(durationData.price)}`;
+                const payText = currentLang === 'id' ? 'Bayar' : 'Pay';
+                payButtonText.textContent = `${payText} Rp ${formatNumber(durationData.price)}`;
             } else {
                 payButton.disabled = true;
-                payButtonText.textContent = 'Complete All Steps';
+                payButtonText.textContent = t('complete_all_steps');
             }
         }
 
@@ -2122,7 +2345,7 @@
 
         function proceedToPayment() {
             if (!selectedPlatform || !selectedDuration || !validatedUserId) {
-                showToast('Complete all steps first!', 'error');
+                showToast(t('complete_steps_first'), 'error');
                 return;
             }
 
@@ -2191,7 +2414,7 @@
                 closePaymentModal();
                 showWaitingPage();
                 
-                showToast('Jangan lupa paste nominal & pesan di Saweria!', 'success');
+                showToast(t('dont_forget_paste'), 'success');
             }
         }
 
@@ -2220,7 +2443,7 @@
                     btn.classList.remove('copied');
                 }, 1500);
 
-                showToast(`${type === 'amount' ? 'Nominal' : 'Pesan'} berhasil di-copy!`, 'success');
+                showToast(type === 'amount' ? t('copy_success_amount') : t('copy_success_msg'), 'success');
             }).catch(() => {
                 // Fallback for older browsers
                 const textArea = document.createElement('textarea');
@@ -2229,7 +2452,7 @@
                 textArea.select();
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
-                showToast(`${type === 'amount' ? 'Nominal' : 'Pesan'} berhasil di-copy!`, 'success');
+                showToast(type === 'amount' ? t('copy_success_amount') : t('copy_success_msg'), 'success');
             });
         }
 
@@ -2396,7 +2619,7 @@
             document.getElementById('section-success').style.display = 'block';
             document.getElementById('section-success').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-            showToast('🎉 VIP berhasil diaktifkan!', 'success');
+            showToast(t('vip_activated'), 'success');
         }
 
         function resetToHome() {
@@ -2515,6 +2738,9 @@
 
         // ============ PAGE LOAD - CHECK PENDING ORDER ============
         document.addEventListener('DOMContentLoaded', () => {
+            // Initialize language
+            setLanguage(currentLang);
+
             // Fetch system status on load
             fetchSystemStatus();
             // Refresh status every 60 seconds

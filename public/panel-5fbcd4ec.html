@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="id">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>VIP User Management - StarshipCore</title>
+        <title>Manajemen Pengguna VIP - StarshipCore</title>
         <style>
             * {
                 margin: 0;
@@ -633,14 +633,60 @@
                     flex-direction: column;
                 }
             }
+
+            /* Language Switcher */
+            .lang-switcher {
+                position: absolute;
+                top: 30px;
+                right: 30px;
+                display: flex;
+                gap: 5px;
+                z-index: 100;
+            }
+
+            .lang-btn {
+                padding: 8px 12px;
+                border: 2px solid #667eea;
+                background: white;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 12px;
+                font-weight: 600;
+                transition: all 0.3s;
+            }
+
+            .lang-btn:hover {
+                background: #f0f0f0;
+            }
+
+            .lang-btn.active {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+
+            @media (max-width: 768px) {
+                .lang-switcher {
+                    position: relative;
+                    top: auto;
+                    right: auto;
+                    justify-content: flex-end;
+                    margin-bottom: 15px;
+                }
+            }
         </style>
     </head>
     <body>
         <div class="container">
+            <!-- Language Switcher -->
+            <div class="lang-switcher">
+                <button class="lang-btn active" onclick="setLanguage('id')" id="lang-id">🇮🇩 ID</button>
+                <button class="lang-btn" onclick="setLanguage('en')" id="lang-en">🇬🇧 EN</button>
+            </div>
+
             <div class="header">
-                <h1>🎯 VIP User Management</h1>
+                <h1>🎯 <span data-i18n="title">Manajemen Pengguna VIP</span></h1>
                 <p class="subtitle">
-                    StarshipCore Whitelist Manager - PC & Mobile
+                    <span data-i18n="subtitle">StarshipCore Whitelist Manager - PC & Mobile</span>
                 </p>
             </div>
 
@@ -649,14 +695,15 @@
             <!-- Admin Authentication -->
             <div class="auth-section">
                 <h2 style="margin-bottom: 20px; color: #333">
-                    🔐 Admin Authentication
+                    🔐 <span data-i18n="admin_auth">Autentikasi Admin</span>
                 </h2>
                 <div class="input-group">
-                    <label for="adminSecret">Admin Secret Key</label>
+                    <label for="adminSecret" data-i18n="admin_secret">Kunci Rahasia Admin</label>
                     <input
                         type="password"
                         id="adminSecret"
-                        placeholder="Enter your admin secret key"
+                        data-i18n-placeholder="enter_secret"
+                        placeholder="Masukkan kunci rahasia admin Anda"
                     />
                 </div>
                 <div
@@ -680,13 +727,14 @@
                             font-weight: 400;
                             font-size: 13px;
                         "
+                        data-i18n="remember_secret"
                     >
-                        💾 Remember secret key (saved in browser)
+                        💾 Ingat kunci rahasia (tersimpan di browser)
                     </label>
                 </div>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap">
                     <button class="btn btn-primary" onclick="saveAndConnect()">
-                        🔓 Connect & Load Users
+                        🔓 <span data-i18n="connect_load">Hubungkan & Muat Pengguna</span>
                     </button>
                     <button
                         class="btn btn-warning"
@@ -694,7 +742,7 @@
                         id="forgetBtn"
                         style="display: none"
                     >
-                        🗑️ Forget Secret
+                        🗑️ <span data-i18n="forget_secret">Lupakan Kunci</span>
                     </button>
                 </div>
                 <div
@@ -709,8 +757,7 @@
                         display: none;
                     "
                 >
-                    ✅ <strong>Secret key saved!</strong> You don't need to
-                    enter it again.
+                    ✅ <strong data-i18n="secret_saved">Kunci rahasia tersimpan!</strong> <span data-i18n="no_need_enter">Anda tidak perlu memasukkannya lagi.</span>
                 </div>
             </div>
 
@@ -721,18 +768,18 @@
                     onclick="switchPlatform('pc')"
                 >
                     <div class="platform-icon">💻</div>
-                    <div class="platform-title">PC Users</div>
-                    <div class="platform-desc">Desktop/Laptop VIP Access</div>
-                    <div class="platform-count" id="pcCount">0 users</div>
+                    <div class="platform-title" data-i18n="pc_users">Pengguna PC</div>
+                    <div class="platform-desc" data-i18n="pc_desc">Akses VIP Desktop/Laptop</div>
+                    <div class="platform-count" id="pcCount">0 <span data-i18n="users">pengguna</span></div>
                 </div>
                 <div
                     class="platform-tab mobile"
                     onclick="switchPlatform('mobile')"
                 >
                     <div class="platform-icon">📱</div>
-                    <div class="platform-title">Mobile Users</div>
-                    <div class="platform-desc">Phone/Tablet VIP Access</div>
-                    <div class="platform-count" id="mobileCount">0 users</div>
+                    <div class="platform-title" data-i18n="mobile_users">Pengguna Mobile</div>
+                    <div class="platform-desc" data-i18n="mobile_desc">Akses VIP HP/Tablet</div>
+                    <div class="platform-count" id="mobileCount">0 <span data-i18n="users">pengguna</span></div>
                 </div>
             </div>
 
@@ -740,7 +787,7 @@
             <div class="stats-container" id="statsContainer">
                 <div class="stat-card">
                     <div class="stat-value" id="statTotal">0</div>
-                    <div class="stat-label">Total Users</div>
+                    <div class="stat-label" data-i18n="total_users">Total Pengguna</div>
                 </div>
                 <div class="stat-card">
                     <div
@@ -750,7 +797,7 @@
                     >
                         0
                     </div>
-                    <div class="stat-label">Active</div>
+                    <div class="stat-label" data-i18n="active">Aktif</div>
                 </div>
                 <div class="stat-card">
                     <div
@@ -760,7 +807,7 @@
                     >
                         0
                     </div>
-                    <div class="stat-label">Suspended</div>
+                    <div class="stat-label" data-i18n="suspended">Ditangguhkan</div>
                 </div>
                 <div class="stat-card">
                     <div
@@ -770,65 +817,66 @@
                     >
                         0
                     </div>
-                    <div class="stat-label">Expired</div>
+                    <div class="stat-label" data-i18n="expired">Kedaluwarsa</div>
                 </div>
             </div>
 
             <!-- Add User Form -->
             <div class="auth-section">
                 <div class="section-title">
-                    <h2>➕ Add New VIP User</h2>
+                    <h2>➕ <span data-i18n="add_new_vip">Tambah Pengguna VIP Baru</span></h2>
                     <span class="badge pc" id="addFormBadge">💻 PC</span>
                 </div>
                 <div class="form-grid">
                     <div class="input-group">
-                        <label for="userId">User ID *</label>
+                        <label for="userId" data-i18n="user_id">User ID *</label>
                         <input
                             type="text"
                             id="userId"
-                            placeholder="e.g., 123456789"
+                            placeholder="contoh: 123456789"
                         />
                     </div>
                     <div class="input-group">
-                        <label for="username">Username *</label>
+                        <label for="username" data-i18n="username">Username *</label>
                         <input
                             type="text"
                             id="username"
-                            placeholder="e.g., JohnDoe_VIP"
+                            placeholder="contoh: JohnDoe_VIP"
                         />
                     </div>
                     <div class="input-group">
-                        <label>👑 Type</label>
+                        <label>👑 <span data-i18n="type">Tipe</span></label>
                         <div style="padding: 12px; border: 2px solid #8b5cf6; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border-radius: 8px; font-weight: bold; text-align: center;">
-                            💎 VIP Access
+                            💎 <span data-i18n="vip_access">Akses VIP</span>
                         </div>
                         <input type="hidden" id="userType" value="vip">
                     </div>
                     <div class="input-group">
-                        <label>⏱️ Duration</label>
+                        <label>⏱️ <span data-i18n="duration">Durasi</span></label>
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
-                            <button type="button" class="duration-btn" data-duration="1" onclick="selectDuration('1')" style="padding: 10px 8px; border: 2px solid #444; background: #2a2a3e; color: #ccc; border-radius: 8px; cursor: pointer; font-size: 12px; transition: all 0.2s;">1 Day</button>
-                            <button type="button" class="duration-btn" data-duration="3" onclick="selectDuration('3')" style="padding: 10px 8px; border: 2px solid #444; background: #2a2a3e; color: #ccc; border-radius: 8px; cursor: pointer; font-size: 12px; transition: all 0.2s;">3 Days</button>
-                            <button type="button" class="duration-btn" data-duration="7" onclick="selectDuration('7')" style="padding: 10px 8px; border: 2px solid #444; background: #2a2a3e; color: #ccc; border-radius: 8px; cursor: pointer; font-size: 12px; transition: all 0.2s;">7 Days</button>
-                            <button type="button" class="duration-btn" data-duration="14" onclick="selectDuration('14')" style="padding: 10px 8px; border: 2px solid #444; background: #2a2a3e; color: #ccc; border-radius: 8px; cursor: pointer; font-size: 12px; transition: all 0.2s;">14 Days</button>
-                            <button type="button" class="duration-btn active" data-duration="30" onclick="selectDuration('30')" style="padding: 10px 8px; border: 2px solid #10b981; background: linear-gradient(135deg, #10b981, #059669); color: white; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; transition: all 0.2s;">1 Month</button>
-                            <button type="button" class="duration-btn" data-duration="lifetime" onclick="selectDuration('lifetime')" style="padding: 10px 8px; border: 2px solid #f59e0b; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; transition: all 0.2s;">♾️ Lifetime</button>
+                            <button type="button" class="duration-btn" data-duration="1" onclick="selectDuration('1')" style="padding: 10px 8px; border: 2px solid #444; background: #2a2a3e; color: #ccc; border-radius: 8px; cursor: pointer; font-size: 12px; transition: all 0.2s;" data-i18n="1_day">1 Hari</button>
+                            <button type="button" class="duration-btn" data-duration="3" onclick="selectDuration('3')" style="padding: 10px 8px; border: 2px solid #444; background: #2a2a3e; color: #ccc; border-radius: 8px; cursor: pointer; font-size: 12px; transition: all 0.2s;" data-i18n="3_days">3 Hari</button>
+                            <button type="button" class="duration-btn" data-duration="7" onclick="selectDuration('7')" style="padding: 10px 8px; border: 2px solid #444; background: #2a2a3e; color: #ccc; border-radius: 8px; cursor: pointer; font-size: 12px; transition: all 0.2s;" data-i18n="7_days">7 Hari</button>
+                            <button type="button" class="duration-btn" data-duration="14" onclick="selectDuration('14')" style="padding: 10px 8px; border: 2px solid #444; background: #2a2a3e; color: #ccc; border-radius: 8px; cursor: pointer; font-size: 12px; transition: all 0.2s;" data-i18n="14_days">14 Hari</button>
+                            <button type="button" class="duration-btn active" data-duration="30" onclick="selectDuration('30')" style="padding: 10px 8px; border: 2px solid #10b981; background: linear-gradient(135deg, #10b981, #059669); color: white; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; transition: all 0.2s;" data-i18n="1_month">1 Bulan</button>
+                            <button type="button" class="duration-btn" data-duration="lifetime" onclick="selectDuration('lifetime')" style="padding: 10px 8px; border: 2px solid #f59e0b; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; transition: all 0.2s;" data-i18n="lifetime">♾️ Selamanya</button>
                         </div>
                         <input type="hidden" id="duration" value="30">
                     </div>
                     <div class="input-group">
-                        <label>🔐 HWID Protection</label>
+                        <label>🔐 <span data-i18n="hwid_protection">Proteksi HWID</span></label>
                         <div style="color: #888; font-size: 12px; padding: 10px; background: #1a1a2e; border-radius: 8px; border: 1px solid #333;">
-                            ✅ HWID otomatis terdaftar saat login pertama. Reset via card user.
+                            ✅ <span data-i18n="hwid_auto">HWID otomatis terdaftar saat login pertama. Reset via card user.</span>
                         </div>
                     </div>
                 </div>
                 <div class="input-group">
-                    <label for="notes">Notes</label>
+                    <label for="notes" data-i18n="notes">Catatan</label>
                     <textarea
                         id="notes"
                         rows="2"
-                        placeholder="Add any notes about this user..."
+                        data-i18n-placeholder="notes_placeholder"
+                        placeholder="Tambahkan catatan tentang pengguna ini..."
                     ></textarea>
                 </div>
                 <button
@@ -836,28 +884,28 @@
                     onclick="addUser()"
                     id="addUserBtn"
                 >
-                    ➕ Add PC VIP User
+                    ➕ <span data-i18n="add_pc_vip">Tambah Pengguna VIP PC</span>
                 </button>
             </div>
 
             <!-- Users List -->
             <div class="users-list">
                 <div class="section-title">
-                    <h2>👥 Whitelisted Users</h2>
+                    <h2>👥 <span data-i18n="whitelisted_users">Pengguna Whitelist</span></h2>
                     <span class="badge pc" id="listBadge">💻 PC</span>
                 </div>
                 
                 <!-- Search and View Controls -->
                 <div class="list-controls">
-                    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search by username or ID..." oninput="filterAndDisplayUsers()">
+                    <input type="text" class="search-box" id="searchBox" data-i18n-placeholder="search_placeholder" placeholder="🔍 Cari berdasarkan username atau ID..." oninput="filterAndDisplayUsers()">
                     <div class="view-toggle">
-                        <button class="view-btn active" id="tableViewBtn" onclick="setView('table')">📊 Table</button>
-                        <button class="view-btn" id="cardViewBtn" onclick="setView('cards')">📋 Cards</button>
+                        <button class="view-btn active" id="tableViewBtn" onclick="setView('table')">📊 <span data-i18n="table">Tabel</span></button>
+                        <button class="view-btn" id="cardViewBtn" onclick="setView('cards')">📋 <span data-i18n="cards">Kartu</span></button>
                     </div>
                 </div>
                 
                 <div id="loadingIndicator" class="loading hidden">
-                    Loading users...
+                    <span data-i18n="loading_users">Memuat pengguna...</span>
                 </div>
                 <div id="usersList"></div>
                 <div id="pagination" class="pagination"></div>
@@ -865,6 +913,169 @@
         </div>
 
         <script>
+            // ============ TRANSLATIONS ============
+            const translations = {
+                id: {
+                    title: 'Manajemen Pengguna VIP',
+                    subtitle: 'StarshipCore Whitelist Manager - PC & Mobile',
+                    admin_auth: 'Autentikasi Admin',
+                    admin_secret: 'Kunci Rahasia Admin',
+                    enter_secret: 'Masukkan kunci rahasia admin Anda',
+                    remember_secret: '💾 Ingat kunci rahasia (tersimpan di browser)',
+                    connect_load: 'Hubungkan & Muat Pengguna',
+                    forget_secret: 'Lupakan Kunci',
+                    secret_saved: 'Kunci rahasia tersimpan!',
+                    no_need_enter: 'Anda tidak perlu memasukkannya lagi.',
+                    pc_users: 'Pengguna PC',
+                    pc_desc: 'Akses VIP Desktop/Laptop',
+                    mobile_users: 'Pengguna Mobile',
+                    mobile_desc: 'Akses VIP HP/Tablet',
+                    users: 'pengguna',
+                    total_users: 'Total Pengguna',
+                    active: 'Aktif',
+                    suspended: 'Ditangguhkan',
+                    expired: 'Kedaluwarsa',
+                    add_new_vip: 'Tambah Pengguna VIP Baru',
+                    user_id: 'User ID *',
+                    username: 'Username *',
+                    type: 'Tipe',
+                    vip_access: 'Akses VIP',
+                    duration: 'Durasi',
+                    '1_day': '1 Hari',
+                    '3_days': '3 Hari',
+                    '7_days': '7 Hari',
+                    '14_days': '14 Hari',
+                    '1_month': '1 Bulan',
+                    'lifetime': '♾️ Selamanya',
+                    hwid_protection: 'Proteksi HWID',
+                    hwid_auto: 'HWID otomatis terdaftar saat login pertama. Reset via card user.',
+                    notes: 'Catatan',
+                    notes_placeholder: 'Tambahkan catatan tentang pengguna ini...',
+                    add_pc_vip: 'Tambah Pengguna VIP PC',
+                    add_mobile_vip: 'Tambah Pengguna VIP Mobile',
+                    whitelisted_users: 'Pengguna Whitelist',
+                    search_placeholder: '🔍 Cari berdasarkan username atau ID...',
+                    table: 'Tabel',
+                    cards: 'Kartu',
+                    loading_users: 'Memuat pengguna...',
+                    secret_forgotten: '🗑️ Kunci rahasia dilupakan',
+                    enter_admin_secret: 'Silakan masukkan kunci rahasia admin',
+                    loaded_users: '✅ Memuat {total} pengguna (PC: {pc}, Mobile: {mobile})',
+                    user_added: '✅ {username} ditambahkan ke whitelist {platform}!',
+                    user_suspended: '⏸️ Pengguna {userId} telah ditangguhkan',
+                    user_reactivated: '▶️ Pengguna {userId} telah diaktifkan kembali',
+                    user_removed: '🗑️ {username} telah dihapus dari whitelist {platform}',
+                    hwid_reset: '🔄 HWID berhasil di-reset untuk {username}',
+                    confirm_suspend: 'Apakah Anda yakin ingin menangguhkan pengguna {userId}?',
+                    confirm_remove: '⚠️ Apakah Anda yakin ingin MENGHAPUS PERMANEN {username} ({userId}) dari whitelist {platform}?\n\nTindakan ini tidak dapat dibatalkan!',
+                    confirm_hwid_reset: '🔄 Reset HWID untuk {username} ({userId})?\n\nPengguna akan bisa login dari device baru setelah reset.',
+                    no_users_found: 'Tidak ada pengguna {platform} ditemukan',
+                    no_match: 'Tidak ada pengguna yang cocok dengan pencarian',
+                    showing_users: 'Menampilkan {count} pengguna'
+                },
+                en: {
+                    title: 'VIP User Management',
+                    subtitle: 'StarshipCore Whitelist Manager - PC & Mobile',
+                    admin_auth: 'Admin Authentication',
+                    admin_secret: 'Admin Secret Key',
+                    enter_secret: 'Enter your admin secret key',
+                    remember_secret: '💾 Remember secret key (saved in browser)',
+                    connect_load: 'Connect & Load Users',
+                    forget_secret: 'Forget Secret',
+                    secret_saved: 'Secret key saved!',
+                    no_need_enter: "You don't need to enter it again.",
+                    pc_users: 'PC Users',
+                    pc_desc: 'Desktop/Laptop VIP Access',
+                    mobile_users: 'Mobile Users',
+                    mobile_desc: 'Phone/Tablet VIP Access',
+                    users: 'users',
+                    total_users: 'Total Users',
+                    active: 'Active',
+                    suspended: 'Suspended',
+                    expired: 'Expired',
+                    add_new_vip: 'Add New VIP User',
+                    user_id: 'User ID *',
+                    username: 'Username *',
+                    type: 'Type',
+                    vip_access: 'VIP Access',
+                    duration: 'Duration',
+                    '1_day': '1 Day',
+                    '3_days': '3 Days',
+                    '7_days': '7 Days',
+                    '14_days': '14 Days',
+                    '1_month': '1 Month',
+                    'lifetime': '♾️ Lifetime',
+                    hwid_protection: 'HWID Protection',
+                    hwid_auto: 'HWID automatically registered on first login. Reset via user card.',
+                    notes: 'Notes',
+                    notes_placeholder: 'Add any notes about this user...',
+                    add_pc_vip: 'Add PC VIP User',
+                    add_mobile_vip: 'Add Mobile VIP User',
+                    whitelisted_users: 'Whitelisted Users',
+                    search_placeholder: '🔍 Search by username or ID...',
+                    table: 'Table',
+                    cards: 'Cards',
+                    loading_users: 'Loading users...',
+                    secret_forgotten: '🗑️ Secret key forgotten',
+                    enter_admin_secret: 'Please enter admin secret key',
+                    loaded_users: '✅ Loaded {total} users (PC: {pc}, Mobile: {mobile})',
+                    user_added: '✅ {username} added to {platform} whitelist!',
+                    user_suspended: '⏸️ User {userId} has been suspended',
+                    user_reactivated: '▶️ User {userId} has been reactivated',
+                    user_removed: '🗑️ {username} has been removed from {platform} whitelist',
+                    hwid_reset: '🔄 HWID successfully reset for {username}',
+                    confirm_suspend: 'Are you sure you want to suspend user {userId}?',
+                    confirm_remove: '⚠️ Are you sure you want to PERMANENTLY REMOVE {username} ({userId}) from {platform} whitelist?\n\nThis action cannot be undone!',
+                    confirm_hwid_reset: '🔄 Reset HWID for {username} ({userId})?\n\nUser will be able to login from a new device after reset.',
+                    no_users_found: 'No {platform} users found',
+                    no_match: 'No users match your search',
+                    showing_users: 'Showing {count} users'
+                }
+            };
+
+            let currentLang = localStorage.getItem('starship_lang') || 'id';
+
+            function setLanguage(lang) {
+                currentLang = lang;
+                localStorage.setItem('starship_lang', lang);
+                
+                document.getElementById('lang-id').classList.toggle('active', lang === 'id');
+                document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+                
+                document.querySelectorAll('[data-i18n]').forEach(el => {
+                    const key = el.getAttribute('data-i18n');
+                    if (translations[lang][key]) {
+                        el.innerHTML = translations[lang][key];
+                    }
+                });
+                
+                document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                    const key = el.getAttribute('data-i18n-placeholder');
+                    if (translations[lang][key]) {
+                        el.placeholder = translations[lang][key];
+                    }
+                });
+
+                document.title = lang === 'id' ? 'Manajemen Pengguna VIP - StarshipCore' : 'VIP User Management - StarshipCore';
+
+                // Update dynamic button text
+                const addUserBtn = document.getElementById('addUserBtn');
+                if (addUserBtn) {
+                    const btnSpan = addUserBtn.querySelector('[data-i18n]');
+                    if (btnSpan) {
+                        btnSpan.textContent = currentPlatform === 'pc' ? t('add_pc_vip') : t('add_mobile_vip');
+                    }
+                }
+            }
+
+            function t(key, replacements = {}) {
+                let text = translations[currentLang][key] || translations['id'][key] || key;
+                for (const [k, v] of Object.entries(replacements)) {
+                    text = text.replace(`{${k}}`, v);
+                }
+                return text;
+            }
+
             const API_BASE = window.location.origin;
             const SECRET_STORAGE_KEY = "vip_admin_secret";
 
@@ -880,6 +1091,7 @@
 
             // Initialize on page load
             document.addEventListener("DOMContentLoaded", () => {
+                setLanguage(currentLang);
                 loadSavedSecret();
             });
 
@@ -958,13 +1170,13 @@
                     "none";
                 document.getElementById("forgetBtn").style.display = "none";
                 document.getElementById("usersList").innerHTML = "";
-                showNotification("🗑️ Secret key forgotten", "success");
+                showNotification(t('secret_forgotten'), "success");
             }
 
             function saveAndConnect() {
                 const secret = document.getElementById("adminSecret").value;
                 if (!secret) {
-                    showNotification("Please enter admin secret key", "error");
+                    showNotification(t('enter_admin_secret'), "error");
                     return;
                 }
                 saveSecretToStorage(secret);
@@ -1008,10 +1220,11 @@
                     `badge ${badgeClass}`;
 
                 // Update button
-                document.getElementById("addUserBtn").textContent =
-                    platform === "pc"
-                        ? "➕ Add PC VIP User"
-                        : "➕ Add Mobile VIP User";
+                const addBtnSpan = document.getElementById("addUserBtn").querySelector('[data-i18n]');
+                if (addBtnSpan) {
+                    addBtnSpan.setAttribute('data-i18n', platform === 'pc' ? 'add_pc_vip' : 'add_mobile_vip');
+                    addBtnSpan.textContent = t(platform === 'pc' ? 'add_pc_vip' : 'add_mobile_vip');
+                }
                 document.getElementById("addUserBtn").className =
                     platform === "pc" ? "btn btn-pc" : "btn btn-mobile";
 
@@ -1024,7 +1237,7 @@
             async function loadAllUsers() {
                 const secret = getAdminSecret();
                 if (!secret) {
-                    showNotification("Please enter admin secret key", "error");
+                    showNotification(t('enter_admin_secret'), "error");
                     return;
                 }
 
