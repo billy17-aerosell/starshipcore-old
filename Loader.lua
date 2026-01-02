@@ -670,7 +670,161 @@ end
 -- Configuration (Production)
 local SECURE_API_URL = "https://starship-core.my.id"
 
+-- Check system status before loading
+local function checkSystemStatus()
+	local statusUrl = SECURE_API_URL .. "/api/tags?action=status"
+	local success, response = pcall(function()
+		return game:HttpGet(statusUrl)
+	end)
+
+	if not success then
+		return true, nil -- If can't check, assume online
+	end
+
+	local data = nil
+	pcall(function()
+		data = HttpService:JSONDecode(response)
+	end)
+
+	if data and data.success then
+		-- Block if maintenance, offline, or updating
+		if data.status == "maintenance" or data.status == "offline" or data.status == "updating" then
+			return false, data
+		end
+	end
+
+	return true, data
+end
+
+-- Show maintenance/offline UI
+local function showMaintenanceUI(statusData)
+	local CoreGui = game:GetService("CoreGui")
+	local TweenService = game:GetService("TweenService")
+
+	local statusEmoji = statusData.emoji or "🔧"
+	local statusLabel = statusData.label or "Maintenance"
+	local statusMessage = statusData.message or "System is under maintenance"
+
+	-- Colors based on status
+	local bgColor = Color3.fromRGB(255, 152, 0) -- Orange default
+	local textColor = Color3.fromRGB(255, 255, 255)
+
+	if statusData.status == "offline" then
+		bgColor = Color3.fromRGB(244, 67, 54) -- Red
+	elseif statusData.status == "updating" then
+		bgColor = Color3.fromRGB(33, 150, 243) -- Blue
+	end
+
+	local MaintenanceGui = Instance.new("ScreenGui")
+	MaintenanceGui.Name = "StarshipMaintenance"
+	MaintenanceGui.Parent = CoreGui
+	MaintenanceGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	-- Background
+	local BlurFrame = Instance.new("Frame", MaintenanceGui)
+	BlurFrame.Size = UDim2.new(1, 0, 1, 0)
+	BlurFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	BlurFrame.BackgroundTransparency = 0.3
+
+	-- Main Frame
+	local Frame = Instance.new("Frame", MaintenanceGui)
+	Frame.Size = UDim2.new(0, 400, 0, 220)
+	Frame.Position = UDim2.new(0.5, -200, 0.5, -110)
+	Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+	Frame.BorderSizePixel = 0
+	Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 12)
+
+	-- Accent bar at top
+	local AccentBar = Instance.new("Frame", Frame)
+	AccentBar.Size = UDim2.new(1, 0, 0, 6)
+	AccentBar.BackgroundColor3 = bgColor
+	AccentBar.BorderSizePixel = 0
+	Instance.new("UICorner", AccentBar).CornerRadius = UDim.new(0, 12)
+
+	-- Status Icon
+	local Icon = Instance.new("TextLabel", Frame)
+	Icon.Text = statusEmoji
+	Icon.Size = UDim2.new(1, 0, 0, 60)
+	Icon.Position = UDim2.new(0, 0, 0, 20)
+	Icon.BackgroundTransparency = 1
+	Icon.TextSize = 48
+
+	-- Title
+	local Title = Instance.new("TextLabel", Frame)
+	Title.Text = "⚠️ " .. string.upper(statusLabel)
+	Title.Size = UDim2.new(1, -20, 0, 30)
+	Title.Position = UDim2.new(0, 10, 0, 85)
+	Title.BackgroundTransparency = 1
+	Title.TextColor3 = bgColor
+	Title.Font = Enum.Font.GothamBold
+	Title.TextSize = 20
+
+	-- Message
+	local Msg = Instance.new("TextLabel", Frame)
+	Msg.Text = statusMessage
+	Msg.Size = UDim2.new(1, -30, 0, 40)
+	Msg.Position = UDim2.new(0, 15, 0, 120)
+	Msg.BackgroundTransparency = 1
+	Msg.TextColor3 = Color3.fromRGB(200, 200, 200)
+	Msg.Font = Enum.Font.Gotham
+	Msg.TextSize = 14
+	Msg.TextWrapped = true
+
+	-- Info text
+	local Info = Instance.new("TextLabel", Frame)
+	Info.Text = "Please try again later. Check Discord for updates."
+	Info.Size = UDim2.new(1, -30, 0, 25)
+	Info.Position = UDim2.new(0, 15, 0, 165)
+	Info.BackgroundTransparency = 1
+	Info.TextColor3 = Color3.fromRGB(130, 130, 130)
+	Info.Font = Enum.Font.Gotham
+	Info.TextSize = 12
+
+	-- Close button
+	local CloseBtn = Instance.new("TextButton", Frame)
+	CloseBtn.Size = UDim2.new(0, 100, 0, 32)
+	CloseBtn.Position = UDim2.new(0.5, -50, 1, -45)
+	CloseBtn.BackgroundColor3 = bgColor
+	CloseBtn.Text = "Close"
+	CloseBtn.TextColor3 = textColor
+	CloseBtn.Font = Enum.Font.GothamBold
+	CloseBtn.TextSize = 14
+	CloseBtn.BorderSizePixel = 0
+	Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+	-- Entrance animation
+	Frame.Position = UDim2.new(0.5, -200, -0.5, -110)
+	TweenService:Create(Frame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, -200, 0.5, -110),
+	}):Play()
+
+	CloseBtn.MouseButton1Click:Connect(function()
+		MaintenanceGui:Destroy()
+	end)
+
+	-- Also animate the icon
+	task.spawn(function()
+		while Icon and Icon.Parent do
+			TweenService:Create(Icon, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				Position = UDim2.new(0, 0, 0, 15),
+			}):Play()
+			task.wait(1)
+			TweenService:Create(Icon, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				Position = UDim2.new(0, 0, 0, 25),
+			}):Play()
+			task.wait(1)
+		end
+	end)
+end
+
 local function main()
+	-- 🔒 CHECK SYSTEM STATUS FIRST
+	local isOnline, statusData = checkSystemStatus()
+	if not isOnline and statusData then
+		showMaintenanceUI(statusData)
+		return -- Stop execution if maintenance/offline
+	end
+
 	local loaderGui, updateStatus = createLoadingUI()
 
 	-- 1. Setup Environment

@@ -912,6 +912,146 @@ end
 -- ══════════════════════════════════════════════════════════════════
 
 local function main()
+	-- 🔒 CHECK SYSTEM STATUS FIRST
+	local statusUrl = SECURE_API_URL .. "/api/tags?action=status"
+	local statusOk, statusResponse = pcall(function()
+		return game:HttpGet(statusUrl)
+	end)
+
+	if statusOk and statusResponse then
+		local statusData = nil
+		pcall(function()
+			statusData = HttpService:JSONDecode(statusResponse)
+		end)
+
+		if statusData and statusData.success then
+			if
+				statusData.status == "maintenance"
+				or statusData.status == "offline"
+				or statusData.status == "updating"
+			then
+				-- Show maintenance UI for mobile
+				local screenGui = Instance.new("ScreenGui")
+				screenGui.Name = "StarshipMaintenance"
+				screenGui.ResetOnSpawn = false
+				screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+				screenGui.IgnoreGuiInset = true
+
+				pcall(function()
+					screenGui.Parent = game:GetService("CoreGui")
+				end)
+				if not screenGui.Parent then
+					screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+				end
+
+				-- Background
+				local background = Instance.new("Frame")
+				background.Size = UDim2.new(1, 0, 1, 0)
+				background.BackgroundColor3 = Color3.fromHex("#0a0a0f")
+				background.BorderSizePixel = 0
+				background.Parent = screenGui
+
+				-- Container
+				local container = Instance.new("Frame")
+				container.Size = UDim2.new(0, 340, 0, 240)
+				container.Position = UDim2.new(0.5, 0, 0.5, 0)
+				container.AnchorPoint = Vector2.new(0.5, 0.5)
+				container.BackgroundColor3 = Color3.fromHex("#1a1a2e")
+				container.BorderSizePixel = 0
+				container.Parent = background
+
+				local containerCorner = Instance.new("UICorner")
+				containerCorner.CornerRadius = UDim.new(0, 16)
+				containerCorner.Parent = container
+
+				-- Accent color based on status
+				local accentColor = Color3.fromHex("#ff9800")
+				if statusData.status == "offline" then
+					accentColor = Color3.fromHex("#f44336")
+				elseif statusData.status == "updating" then
+					accentColor = Color3.fromHex("#2196f3")
+				end
+
+				local containerStroke = Instance.new("UIStroke")
+				containerStroke.Color = accentColor
+				containerStroke.Thickness = 2
+				containerStroke.Transparency = 0.3
+				containerStroke.Parent = container
+
+				-- Status Icon
+				local icon = Instance.new("TextLabel")
+				icon.Size = UDim2.new(1, 0, 0, 60)
+				icon.Position = UDim2.new(0.5, 0, 0, 20)
+				icon.AnchorPoint = Vector2.new(0.5, 0)
+				icon.BackgroundTransparency = 1
+				icon.Text = statusData.emoji or "🔧"
+				icon.TextSize = 48
+				icon.Font = Enum.Font.GothamBold
+				icon.Parent = container
+
+				-- Title
+				local title = Instance.new("TextLabel")
+				title.Size = UDim2.new(1, -40, 0, 30)
+				title.Position = UDim2.new(0.5, 0, 0, 85)
+				title.AnchorPoint = Vector2.new(0.5, 0)
+				title.BackgroundTransparency = 1
+				title.Text = "⚠️ " .. string.upper(statusData.label or "MAINTENANCE")
+				title.TextColor3 = accentColor
+				title.TextSize = 20
+				title.Font = Enum.Font.GothamBold
+				title.Parent = container
+
+				-- Message
+				local msg = Instance.new("TextLabel")
+				msg.Size = UDim2.new(1, -40, 0, 50)
+				msg.Position = UDim2.new(0.5, 0, 0, 120)
+				msg.AnchorPoint = Vector2.new(0.5, 0)
+				msg.BackgroundTransparency = 1
+				msg.Text = statusData.message or "System is under maintenance"
+				msg.TextColor3 = Color3.fromHex("#a1a1aa")
+				msg.TextSize = 14
+				msg.Font = Enum.Font.Gotham
+				msg.TextWrapped = true
+				msg.Parent = container
+
+				-- Info
+				local info = Instance.new("TextLabel")
+				info.Size = UDim2.new(1, -40, 0, 25)
+				info.Position = UDim2.new(0.5, 0, 0, 170)
+				info.AnchorPoint = Vector2.new(0.5, 0)
+				info.BackgroundTransparency = 1
+				info.Text = "Please try again later."
+				info.TextColor3 = Color3.fromHex("#6a6a8e")
+				info.TextSize = 12
+				info.Font = Enum.Font.Gotham
+				info.Parent = container
+
+				-- Close button
+				local closeBtn = Instance.new("TextButton")
+				closeBtn.Size = UDim2.new(0, 100, 0, 35)
+				closeBtn.Position = UDim2.new(0.5, 0, 1, -40)
+				closeBtn.AnchorPoint = Vector2.new(0.5, 0)
+				closeBtn.BackgroundColor3 = accentColor
+				closeBtn.Text = "Close"
+				closeBtn.TextColor3 = Color3.fromHex("#ffffff")
+				closeBtn.TextSize = 14
+				closeBtn.Font = Enum.Font.GothamBold
+				closeBtn.BorderSizePixel = 0
+				closeBtn.Parent = container
+
+				local closeCorner = Instance.new("UICorner")
+				closeCorner.CornerRadius = UDim.new(0, 8)
+				closeCorner.Parent = closeBtn
+
+				closeBtn.MouseButton1Click:Connect(function()
+					screenGui:Destroy()
+				end)
+
+				return -- Stop execution
+			end
+		end
+	end
+
 	local loaderGui, updateStatus = createLoadingUI()
 
 	-- Step 1: Initialize
