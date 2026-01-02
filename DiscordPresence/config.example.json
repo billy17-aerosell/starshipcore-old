@@ -1,0 +1,15 @@
+{
+  "clientId": "YOUR_DISCORD_APPLICATION_ID",
+  "details": "StarshipCore Developer",
+  "state": "Building something awesome",
+  "largeImageKey": "logo",
+  "largeImageText": "StarshipCore",
+  "smallImageKey": "",
+  "smallImageText": "",
+  "buttons": [
+    {
+      "label": "🌐 Website",
+      "url": "https://starship-core.my.id"
+    }
+  ]
+}

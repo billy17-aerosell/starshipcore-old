@@ -75,3 +75,8 @@ scripts/
 
 #recording
 folder_recorder/
+# ===========================================
+# Discord Presence (contains Application ID)
+# ===========================================
+DiscordPresence/config.json
+DiscordPresence/node_modules/

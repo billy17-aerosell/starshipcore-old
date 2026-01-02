@@ -1,0 +1,12 @@
+{
+  "name": "discord-presence",
+  "version": "1.0.0",
+  "description": "Custom Discord Rich Presence - Always Running",
+  "main": "presence.js",
+  "scripts": {
+    "start": "node presence.js"
+  },
+  "dependencies": {
+    "discord-rpc": "^4.0.1"
+  }
+}
