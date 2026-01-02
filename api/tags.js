@@ -151,6 +151,54 @@ async function sendDiscordStatusUpdate(status, message, discordWebhookUrl) {
     }
 }
 
+// Channel name formats for each status
+const STATUS_CHANNEL_NAMES = {
+    online: '🔒 🟢 | LIVE',
+    maintenance: '🔒 🟠 | MAINTENANCE',
+    offline: '🔒 🔴 | OFFLINE',
+    degraded: '🔒 🟡 | DEGRADED',
+    updating: '🔒 🔵 | UPDATING'
+};
+
+// Rename Discord channel to show status (like voice channel with lock)
+async function updateDiscordChannelName(status) {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const channelId = process.env.DISCORD_STATUS_CHANNEL_ID;
+    
+    if (!botToken || !channelId) {
+        console.log('Discord channel rename skipped: missing BOT_TOKEN or STATUS_CHANNEL_ID');
+        return false;
+    }
+    
+    const channelName = STATUS_CHANNEL_NAMES[status] || STATUS_CHANNEL_NAMES.online;
+    
+    try {
+        const response = await fetch(`https://discord.com/api/v10/channels/${channelId}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bot ${botToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: channelName
+            })
+        });
+        
+        if (response.ok) {
+            console.log(`Discord channel renamed to: ${channelName}`);
+            return true;
+        } else {
+            const error = await response.text();
+            console.error('Failed to rename Discord channel:', error);
+            return false;
+        }
+    } catch (e) {
+        console.error('Discord channel rename error:', e);
+        return false;
+    }
+}
+
+
 // Add role to Discord user
 async function addDiscordRole(discordId, roleId) {
     if (!DISCORD_BOT_TOKEN) {
@@ -267,12 +315,16 @@ export default async function handler(req, res) {
             });
         }
 
+        // Update Discord webhook (send embed message)
         const discordWebhookUrl = process.env.DISCORD_STATUS_WEBHOOK_URL;
         let discordMessageId = null;
         
         if (discordWebhookUrl) {
             discordMessageId = await sendDiscordStatusUpdate(status, message, discordWebhookUrl);
         }
+
+        // Update Discord channel name (🔒 🟢 | LIVE format)
+        const channelUpdated = await updateDiscordChannelName(status);
 
         const newStatus = {
             status,
@@ -291,7 +343,9 @@ export default async function handler(req, res) {
             emoji: statusInfo.emoji,
             message: newStatus.message,
             lastUpdated: newStatus.lastUpdated,
-            discordUpdated: !!discordMessageId
+            discordWebhookUpdated: !!discordMessageId,
+            discordChannelUpdated: channelUpdated,
+            channelName: STATUS_CHANNEL_NAMES[status]
         });
     }
 
