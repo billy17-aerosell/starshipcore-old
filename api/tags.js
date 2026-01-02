@@ -1,6 +1,6 @@
 // Discord VIP Verification API
 // Usage: POST /api/tags with { robloxId, discordId, action: 'verify' }
-// Returns VIP status and can trigger role assignment
+// Also handles system status: GET /api/tags?action=status or POST with action: 'set_status'
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const GUILD_ID = '1449716046905737310';
@@ -30,6 +30,126 @@ const PLATFORM_CONFIG = {
     pc: { whitelistKey: 'starship:whitelist' },
     mobile: { whitelistKey: 'starship:mobile_whitelist' }
 };
+
+// ============ STATUS SYSTEM ============
+const STATUS_TYPES = {
+    online: {
+        emoji: '🟢',
+        label: 'Online',
+        color: 0x00E676,
+        description: 'All systems operational'
+    },
+    maintenance: {
+        emoji: '🟠',
+        label: 'Maintenance',
+        color: 0xFF9800,
+        description: 'System is under maintenance'
+    },
+    offline: {
+        emoji: '🔴',
+        label: 'Offline',
+        color: 0xF44336,
+        description: 'System is currently offline'
+    },
+    degraded: {
+        emoji: '🟡',
+        label: 'Degraded',
+        color: 0xFFEB3B,
+        description: 'Some features may be unavailable'
+    },
+    updating: {
+        emoji: '🔵',
+        label: 'Updating',
+        color: 0x2196F3,
+        description: 'New update is being deployed'
+    }
+};
+
+// In-memory status fallback
+let currentStatus = {
+    status: 'online',
+    message: 'All systems operational',
+    lastUpdated: new Date().toISOString(),
+    discordMessageId: null
+};
+
+async function getStatus() {
+    const redisClient = await getRedis();
+    if (redisClient) {
+        try {
+            const data = await redisClient.get('starship:status');
+            if (data) return JSON.parse(data);
+        } catch (e) {
+            console.error('Redis get status error:', e);
+        }
+    }
+    return currentStatus;
+}
+
+async function saveStatus(status) {
+    currentStatus = status;
+    const redisClient = await getRedis();
+    if (redisClient) {
+        try {
+            await redisClient.set('starship:status', JSON.stringify(status));
+        } catch (e) {
+            console.error('Redis set status error:', e);
+        }
+    }
+}
+
+async function sendDiscordStatusUpdate(status, message, discordWebhookUrl) {
+    const statusInfo = STATUS_TYPES[status] || STATUS_TYPES.online;
+    
+    const embed = {
+        title: `${statusInfo.emoji} StarshipCore Status: ${statusInfo.label}`,
+        description: message || statusInfo.description,
+        color: statusInfo.color,
+        fields: [
+            { name: '📊 Status', value: `\`${status.toUpperCase()}\``, inline: true },
+            { name: '🕐 Updated', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+        ],
+        footer: {
+            text: 'StarshipCore Status Monitor',
+            icon_url: 'https://starship-core.my.id/starship-logo.png'
+        },
+        timestamp: new Date().toISOString()
+    };
+
+    if (status === 'maintenance') {
+        embed.fields.push({ name: '⚠️ Notice', value: 'System under maintenance. Please wait.', inline: false });
+    } else if (status === 'updating') {
+        embed.fields.push({ name: '🔄 Update', value: 'New version being deployed (2-5 min).', inline: false });
+    }
+
+    try {
+        const currentStatusData = await getStatus();
+        if (currentStatusData.discordMessageId && discordWebhookUrl) {
+            try {
+                await fetch(`${discordWebhookUrl}/messages/${currentStatusData.discordMessageId}`, { method: 'DELETE' });
+            } catch (e) { /* ignore */ }
+        }
+
+        const response = await fetch(`${discordWebhookUrl}?wait=true`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: 'StarshipCore Status',
+                avatar_url: 'https://starship-core.my.id/starship-logo.png',
+                embeds: [embed]
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            return data.id;
+        }
+        return null;
+    } catch (e) {
+        console.error('Discord webhook error:', e);
+        return null;
+    }
+}
 
 // Add role to Discord user
 async function addDiscordRole(discordId, roleId) {
@@ -102,18 +222,78 @@ async function checkVipStatus(robloxId) {
 export default async function handler(req, res) {
     // Set CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-secret');
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
+    }
+
+    // ============ GET STATUS (PUBLIC) ============
+    if (req.method === 'GET' && req.query.action === 'status') {
+        const status = await getStatus();
+        const statusInfo = STATUS_TYPES[status.status] || STATUS_TYPES.online;
+        
+        return res.status(200).json({
+            success: true,
+            status: status.status,
+            label: statusInfo.label,
+            emoji: statusInfo.emoji,
+            color: statusInfo.color,
+            message: status.message,
+            description: statusInfo.description,
+            lastUpdated: status.lastUpdated
+        });
     }
 
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    const { robloxId, discordId, action, code, redirectUri } = req.body;
+    const { robloxId, discordId, action, code, redirectUri, status, message } = req.body;
+
+    // ============ SET STATUS (ADMIN ONLY) ============
+    if (action === 'set_status') {
+        const adminSecret = req.headers['x-admin-secret'];
+        
+        if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: 'Unauthorized' });
+        }
+
+        if (!status || !STATUS_TYPES[status]) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid status. Valid: ' + Object.keys(STATUS_TYPES).join(', ')
+            });
+        }
+
+        const discordWebhookUrl = process.env.DISCORD_STATUS_WEBHOOK_URL;
+        let discordMessageId = null;
+        
+        if (discordWebhookUrl) {
+            discordMessageId = await sendDiscordStatusUpdate(status, message, discordWebhookUrl);
+        }
+
+        const newStatus = {
+            status,
+            message: message || STATUS_TYPES[status].description,
+            lastUpdated: new Date().toISOString(),
+            discordMessageId
+        };
+        
+        await saveStatus(newStatus);
+        const statusInfo = STATUS_TYPES[status];
+        
+        return res.status(200).json({
+            success: true,
+            status: newStatus.status,
+            label: statusInfo.label,
+            emoji: statusInfo.emoji,
+            message: newStatus.message,
+            lastUpdated: newStatus.lastUpdated,
+            discordUpdated: !!discordMessageId
+        });
+    }
 
     // ============ DISCORD OAUTH EXCHANGE ============
     if (action === 'discord_oauth' && code) {
@@ -254,3 +434,4 @@ export default async function handler(req, res) {
 
     return res.status(400).json({ error: 'Invalid request' });
 }
+

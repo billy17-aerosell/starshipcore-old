@@ -11,5 +11,7 @@
       "label": "🌐 Website",
       "url": "https://starship-core.my.id"
     }
-  ]
+  ],
+  "apiUrl": "https://starship-core.my.id/api/tags",
+  "adminSecret": "YOUR_ADMIN_SECRET_HERE"
 }

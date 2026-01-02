@@ -91,6 +91,139 @@
             100% { transform: translateX(-50%); }
         }
 
+        /* ============ STATUS BADGE ============ */
+        .status-badge-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 20px;
+            background: var(--white);
+            border: var(--border);
+            box-shadow: var(--shadow-sm);
+            font-family: 'Space Mono', monospace;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transition: all 0.3s ease;
+            cursor: default;
+        }
+
+        .status-badge:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: var(--shadow);
+        }
+
+        .status-badge.online {
+            background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+            border-color: #2e7d32;
+        }
+
+        .status-badge.maintenance {
+            background: linear-gradient(135deg, #fff3e0, #ffe0b2);
+            border-color: #e65100;
+            animation: pulse-maintenance 2s ease-in-out infinite;
+        }
+
+        .status-badge.offline {
+            background: linear-gradient(135deg, #ffebee, #ffcdd2);
+            border-color: #c62828;
+        }
+
+        .status-badge.degraded {
+            background: linear-gradient(135deg, #fffde7, #fff9c4);
+            border-color: #f9a825;
+        }
+
+        .status-badge.updating {
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            border-color: #1565c0;
+            animation: pulse-updating 1.5s ease-in-out infinite;
+        }
+
+        .status-badge.loading {
+            background: var(--bg-alt);
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: status-pulse 2s ease-in-out infinite;
+        }
+
+        .status-badge.online .status-indicator {
+            background: #00e676;
+            box-shadow: 0 0 8px #00e676;
+        }
+
+        .status-badge.maintenance .status-indicator {
+            background: #ff9800;
+            box-shadow: 0 0 8px #ff9800;
+        }
+
+        .status-badge.offline .status-indicator {
+            background: #f44336;
+            box-shadow: 0 0 8px #f44336;
+            animation: none;
+        }
+
+        .status-badge.degraded .status-indicator {
+            background: #ffeb3b;
+            box-shadow: 0 0 8px #ffeb3b;
+        }
+
+        .status-badge.updating .status-indicator {
+            background: #2196f3;
+            box-shadow: 0 0 8px #2196f3;
+        }
+
+        .status-text {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .status-label {
+            font-size: 0.65rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .status-value {
+            font-size: 0.9rem;
+        }
+
+        .status-message {
+            font-size: 0.75rem;
+            color: #666;
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        @keyframes status-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.9); }
+        }
+
+        @keyframes pulse-maintenance {
+            0%, 100% { box-shadow: var(--shadow-sm); }
+            50% { box-shadow: 0 0 15px rgba(255, 152, 0, 0.4), var(--shadow-sm); }
+        }
+
+        @keyframes pulse-updating {
+            0%, 100% { box-shadow: var(--shadow-sm); }
+            50% { box-shadow: 0 0 15px rgba(33, 150, 243, 0.4), var(--shadow-sm); }
+        }
+
         /* ============ MAIN CONTAINER ============ */
         .main-container {
             position: relative;
@@ -1245,6 +1378,17 @@
         <section class="hero">
             <img src="/starship-logo.png" alt="Starship Logo" class="hero-logo">
             
+            <!-- Status Badge -->
+            <div class="status-badge-container">
+                <div class="status-badge loading" id="status-badge" title="Loading status...">
+                    <div class="status-indicator"></div>
+                    <div class="status-text">
+                        <span class="status-label">System Status</span>
+                        <span class="status-value" id="status-value">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            
             <h1>STARSHIP <span>VIP</span></h1>
             <p>Unlock premium features for your Roblox experience. No limits. Full power.</p>
             
@@ -2285,8 +2429,97 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
+        // ============ STATUS BADGE ============
+        async function fetchSystemStatus() {
+            const badge = document.getElementById('status-badge');
+            const statusValue = document.getElementById('status-value');
+            
+            try {
+                const response = await fetch('/api/tags?action=status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Update badge class
+                    badge.className = `status-badge ${data.status}`;
+                    badge.title = data.message || data.description;
+                    
+                    // Update text
+                    statusValue.textContent = `${data.emoji} ${data.label}`;
+                    
+                    // If maintenance, show prominent banner
+                    if (data.status === 'maintenance' || data.status === 'offline') {
+                        showMaintenanceBanner(data);
+                    } else {
+                        hideMaintenanceBanner();
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to fetch status:', e);
+                badge.className = 'status-badge online';
+                statusValue.textContent = '🟢 Online';
+            }
+        }
+        
+        function showMaintenanceBanner(data) {
+            // Check if banner already exists
+            if (document.getElementById('maintenance-banner')) return;
+            
+            const banner = document.createElement('div');
+            banner.id = 'maintenance-banner';
+            banner.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                background: ${data.status === 'offline' ? '#c62828' : '#e65100'};
+                color: white;
+                padding: 12px 20px;
+                text-align: center;
+                font-family: 'Space Mono', monospace;
+                font-size: 0.85rem;
+                font-weight: 700;
+                z-index: 9999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+                animation: slideDown 0.3s ease;
+            `;
+            banner.innerHTML = `
+                <span>${data.emoji}</span>
+                <span>${data.label.toUpperCase()}: ${data.message}</span>
+            `;
+            
+            // Add animation keyframes
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideDown {
+                    from { transform: translateY(-100%); }
+                    to { transform: translateY(0); }
+                }
+            `;
+            document.head.appendChild(style);
+            document.body.prepend(banner);
+            
+            // Add padding to body
+            document.body.style.paddingTop = '48px';
+        }
+        
+        function hideMaintenanceBanner() {
+            const banner = document.getElementById('maintenance-banner');
+            if (banner) {
+                banner.remove();
+                document.body.style.paddingTop = '0';
+            }
+        }
+
         // ============ PAGE LOAD - CHECK PENDING ORDER ============
         document.addEventListener('DOMContentLoaded', () => {
+            // Fetch system status on load
+            fetchSystemStatus();
+            // Refresh status every 60 seconds
+            setInterval(fetchSystemStatus, 60000);
+            
             const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
             
             if (pendingOrder) {
