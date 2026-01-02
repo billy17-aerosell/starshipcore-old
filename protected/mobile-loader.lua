@@ -904,6 +904,161 @@ local function loadMobileUI(sessionData, loaderGui, updateStatus)
 		-- They are needed for periodic ban check to function properly
 	end)
 
+	-- ══════════════════════════════════════════════════════════════════
+	-- REAL-TIME STATUS MONITORING (MOBILE)
+	-- Check status every 5 minutes and close UI if maintenance/offline
+	-- ══════════════════════════════════════════════════════════════════
+	task.spawn(function()
+		task.wait(60) -- Wait 1 minute before first check
+
+		while true do
+			task.wait(300) -- Check every 5 minutes
+
+			-- Check if StarshipCore is still active
+			if not getgenv().StarshipSession then
+				break -- Script was closed, stop monitoring
+			end
+
+			-- Check system status
+			local statusCheckUrl = SECURE_API_URL .. "/api/tags?action=status"
+			local success, response = pcall(function()
+				return game:HttpGet(statusCheckUrl)
+			end)
+
+			if success and response then
+				local statusData = nil
+				pcall(function()
+					statusData = HttpService:JSONDecode(response)
+				end)
+
+				if statusData and statusData.success then
+					if
+						statusData.status == "maintenance"
+						or statusData.status == "offline"
+						or statusData.status == "updating"
+					then
+						-- Status changed to maintenance/offline/updating - close UI
+						print("[StarshipCore Mobile] Server status changed to:", statusData.status)
+
+						-- Try to close the main UI
+						pcall(function()
+							if getgenv().StarshipWindow then
+								getgenv().StarshipWindow:destroy()
+							end
+						end)
+						pcall(function()
+							if getgenv().StarshipWindUI then
+								getgenv().StarshipWindUI:Destroy()
+							end
+						end)
+						pcall(function()
+							local CoreGui = game:GetService("CoreGui")
+							local mobileUI = CoreGui:FindFirstChild("StarshipMobile")
+							if mobileUI then
+								mobileUI:Destroy()
+							end
+						end)
+						pcall(function()
+							local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
+							if PlayerGui then
+								local mobileUI = PlayerGui:FindFirstChild("StarshipMobile")
+								if mobileUI then
+									mobileUI:Destroy()
+								end
+							end
+						end)
+
+						-- Show maintenance message (reuse existing UI code from main)
+						local screenGui = Instance.new("ScreenGui")
+						screenGui.Name = "StarshipMaintenance"
+						screenGui.ResetOnSpawn = false
+						screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+						screenGui.IgnoreGuiInset = true
+
+						pcall(function()
+							screenGui.Parent = game:GetService("CoreGui")
+						end)
+						if not screenGui.Parent then
+							screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+						end
+
+						local background = Instance.new("Frame")
+						background.Size = UDim2.new(1, 0, 1, 0)
+						background.BackgroundColor3 = Color3.fromHex("#0a0a0f")
+						background.BorderSizePixel = 0
+						background.Parent = screenGui
+
+						local container = Instance.new("Frame")
+						container.Size = UDim2.new(0, 340, 0, 240)
+						container.Position = UDim2.new(0.5, 0, 0.5, 0)
+						container.AnchorPoint = Vector2.new(0.5, 0.5)
+						container.BackgroundColor3 = Color3.fromHex("#1a1a2e")
+						container.BorderSizePixel = 0
+						container.Parent = background
+						Instance.new("UICorner", container).CornerRadius = UDim.new(0, 16)
+
+						local accentColor = Color3.fromHex("#ff9800")
+						if statusData.status == "offline" then
+							accentColor = Color3.fromHex("#f44336")
+						elseif statusData.status == "updating" then
+							accentColor = Color3.fromHex("#2196f3")
+						end
+
+						local containerStroke = Instance.new("UIStroke")
+						containerStroke.Color = accentColor
+						containerStroke.Thickness = 2
+						containerStroke.Parent = container
+
+						local title = Instance.new("TextLabel")
+						title.Size = UDim2.new(1, 0, 0, 60)
+						title.Position = UDim2.new(0.5, 0, 0, 30)
+						title.AnchorPoint = Vector2.new(0.5, 0)
+						title.BackgroundTransparency = 1
+						title.Text = statusData.emoji .. " " .. string.upper(statusData.label)
+						title.TextColor3 = accentColor
+						title.TextSize = 24
+						title.Font = Enum.Font.GothamBold
+						title.Parent = container
+
+						local msg = Instance.new("TextLabel")
+						msg.Size = UDim2.new(1, -40, 0, 60)
+						msg.Position = UDim2.new(0.5, 0, 0, 100)
+						msg.AnchorPoint = Vector2.new(0.5, 0)
+						msg.BackgroundTransparency = 1
+						msg.Text = statusData.message .. "\n\nPlease try again later."
+						msg.TextColor3 = Color3.fromHex("#a1a1aa")
+						msg.TextSize = 14
+						msg.Font = Enum.Font.Gotham
+						msg.TextWrapped = true
+						msg.Parent = container
+
+						local closeBtn = Instance.new("TextButton")
+						closeBtn.Size = UDim2.new(0, 100, 0, 35)
+						closeBtn.Position = UDim2.new(0.5, 0, 1, -40)
+						closeBtn.AnchorPoint = Vector2.new(0.5, 0)
+						closeBtn.BackgroundColor3 = accentColor
+						closeBtn.Text = "Close"
+						closeBtn.TextColor3 = Color3.fromHex("#ffffff")
+						closeBtn.TextSize = 14
+						closeBtn.Font = Enum.Font.GothamBold
+						closeBtn.BorderSizePixel = 0
+						closeBtn.Parent = container
+						Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 8)
+
+						closeBtn.MouseButton1Click:Connect(function()
+							screenGui:Destroy()
+						end)
+
+						-- Clear session
+						getgenv().StarshipSession = nil
+
+						break -- Stop monitoring
+					end
+				end
+			end
+		end
+	end)
+
 	return true
 end
 

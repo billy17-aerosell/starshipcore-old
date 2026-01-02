@@ -1089,6 +1089,70 @@ local function main()
 		-- Debug log (remove in production if needed)
 		-- print("[StarshipCore] Security cleanup completed - globals cleared")
 	end)
+
+	-- ══════════════════════════════════════════════════════════════════
+	-- REAL-TIME STATUS MONITORING
+	-- Check status every 5 minutes and close UI if maintenance/offline
+	-- ══════════════════════════════════════════════════════════════════
+	task.spawn(function()
+		task.wait(60) -- Wait 1 minute before first check
+
+		while true do
+			task.wait(300) -- Check every 5 minutes
+
+			-- Check if StarshipCore is still active
+			if not getgenv().StarshipSession then
+				break -- Script was closed, stop monitoring
+			end
+
+			-- Check system status
+			local statusUrl = SECURE_API_URL .. "/api/tags?action=status"
+			local success, response = pcall(function()
+				return game:HttpGet(statusUrl)
+			end)
+
+			if success and response then
+				local data = nil
+				pcall(function()
+					data = HttpService:JSONDecode(response)
+				end)
+
+				if data and data.success then
+					if data.status == "maintenance" or data.status == "offline" or data.status == "updating" then
+						-- Status changed to maintenance/offline/updating - close UI
+						print("[StarshipCore] Server status changed to:", data.status)
+
+						-- Try to close the main UI
+						pcall(function()
+							if getgenv().StarshipWindow then
+								getgenv().StarshipWindow:destroy()
+							end
+						end)
+						pcall(function()
+							if getgenv().StarshipWindUI then
+								getgenv().StarshipWindUI:Destroy()
+							end
+						end)
+						pcall(function()
+							local CoreGui = game:GetService("CoreGui")
+							local ui = CoreGui:FindFirstChild("Starship")
+							if ui then
+								ui:Destroy()
+							end
+						end)
+
+						-- Show maintenance message
+						showMaintenanceUI(data)
+
+						-- Clear session
+						getgenv().StarshipSession = nil
+
+						break -- Stop monitoring
+					end
+				end
+			end
+		end
+	end)
 end
 
 main()
