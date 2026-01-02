@@ -165,12 +165,17 @@ async function updateDiscordChannelName(status) {
     const botToken = process.env.DISCORD_BOT_TOKEN;
     const channelId = process.env.DISCORD_STATUS_CHANNEL_ID;
     
+    console.log('[Status] Attempting channel rename...');
+    console.log('[Status] Channel ID:', channelId ? channelId.substring(0, 6) + '...' : 'NOT SET');
+    console.log('[Status] Bot Token:', botToken ? 'SET (' + botToken.length + ' chars)' : 'NOT SET');
+    
     if (!botToken || !channelId) {
-        console.log('Discord channel rename skipped: missing BOT_TOKEN or STATUS_CHANNEL_ID');
+        console.log('[Status] Discord channel rename skipped: missing BOT_TOKEN or STATUS_CHANNEL_ID');
         return false;
     }
     
     const channelName = STATUS_CHANNEL_NAMES[status] || STATUS_CHANNEL_NAMES.online;
+    console.log('[Status] Target channel name:', channelName);
     
     try {
         const response = await fetch(`https://discord.com/api/v10/channels/${channelId}`, {
@@ -185,15 +190,16 @@ async function updateDiscordChannelName(status) {
         });
         
         if (response.ok) {
-            console.log(`Discord channel renamed to: ${channelName}`);
+            console.log(`[Status] ✅ Discord channel renamed to: ${channelName}`);
             return true;
         } else {
             const error = await response.text();
-            console.error('Failed to rename Discord channel:', error);
+            console.error('[Status] ❌ Failed to rename Discord channel:', error);
+            console.error('[Status] Response status:', response.status);
             return false;
         }
     } catch (e) {
-        console.error('Discord channel rename error:', e);
+        console.error('[Status] Discord channel rename error:', e);
         return false;
     }
 }
