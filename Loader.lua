@@ -316,6 +316,193 @@ local function downloadModules(statusCallback)
 	return downloaded == totalFiles
 end
 
+-- ══════════════════════════════════════════════════════════════════
+-- LANGUAGE PICKER: Simple modal for first-time users to select language
+-- ══════════════════════════════════════════════════════════════════
+local CONFIG_FILE = FOLDER_NAME .. "/config.json"
+
+local function getSavedLanguage()
+	local success, result = pcall(function()
+		if isfile and isfile(CONFIG_FILE) then
+			local content = readfile(CONFIG_FILE)
+			local data = HttpService:JSONDecode(content)
+			return data.language
+		end
+		return nil
+	end)
+	return success and result or nil
+end
+
+local function saveLanguage(lang)
+	pcall(function()
+		local data = {}
+		-- Load existing config
+		if isfile and isfile(CONFIG_FILE) then
+			local content = readfile(CONFIG_FILE)
+			local parsed = HttpService:JSONDecode(content)
+			if parsed then
+				data = parsed
+			end
+		end
+		data.language = lang
+		if writefile then
+			writefile(CONFIG_FILE, HttpService:JSONEncode(data))
+		end
+	end)
+end
+
+local function showLanguagePicker()
+	local CoreGui = game:GetService("CoreGui")
+	local TweenService = game:GetService("TweenService")
+
+	local selectedLang = nil
+
+	local ScreenGui = Instance.new("ScreenGui")
+	ScreenGui.Name = "StarshipLanguage"
+	ScreenGui.Parent = CoreGui
+	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	ScreenGui.DisplayOrder = 10001
+
+	-- Background
+	local Overlay = Instance.new("Frame", ScreenGui)
+	Overlay.Size = UDim2.new(1, 0, 1, 0)
+	Overlay.BackgroundColor3 = Color3.fromRGB(8, 8, 15)
+	Overlay.BackgroundTransparency = 0
+	Overlay.BorderSizePixel = 0
+
+	-- Modal
+	local Modal = Instance.new("Frame", ScreenGui)
+	Modal.Size = UDim2.new(0, 350, 0, 200)
+	Modal.Position = UDim2.new(0.5, -175, 0.5, -100)
+	Modal.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+	Modal.BorderSizePixel = 0
+	Instance.new("UICorner", Modal).CornerRadius = UDim.new(0, 16)
+
+	-- Accent bar
+	local Accent = Instance.new("Frame", Modal)
+	Accent.Size = UDim2.new(1, 0, 0, 4)
+	Accent.BackgroundColor3 = Color3.fromRGB(90, 110, 245)
+	Accent.BorderSizePixel = 0
+	Instance.new("UICorner", Accent).CornerRadius = UDim.new(0, 16)
+
+	-- Title
+	local Title = Instance.new("TextLabel", Modal)
+	Title.Text = "🌍 Select Language"
+	Title.Size = UDim2.new(1, 0, 0, 40)
+	Title.Position = UDim2.new(0, 0, 0, 20)
+	Title.BackgroundTransparency = 1
+	Title.TextColor3 = Color3.fromRGB(220, 220, 230)
+	Title.Font = Enum.Font.GothamBold
+	Title.TextSize = 20
+
+	-- Subtitle
+	local Subtitle = Instance.new("TextLabel", Modal)
+	Subtitle.Text = "Choose your preferred language"
+	Subtitle.Size = UDim2.new(1, 0, 0, 20)
+	Subtitle.Position = UDim2.new(0, 0, 0, 55)
+	Subtitle.BackgroundTransparency = 1
+	Subtitle.TextColor3 = Color3.fromRGB(140, 140, 160)
+	Subtitle.Font = Enum.Font.Gotham
+	Subtitle.TextSize = 13
+
+	-- Button container
+	local BtnContainer = Instance.new("Frame", Modal)
+	BtnContainer.Size = UDim2.new(1, -40, 0, 60)
+	BtnContainer.Position = UDim2.new(0, 20, 0, 100)
+	BtnContainer.BackgroundTransparency = 1
+
+	local BtnLayout = Instance.new("UIListLayout", BtnContainer)
+	BtnLayout.FillDirection = Enum.FillDirection.Horizontal
+	BtnLayout.Padding = UDim.new(0, 15)
+	BtnLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+	-- Indonesia button
+	local BtnID = Instance.new("TextButton", BtnContainer)
+	BtnID.Size = UDim2.new(0, 140, 0, 50)
+	BtnID.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	BtnID.Text = "🇮🇩  Indonesia"
+	BtnID.TextColor3 = Color3.new(1, 1, 1)
+	BtnID.Font = Enum.Font.GothamBold
+	BtnID.TextSize = 15
+	BtnID.BorderSizePixel = 0
+	Instance.new("UICorner", BtnID).CornerRadius = UDim.new(0, 10)
+
+	local BtnIDStroke = Instance.new("UIStroke", BtnID)
+	BtnIDStroke.Color = Color3.fromRGB(90, 110, 245)
+	BtnIDStroke.Thickness = 0
+
+	-- English button
+	local BtnEN = Instance.new("TextButton", BtnContainer)
+	BtnEN.Size = UDim2.new(0, 140, 0, 50)
+	BtnEN.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	BtnEN.Text = "🇺🇸  English"
+	BtnEN.TextColor3 = Color3.new(1, 1, 1)
+	BtnEN.Font = Enum.Font.GothamBold
+	BtnEN.TextSize = 15
+	BtnEN.BorderSizePixel = 0
+	Instance.new("UICorner", BtnEN).CornerRadius = UDim.new(0, 10)
+
+	local BtnENStroke = Instance.new("UIStroke", BtnEN)
+	BtnENStroke.Color = Color3.fromRGB(90, 110, 245)
+	BtnENStroke.Thickness = 0
+
+	-- Hover effects
+	BtnID.MouseEnter:Connect(function()
+		TweenService:Create(BtnID, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(60, 60, 80) }):Play()
+		TweenService:Create(BtnIDStroke, TweenInfo.new(0.2), { Thickness = 2 }):Play()
+	end)
+	BtnID.MouseLeave:Connect(function()
+		TweenService:Create(BtnID, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(40, 40, 55) }):Play()
+		TweenService:Create(BtnIDStroke, TweenInfo.new(0.2), { Thickness = 0 }):Play()
+	end)
+	BtnEN.MouseEnter:Connect(function()
+		TweenService:Create(BtnEN, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(60, 60, 80) }):Play()
+		TweenService:Create(BtnENStroke, TweenInfo.new(0.2), { Thickness = 2 }):Play()
+	end)
+	BtnEN.MouseLeave:Connect(function()
+		TweenService:Create(BtnEN, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(40, 40, 55) }):Play()
+		TweenService:Create(BtnENStroke, TweenInfo.new(0.2), { Thickness = 0 }):Play()
+	end)
+
+	-- Click handlers
+	BtnID.MouseButton1Click:Connect(function()
+		selectedLang = "id"
+		TweenService:Create(BtnID, TweenInfo.new(0.15), { BackgroundColor3 = Color3.fromRGB(90, 110, 245) }):Play()
+	end)
+	BtnEN.MouseButton1Click:Connect(function()
+		selectedLang = "en"
+		TweenService:Create(BtnEN, TweenInfo.new(0.15), { BackgroundColor3 = Color3.fromRGB(90, 110, 245) }):Play()
+	end)
+
+	-- Entrance animation
+	Modal.Position = UDim2.new(0.5, -175, 1.5, 0)
+	Overlay.BackgroundTransparency = 1
+	TweenService:Create(Overlay, TweenInfo.new(0.3), { BackgroundTransparency = 0 }):Play()
+	TweenService:Create(Modal, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, -175, 0.5, -100),
+	}):Play()
+
+	-- Wait for selection
+	while selectedLang == nil do
+		task.wait(0.1)
+	end
+
+	-- Save and set global
+	saveLanguage(selectedLang)
+	_G.StarshipLanguage = selectedLang
+
+	-- Exit animation
+	TweenService:Create(Overlay, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
+	TweenService:Create(Modal, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+		Position = UDim2.new(0.5, -175, 1.5, 0),
+	}):Play()
+
+	task.wait(0.3)
+	ScreenGui:Destroy()
+
+	return selectedLang
+end
+
 -- Legacy Firebase authentication removed
 -- Now using secure API endpoint /api/load for all authentication
 
@@ -1097,6 +1284,21 @@ local function main()
 		getgenv().StarshipIntroComplete = true
 
 		loaderGui:Destroy()
+	end
+
+	-- ══════════════════════════════════════════════════════════════════
+	-- LANGUAGE PICKER: Show for first-time users before anything else
+	-- ══════════════════════════════════════════════════════════════════
+	local savedLang = getSavedLanguage()
+	if savedLang then
+		-- Use saved language
+		_G.StarshipLanguage = savedLang
+		warn("[Language] Loaded saved language: " .. savedLang)
+	else
+		-- First-time user, show picker
+		warn("[Language] No saved language, showing picker...")
+		showLanguagePicker()
+		warn("[Language] Selected: " .. tostring(_G.StarshipLanguage))
 	end
 
 	-- ══════════════════════════════════════════════════════════════════
