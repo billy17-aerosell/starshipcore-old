@@ -173,12 +173,59 @@ export default async function handler(req, res) {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // MAINTENANCE MODE - Fetched from Google Sheets (no deploy needed!)
+  // CHECK MOBILE STATUS FROM REDIS (MAINTENANCE/OFFLINE CHECK)
+  // This is the PRIMARY status check - consistent with PC and manager
+  // ═══════════════════════════════════════════════════════════════
+  if (!isDev) {
+    try {
+      const redisClient = await getRedis();
+      if (redisClient) {
+        const statusData = await redisClient.get('starship:status:mobile');
+        if (statusData) {
+          const status = JSON.parse(statusData);
+          if (status.status === 'maintenance' || status.status === 'offline') {
+            console.log(`[${timestamp}] 🔧 MOBILE ${status.status.toUpperCase()} (Redis) | IP: ${clientIP}`);
+            
+            res.setHeader("Content-Type", "text/plain; charset=utf-8");
+            res.setHeader("X-Status", status.status);
+            
+            const statusEmoji = status.status === 'maintenance' ? '🔧' : '🔴';
+            const statusTitle = status.status === 'maintenance' ? 'Maintenance Mode' : 'System Offline';
+            const statusMessage = status.message || (status.status === 'maintenance' 
+              ? 'Mobile is under maintenance. Please try again later.'
+              : 'Mobile is currently offline. Please try again later.');
+            
+            return res.status(200).send(`
+-- StarshipCore Mobile - ${statusTitle}
+print("[StarshipCore Mobile] ${statusEmoji} ${statusTitle}")
+print("[StarshipCore Mobile] ${statusMessage}")
+
+pcall(function()
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "${statusEmoji} ${statusTitle}",
+        Text = "${statusMessage}",
+        Duration = 10
+    })
+end)
+
+warn("[StarshipCore] Mobile access is temporarily disabled.")
+`);
+          }
+        }
+      }
+    } catch (e) {
+      console.error(`[${timestamp}] ⚠️ Redis status check error:`, e.message);
+      // Continue if Redis fails
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // MAINTENANCE MODE - Fallback from Google Sheets (legacy)
   // ═══════════════════════════════════════════════════════════════
   if (!isDev) {
     const maintStatus = await checkMaintenanceFromSheets();
     if (maintStatus.maintenance) {
-      console.log(`[${timestamp}] 🔧 MOBILE MAINTENANCE | IP: ${clientIP}`);
+      console.log(`[${timestamp}] 🔧 MOBILE MAINTENANCE (Sheets) | IP: ${clientIP}`);
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       return res.status(200).send(`
 -- StarshipCore Mobile - Maintenance Mode
