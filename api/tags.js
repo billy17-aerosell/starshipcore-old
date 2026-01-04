@@ -65,7 +65,21 @@ const STATUS_TYPES = {
     }
 };
 
-// In-memory status fallback
+// In-memory status fallback (per platform)
+let platformStatus = {
+    pc: {
+        status: 'online',
+        message: 'All systems operational',
+        lastUpdated: new Date().toISOString()
+    },
+    mobile: {
+        status: 'online',
+        message: 'All systems operational',
+        lastUpdated: new Date().toISOString()
+    }
+};
+
+// Legacy single status for backwards compatibility
 let currentStatus = {
     status: 'online',
     message: 'All systems operational',
@@ -73,25 +87,64 @@ let currentStatus = {
     discordMessageId: null
 };
 
-async function getStatus() {
+async function getStatus(platform = null) {
     const redisClient = await getRedis();
+    
+    // If specific platform requested
+    if (platform && (platform === 'pc' || platform === 'mobile')) {
+        if (redisClient) {
+            try {
+                const data = await redisClient.get(`starship:status:${platform}`);
+                if (data) return JSON.parse(data);
+            } catch (e) {
+                console.error('Redis get status error:', e);
+            }
+        }
+        return platformStatus[platform];
+    }
+    
+    // Return combined status (for backwards compatibility)
     if (redisClient) {
         try {
-            const data = await redisClient.get('starship:status');
-            if (data) return JSON.parse(data);
+            const pcData = await redisClient.get('starship:status:pc');
+            const mobileData = await redisClient.get('starship:status:mobile');
+            return {
+                pc: pcData ? JSON.parse(pcData) : platformStatus.pc,
+                mobile: mobileData ? JSON.parse(mobileData) : platformStatus.mobile,
+                lastUpdated: new Date().toISOString()
+            };
         } catch (e) {
             console.error('Redis get status error:', e);
         }
     }
-    return currentStatus;
+    return platformStatus;
 }
 
-async function saveStatus(status) {
-    currentStatus = status;
+async function saveStatus(status, platform = null) {
     const redisClient = await getRedis();
+    
+    // If specific platform
+    if (platform && (platform === 'pc' || platform === 'mobile')) {
+        platformStatus[platform] = status;
+        if (redisClient) {
+            try {
+                await redisClient.set(`starship:status:${platform}`, JSON.stringify(status));
+            } catch (e) {
+                console.error('Redis set status error:', e);
+            }
+        }
+        return;
+    }
+    
+    // Set both platforms (all)
+    platformStatus.pc = status;
+    platformStatus.mobile = status;
+    currentStatus = status;
     if (redisClient) {
         try {
-            await redisClient.set('starship:status', JSON.stringify(status));
+            await redisClient.set('starship:status:pc', JSON.stringify(status));
+            await redisClient.set('starship:status:mobile', JSON.stringify(status));
+            await redisClient.set('starship:status', JSON.stringify(status)); // Legacy
         } catch (e) {
             console.error('Redis set status error:', e);
         }
@@ -285,18 +338,45 @@ export default async function handler(req, res) {
 
     // ============ GET STATUS (PUBLIC) ============
     if (req.method === 'GET' && req.query.action === 'status') {
-        const status = await getStatus();
-        const statusInfo = STATUS_TYPES[status.status] || STATUS_TYPES.online;
+        const platform = req.query.platform; // pc, mobile, or null for all
+        const status = await getStatus(platform);
+        
+        // If specific platform, return single status
+        if (platform && (platform === 'pc' || platform === 'mobile')) {
+            const statusInfo = STATUS_TYPES[status.status] || STATUS_TYPES.online;
+            return res.status(200).json({
+                success: true,
+                platform: platform,
+                status: status.status,
+                label: statusInfo.label,
+                emoji: statusInfo.emoji,
+                color: statusInfo.color,
+                message: status.message,
+                description: statusInfo.description,
+                lastUpdated: status.lastUpdated
+            });
+        }
+        
+        // Return both platforms
+        const pcInfo = STATUS_TYPES[status.pc?.status] || STATUS_TYPES.online;
+        const mobileInfo = STATUS_TYPES[status.mobile?.status] || STATUS_TYPES.online;
         
         return res.status(200).json({
             success: true,
-            status: status.status,
-            label: statusInfo.label,
-            emoji: statusInfo.emoji,
-            color: statusInfo.color,
-            message: status.message,
-            description: statusInfo.description,
-            lastUpdated: status.lastUpdated
+            pc: {
+                status: status.pc?.status || 'online',
+                label: pcInfo.label,
+                emoji: pcInfo.emoji,
+                message: status.pc?.message,
+                lastUpdated: status.pc?.lastUpdated
+            },
+            mobile: {
+                status: status.mobile?.status || 'online',
+                label: mobileInfo.label,
+                emoji: mobileInfo.emoji,
+                message: status.mobile?.message,
+                lastUpdated: status.mobile?.lastUpdated
+            }
         });
     }
 
@@ -337,11 +417,14 @@ export default async function handler(req, res) {
             lastUpdated: new Date().toISOString()
         };
         
-        await saveStatus(newStatus);
+        // Get platform from request body (pc, mobile, or all/null)
+        const platform = req.body.platform;
+        await saveStatus(newStatus, platform === 'all' ? null : platform);
         const statusInfo = STATUS_TYPES[status];
         
         return res.status(200).json({
             success: true,
+            platform: req.body.platform || 'all',
             status: newStatus.status,
             label: statusInfo.label,
             emoji: statusInfo.emoji,
