@@ -323,10 +323,22 @@ local CONFIG_FILE = FOLDER_NAME .. "/config.json"
 
 local function getSavedLanguage()
 	local success, result = pcall(function()
+		-- First check config.json (Language Picker style)
 		if isfile and isfile(CONFIG_FILE) then
 			local content = readfile(CONFIG_FILE)
 			local data = HttpService:JSONDecode(content)
-			return data.language
+			if data.language then
+				return data.language
+			end
+		end
+		-- Fallback: check Language.json (ConfigTab style)
+		local LANG_FILE = FOLDER_NAME .. "/StarshipConfigs/Language.json"
+		if isfile and isfile(LANG_FILE) then
+			local content = readfile(LANG_FILE)
+			local data = HttpService:JSONDecode(content)
+			if data.Language then
+				return data.Language
+			end
 		end
 		return nil
 	end)
@@ -348,6 +360,14 @@ local function saveLanguage(lang)
 		if writefile then
 			writefile(CONFIG_FILE, HttpService:JSONEncode(data))
 		end
+
+		-- ALSO save to Language.json for consistency with ConfigTab
+		local LANG_FOLDER = FOLDER_NAME .. "/StarshipConfigs"
+		local LANG_FILE = LANG_FOLDER .. "/Language.json"
+		if not isfolder(LANG_FOLDER) then
+			makefolder(LANG_FOLDER)
+		end
+		writefile(LANG_FILE, HttpService:JSONEncode({ Language = lang }))
 	end)
 end
 
