@@ -329,60 +329,78 @@ local function createLoadingUI()
 
 	local MainFrame = Instance.new("Frame", LoaderGui)
 	MainFrame.Size = UDim2.new(1, 0, 1, 0)
-	MainFrame.BackgroundColor3 = Color3.new(0, 0, 0)
-	MainFrame.BackgroundTransparency = 0.2
+	MainFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 15)
+	MainFrame.BackgroundTransparency = 0
+
+	-- Gradient overlay for depth effect
+	local GradientTop = Instance.new("Frame", MainFrame)
+	GradientTop.Size = UDim2.new(1, 0, 0.5, 0)
+	GradientTop.Position = UDim2.new(0, 0, 0, 0)
+	GradientTop.BackgroundTransparency = 1
+	GradientTop.ZIndex = 1
+
+	local GradientBottom = Instance.new("Frame", MainFrame)
+	GradientBottom.Size = UDim2.new(1, 0, 0.5, 0)
+	GradientBottom.Position = UDim2.new(0, 0, 0.5, 0)
+	GradientBottom.BackgroundColor3 = Color3.fromRGB(15, 10, 30)
+	GradientBottom.BackgroundTransparency = 0.7
+	GradientBottom.ZIndex = 1
+
+	-- Add subtle radial glow in center
+	local CenterGlow = Instance.new("Frame", MainFrame)
+	CenterGlow.Size = UDim2.new(0, 400, 0, 400)
+	CenterGlow.Position = UDim2.new(0.5, -200, 0.4, -200)
+	CenterGlow.BackgroundColor3 = Color3.fromRGB(90, 110, 245)
+	CenterGlow.BackgroundTransparency = 0.92
+	CenterGlow.ZIndex = 1
+	Instance.new("UICorner", CenterGlow).CornerRadius = UDim.new(1, 0)
 
 	-- Floating Particles Container
 	local ParticleContainer = Instance.new("Frame", MainFrame)
 	ParticleContainer.Size = UDim2.new(1, 0, 1, 0)
 	ParticleContainer.BackgroundTransparency = 1
 	ParticleContainer.ClipsDescendants = true
+	ParticleContainer.ZIndex = 2
 
-	-- Create Floating Particles (using Frames instead of broken unicode)
+	-- OPTIMIZED: Reduced particle count 40 → 25 for better performance
 	task.spawn(function()
-		for i = 1, 40 do
+		for i = 1, 25 do
 			if not LoaderGui or not LoaderGui.Parent then
 				break
 			end
 
-			-- Random particle type: circle or diamond shape
 			local particleType = math.random(1, 3)
 			local particle = Instance.new("Frame", ParticleContainer)
 
-			local baseSize = math.random(3, 8)
+			local baseSize = math.random(2, 6)
 			particle.Size = UDim2.new(0, baseSize, 0, baseSize)
 			particle.Position = UDim2.new(math.random(), 0, math.random(), 0)
-			particle.BackgroundColor3 = Color3.fromRGB(90, 110, 245)
-			particle.BackgroundTransparency = math.random() * 0.4 + 0.3
+			particle.BackgroundColor3 = Color3.fromHSV(0.65 + math.random() * 0.1, 0.8, 1)
+			particle.BackgroundTransparency = math.random() * 0.3 + 0.4
 			particle.BorderSizePixel = 0
+			particle.ZIndex = 3
 
-			-- Add corner radius for different shapes
 			local corner = Instance.new("UICorner", particle)
 			if particleType == 1 then
-				-- Circle
 				corner.CornerRadius = UDim.new(1, 0)
 			elseif particleType == 2 then
-				-- Rounded square
 				corner.CornerRadius = UDim.new(0, 2)
 			else
-				-- Diamond (rotated square)
 				corner.CornerRadius = UDim.new(0, 1)
 				particle.Rotation = 45
 			end
 
-			-- Add subtle glow effect
 			local glow = Instance.new("UIStroke", particle)
-			glow.Color = Color3.fromRGB(90, 110, 245)
+			glow.Color = particle.BackgroundColor3
 			glow.Thickness = 1
-			glow.Transparency = 0.7
+			glow.Transparency = 0.6
 
-			-- Animate floating upward with gentle sway
 			task.spawn(function()
 				local startY = particle.Position.Y.Scale
 				local startX = particle.Position.X.Scale
 				local swayOffset = math.random() * math.pi * 2
-				local swaySpeed = math.random(20, 40) / 10
-				local floatSpeed = math.random(15, 30) / 10000
+				local swaySpeed = math.random(15, 35) / 10
+				local floatSpeed = math.random(12, 25) / 10000
 
 				while particle and particle.Parent do
 					local newY = startY - floatSpeed
@@ -393,28 +411,26 @@ local function createLoadingUI()
 					end
 					startY = newY
 
-					-- Gentle horizontal sway
-					local sway = math.sin(os.clock() * swaySpeed + swayOffset) * 0.02
+					local sway = math.sin(os.clock() * swaySpeed + swayOffset) * 0.025
 					particle.Position = UDim2.new(startX + sway, 0, newY, 0)
-
-					-- Pulsing transparency
-					particle.BackgroundTransparency = 0.3 + math.sin(os.clock() * 2 + i) * 0.25
+					particle.BackgroundTransparency = 0.4 + math.sin(os.clock() * 2 + i) * 0.2
 					if glow then
-						glow.Transparency = 0.5 + math.sin(os.clock() * 3 + i) * 0.3
+						glow.Transparency = 0.5 + math.sin(os.clock() * 2.5 + i) * 0.25
 					end
 
-					task.wait(0.02)
+					task.wait(0.025)
 				end
 			end)
-			task.wait(0.03)
+			task.wait(0.04)
 		end
 	end)
 
-	-- Logo Icon (Animated "S")
+	-- Logo Icon (Animated "S") with FLOATING effect
 	local LogoContainer = Instance.new("Frame", MainFrame)
 	LogoContainer.Size = UDim2.new(0, 100, 0, 100)
-	LogoContainer.Position = UDim2.new(0.5, -50, 0.35, 0)
+	LogoContainer.Position = UDim2.new(0.5, -50, 0.33, 0)
 	LogoContainer.BackgroundTransparency = 1
+	LogoContainer.ZIndex = 10
 
 	local Logo = Instance.new("TextLabel", LogoContainer)
 	Logo.Text = "S"
@@ -423,81 +439,115 @@ local function createLoadingUI()
 	Logo.TextColor3 = Color3.fromRGB(90, 110, 245)
 	Logo.Font = Enum.Font.GothamBlack
 	Logo.TextSize = 72
-	Logo.TextTransparency = 0 -- Visible immediately
+	Logo.TextTransparency = 0
+	Logo.ZIndex = 10
 
 	local LogoGlow = Instance.new("UIStroke", Logo)
 	LogoGlow.Color = Color3.fromRGB(90, 110, 245)
 	LogoGlow.Thickness = 3
-	LogoGlow.Transparency = 0.5
+	LogoGlow.Transparency = 0.4
 
 	-- Title Text
 	local Title = Instance.new("TextLabel", MainFrame)
 	Title.Text = "STARSHIP"
 	Title.Size = UDim2.new(1, 0, 0, 50)
-	Title.Position = UDim2.new(0, 0, 0.48, 0)
+	Title.Position = UDim2.new(0, 0, 0.46, 0)
 	Title.BackgroundTransparency = 1
 	Title.TextColor3 = Color3.fromRGB(90, 110, 245)
 	Title.Font = Enum.Font.GothamBlack
 	Title.TextSize = 42
 	Title.TextTransparency = 0
 	Title.RichText = true
+	Title.ZIndex = 10
 
 	-- Subtitle / Status Text
 	local Sub = Instance.new("TextLabel", MainFrame)
 	Sub.Text = "INITIALIZING..."
 	Sub.Size = UDim2.new(1, 0, 0, 25)
-	Sub.Position = UDim2.new(0, 0, 0.55, 0)
+	Sub.Position = UDim2.new(0, 0, 0.53, 0)
 	Sub.BackgroundTransparency = 1
-	Sub.TextColor3 = Color3.fromRGB(180, 180, 180)
+	Sub.TextColor3 = Color3.fromRGB(180, 180, 190)
 	Sub.Font = Enum.Font.GothamMedium
 	Sub.TextSize = 14
 	Sub.TextTransparency = 0
+	Sub.ZIndex = 10
 
-	-- Progress Bar Container
+	-- Progress Bar Container with GLOW
 	local ProgressContainer = Instance.new("Frame", MainFrame)
-	ProgressContainer.Size = UDim2.new(0.3, 0, 0, 4)
-	ProgressContainer.Position = UDim2.new(0.35, 0, 0.6, 0)
-	ProgressContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+	ProgressContainer.Size = UDim2.new(0.3, 0, 0, 6)
+	ProgressContainer.Position = UDim2.new(0.35, 0, 0.58, 0)
+	ProgressContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
 	ProgressContainer.BackgroundTransparency = 0
+	ProgressContainer.ZIndex = 10
 	Instance.new("UICorner", ProgressContainer).CornerRadius = UDim.new(1, 0)
+
+	local ProgressGlow = Instance.new("UIStroke", ProgressContainer)
+	ProgressGlow.Color = Color3.fromRGB(90, 110, 245)
+	ProgressGlow.Thickness = 1
+	ProgressGlow.Transparency = 0.7
 
 	local ProgressFill = Instance.new("Frame", ProgressContainer)
 	ProgressFill.Size = UDim2.new(0, 0, 1, 0)
 	ProgressFill.BackgroundColor3 = Color3.fromRGB(90, 110, 245)
+	ProgressFill.ZIndex = 11
 	Instance.new("UICorner", ProgressFill).CornerRadius = UDim.new(1, 0)
+
+	-- Add gradient to progress fill
+	local ProgressGradient = Instance.new("UIGradient", ProgressFill)
+	ProgressGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(70, 90, 200)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(130, 150, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(90, 110, 245)),
+	})
 
 	-- Progress Percentage
 	local ProgressText = Instance.new("TextLabel", MainFrame)
 	ProgressText.Text = "0%"
 	ProgressText.Size = UDim2.new(1, 0, 0, 20)
-	ProgressText.Position = UDim2.new(0, 0, 0.63, 0)
+	ProgressText.Position = UDim2.new(0, 0, 0.61, 0)
 	ProgressText.BackgroundTransparency = 1
-	ProgressText.TextColor3 = Color3.fromRGB(90, 110, 245)
+	ProgressText.TextColor3 = Color3.fromRGB(120, 140, 255)
 	ProgressText.Font = Enum.Font.GothamBold
 	ProgressText.TextSize = 12
 	ProgressText.TextTransparency = 0
+	ProgressText.ZIndex = 10
 
 	-- Welcome Message
 	local WelcomeMsg = Instance.new("TextLabel", MainFrame)
 	WelcomeMsg.Text = "Welcome back, " .. game:GetService("Players").LocalPlayer.Name .. "!"
 	WelcomeMsg.Size = UDim2.new(1, 0, 0, 20)
-	WelcomeMsg.Position = UDim2.new(0, 0, 0.28, 0)
+	WelcomeMsg.Position = UDim2.new(0, 0, 0.26, 0)
 	WelcomeMsg.BackgroundTransparency = 1
-	WelcomeMsg.TextColor3 = Color3.fromRGB(150, 150, 160)
+	WelcomeMsg.TextColor3 = Color3.fromRGB(140, 140, 160)
 	WelcomeMsg.Font = Enum.Font.Gotham
 	WelcomeMsg.TextSize = 14
 	WelcomeMsg.TextTransparency = 0
+	WelcomeMsg.ZIndex = 10
 
-	-- Logo Rainbow Animation
+	-- Logo Animation: Rainbow + Pulse + FLOATING
 	task.spawn(function()
 		local t = 0
+		local floatOffset = 0
 		while Logo and Logo.Parent do
-			t = t + 0.02
-			local c = Color3.fromHSV(t % 1, 0.9, 1)
+			t = t + 0.025
+			floatOffset = floatOffset + 0.08
+
+			-- Rainbow color cycle (faster)
+			local c = Color3.fromHSV(t % 1, 0.85, 1)
 			Logo.TextColor3 = c
 			LogoGlow.Color = c
-			local pulse = 1 + math.sin(t * 5) * 0.05
+			Title.TextColor3 = c
+			ProgressFill.BackgroundColor3 = c
+			ProgressGlow.Color = c
+
+			-- Pulse size
+			local pulse = 1 + math.sin(t * 4) * 0.04
 			Logo.TextSize = 72 * pulse
+
+			-- Floating bob animation
+			local floatY = math.sin(floatOffset) * 5
+			LogoContainer.Position = UDim2.new(0.5, -50, 0.33, floatY)
+
 			task.wait(0.02)
 		end
 	end)
@@ -506,13 +556,17 @@ local function createLoadingUI()
 		function(text, progress)
 			-- Obfuscate specific module names
 			if string.find(text, "Downloading:") then
-				text = "Downloading Asset #" .. math.random(1000, 9999)
+				text = "Loading Module #" .. math.random(1000, 9999)
 			elseif string.find(text, "Updating modules") then
-				text = "Updating Assets..."
+				text = "Preparing Assets..."
 			end
 
 			Sub.Text = text
-			TweenService:Create(ProgressFill, TweenInfo.new(0.3), { Size = UDim2.new(progress, 0, 1, 0) }):Play()
+			TweenService:Create(
+				ProgressFill,
+				TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Size = UDim2.new(progress, 0, 1, 0) }
+			):Play()
 			ProgressText.Text = math.floor(progress * 100) .. "%"
 		end
 end
