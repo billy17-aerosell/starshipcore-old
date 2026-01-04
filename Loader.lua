@@ -362,6 +362,7 @@ local function showLanguagePicker()
 	ScreenGui.Parent = CoreGui
 	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	ScreenGui.DisplayOrder = 10001
+	ScreenGui.IgnoreGuiInset = true
 
 	-- Background
 	local Overlay = Instance.new("Frame", ScreenGui)
