@@ -433,7 +433,7 @@ local function createLoadingUI()
 	LogoContainer.ZIndex = 10
 
 	local Logo = Instance.new("ImageLabel", LogoContainer)
-	Logo.Image = "https://starship-core.my.id/starship-logo.png"
+	Logo.Image = "rbxassetid://91946746369709"
 	Logo.Size = UDim2.new(1, 0, 1, 0)
 	Logo.BackgroundTransparency = 1
 	Logo.ScaleType = Enum.ScaleType.Fit
