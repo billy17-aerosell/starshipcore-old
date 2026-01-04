@@ -28,6 +28,16 @@ local LocalPlayer = Players.LocalPlayer
 
 local CloudRecording = {}
 
+-- DEV_MODE detection (same as StarshipCore)
+local DEV_MODE = _G.StarshipDevMode or false
+
+-- Dev-only logging helper (only shows in dev mode)
+local function DevLog(...)
+	if DEV_MODE then
+		warn("[CloudRecording]", ...)
+	end
+end
+
 -- Configuration - use dynamic URL from global (supports localhost dev mode)
 -- Uses Cloudflare R2 storage for large files support (up to 5GB)
 local function GetEventCode()
@@ -200,8 +210,8 @@ end
 
 -- Helper: Safe HTTP request with retry (compatible with most executors)
 local function SafeRequest(url, method, body, callback)
-	-- DEBUG: Print URL being used
-	warn("[CloudRecording] " .. method .. " request to: " .. url)
+	-- DEBUG: Print URL being used (only in dev mode)
+	DevLog(method .. " request to: " .. url)
 
 	task.spawn(function()
 		local attempts = 0
@@ -211,12 +221,12 @@ local function SafeRequest(url, method, body, callback)
 		local httpFunc = request or http_request or (syn and syn.request) or (http and http.request)
 
 		if not httpFunc then
-			warn("[CloudRecording] No request() function found, falling back to game:HttpGet/HttpPost")
+			DevLog("No request() function found, falling back to game:HttpGet/HttpPost")
 		end
 
 		while attempts < MAX_RETRY do
 			attempts = attempts + 1
-			warn("[CloudRecording] Attempt " .. attempts .. "/" .. MAX_RETRY)
+			DevLog("Attempt " .. attempts .. "/" .. MAX_RETRY)
 
 			local success, result = pcall(function()
 				if httpFunc then
@@ -242,8 +252,8 @@ local function SafeRequest(url, method, body, callback)
 				end
 			end)
 
-			warn(
-				"[CloudRecording] pcall success: "
+			DevLog(
+				"pcall success: "
 					.. tostring(success)
 					.. ", result length: "
 					.. tostring(result and #tostring(result) or 0)
@@ -255,28 +265,25 @@ local function SafeRequest(url, method, body, callback)
 				end)
 
 				if decodeSuccess then
-					warn("[CloudRecording] Decoded successfully!")
+					DevLog("Decoded successfully!")
 					-- DEBUG: Print response content for troubleshooting
 					if decoded.success then
-						warn(
-							"[CloudRecording] ✅ Response SUCCESS - recordingId: "
-								.. tostring(decoded.recordingId or "N/A")
-						)
+						DevLog("✅ Response SUCCESS - recordingId: " .. tostring(decoded.recordingId or "N/A"))
 					else
-						warn("[CloudRecording] ❌ Response ERROR: " .. tostring(decoded.error or "Unknown error"))
+						DevLog("❌ Response ERROR: " .. tostring(decoded.error or "Unknown error"))
 						if decoded.message then
-							warn("[CloudRecording] Message: " .. tostring(decoded.message))
+							DevLog("Message: " .. tostring(decoded.message))
 						end
 						if decoded.details then
-							warn("[CloudRecording] Details: " .. tostring(decoded.details))
+							DevLog("Details: " .. tostring(decoded.details))
 						end
 						if decoded.githubError then
-							warn("[CloudRecording] GitHub Error: " .. tostring(decoded.githubError))
+							DevLog("GitHub Error: " .. tostring(decoded.githubError))
 						end
 						-- Show size info if available (for file too large errors)
 						if decoded.size then
-							warn(
-								"[CloudRecording] Recording Size: "
+							DevLog(
+								"Recording Size: "
 									.. tostring(decoded.size)
 									.. "KB (Max: "
 									.. tostring(decoded.maxSize or 1024)
@@ -290,11 +297,11 @@ local function SafeRequest(url, method, body, callback)
 					return
 				else
 					lastError = "JSON decode failed: " .. tostring(result):sub(1, 100)
-					warn("[CloudRecording] " .. lastError)
+					DevLog(lastError)
 				end
 			else
 				lastError = tostring(result)
-				warn("[CloudRecording] HTTP Error: " .. lastError)
+				DevLog("HTTP Error: " .. lastError)
 			end
 
 			if attempts < MAX_RETRY then
@@ -303,7 +310,7 @@ local function SafeRequest(url, method, body, callback)
 		end
 
 		-- All retries failed
-		warn("[CloudRecording] All " .. MAX_RETRY .. " attempts failed. Last error: " .. tostring(lastError))
+		DevLog("All " .. MAX_RETRY .. " attempts failed. Last error: " .. tostring(lastError))
 		if callback then
 			callback({
 				success = false,

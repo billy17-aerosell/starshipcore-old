@@ -9,16 +9,18 @@ local function L(key, ...)
 	return key
 end
 
-local Colors = {
-	MAIN = Color3.fromRGB(10, 10, 14),
-	ITEM = Color3.fromRGB(20, 20, 28),
-	ACCENT = Color3.fromRGB(90, 110, 245),
-	TEXT = Color3.fromRGB(240, 240, 250),
-	TEXT_DIM = Color3.fromRGB(140, 140, 160),
-	GREEN = Color3.fromRGB(60, 255, 160),
-	YELLOW = Color3.fromRGB(255, 220, 60),
-	RED = Color3.fromRGB(255, 80, 80),
-}
+-- Use global StarshipColors for theme consistency (fallback if not set)
+local Colors = _G.StarshipColors
+	or {
+		MAIN = Color3.fromRGB(10, 10, 14),
+		ITEM = Color3.fromRGB(20, 20, 28),
+		ACCENT = Color3.fromRGB(90, 110, 245),
+		TEXT = Color3.fromRGB(240, 240, 250),
+		TEXT_DIM = Color3.fromRGB(140, 140, 160),
+		GREEN = Color3.fromRGB(60, 255, 160),
+		YELLOW = Color3.fromRGB(255, 220, 60),
+		RED = Color3.fromRGB(255, 80, 80),
+	}
 local DISCORD_LINK = "https://discord.gg/BUJuXA8Z"
 
 return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
