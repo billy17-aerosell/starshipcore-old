@@ -210,6 +210,52 @@ export default async function handler(req, res) {
   const platformEmoji = platform === "mobile" ? "📱" : "💻";
 
   // ═══════════════════════════════════════════════════════════════
+  // CHECK PLATFORM STATUS FROM REDIS (MAINTENANCE/OFFLINE CHECK)
+  // ═══════════════════════════════════════════════════════════════
+  try {
+    const redisClient = await getRedis();
+    if (redisClient) {
+      const statusData = await redisClient.get(`starship:status:${platform}`);
+      if (statusData) {
+        const status = JSON.parse(statusData);
+        if (status.status === 'maintenance' || status.status === 'offline') {
+          console.log(`[${timestamp}] 🔧 ${platform.toUpperCase()} ${status.status.toUpperCase()} - Blocking access | IP: ${clientIP}`);
+          
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          res.setHeader("X-Status", status.status);
+          
+          const statusEmoji = status.status === 'maintenance' ? '🔧' : '🔴';
+          const statusTitle = status.status === 'maintenance' ? 'Maintenance Mode' : 'System Offline';
+          const statusMessage = status.message || (status.status === 'maintenance' 
+            ? 'System is under maintenance. Please try again later.'
+            : 'System is currently offline. Please try again later.');
+          
+          const maintenanceScript = `
+-- StarshipCore ${platform === "mobile" ? "Mobile" : "PC"} - ${statusTitle}
+print("[StarshipCore] ${statusEmoji} ${statusTitle}")
+print("[StarshipCore] ${statusMessage}")
+
+-- Show notification
+pcall(function()
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "${statusEmoji} ${statusTitle}",
+        Text = "${statusMessage}",
+        Duration = 10
+    })
+end)
+
+warn("[StarshipCore] ${platform.toUpperCase()} access is temporarily disabled.")
+`;
+          return res.status(200).send(maintenanceScript);
+        }
+      }
+    }
+  } catch (e) {
+    console.error(`[${timestamp}] ⚠️ Status check error:`, e.message);
+    // Continue if Redis fails - don't block access
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   // SECURITY: Redirect mobile to secure mobile-bootstrap handler
   // This handler serves loader DIRECTLY without exposing any URLs
   // ═══════════════════════════════════════════════════════════════
@@ -217,6 +263,7 @@ export default async function handler(req, res) {
     console.log(`[${timestamp}] 📱 Mobile request -> Redirecting to secure mobile-bootstrap | IP: ${clientIP}`);
     return mobileBootstrapHandler(req, res);
   }
+
 
   // Check for development mode (check this early to bypass maintenance)
   const isDev =
