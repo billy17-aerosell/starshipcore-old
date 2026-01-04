@@ -86,21 +86,29 @@ end
 function Changelog.FetchChangelog()
 	local url = SERVER_URL .. "/changelog.json?t=" .. os.time() -- Cache bust
 
+	warn("[Changelog] Fetching from: " .. url)
+
 	local success, response = pcall(function()
 		return game:HttpGet(url)
 	end)
 
 	if not success or not response then
+		warn("[Changelog] Fetch failed:", response or "no response")
 		return nil
 	end
+
+	warn("[Changelog] Response received, length: " .. #response)
 
 	local parseSuccess, data = pcall(function()
 		return HttpService:JSONDecode(response)
 	end)
 
 	if not parseSuccess or not data then
+		warn("[Changelog] Parse failed")
 		return nil
 	end
+
+	warn("[Changelog] Parsed successfully, version: " .. tostring(data.currentVersion))
 
 	return data
 end
@@ -223,10 +231,13 @@ function Changelog.ShowModal(changelogData)
 			UpdateFrame.AutomaticSize = Enum.AutomaticSize.Y
 			UpdateFrame.LayoutOrder = i
 			Instance.new("UICorner", UpdateFrame).CornerRadius = UDim.new(0, 8)
-			Instance.new("UIPadding", UpdateFrame).PaddingTop = UDim.new(0, 10)
-			Instance.new("UIPadding", UpdateFrame).PaddingBottom = UDim.new(0, 10)
-			Instance.new("UIPadding", UpdateFrame).PaddingLeft = UDim.new(0, 12)
-			Instance.new("UIPadding", UpdateFrame).PaddingRight = UDim.new(0, 12)
+
+			-- FIX: Create single UIPadding with all properties
+			local padding = Instance.new("UIPadding", UpdateFrame)
+			padding.PaddingTop = UDim.new(0, 10)
+			padding.PaddingBottom = UDim.new(0, 10)
+			padding.PaddingLeft = UDim.new(0, 12)
+			padding.PaddingRight = UDim.new(0, 12)
 
 			local UpdateLayout = Instance.new("UIListLayout", UpdateFrame)
 			UpdateLayout.Padding = UDim.new(0, 6)
@@ -326,16 +337,24 @@ function Changelog.CheckAndShow()
 		-- Wait a bit for UI to settle
 		task.wait(2)
 
+		warn("[Changelog] Starting check...")
+
 		local changelogData = Changelog.FetchChangelog()
 		if not changelogData then
-			return -- Failed to fetch, skip silently
+			warn("[Changelog] Failed to fetch data, skipping")
+			return
 		end
 
 		local lastSeen = Changelog.GetLastSeenVersion()
 		local serverVersion = changelogData.currentVersion or CURRENT_VERSION
 
+		warn("[Changelog] Last seen: " .. lastSeen .. ", Server: " .. serverVersion)
+
 		if Changelog.IsNewerVersion(serverVersion, lastSeen) then
+			warn("[Changelog] New version detected! Showing modal...")
 			Changelog.ShowModal(changelogData)
+		else
+			warn("[Changelog] No new version, skipping modal")
 		end
 	end)
 end
