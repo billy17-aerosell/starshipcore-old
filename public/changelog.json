@@ -5,34 +5,33 @@
     {
       "version": "1.4.0",
       "date": "2026-01-04",
-      "title": "Performance & UI Improvements",
+      "title": "What's New",
       "changes": [
-        "✨ New loader animation with floating logo",
-        "🚀 Optimized path generation (chunked loading)",
-        "🛡️ Memory leak prevention system",
-        "🎨 Async recording loading with progress indicator",
-        "🌈 Enhanced loader with gradient background",
-        "🔧 Unified color system across all modules"
+        "✨ Improved loading experience",
+        "🚀 Performance boost",
+        "🛡️ Enhanced stability",
+        "🎨 UI improvements",
+        "🔧 Bug fixes"
       ]
     },
     {
       "version": "1.3.0",
       "date": "2026-01-01",
-      "title": "Recording System Update",
+      "title": "Update",
       "changes": [
-        "📍 Distance validation for recordings",
-        "⚠️ Map mismatch warnings",
-        "🎯 Improved playback accuracy"
+        "📍 Better accuracy",
+        "⚠️ Improved warnings",
+        "🎯 Quality improvements"
       ]
     },
     {
       "version": "1.2.0",
       "date": "2025-12-28",
-      "title": "Cloud Recording",
+      "title": "New Features",
       "changes": [
-        "☁️ Cloud recording upload/download",
-        "🔐 Secure R2 storage",
-        "📂 Recording workspace system"
+        "☁️ Cloud sync",
+        "🔐 Security enhancements",
+        "📂 Better file management"
       ]
     }
   ]
