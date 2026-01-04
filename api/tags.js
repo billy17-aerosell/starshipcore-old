@@ -415,7 +415,9 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    const { robloxId, discordId, action, code, redirectUri, status, message } = req.body;
+    const { robloxId, discordId, code, redirectUri, status, message } = req.body;
+    // Check action from both body and query parameter
+    const action = req.body.action || req.query.action;
 
     // ============ SET STATUS (ADMIN ONLY) ============
     if (action === 'set_status') {
