@@ -1,2368 +1,2568 @@
 local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, UIHandlers, ShowConfirm, RegisterTheme)
-    local Players = game:GetService("Players")
-    local RunService = game:GetService("RunService")
-    local UserInputService = game:GetService("UserInputService")
-    local TweenService = game:GetService("TweenService")
-    local HttpService = game:GetService("HttpService")
-
-    -- UPDATED THEME
-    local C_MAIN = Color3.fromRGB(10, 10, 14)
-    local C_SIDE = Color3.fromRGB(15, 15, 20)
-    local C_ACCENT = Color3.fromRGB(90, 110, 245) -- Midnight Blue
-    local C_TEXT = Color3.fromRGB(240, 240, 250)
-    local C_TEXT_DIM = Color3.fromRGB(140, 140, 160)
-    local C_ITEM = Color3.fromRGB(20, 20, 28)
-    local C_RED = Color3.fromRGB(255, 80, 80)
-    local C_YELLOW = Color3.fromRGB(255, 220, 60)
-    local C_GREEN = Color3.fromRGB(60, 255, 160)
-
-    -- Helper function to get localized text
-    local function L(key, ...)
-        if _G.StarshipLocale and _G.StarshipLocale.Get then
-            return _G.StarshipLocale.Get(key, ...)
-        end
-        return key
-    end
-
-    -- Helper function to show toast when feature is toggled
-    local function ShowFeatureToast(featureName, isEnabled)
-        if UI and UI.ShowToast then
-            local status = isEnabled and L("enabled") or L("disabled")
-            local toastType = isEnabled and "success" or "info"
-            UI.ShowToast(featureName, status, toastType, 2)
-        end
-    end
-
-    local FOLDER_NAME = "StarshipCore"
-
-    local function CFToTbl(cf)
-        return { cf:GetComponents() }
-    end
-    local function TblToCF(t)
-        return CFrame.new(unpack(t))
-    end
-
-    -- Ensure RegisterTheme exists
-    if not RegisterTheme then
-        RegisterTheme = function() end
-    end
-
-    -- Clear existing children for reactive refresh support
-    PageHelper:ClearAllChildren()
-
-    local HelperScroll = Instance.new("ScrollingFrame", PageHelper)
-    HelperScroll.Size = UDim2.new(1, 0, 1, 0)
-    HelperScroll.BackgroundTransparency = 1
-    HelperScroll.BorderSizePixel = 0
-    HelperScroll.ScrollBarThickness = 6
-    HelperScroll.ScrollBarImageColor3 = C_ACCENT
-    HelperScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    HelperScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    RegisterTheme(HelperScroll, "ScrollBarImageColor3", "Accent")
-
-    local HelperLayout = Instance.new("UIListLayout", HelperScroll)
-    HelperLayout.Padding = UDim.new(0, 15)
-    HelperLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    HelperLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-
-    local function CreateCard(t, h, o)
-        local c = Instance.new("Frame", HelperScroll)
-        c.Size = UDim2.new(0.96, 0, 0, h)
-        c.BackgroundColor3 = C_ITEM
-        c.LayoutOrder = o
-        Instance.new("UICorner", c).CornerRadius = UDim.new(0, 12)
-        local s = Instance.new("UIStroke", c)
-        s.Color = C_ACCENT
-        s.Transparency = 0.8
-        s.Thickness = 1
-        local l = Instance.new("TextLabel", c)
-        l.Text = t
-        l.Size = UDim2.new(1, -20, 0, 30)
-        l.Position = UDim2.new(0, 15, 0, 0)
-        l.BackgroundTransparency = 1
-        l.TextColor3 = C_TEXT_DIM
-        l.Font = Enum.Font.GothamBold
-        l.TextSize = 11
-        l.TextXAlignment = Enum.TextXAlignment.Left
-
-        RegisterTheme(c, "BackgroundColor3", "Item")
-        RegisterTheme(s, "Color", "Accent")
-        RegisterTheme(l, "TextColor3", "TextDim")
-        return c
-    end
-
-    local function StyleBtn(btn, col)
-        btn.BackgroundColor3 = C_SIDE
-        btn.TextColor3 = col
-        btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 11
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-        local s = Instance.new("UIStroke", btn)
-        s.Color = col
-        s.Transparency = 0.7
-        s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
-        RegisterTheme(btn, "BackgroundColor3", "Side")
-
-        -- Only register static colors
-        if col == C_ACCENT then
-            RegisterTheme(btn, "TextColor3", "Accent")
-            RegisterTheme(s, "Color", "Accent")
-        elseif col == C_TEXT then
-            RegisterTheme(btn, "TextColor3", "Text")
-            RegisterTheme(s, "Color", "Text")
-        elseif col == C_TEXT_DIM then
-            RegisterTheme(btn, "TextColor3", "TextDim")
-            RegisterTheme(s, "Color", "TextDim")
-        end
-    end
-
-    -- Helper function to create feature button with subtitle description
-    local function CreateFeatureButton(parent, text, subtitle, size, position, color)
-        local container = Instance.new("Frame", parent)
-        container.Size = size
-        container.Position = position
-        container.BackgroundTransparency = 1
-
-        local btn = Instance.new("TextButton", container)
-        btn.Text = text
-        btn.Size = UDim2.new(1, 0, 0, 35)
-        btn.Position = UDim2.new(0, 0, 0, 0)
-        StyleBtn(btn, color)
-
-        local desc = Instance.new("TextLabel", container)
-        desc.Text = subtitle
-        desc.Size = UDim2.new(1, 0, 0, 14)
-        desc.Position = UDim2.new(0, 0, 0, 37)
-        desc.BackgroundTransparency = 1
-        desc.TextColor3 = C_TEXT_DIM
-        desc.Font = Enum.Font.Gotham
-        desc.TextSize = 9
-        desc.TextXAlignment = Enum.TextXAlignment.Center
-        desc.TextWrapped = true
-        RegisterTheme(desc, "TextColor3", "TextDim")
-
-        return btn, container
-    end
-
-    -- 0. CHARACTER & FLY
-    local CardChar = CreateCard(L("character_fly"), 145, 0)
-
-    -- Speed
-    local WSVal = Instance.new("TextBox", CardChar)
-    WSVal.Text = ""
-    WSVal.PlaceholderText = "16"
-    WSVal.Size = UDim2.new(0.15, 0, 0, 35)
-    WSVal.Position = UDim2.new(0.82, 0, 0, 35)
-    WSVal.BackgroundColor3 = C_SIDE
-    WSVal.TextColor3 = C_TEXT
-    WSVal.Font = Enum.Font.Gotham
-    Instance.new("UICorner", WSVal).CornerRadius = UDim.new(0, 6)
-    local SldWS = Instance.new("TextButton", CardChar)
-    SldWS.Text = ""
-    SldWS.Size = UDim2.new(0.55, 0, 0, 6)
-    SldWS.Position = UDim2.new(0.25, 0, 0, 50)
-    SldWS.BackgroundColor3 = C_SIDE
-    SldWS.AutoButtonColor = false
-    Instance.new("UICorner", SldWS)
-    local FillWS = Instance.new("Frame", SldWS)
-    FillWS.Size = UDim2.new(0, 0, 1, 0)
-    FillWS.BackgroundColor3 = C_ACCENT
-    Instance.new("UICorner", FillWS)
-    local BtnTogWS = Instance.new("TextButton", CardChar)
-    BtnTogWS.Text = "SPEED: OFF"
-    BtnTogWS.Size = UDim2.new(0.2, 0, 0, 35)
-    BtnTogWS.Position = UDim2.new(0.03, 0, 0, 35)
-    StyleBtn(BtnTogWS, C_RED)
-
-    local isWSEnabled, wsCon, defWS, tgtWS = false, nil, 16, 16
-    local function UpdateWSVisual(v)
-        v = math.clamp(v, 0, 300)
-        local p = v / 300
-        FillWS.Size = UDim2.new(p, 0, 1, 0)
-        WSVal.Text = tostring(math.floor(v))
-    end
-    local function ApplySpeed(v)
-        local c = LocalPlayer.Character
-        local h = c and c:FindFirstChild("Humanoid")
-        if h then
-            if math.abs(h.WalkSpeed - v) > 5 then
-                TweenService:Create(h, TweenInfo.new(0.5), { WalkSpeed = v }):Play()
-            else
-                h.WalkSpeed = v
-            end
-        end
-    end
-    local function SetWS(v, up)
-        tgtWS = v
-        UpdateWSVisual(v)
-        if up and isWSEnabled then
-            ApplySpeed(v)
-        end
-    end
-    local function ToggleSpeed(forceEnable)
-        if forceEnable ~= nil then
-            if forceEnable == isWSEnabled then
-                return
-            end
-        end
-
-        local c = LocalPlayer.Character
-        local h = c and c:FindFirstChild("Humanoid")
-        if not isWSEnabled then
-            isWSEnabled = true
-            BtnTogWS.Text = "SPEED: ON"
-            BtnTogWS.TextColor3 = C_GREEN
-            BtnTogWS.UIStroke.Color = C_GREEN
-            if h then
-                defWS = h.WalkSpeed
-            end
-            SetWS(tgtWS, true)
-            if wsCon then
-                wsCon:Disconnect()
-            end
-            wsCon = RunService.Heartbeat:Connect(function()
-                local c = LocalPlayer.Character
-                local h = c and c:FindFirstChild("Humanoid")
-                if h and math.abs(h.WalkSpeed - tgtWS) > 1 then
-                    h.WalkSpeed = tgtWS
-                end
-            end)
-            table.insert(Connections, wsCon)
-        else
-            isWSEnabled = false
-            BtnTogWS.Text = "SPEED: OFF"
-            BtnTogWS.TextColor3 = C_RED
-            BtnTogWS.UIStroke.Color = C_RED
-            if wsCon then
-                wsCon:Disconnect()
-                wsCon = nil
-            end
-            ApplySpeed(defWS)
-            UpdateWSVisual(tgtWS)
-        end
-    end
-    BtnTogWS.MouseButton1Click:Connect(function()
-        ToggleSpeed()
-    end)
-    UIHandlers.ToggleSpeed = ToggleSpeed
-    local dragWS = false
-    SldWS.MouseButton1Down:Connect(function()
-        dragWS = true
-    end)
-    UserInputService.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragWS = false
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if dragWS and i.UserInputType == Enum.UserInputType.MouseMovement then
-            local sc = math.clamp((i.Position.X - SldWS.AbsolutePosition.X) / SldWS.AbsoluteSize.X, 0, 1)
-            local n = math.floor(sc * 300)
-            if isWSEnabled then
-                SetWS(n, true)
-            else
-                UpdateWSVisual(n)
-            end
-        end
-    end)
-    WSVal.FocusLost:Connect(function()
-        local v = tonumber(WSVal.Text)
-        if v then
-            if isWSEnabled then
-                SetWS(v, true)
-            else
-                UpdateWSVisual(v)
-            end
-        else
-            WSVal.Text = "16"
-        end
-    end)
-
-    -- Inf Jump
-    local BtnInfJump = Instance.new("TextButton", CardChar)
-    BtnInfJump.Text = "INFINITE JUMP: OFF"
-    BtnInfJump.Size = UDim2.new(0.94, 0, 0, 30)
-    BtnInfJump.Position = UDim2.new(0.03, 0, 0, 75)
-    StyleBtn(BtnInfJump, C_TEXT_DIM)
-    local isInfJump, infJumpCon = false, nil
-    local function ToggleInfJump(forceEnable)
-        if forceEnable ~= nil then
-            if forceEnable == isInfJump then
-                return
-            end
-        end
-
-        isInfJump = not isInfJump
-        BtnInfJump.Text = "INFINITE JUMP: " .. (isInfJump and "ON" or "OFF")
-        BtnInfJump.TextColor3 = isInfJump and C_GREEN or C_TEXT_DIM
-        BtnInfJump.UIStroke.Color = isInfJump and C_GREEN or C_TEXT_DIM
-        if isInfJump then
-            infJumpCon = UserInputService.JumpRequest:Connect(function()
-                local c = LocalPlayer.Character
-                if c then
-                    local h = c:FindFirstChildOfClass("Humanoid")
-                    if h then
-                        h:ChangeState("Jumping")
-                    end
-                end
-            end)
-            table.insert(Connections, infJumpCon)
-        else
-            if infJumpCon then
-                infJumpCon:Disconnect()
-                infJumpCon = nil
-            end
-        end
-    end
-    BtnInfJump.MouseButton1Click:Connect(function()
-        ToggleInfJump()
-    end)
-    UIHandlers.ToggleInfJump = ToggleInfJump
-
-    -- Fly
-    local BtnFly = Instance.new("TextButton", CardChar)
-    BtnFly.Text = "Fly: OFF"
-    BtnFly.Size = UDim2.new(0.45, 0, 0, 35)
-    BtnFly.Position = UDim2.new(0.03, 0, 0, 110)
-    StyleBtn(BtnFly, C_TEXT_DIM)
-    local InpFlySpd = Instance.new("TextBox", CardChar)
-    InpFlySpd.PlaceholderText = "Spd"
-    InpFlySpd.Text = "50"
-    InpFlySpd.Size = UDim2.new(0.45, 0, 0, 35)
-    InpFlySpd.Position = UDim2.new(0.52, 0, 0, 110)
-    InpFlySpd.BackgroundColor3 = C_SIDE
-    InpFlySpd.TextColor3 = C_TEXT
-    InpFlySpd.Font = Enum.Font.Gotham
-    Instance.new("UICorner", InpFlySpd).CornerRadius = UDim.new(0, 6)
-    local FlySpeed, isFlying = 50, false
-    InpFlySpd.FocusLost:Connect(function()
-        FlySpeed = tonumber(InpFlySpd.Text) or 50
-    end)
-
-    local function StopFly()
-        isFlying = false
-        BtnFly.Text = "Fly: OFF"
-        BtnFly.TextColor3 = C_TEXT_DIM
-        BtnFly.UIStroke.Color = C_TEXT_DIM
-        local c = LocalPlayer.Character
-        if c then
-            local r = c:FindFirstChild("HumanoidRootPart")
-            if r then
-                for _, x in pairs(r:GetChildren()) do
-                    if x.Name == "AmethystFlyVel" or x.Name == "AmethystFlyGyro" then
-                        x:Destroy()
-                    end
-                end
-            end
-            local h = c:FindFirstChild("Humanoid")
-            if h then
-                h.PlatformStand = false
-            end
-        end
-        if Connections.FlyLoop then
-            Connections.FlyLoop:Disconnect()
-        end
-    end
-
-    local function StartFly()
-        local c = LocalPlayer.Character
-        local r = c and c:FindFirstChild("HumanoidRootPart")
-        local h = c and c:FindFirstChild("Humanoid")
-        if not c or not r or not h then
-            return
-        end
-        isFlying = true
-        BtnFly.Text = "Fly: ON"
-        BtnFly.TextColor3 = C_GREEN
-        BtnFly.UIStroke.Color = C_GREEN
-        h.PlatformStand = true
-        local bv = Instance.new("BodyVelocity", r)
-        bv.Name = "AmethystFlyVel"
-        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bv.Velocity = Vector3.new(0, 0, 0)
-        local bg = Instance.new("BodyGyro", r)
-        bg.Name = "AmethystFlyGyro"
-        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bg.P = 10000
-        bg.D = 1000
-
-        local flyLoop = game:GetService("RunService").RenderStepped:Connect(function()
-            if not isFlying or not c.Parent then
-                StopFly()
-                return
-            end
-            local cam = workspace.CurrentCamera
-            local m = Vector3.new(0, 0, 0)
-            local k = UserInputService:GetKeysPressed()
-            local W, A, S, D = false, false, false, false
-            for _, key in pairs(k) do
-                if key.KeyCode == Enum.KeyCode.W then
-                    W = true
-                elseif key.KeyCode == Enum.KeyCode.A then
-                    A = true
-                elseif key.KeyCode == Enum.KeyCode.S then
-                    S = true
-                elseif key.KeyCode == Enum.KeyCode.D then
-                    D = true
-                end
-            end
-            if W then
-                m = m + cam.CFrame.LookVector
-            end
-            if S then
-                m = m - cam.CFrame.LookVector
-            end
-            if A then
-                m = m - cam.CFrame.RightVector
-            end
-            if D then
-                m = m + cam.CFrame.RightVector
-            end
-            bg.CFrame = cam.CFrame
-            bv.Velocity = m * FlySpeed
-        end)
-
-        Connections.FlyLoop = flyLoop
-    end
-
-    local function ToggleFly(forceEnable)
-        if forceEnable ~= nil then
-            if forceEnable == isFlying then
-                return
-            end
-        end
-
-        if isFlying then
-            StopFly()
-        else
-            StartFly()
-        end
-    end
-    BtnFly.MouseButton1Click:Connect(function()
-        ToggleFly()
-    end)
-    UIHandlers.ToggleFly = ToggleFly
-
-    -- 4. JUMP ASSIST
-    do
-        local CardJump = CreateCard(L("jump_assist"), 100, 4)
-
-        -- Auto Jump
-        local BtnAutoJump, AutoJumpContainer = CreateFeatureButton(
-            CardJump,
-            L("auto_jump") .. ": " .. L("off"),
-            L("auto_jump_desc"),
-            UDim2.new(0.45, 0, 0, 55),
-            UDim2.new(0.03, 0, 0, 35),
-            C_TEXT_DIM
-        )
-
-        local isAutoJump, autoJumpLoop = false, nil
-
-        local function ToggleAutoJump(forceEnable)
-            -- Support forceEnable parameter for auto-enable
-            if forceEnable ~= nil then
-                if forceEnable == isAutoJump then
-                    return
-                end
-            end
-
-            isAutoJump = not isAutoJump
-            BtnAutoJump.Text = L("auto_jump") .. ": " .. (isAutoJump and L("on") or L("off"))
-            BtnAutoJump.TextColor3 = isAutoJump and C_GREEN or C_TEXT_DIM
-            BtnAutoJump.UIStroke.Color = isAutoJump and C_GREEN or C_TEXT_DIM
-            ShowFeatureToast("Auto Jump", isAutoJump)
-
-            if isAutoJump then
-                autoJumpLoop = RunService.Heartbeat:Connect(function()
-                    local c = LocalPlayer.Character
-                    local h = c and c:FindFirstChild("Humanoid")
-                    if h and h.FloorMaterial ~= Enum.Material.Air then
-                        h:ChangeState(Enum.HumanoidStateType.Jumping)
-                    end
-                end)
-                table.insert(Connections, autoJumpLoop)
-            else
-                if autoJumpLoop then
-                    autoJumpLoop:Disconnect()
-                    autoJumpLoop = nil
-                end
-            end
-        end
-
-        BtnAutoJump.MouseButton1Click:Connect(function()
-            ToggleAutoJump()
-        end)
-        UIHandlers.ToggleAutoJump = ToggleAutoJump
-
-        -- Air Lock (Edge Assist + Velocity Boost for Obby)
-        local BtnAirLock, AirLockContainer = CreateFeatureButton(
-            CardJump,
-            L("air_lock") .. ": " .. L("off"),
-            L("air_lock_desc"),
-            UDim2.new(0.45, 0, 0, 55),
-            UDim2.new(0.52, 0, 0, 35),
-            C_TEXT_DIM
-        )
-
-        local isAirLock, airLockLoop = false, nil
-        local edgeBoostCooldown = false
-        local detectedEdgePosition = nil
-        local preDetectedEdge = nil -- Pre-detect while on ground
-        local preDetectedPart = nil -- Pre-detected part
-        local lastGroundTime = 0    -- Track when we left ground
-
-        -- Edge Detection Settings (BALANCED)
-        local EDGE_DETECT_DISTANCE = 12   -- Raycast distance to detect ledge
-        local EDGE_HEIGHT_TOLERANCE = 8   -- How much "almost there" we allow
-        local BOOST_POWER_UP = 10         -- Upward boost strength (increased)
-        local BOOST_POWER_FORWARD = 10    -- Forward boost strength
-        local BOOST_COOLDOWN = 0.4        -- Cooldown between boosts
-        local UPWARD_DETECT_DISTANCE = 10 -- Raycast distance upward for ladders above head
-
-        -- Ladder Grab Assist Settings
-        local LADDER_BOOST_MULTIPLIER = 1.0 -- Boost multiplier for ladder (reduced - no extra boost)
-        local PRE_DETECT_ENABLED = true     -- Enable ground pre-detection
-        local INSTANT_BOOST_WINDOW = 0.15   -- Seconds after jump to use pre-detected target
-        local detectedLadderPart = nil      -- Track detected ladder
-        local hasBostedThisJump = false     -- Prevent multiple boosts per jump
-
-        -- Check if part is a VERTICAL ladder/truss (not diagonal/horizontal)
-        local function IsLadder(part)
-            if not part then return false end
-
-            -- Check if it's a TrussPart or has ladder-like name
-            local isLadderType = part:IsA("TrussPart")
-            if not isLadderType then
-                local name = part.Name:lower()
-                isLadderType = name:find("ladder") or name:find("truss") or name:find("climb") or
-                    name:find("vine") or name:find("rope")
-            end
-
-            if not isLadderType then return false end
-
-            -- Check orientation - only treat as ladder if mostly VERTICAL
-            -- Diagonal/horizontal ladders should be treated as platforms
-            local size = part.Size
-            local upVector = part.CFrame.UpVector
-
-            -- If the part's up vector is mostly vertical (Y > 0.7), it's a climbable ladder
-            -- If it's more horizontal/diagonal, treat as platform
-            local isVertical = math.abs(upVector.Y) > 0.7
-
-            -- Also check if height > width (tall ladder vs flat bridge)
-            local isTall = size.Y > math.max(size.X, size.Z) * 0.8
-
-            -- Only return true for VERTICAL ladders
-            return isVertical or isTall
-        end
-
-        -- Detect edge/ladder in front of player with MULTI-ANGLE detection for diagonal ladders
-        -- Returns: hitPosition, hitPart (to check if ladder)
-        -- Now uses MoveDirection for Shift Lock compatibility
-        local function DetectEdgeForward(character, rootPart, humanoid)
-            local rayParams = RaycastParams.new()
-            rayParams.FilterDescendantsInstances = { character }
-            rayParams.FilterType = Enum.RaycastFilterType.Exclude
-
-            local playerPos = rootPart.Position
-            local playerTop = playerPos.Y + 2
-
-            -- Use MoveDirection if available (for Shift Lock compatibility)
-            -- Fall back to LookVector if not moving
-            local moveDir = humanoid and humanoid.MoveDirection or Vector3.new(0, 0, 0)
-            local lookDir = rootPart.CFrame.LookVector
-
-            -- If moving, use move direction; otherwise use look direction
-            local primaryDir
-            if moveDir.Magnitude > 0.1 then
-                primaryDir = moveDir
-            else
-                primaryDir = lookDir
-            end
-
-            local rightDir = rootPart.CFrame.RightVector
-            local horizontalLook = Vector3.new(primaryDir.X, 0, primaryDir.Z)
-            if horizontalLook.Magnitude > 0 then
-                horizontalLook = horizontalLook.Unit
-            else
-                horizontalLook = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
-            end
-
-            -- Store best ladder hit (prioritize ladders!)
-            local bestLadderHit = nil
-            local bestLadderPart = nil
-            local bestLadderDist = math.huge
-
-            -- Store best edge hit
-            local bestEdgeHit = nil
-            local bestEdgePart = nil
-
-            -- Helper function to check hit and return if valid
-            local function CheckHit(hitResult, checkHeightDiff)
-                if not hitResult then return nil, nil end
-
-                local hitPart = hitResult.Instance
-                local hitPosition = hitResult.Position
-
-                -- For ladders, we don't need strict height check
-                if IsLadder(hitPart) then
-                    local dist = (hitPosition - playerPos).Magnitude
-                    if dist < bestLadderDist then
-                        bestLadderDist = dist
-                        bestLadderHit = hitPart.Position -- Use ladder center for better targeting
-                        bestLadderPart = hitPart
-                    end
-                    return hitPosition, hitPart
-                end
-
-                -- For regular edges, check height difference
-                if checkHeightDiff then
-                    local ledgeTop = hitPart.Position.Y + (hitPart.Size.Y / 2)
-                    local heightDiff = ledgeTop - playerTop
-                    if heightDiff > 0 and heightDiff <= EDGE_HEIGHT_TOLERANCE then
-                        if not bestEdgeHit then
-                            bestEdgeHit = hitPosition
-                            bestEdgePart = hitPart
-                        end
-                        return hitPosition, hitPart
-                    end
-                end
-
-                return nil, nil
-            end
-
-            -- MULTI-ANGLE RAYCAST for diagonal ladder detection
-            local angles = {
-                -- Forward directions
-                horizontalLook,
-                -- Diagonal up-forward (various angles for diagonal ladders)
-                (horizontalLook + Vector3.new(0, 0.3, 0)).Unit,
-                (horizontalLook + Vector3.new(0, 0.5, 0)).Unit,
-                (horizontalLook + Vector3.new(0, 0.8, 0)).Unit,
-                (horizontalLook + Vector3.new(0, 1.0, 0)).Unit,
-                (horizontalLook + Vector3.new(0, 1.5, 0)).Unit,
-                (horizontalLook + Vector3.new(0, 2.0, 0)).Unit,
-                -- Steep upward (for ladders above)
-                (horizontalLook * 0.5 + Vector3.new(0, 1, 0)).Unit,
-                (horizontalLook * 0.3 + Vector3.new(0, 1, 0)).Unit,
-                -- Slight left/right diagonal (for offset ladders)
-                (horizontalLook + rightDir * 0.3 + Vector3.new(0, 0.5, 0)).Unit,
-                (horizontalLook - rightDir * 0.3 + Vector3.new(0, 0.5, 0)).Unit,
-                (horizontalLook + rightDir * 0.3 + Vector3.new(0, 1.0, 0)).Unit,
-                (horizontalLook - rightDir * 0.3 + Vector3.new(0, 1.0, 0)).Unit,
-            }
-
-            -- Cast rays in all directions
-            for _, dir in ipairs(angles) do
-                local hitResult = workspace:Raycast(playerPos, dir * EDGE_DETECT_DISTANCE, rayParams)
-                CheckHit(hitResult, true)
-            end
-
-            -- Also raycast straight up
-            local upHit = workspace:Raycast(playerPos, Vector3.new(0, 1, 0) * UPWARD_DETECT_DISTANCE, rayParams)
-            if upHit then
-                CheckHit(upHit, false)
-                if IsLadder(upHit.Instance) then
-                    local dist = (upHit.Position - playerPos).Magnitude
-                    if dist < bestLadderDist then
-                        bestLadderDist = dist
-                        bestLadderHit = upHit.Instance.Position
-                        bestLadderPart = upHit.Instance
-                    end
-                end
-            end
-
-            -- Prioritize ladder hits over regular edges!
-            if bestLadderHit then
-                return bestLadderHit, bestLadderPart
-            end
-
-            if bestEdgeHit then
-                return bestEdgeHit, bestEdgePart
-            end
-
-            return nil, nil
-        end
-
-
-
-        -- Check if there's an obstacle above player's head
-        local function CheckOverhead(character, rootPart, checkDistance)
-            local rayParams = RaycastParams.new()
-            rayParams.FilterDescendantsInstances = { character }
-            rayParams.FilterType = Enum.RaycastFilterType.Exclude
-
-            -- Raycast from head position upward
-            local headPos = rootPart.Position + Vector3.new(0, 2, 0)
-            local hitResult = workspace:Raycast(headPos, Vector3.new(0, checkDistance, 0), rayParams)
-
-            if hitResult then
-                return true, hitResult.Position.Y - headPos.Y -- obstacle found, return distance
-            end
-            return false, checkDistance                       -- no obstacle
-        end
-
-        -- Boost toward the edge (SAFE VERSION - simple ADD, no replace)
-        local function BoostTowardEdge(rootPart, edgePosition, isLadderTarget)
-            if edgeBoostCooldown or hasBostedThisJump then return false end
-
-            local directionToEdge = (edgePosition - rootPart.Position)
-            local distance = directionToEdge.Magnitude
-
-            -- Don't boost if too close (already there)
-            if distance < 2 then return false end
-
-            local currentVel = rootPart.AssemblyLinearVelocity
-
-            -- Only boost if actually moving upward or forward (not falling fast)
-            if currentVel.Y < -20 then return false end
-
-            -- Check for overhead obstacles (increased check distance)
-            local character = rootPart.Parent
-            local hasOverhead, overheadDist = CheckOverhead(character, rootPart, 8)
-
-            local boostVelocity
-
-            if isLadderTarget and distance > 0 then
-                -- Ladder: boost toward it with VERY MINIMAL force
-                local directDir = directionToEdge.Unit
-                local boostStrength = BOOST_POWER_FORWARD * LADDER_BOOST_MULTIPLIER * 0.6 -- Reduced
-
-                -- Almost no upward boost for ladders to prevent head bump
-                local upwardBoost = 0
-                if not hasOverhead and overheadDist > 5 then
-                    upwardBoost = 1 -- Only tiny upward if no obstacle
-                end
-
-                boostVelocity = Vector3.new(
-                    directDir.X * boostStrength,
-                    upwardBoost,
-                    directDir.Z * boostStrength
-                )
-            else
-                -- Platform: horizontal + upward
-                -- Use direction to edge, or MoveDirection for Shift Lock compatibility
-                local horizontalDir = Vector3.new(directionToEdge.X, 0, directionToEdge.Z)
-                if horizontalDir.Magnitude > 0 then
-                    horizontalDir = horizontalDir.Unit
-                else
-                    -- Fall back to humanoid MoveDirection if available
-                    local hum = rootPart.Parent and rootPart.Parent:FindFirstChildOfClass("Humanoid")
-                    if hum and hum.MoveDirection.Magnitude > 0.1 then
-                        horizontalDir = hum.MoveDirection
-                    else
-                        horizontalDir = rootPart.CFrame.LookVector
-                    end
-                end
-
-                -- Simple upward based on if target is above
-                local heightDiff = edgePosition.Y - rootPart.Position.Y
-                local upwardBoost = heightDiff > 0 and math.clamp(heightDiff * 0.5, 4, BOOST_POWER_UP) or 2
-
-                -- Reduce upward boost if overhead obstacle detected (but keep more power)
-                if hasOverhead then
-                    upwardBoost = math.min(upwardBoost, overheadDist * 0.6)
-                end
-
-                -- Use reduced forward boost
-                local forwardBoost = BOOST_POWER_FORWARD * 0.7
-
-                boostVelocity = Vector3.new(
-                    horizontalDir.X * forwardBoost,
-                    upwardBoost,
-                    horizontalDir.Z * forwardBoost
-                )
-            end
-
-            -- SIMPLE ADD - don't mess with current velocity, just add boost
-            rootPart.AssemblyLinearVelocity = currentVel + boostVelocity
-
-            -- Mark as boosted this jump & set cooldown
-            hasBostedThisJump = true
-            edgeBoostCooldown = true
-            task.delay(BOOST_COOLDOWN, function()
-                edgeBoostCooldown = false
-            end)
-
-            return true
-        end
-
-        local function ToggleAirLock(forceEnable)
-            if forceEnable ~= nil then
-                if forceEnable == isAirLock then
-                    return
-                end
-            end
-
-            isAirLock = not isAirLock
-            BtnAirLock.Text = "AIR LOCK: " .. (isAirLock and "ON" or "OFF")
-            BtnAirLock.TextColor3 = isAirLock and C_GREEN or C_TEXT_DIM
-            BtnAirLock.UIStroke.Color = isAirLock and C_GREEN or C_TEXT_DIM
-            ShowFeatureToast("Air Lock", isAirLock)
-
-            if isAirLock then
-                airLockLoop = RunService.RenderStepped:Connect(function()
-                    local c = LocalPlayer.Character
-                    local h = c and c:FindFirstChild("Humanoid")
-                    local r = c and c:FindFirstChild("HumanoidRootPart")
-
-                    if h and r then
-                        local state = h:GetState()
-                        local velocity = r.AssemblyLinearVelocity
-                        local currentTime = tick()
-
-                        -- GROUND STATE: Reset boost flag & pre-detect
-                        if state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.RunningNoPhysics or state == Enum.HumanoidStateType.Landed then
-                            lastGroundTime = currentTime
-                            hasBostedThisJump = false -- Reset boost flag when on ground
-
-                            -- Pre-detect while moving on ground
-                            if h.MoveDirection.Magnitude > 0.1 then
-                                local hitPos, hitPart = DetectEdgeForward(c, r, h)
-                                preDetectedEdge = hitPos
-                                preDetectedPart = hitPart
-                            end
-                            -- Reset air detection
-                            detectedEdgePosition = nil
-                            detectedLadderPart = nil
-                        end
-
-                        -- AIR STATE: Only boost when jumping/falling AND not already boosted
-                        if (state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall) and not hasBostedThisJump then
-                            local timeSinceGround = currentTime - lastGroundTime
-
-                            -- Wait a tiny bit after jump to let normal jump physics work
-                            if timeSinceGround < 0.1 then
-                                return -- Let normal jump happen first
-                            end
-
-                            -- Use pre-detected target if available
-                            if not detectedEdgePosition and preDetectedEdge and timeSinceGround < INSTANT_BOOST_WINDOW then
-                                detectedEdgePosition = preDetectedEdge
-                                detectedLadderPart = preDetectedPart
-                            end
-
-                            -- Detect in air if no target yet
-                            if not detectedEdgePosition then
-                                local hitPos, hitPart = DetectEdgeForward(c, r, h)
-                                detectedEdgePosition = hitPos
-                                detectedLadderPart = hitPart
-                            end
-
-                            -- Boost toward edge (only once per jump)
-                            if detectedEdgePosition and not edgeBoostCooldown and not hasBostedThisJump then
-                                local isLadderTarget = IsLadder(detectedLadderPart)
-                                BoostTowardEdge(r, detectedEdgePosition, isLadderTarget)
-                                -- Clear pre-detected after use
-                                preDetectedEdge = nil
-                                preDetectedPart = nil
-                            end
-                        end
-                    end
-                end)
-                table.insert(Connections, airLockLoop)
-            else
-                if airLockLoop then
-                    airLockLoop:Disconnect()
-                    airLockLoop = nil
-                end
-            end
-        end
-        BtnAirLock.MouseButton1Click:Connect(function()
-            ToggleAirLock()
-        end)
-        UIHandlers.ToggleAirLock = ToggleAirLock
-    end
-
-    -- 5. QUICK BOOST (L2/R2 or A/D Control)
-    -- Technique: Press L2/R2 or A/D in air to get vertical boost
-    do
-        local CardBoost = CreateCard("QUICK BOOST", 130, 5)
-
-        local BtnQuickBoost, QuickBoostContainer = CreateFeatureButton(
-            CardBoost,
-            L("quick_boost") .. ": " .. L("off"),
-            L("quick_boost_desc"),
-            UDim2.new(0.94, 0, 0, 35),
-            UDim2.new(0.03, 0, 0, 35),
-            C_TEXT_DIM
-        )
-
-        -- Boost Power Slider Row (below the button)
-        local SliderRow = Instance.new("Frame", CardBoost)
-        SliderRow.Size = UDim2.new(0.94, 0, 0, 30)
-        SliderRow.Position = UDim2.new(0.03, 0, 0, 95)
-        SliderRow.BackgroundTransparency = 1
-
-        -- Clamp existing config value to new max of 20
-        Config.QuickBoostPower = math.clamp(Config.QuickBoostPower or 10, 0, 20)
-        local LblBoostPower = Instance.new("TextLabel", SliderRow)
-        LblBoostPower.Text = "BOOST POWER: " .. Config.QuickBoostPower
-        LblBoostPower.Size = UDim2.new(0.35, 0, 0, 20)
-        LblBoostPower.Position = UDim2.new(0, 0, 0.5, -10)
-        LblBoostPower.BackgroundTransparency = 1
-        LblBoostPower.TextColor3 = C_TEXT_DIM
-        LblBoostPower.Font = Enum.Font.GothamBold
-        LblBoostPower.TextSize = 10
-        LblBoostPower.TextXAlignment = Enum.TextXAlignment.Left
-
-        local SldBoostBg = Instance.new("TextButton", SliderRow)
-        SldBoostBg.Text = ""
-        SldBoostBg.Size = UDim2.new(0.6, 0, 0, 8)
-        SldBoostBg.Position = UDim2.new(0.38, 0, 0.5, -4)
-        SldBoostBg.BackgroundColor3 = C_SIDE
-        SldBoostBg.AutoButtonColor = false
-        Instance.new("UICorner", SldBoostBg).CornerRadius = UDim.new(0, 4)
-
-        local SldBoostFill = Instance.new("Frame", SldBoostBg)
-        SldBoostFill.Size = UDim2.new(Config.QuickBoostPower / 20, 0, 1, 0)
-        SldBoostFill.BackgroundColor3 = C_ACCENT
-        Instance.new("UICorner", SldBoostFill).CornerRadius = UDim.new(0, 4)
-
-        local function UpdateBoostSlider(input)
-            local rx = input.Position.X - SldBoostBg.AbsolutePosition.X
-            local sc = math.clamp(rx / SldBoostBg.AbsoluteSize.X, 0, 1)
-            Config.QuickBoostPower = math.floor(sc * 20) -- 0 to 20
-            SldBoostFill.Size = UDim2.new(sc, 0, 1, 0)
-            LblBoostPower.Text = "BOOST POWER: " .. Config.QuickBoostPower
-        end
-
-        local draggingBoost = false
-        SldBoostBg.MouseButton1Down:Connect(function()
-            draggingBoost = true
-        end)
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                draggingBoost = false
-            end
-        end)
-        UserInputService.InputChanged:Connect(function(input)
-            if draggingBoost and input.UserInputType == Enum.UserInputType.MouseMovement then
-                UpdateBoostSlider(input)
-            end
-        end)
-
-        -- Quick Boost State - L2/R2 or A/D control
-        local isQuickBoost, quickBoostLoop = false, nil
-        local hasBoostedThisJump = false -- Track if already boosted this jump
-        -- BOOST_AMOUNT now uses Config.QuickBoostPower from slider (0-20)
-        -- MAX_TOTAL_Y_VEL now scales with boost power (base 50 + boost amount)
-        local wasOnGround = true
-        local lastMoveX = 0             -- Track last X movement for detecting direction change
-        local KEYBOARD_THRESHOLD = 0.3  -- Lower threshold for keyboard (more responsive)
-        local JOYSTICK_THRESHOLD = 0.85 -- Higher threshold for joystick (less sensitive)
-        local wasMovingLeft = false
-        local wasMovingRight = false
-        local lastAPressed = false
-        local lastDPressed = false
-
-        -- Gamepad Button State (LT = spin left, RT = spin right)
-        local lastLTPressed = false
-        local lastRTPressed = false
-
-        local function ToggleQuickBoost(forceEnable)
-            if forceEnable ~= nil then
-                if forceEnable == isQuickBoost then
-                    return
-                end
-            end
-
-            isQuickBoost = not isQuickBoost
-            BtnQuickBoost.Text = L("quick_boost") .. ": " .. (isQuickBoost and L("on") or L("off"))
-            BtnQuickBoost.TextColor3 = isQuickBoost and C_GREEN or C_TEXT_DIM
-            BtnQuickBoost.UIStroke.Color = isQuickBoost and C_GREEN or C_TEXT_DIM
-            ShowFeatureToast("Quick Boost", isQuickBoost)
-
-            if isQuickBoost then
-                quickBoostLoop = RunService.Heartbeat:Connect(function(dt)
-                    local c = LocalPlayer.Character
-                    local h = c and c:FindFirstChild("Humanoid")
-                    local r = c and c:FindFirstChild("HumanoidRootPart")
-
-                    if h and r then
-                        local state = h:GetState()
-                        local isOnGround = (state == Enum.HumanoidStateType.Running or
-                            state == Enum.HumanoidStateType.Landed or
-                            h.FloorMaterial ~= Enum.Material.Air)
-                        local isInAir = (state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall)
-
-                        -- Reset when landing
-                        if isOnGround then
-                            hasBoostedThisJump = false
-                        end
-
-                        -- Check keyboard A/D (separate detection - more reliable)
-                        local aPressed = UserInputService:IsKeyDown(Enum.KeyCode.A)
-                        local dPressed = UserInputService:IsKeyDown(Enum.KeyCode.D)
-
-                        -- Detect keyboard press (transition from not pressed to pressed)
-                        local aJustPressed = aPressed and not lastAPressed
-                        local dJustPressed = dPressed and not lastDPressed
-                        lastAPressed = aPressed
-                        lastDPressed = dPressed
-
-                        -- GAMEPAD LT/RT DETECTION
-                        local ltPressed = UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1,
-                            Enum.KeyCode.ButtonL2)
-                        local rtPressed = UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1,
-                            Enum.KeyCode.ButtonR2)
-
-                        -- Detect button press (transition from not pressed to pressed)
-                        local ltJustPressed = ltPressed and not lastLTPressed
-                        local rtJustPressed = rtPressed and not lastRTPressed
-                        lastLTPressed = ltPressed
-                        lastRTPressed = rtPressed
-
-                        -- Combine keyboard and gamepad triggers
-                        local justMovedLeft = aJustPressed or ltJustPressed
-                        local justMovedRight = dJustPressed or rtJustPressed
-
-                        -- Apply boost when L2/R2 or A/D pressed in air (once per jump)
-                        if isInAir and not hasBoostedThisJump then
-                            if justMovedLeft or justMovedRight then
-                                -- BOOST ONLY - no rotation
-                                local currentVel = r.AssemblyLinearVelocity
-                                local boostAmount = Config.QuickBoostPower or 10
-                                local maxYVel = 50 + boostAmount -- Cap scales with boost power
-                                -- Only add small boost, cap total velocity
-                                local newYVel = math.min(currentVel.Y + boostAmount, maxYVel)
-                                -- Don't boost if already going up fast
-                                if currentVel.Y < maxYVel then
-                                    r.AssemblyLinearVelocity = Vector3.new(
-                                        currentVel.X,
-                                        newYVel,
-                                        currentVel.Z
-                                    )
-                                end
-                                hasBoostedThisJump = true -- Mark as boosted
-                            end
-                        end
-
-
-
-                        wasOnGround = isOnGround
-                    end
-                end)
-                table.insert(Connections, quickBoostLoop)
-            else
-                if quickBoostLoop then
-                    quickBoostLoop:Disconnect()
-                    quickBoostLoop = nil
-                end
-                hasBoostedThisJump = false
-                lastLTPressed = false
-                lastRTPressed = false
-            end
-        end
-
-        BtnQuickBoost.MouseButton1Click:Connect(function()
-            ToggleQuickBoost()
-        end)
-        UIHandlers.ToggleQuickBoost = ToggleQuickBoost
-    end
-
-    -- 1. ALWAYS MOMENTUM
-    local CardMomentum = CreateCard(L("always_momentum"), 100, 1)
-
-    local BtnMomentum, MomentumContainer = CreateFeatureButton(
-        CardMomentum,
-        L("always_momentum") .. ": " .. L("off"),
-        L("always_momentum_desc"),
-        UDim2.new(0.94, 0, 0, 55),
-        UDim2.new(0.03, 0, 0, 35),
-        C_TEXT_DIM
-    )
-
-    local isMomentum, momentumLoop = false, nil
-    local lockedSpeed = nil
-    local momentumHUD = nil
-
-    local function CreateMomentumHUD()
-        if momentumHUD then
-            return
-        end
-        local screenGui = Instance.new("ScreenGui")
-        screenGui.Name = "MomentumHUD"
-        screenGui.ResetOnSpawn = false
-        screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
-        local frame = Instance.new("Frame", screenGui)
-        frame.Name = "HUDFrame"
-        frame.Size = UDim2.new(0, 160, 0, 55)
-        frame.Position = UDim2.new(0.5, -80, 1, -70)
-        frame.AnchorPoint = Vector2.new(0.5, 1)
-        frame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-        frame.BackgroundTransparency = 0.3
-        Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
-        local stroke = Instance.new("UIStroke", frame)
-        stroke.Color = C_ACCENT
-        stroke.Transparency = 0.5
-
-        local title = Instance.new("TextLabel", frame)
-        title.Name = "Title"
-        title.Text = "MOMENTUM"
-        title.Size = UDim2.new(1, 0, 0, 18)
-        title.Position = UDim2.new(0, 0, 0, 3)
-        title.BackgroundTransparency = 1
-        title.TextColor3 = C_ACCENT
-        title.Font = Enum.Font.GothamBold
-        title.TextSize = 10
-
-        local speedLabel = Instance.new("TextLabel", frame)
-        speedLabel.Name = "Speed"
-        speedLabel.Text = "0"
-        speedLabel.Size = UDim2.new(1, 0, 0, 22)
-        speedLabel.Position = UDim2.new(0, 0, 0, 20)
-        speedLabel.BackgroundTransparency = 1
-        speedLabel.TextColor3 = C_GREEN
-        speedLabel.Font = Enum.Font.GothamBlack
-        speedLabel.TextSize = 20
-
-        local lockLabel = Instance.new("TextLabel", frame)
-        lockLabel.Name = "Lock"
-        lockLabel.Text = "LOCKED: --"
-        lockLabel.Size = UDim2.new(1, 0, 0, 12)
-        lockLabel.Position = UDim2.new(0, 0, 0, 42)
-        lockLabel.BackgroundTransparency = 1
-        lockLabel.TextColor3 = C_TEXT_DIM
-        lockLabel.Font = Enum.Font.Gotham
-        lockLabel.TextSize = 9
-
-        momentumHUD = screenGui
-    end
-
-    local function DestroyMomentumHUD()
-        if momentumHUD then
-            momentumHUD:Destroy()
-            momentumHUD = nil
-        end
-    end
-
-    local function UpdateMomentumHUD(currentSpeed, locked)
-        if not momentumHUD then
-            return
-        end
-        local frame = momentumHUD:FindFirstChild("HUDFrame")
-        if not frame then
-            return
-        end
-
-        local speedLbl = frame:FindFirstChild("Speed")
-        local lockLbl = frame:FindFirstChild("Lock")
-
-        if speedLbl then
-            speedLbl.Text = string.format("%.1f", currentSpeed or 0)
-        end
-
-        if lockLbl then
-            if locked then
-                lockLbl.Text = string.format("LOCKED: %.1f", locked)
-            else
-                lockLbl.Text = "LOCKED: --"
-            end
-        end
-    end
-
-    local function ToggleMomentum(forceEnable)
-        if forceEnable ~= nil then
-            if forceEnable == isMomentum then
-                return
-            end
-        end
-
-        isMomentum = not isMomentum
-        BtnMomentum.Text = L("always_momentum") .. ": " .. (isMomentum and L("on") or L("off"))
-        BtnMomentum.TextColor3 = isMomentum and C_GREEN or C_TEXT_DIM
-        BtnMomentum.UIStroke.Color = isMomentum and C_GREEN or C_TEXT_DIM
-        ShowFeatureToast("Always Momentum", isMomentum)
-
-        if isMomentum then
-            lockedSpeed = nil
-            CreateMomentumHUD()
-            momentumLoop = RunService.Heartbeat:Connect(function()
-                local c = LocalPlayer.Character
-                local h = c and c:FindFirstChild("Humanoid")
-                local r = c and c:FindFirstChild("HumanoidRootPart")
-
-                if h and r and h.MoveDirection.Magnitude > 0.1 then
-                    local vel = r.AssemblyLinearVelocity
-                    local horizontalSpeed = Vector3.new(vel.X, 0, vel.Z).Magnitude
-
-                    if lockedSpeed == nil then
-                        lockedSpeed = horizontalSpeed
-                    end
-
-                    if horizontalSpeed < lockedSpeed then
-                        local moveDir = h.MoveDirection.Unit
-                        r.AssemblyLinearVelocity = Vector3.new(moveDir.X * lockedSpeed, vel.Y, moveDir.Z * lockedSpeed)
-                    elseif horizontalSpeed > lockedSpeed + 1 then
-                        lockedSpeed = lockedSpeed + 1
-                    end
-
-                    UpdateMomentumHUD(horizontalSpeed, lockedSpeed)
-                else
-                    lockedSpeed = nil
-                    UpdateMomentumHUD(0, nil)
-                end
-            end)
-            table.insert(Connections, momentumLoop)
-        else
-            if momentumLoop then
-                momentumLoop:Disconnect()
-                momentumLoop = nil
-            end
-            lockedSpeed = nil
-            DestroyMomentumHUD()
-        end
-    end
-
-    BtnMomentum.MouseButton1Click:Connect(function()
-        ToggleMomentum()
-    end)
-    UIHandlers.ToggleMomentum = ToggleMomentum
-
-    -- 2. ANTI-SLIP
-    local CardSlip = CreateCard(L("anti_slip"), 155, 2)
-
-    local BtnSlip, SlipContainer = CreateFeatureButton(
-        CardSlip,
-        L("anti_slip") .. ": " .. L("off"),
-        L("anti_slip_desc"),
-        UDim2.new(0.94, 0, 0, 55),
-        UDim2.new(0.03, 0, 0, 35),
-        C_RED
-    )
-
-    -- Size Slider
-    local LblSize = Instance.new("TextLabel", CardSlip)
-    LblSize.Text = L("size") .. ": 0.5"
-    LblSize.Size = UDim2.new(1, -20, 0, 20)
-    LblSize.Position = UDim2.new(0, 15, 0, 95)
-    LblSize.BackgroundTransparency = 1
-    LblSize.TextColor3 = C_TEXT_DIM
-    LblSize.Font = Enum.Font.GothamBold
-    LblSize.TextSize = 10
-    LblSize.TextXAlignment = Enum.TextXAlignment.Left
-
-    local SldBg = Instance.new("TextButton", CardSlip)
-    SldBg.Text = ""
-    SldBg.Size = UDim2.new(0.9, 0, 0, 6)
-    SldBg.Position = UDim2.new(0.05, 0, 0, 115)
-    SldBg.BackgroundColor3 = C_SIDE
-    SldBg.AutoButtonColor = false
-    Instance.new("UICorner", SldBg).CornerRadius = UDim.new(0, 3)
-
-    local SldFill = Instance.new("Frame", SldBg)
-    SldFill.Size = UDim2.new(0.3, 0, 1, 0) -- Default 30% = size 3
-    SldFill.BackgroundColor3 = C_ACCENT
-    Instance.new("UICorner", SldFill).CornerRadius = UDim.new(0, 3)
-
-    local targetSize = 3 -- Default size 3 studs
-    local isSlipOn = false
-    local slipLoop = nil
-    local modifiedParts = {}
-
-    LblSize.Text = L("size") .. ": 3.0" -- Update default label
-
-    local function UpdateSlider(input)
-        local rx = input.Position.X - SldBg.AbsolutePosition.X
-        local sc = math.clamp(rx / SldBg.AbsoluteSize.X, 0, 1)
-        targetSize = 1 + (sc * 9) -- Range 1-10 studs
-        SldFill.Size = UDim2.new(sc, 0, 1, 0)
-        LblSize.Text = L("size") .. ": " .. string.format("%.1f", targetSize)
-    end
-
-    local dragging = false
-    SldBg.MouseButton1Down:Connect(function()
-        dragging = true
-    end)
-    UserInputService.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-            UpdateSlider(i)
-        end
-    end)
-
-    local lastSafeY = nil
-    local lastGroundPart = nil
-    local visualPart = nil
-
-    local function ToggleAntiSlip(forceEnable)
-        if forceEnable ~= nil then
-            if forceEnable == isSlipOn then
-                return
-            end
-        end
-
-        isSlipOn = not isSlipOn
-        BtnSlip.Text = L("anti_slip") .. ": " .. (isSlipOn and L("on") or L("off"))
-        BtnSlip.TextColor3 = isSlipOn and C_GREEN or C_RED
-        BtnSlip.UIStroke.Color = isSlipOn and C_GREEN or C_RED
-        ShowFeatureToast("Anti-Slip", isSlipOn)
-
-        if isSlipOn then
-            lastSafeY = nil
-            lastGroundPart = nil
-
-            -- Create visual indicator
-            visualPart = Instance.new("Part")
-            visualPart.Name = "StarshipAntiSlipVisual"
-            visualPart.Anchored = true
-            visualPart.CanCollide = false
-            visualPart.CanQuery = false
-            visualPart.CanTouch = false
-            visualPart.Transparency = 0.5
-            visualPart.Color = Color3.fromRGB(0, 255, 100)
-            visualPart.Material = Enum.Material.Neon
-            visualPart.Size = Vector3.new(targetSize, 0.1, targetSize)
-            visualPart.CastShadow = false
-            visualPart.Parent = workspace
-
-            slipLoop = RunService.Heartbeat:Connect(function()
-                local c = LocalPlayer.Character
-                if not c then
-                    return
-                end
-
-                local r = c:FindFirstChild("HumanoidRootPart")
-                local h = c:FindFirstChild("Humanoid")
-                if not r or not h then
-                    return
-                end
-
-                local params = RaycastParams.new()
-                params.FilterDescendantsInstances = { c, visualPart }
-                params.FilterType = Enum.RaycastFilterType.Exclude
-
-                local playerPos = r.Position
-                local halfSize = targetSize / 2
-
-                -- Multi-raycast untuk mencari ground dalam radius
-                local rayPositions = {
-                    playerPos,
-                    playerPos + Vector3.new(halfSize, 0, 0),
-                    playerPos + Vector3.new(-halfSize, 0, 0),
-                    playerPos + Vector3.new(0, 0, halfSize),
-                    playerPos + Vector3.new(0, 0, -halfSize),
-                    playerPos + Vector3.new(halfSize, 0, halfSize),
-                    playerPos + Vector3.new(-halfSize, 0, halfSize),
-                    playerPos + Vector3.new(halfSize, 0, -halfSize),
-                    playerPos + Vector3.new(-halfSize, 0, -halfSize),
-                }
-
-                local foundGround = false
-                local highestY = -math.huge
-
-                for _, pos in ipairs(rayPositions) do
-                    local ray = workspace:Raycast(pos, Vector3.new(0, -50, 0), params)
-                    if ray and ray.Instance and not ray.Instance:IsA("Terrain") then
-                        foundGround = true
-                        if ray.Position.Y > highestY then
-                            highestY = ray.Position.Y
-                            lastGroundPart = ray.Instance
-                        end
-                    end
-                end
-
-                if foundGround then
-                    lastSafeY = highestY + 3
-
-                    -- Update visual
-                    if visualPart then
-                        visualPart.Size = Vector3.new(targetSize, 0.1, targetSize)
-                        visualPart.CFrame = CFrame.new(playerPos.X, highestY + 0.05, playerPos.Z)
-                    end
-                else
-                    if visualPart then
-                        visualPart.Position = Vector3.new(0, -9999, 0)
-                    end
-                end
-
-                -- Keep player from falling - but allow jumping
-                if lastSafeY then
-                    local vel = r.AssemblyLinearVelocity
-                    local state = h:GetState()
-                    local isJumping = state == Enum.HumanoidStateType.Jumping or vel.Y > 1
-
-                    if not isJumping and r.Position.Y < lastSafeY - 0.3 and vel.Y < 0 then
-                        r.CFrame = CFrame.new(r.Position.X, lastSafeY, r.Position.Z) * (r.CFrame - r.CFrame.Position)
-                        r.AssemblyLinearVelocity = Vector3.new(vel.X, 0, vel.Z)
-                        h:ChangeState(Enum.HumanoidStateType.Running)
-                    end
-                end
-            end)
-            table.insert(Connections, slipLoop)
-        else
-            if slipLoop then
-                slipLoop:Disconnect()
-                slipLoop = nil
-            end
-            lastSafeY = nil
-            lastGroundPart = nil
-
-            -- Remove visual part
-            if visualPart then
-                visualPart:Destroy()
-                visualPart = nil
-            end
-
-            modifiedParts = {}
-        end
-    end
-    BtnSlip.MouseButton1Click:Connect(function()
-        ToggleAntiSlip()
-    end)
-    UIHandlers.ToggleAntiSlip = ToggleAntiSlip
-
-    -- 3. ANTI-RAGDOLL
-    local CardRagdoll = CreateCard(L("anti_ragdoll"), 140, 3)
-
-    local BtnRagdoll, RagdollContainer = CreateFeatureButton(
-        CardRagdoll,
-        L("anti_ragdoll") .. ": " .. L("off"),
-        L("anti_ragdoll_desc"),
-        UDim2.new(0.94, 0, 0, 55),
-        UDim2.new(0.03, 0, 0, 35),
-        C_RED
-    )
-
-    -- Max Velocity Slider
-    local LblMaxVel = Instance.new("TextLabel", CardRagdoll)
-    LblMaxVel.Text = L("max_velocity") .. ": 50"
-    LblMaxVel.Size = UDim2.new(1, -20, 0, 20)
-    LblMaxVel.Position = UDim2.new(0, 15, 0, 95)
-    LblMaxVel.BackgroundTransparency = 1
-    LblMaxVel.TextColor3 = C_TEXT_DIM
-    LblMaxVel.Font = Enum.Font.GothamBold
-    LblMaxVel.TextSize = 10
-    LblMaxVel.TextXAlignment = Enum.TextXAlignment.Left
-
-    local SldVelBg = Instance.new("TextButton", CardRagdoll)
-    SldVelBg.Text = ""
-    SldVelBg.Size = UDim2.new(0.9, 0, 0, 6)
-    SldVelBg.Position = UDim2.new(0.05, 0, 0, 115)
-    SldVelBg.BackgroundColor3 = C_SIDE
-    SldVelBg.AutoButtonColor = false
-    Instance.new("UICorner", SldVelBg).CornerRadius = UDim.new(0, 3)
-
-    local SldVelFill = Instance.new("Frame", SldVelBg)
-    SldVelFill.Size = UDim2.new(0.5, 0, 1, 0) -- Default 50% = 100
-    SldVelFill.BackgroundColor3 = C_ACCENT
-    Instance.new("UICorner", SldVelFill).CornerRadius = UDim.new(0, 3)
-
-    local maxVelocity = 100 -- Default max velocity
-    local isRagdollOn = false
-    local ragdollLoop = nil
-    local stateConnection = nil
-
-    local function UpdateVelSlider(input)
-        local rx = input.Position.X - SldVelBg.AbsolutePosition.X
-        local sc = math.clamp(rx / SldVelBg.AbsoluteSize.X, 0, 1)
-        maxVelocity = math.floor(50 + (sc * 150)) -- Range 50-200
-        SldVelFill.Size = UDim2.new(sc, 0, 1, 0)
-        LblMaxVel.Text = L("max_velocity") .. ": " .. maxVelocity
-    end
-
-    local draggingVel = false
-    SldVelBg.MouseButton1Down:Connect(function()
-        draggingVel = true
-    end)
-    UserInputService.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then
-            draggingVel = false
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if draggingVel and i.UserInputType == Enum.UserInputType.MouseMovement then
-            UpdateVelSlider(i)
-        end
-    end)
-
-    local function ToggleAntiRagdoll(forceEnable)
-        if forceEnable ~= nil then
-            if forceEnable == isRagdollOn then
-                return
-            end
-        end
-
-        isRagdollOn = not isRagdollOn
-        BtnRagdoll.Text = "ANTI-RAGDOLL: " .. (isRagdollOn and "ON" or "OFF")
-        BtnRagdoll.TextColor3 = isRagdollOn and C_GREEN or C_RED
-        BtnRagdoll.UIStroke.Color = isRagdollOn and C_GREEN or C_RED
-        ShowFeatureToast("Anti-Ragdoll", isRagdollOn)
-
-        if isRagdollOn then
-            local c = LocalPlayer.Character
-            local h = c and c:FindFirstChildOfClass("Humanoid")
-
-            if h then
-                -- Disable ragdoll states
-                h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-                h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-
-                -- Listen for state changes to force recovery
-                stateConnection = h.StateChanged:Connect(function(oldState, newState)
-                    if newState == Enum.HumanoidStateType.Ragdoll or newState == Enum.HumanoidStateType.FallingDown then
-                        h:ChangeState(Enum.HumanoidStateType.GettingUp)
-                        task.wait(0.1)
-                        h:ChangeState(Enum.HumanoidStateType.Running)
-                    end
-                end)
-                table.insert(Connections, stateConnection)
-            end
-
-            -- Velocity clamp loop
-            ragdollLoop = RunService.Heartbeat:Connect(function()
-                local c = LocalPlayer.Character
-                if not c then
-                    return
-                end
-
-                local r = c:FindFirstChild("HumanoidRootPart")
-                local h = c:FindFirstChildOfClass("Humanoid")
-                if not r or not h then
-                    return
-                end
-
-                -- Ensure states stay disabled
-                if h:GetStateEnabled(Enum.HumanoidStateType.Ragdoll) then
-                    h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-                end
-                if h:GetStateEnabled(Enum.HumanoidStateType.FallingDown) then
-                    h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-                end
-
-                -- Clamp velocity to prevent fling
-                local vel = r.AssemblyLinearVelocity
-                local horizontalVel = Vector3.new(vel.X, 0, vel.Z)
-                local horizontalSpeed = horizontalVel.Magnitude
-
-                if horizontalSpeed > maxVelocity then
-                    local clampedHorizontal = horizontalVel.Unit * maxVelocity
-                    r.AssemblyLinearVelocity = Vector3.new(clampedHorizontal.X, vel.Y, clampedHorizontal.Z)
-                end
-
-                -- Clamp vertical velocity (prevent super fling up)
-                if vel.Y > maxVelocity then
-                    r.AssemblyLinearVelocity = Vector3.new(vel.X, maxVelocity, vel.Z)
-                end
-
-                -- Force recovery if somehow in ragdoll
-                local state = h:GetState()
-                if state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown then
-                    h:ChangeState(Enum.HumanoidStateType.GettingUp)
-                end
-            end)
-            table.insert(Connections, ragdollLoop)
-
-            -- Handle respawn
-            LocalPlayer.CharacterAdded:Connect(function(newChar)
-                if not isRagdollOn then
-                    return
-                end
-                task.wait(0.5)
-                local newHum = newChar:FindFirstChildOfClass("Humanoid")
-                if newHum then
-                    newHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-                    newHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-                end
-            end)
-        else
-            -- Disable
-            if ragdollLoop then
-                ragdollLoop:Disconnect()
-                ragdollLoop = nil
-            end
-            if stateConnection then
-                stateConnection:Disconnect()
-                stateConnection = nil
-            end
-
-            -- Re-enable states
-            local c = LocalPlayer.Character
-            local h = c and c:FindFirstChildOfClass("Humanoid")
-            if h then
-                h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-                h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-            end
-        end
-    end
-
-    BtnRagdoll.MouseButton1Click:Connect(function()
-        ToggleAntiRagdoll()
-    end)
-    UIHandlers.ToggleAntiRagdoll = ToggleAntiRagdoll
-
-    -- 5. REAL PATH ESP
-    local CardESP = CreateCard(L("real_path_esp"), 175, 5)
-
-    local BtnRealESP, RealESPContainer = CreateFeatureButton(
-        CardESP,
-        L("real_path_esp") .. ": " .. L("off"),
-        L("real_path_esp_desc"),
-        UDim2.new(0.94, 0, 0, 55),
-        UDim2.new(0.03, 0, 0, 35),
-        C_RED
-    )
-
-    -- Color Legend
-    local LblColorInfo = Instance.new("TextLabel", CardESP)
-    LblColorInfo.Text = L("color_info")
-    LblColorInfo.Size = UDim2.new(0.94, 0, 0, 18)
-    LblColorInfo.Position = UDim2.new(0.03, 0, 0, 95)
-    LblColorInfo.BackgroundTransparency = 1
-    LblColorInfo.TextColor3 = C_TEXT_DIM
-    LblColorInfo.TextSize = 12
-    LblColorInfo.Font = Enum.Font.GothamBold
-    LblColorInfo.TextXAlignment = Enum.TextXAlignment.Left
-
-    local LblGreen = Instance.new("TextLabel", CardESP)
-    LblGreen.Text = L("green_safe")
-    LblGreen.Size = UDim2.new(0.94, 0, 0, 14)
-    LblGreen.Position = UDim2.new(0.03, 0, 0, 111)
-    LblGreen.BackgroundTransparency = 1
-    LblGreen.TextColor3 = Color3.new(0, 1, 0)
-    LblGreen.TextSize = 10
-    LblGreen.Font = Enum.Font.Gotham
-    LblGreen.TextXAlignment = Enum.TextXAlignment.Left
-
-    local LblCyan = Instance.new("TextLabel", CardESP)
-    LblCyan.Text = L("cyan_ladder")
-    LblCyan.Size = UDim2.new(0.94, 0, 0, 14)
-    LblCyan.Position = UDim2.new(0.03, 0, 0, 125)
-    LblCyan.BackgroundTransparency = 1
-    LblCyan.TextColor3 = Color3.fromRGB(0, 255, 255)
-    LblCyan.TextSize = 10
-    LblCyan.Font = Enum.Font.Gotham
-    LblCyan.TextXAlignment = Enum.TextXAlignment.Left
-
-    local LblOrange = Instance.new("TextLabel", CardESP)
-    LblOrange.Text = L("orange_ladder")
-    LblOrange.Size = UDim2.new(0.94, 0, 0, 14)
-    LblOrange.Position = UDim2.new(0.03, 0, 0, 139)
-    LblOrange.BackgroundTransparency = 1
-    LblOrange.TextColor3 = Color3.fromRGB(255, 165, 0)
-    LblOrange.TextSize = 10
-    LblOrange.Font = Enum.Font.Gotham
-    LblOrange.TextXAlignment = Enum.TextXAlignment.Left
-
-    local LblRed = Instance.new("TextLabel", CardESP)
-    LblRed.Text = L("red_fake")
-    LblRed.Size = UDim2.new(0.94, 0, 0, 14)
-    LblRed.Position = UDim2.new(0.03, 0, 0, 153)
-    LblRed.BackgroundTransparency = 1
-    LblRed.TextColor3 = Color3.new(1, 0, 0)
-    LblRed.TextSize = 10
-    LblRed.Font = Enum.Font.Gotham
-    LblRed.TextXAlignment = Enum.TextXAlignment.Left
-
-    local isRealESP, espLoop = false, nil
-    local espContainer = Instance.new("Folder", workspace)
-    espContainer.Name = "StarshipESP"
-    local highlightedParts = {} -- Track highlighted parts by reference
-
-    -- Check if part has decal/texture (invisible but has sticker) - GLOBAL
-    local function HasDecalOrTexture(part)
-        for _, child in pairs(part:GetChildren()) do
-            if child:IsA("Decal") or child:IsA("Texture") or child:IsA("SurfaceGui") then
-                return true
-            end
-        end
-        return false
-    end
-
-    -- Simple check: CanCollide = walkable
-    local function IsPlatformWalkable(part)
-        return part.CanCollide == true
-    end
-
-    local function CreateHighlight(part, color)
-        if highlightedParts[part] then
-            return
-        end
-        highlightedParts[part] = true
-
-        local h = Instance.new("BoxHandleAdornment")
-        h.Name = "ESP_" .. tostring(part:GetDebugId())
-        h.Adornee = part
-        h.Size = part.Size + Vector3.new(0.1, 0.1, 0.1)
-        h.Color3 = color
-        h.Transparency = 0.5
-        h.ZIndex = 0
-        h.AlwaysOnTop = true
-        h.Parent = espContainer
-        part.AncestryChanged:Connect(function()
-            if not part:IsDescendantOf(game) then
-                h:Destroy()
-                highlightedParts[part] = nil
-            end
-        end)
-    end
-
-    local function ToggleRealESP(forceEnable)
-        if forceEnable ~= nil then
-            if forceEnable == isRealESP then
-                return
-            end
-        end
-
-        isRealESP = not isRealESP
-        BtnRealESP.Text = L("real_path_esp") .. ": " .. (isRealESP and L("on") or L("off"))
-        BtnRealESP.TextColor3 = isRealESP and C_GREEN or C_RED
-        BtnRealESP.UIStroke.Color = isRealESP and C_GREEN or C_RED
-        ShowFeatureToast("Real Path ESP", isRealESP)
-
-        if isRealESP then
-            -- Scan and test each platform with raycast
-            local function ScanAllParts(charPos, range)
-                for _, p in pairs(workspace:GetDescendants()) do
-                    if p:IsA("BasePart") then
-                        -- Include: visible parts OR invisible parts with decal/texture OR any CanCollide part
-                        local shouldInclude = p.Transparency < 0.95 or HasDecalOrTexture(p) or p.CanCollide
-
-                        if shouldInclude then
-                            -- Skip character parts and ESP container
-                            local isCharPart = p:FindFirstAncestorOfClass("Model")
-                                and p:FindFirstAncestorOfClass("Model"):FindFirstChild("Humanoid")
-                            if not isCharPart and not p:IsDescendantOf(espContainer) then
-                                local dist = (p.Position - charPos).Magnitude
-                                if dist <= range then
-                                    local color
-                                    local isLadder = p:IsA("TrussPart")
-                                        or p.Name:lower():find("ladder")
-                                        or p.Name:lower():find("truss")
-                                        or p.Name:lower():find("climb")
-
-                                    if isLadder then
-                                        if p.CanCollide then
-                                            color = Color3.fromRGB(0, 255, 255) -- CYAN = Ladder WALKABLE
-                                        else
-                                            color = Color3.fromRGB(255, 165, 0) -- ORANGE = Ladder NOT WALKABLE
-                                        end
-                                    elseif IsPlatformWalkable(p) then
-                                        color = Color3.new(0, 1, 0) -- Green = SAFE
-                                    else
-                                        color = Color3.new(1, 0, 0) -- Red = NOT SAFE
-                                    end
-                                    CreateHighlight(p, color)
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-
-            local c = LocalPlayer.Character
-            local r = c and c:FindFirstChild("HumanoidRootPart")
-            if r then
-                ScanAllParts(r.Position, 75)
-            end
-
-            -- Periodic rescan for new parts entering range (every 0.5 sec)
-            local lastScan = 0
-            espLoop = RunService.Heartbeat:Connect(function()
-                local now = tick()
-                if now - lastScan < 0.5 then
-                    return
-                end -- Only scan every 0.5 seconds
-                lastScan = now
-
-                local c = LocalPlayer.Character
-                local r = c and c:FindFirstChild("HumanoidRootPart")
-                if r then
-                    local range = 75
-                    local params = OverlapParams.new()
-                    params.FilterDescendantsInstances = { c, espContainer }
-                    params.FilterType = Enum.RaycastFilterType.Exclude
-                    local parts = workspace:GetPartBoundsInBox(r.CFrame, Vector3.new(range, range, range), params)
-                    for _, p in pairs(parts) do
-                        if p:IsA("BasePart") then
-                            local shouldInclude = p.Transparency < 0.95 or HasDecalOrTexture(p) or p.CanCollide
-                            if shouldInclude then
-                                local isCharPart = p:FindFirstAncestorOfClass("Model")
-                                    and p:FindFirstAncestorOfClass("Model"):FindFirstChild("Humanoid")
-                                if not isCharPart then
-                                    local color
-                                    local isLadder = p:IsA("TrussPart")
-                                        or p.Name:lower():find("ladder")
-                                        or p.Name:lower():find("truss")
-                                        or p.Name:lower():find("climb")
-
-                                    if isLadder then
-                                        if p.CanCollide then
-                                            color = Color3.fromRGB(0, 255, 255) -- CYAN = Ladder WALKABLE
-                                        else
-                                            color = Color3.fromRGB(255, 165, 0) -- ORANGE = Ladder NOT WALKABLE
-                                        end
-                                    elseif IsPlatformWalkable(p) then
-                                        color = Color3.new(0, 1, 0)
-                                    else
-                                        color = Color3.new(1, 0, 0)
-                                    end
-                                    CreateHighlight(p, color)
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-            table.insert(Connections, espLoop)
-        else
-            if espLoop then
-                espLoop:Disconnect()
-                espLoop = nil
-            end
-            espContainer:ClearAllChildren()
-            highlightedParts = {} -- Reset tracking table
-        end
-    end
-    BtnRealESP.MouseButton1Click:Connect(function()
-        ToggleRealESP()
-    end)
-    UIHandlers.ToggleRealESP = ToggleRealESP
-
-    -- 6. GHOST REPLAY
-    local CardReplay = CreateCard("GHOST REPLAY", 370, 6)
-    local currentWorkspace = "Default"
-
-    local function GetGhostPath()
-        local ghostRoot = "StarshipCore/StarshipGhosts"
-        if not isfolder(ghostRoot) then
-            makefolder(ghostRoot)
-        end
-        local path = ghostRoot .. "/" .. currentWorkspace
-        if not isfolder(path) then
-            makefolder(path)
-        end
-        return path
-    end
-
-    local GhostData = {}
-    local isGhostRecording = false
-    local isGhostPlaying = false
-    local ghostRecLoop = nil
-    local ghostPlayLoop = nil
-    local GhostModel = nil
-
-    -- WORKSPACE SELECTOR
-    local LblGWorkspace = Instance.new("TextLabel", CardReplay)
-    LblGWorkspace.Text = "WS:"
-    LblGWorkspace.Size = UDim2.new(0.15, 0, 0, 25)
-    LblGWorkspace.Position = UDim2.new(0.03, 0, 0, 35)
-    LblGWorkspace.BackgroundTransparency = 1
-    LblGWorkspace.TextColor3 = C_TEXT_DIM
-    LblGWorkspace.Font = Enum.Font.GothamBold
-    LblGWorkspace.TextSize = 10
-    LblGWorkspace.TextXAlignment = Enum.TextXAlignment.Left
-
-    local BtnGWorkspace = Instance.new("TextButton", CardReplay)
-    BtnGWorkspace.Text = currentWorkspace
-    BtnGWorkspace.Size = UDim2.new(0.75, 0, 0, 25)
-    BtnGWorkspace.Position = UDim2.new(0.22, 0, 0, 35)
-    BtnGWorkspace.BackgroundColor3 = C_SIDE
-    BtnGWorkspace.TextColor3 = C_ACCENT
-    BtnGWorkspace.Font = Enum.Font.Gotham
-    BtnGWorkspace.TextSize = 11
-    Instance.new("UICorner", BtnGWorkspace).CornerRadius = UDim.new(0, 4)
-    local sws = Instance.new("UIStroke", BtnGWorkspace)
-    sws.Color = C_ACCENT
-    sws.Transparency = 0.6
-    sws.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
-    local GWSList = Instance.new("Frame", CardReplay)
-    GWSList.Size = UDim2.new(0.75, 0, 0, 100)
-    GWSList.Position = UDim2.new(0.22, 0, 0, 65)
-    GWSList.BackgroundColor3 = C_SIDE
-    GWSList.Visible = false
-    GWSList.ZIndex = 50
-    Instance.new("UICorner", GWSList).CornerRadius = UDim.new(0, 6)
-    local sl = Instance.new("UIStroke", GWSList)
-    sl.Color = C_ACCENT
-    sl.Transparency = 0.6
-
-    local GWSScroll = Instance.new("ScrollingFrame", GWSList)
-    GWSScroll.Size = UDim2.new(1, 0, 1, 0)
-    GWSScroll.BackgroundTransparency = 1
-    GWSScroll.BorderSizePixel = 0
-    GWSScroll.ScrollBarThickness = 4
-    GWSScroll.ZIndex = 55
-    Instance.new("UIListLayout", GWSScroll).Padding = UDim.new(0, 2)
-
-    local function RefreshGhostList() end -- Forward declaration
-
-    local function UpdateGWSList()
-        for _, c in pairs(GWSScroll:GetChildren()) do
-            if c:IsA("TextButton") or c:IsA("TextBox") then
-                c:Destroy()
-            end
-        end
-
-        -- Path yang benar: StarshipCore/StarshipGhosts
-        local ghostRoot = "StarshipCore/StarshipGhosts"
-        if not isfolder(ghostRoot) then
-            makefolder(ghostRoot)
-        end
-
-        -- Input untuk workspace baru
-        local NewWSInput = Instance.new("TextBox", GWSScroll)
-        NewWSInput.PlaceholderText = "+ New..."
-        NewWSInput.Text = ""
-        NewWSInput.Size = UDim2.new(1, -5, 0, 25)
-        NewWSInput.BackgroundColor3 = C_ITEM
-        NewWSInput.TextColor3 = C_TEXT
-        NewWSInput.PlaceholderColor3 = C_GREEN
-        NewWSInput.Font = Enum.Font.Gotham
-        NewWSInput.TextSize = 10
-        NewWSInput.ZIndex = 55
-        Instance.new("UICorner", NewWSInput).CornerRadius = UDim.new(0, 4)
-
-        NewWSInput.FocusLost:Connect(function(enterPressed)
-            if enterPressed and NewWSInput.Text ~= "" then
-                local newName = NewWSInput.Text
-                local newPath = ghostRoot .. "/" .. newName
-                if not isfolder(newPath) then
-                    makefolder(newPath)
-                end
-                currentWorkspace = newName
-                BtnGWorkspace.Text = currentWorkspace
-                GWSList.Visible = false
-                RefreshGhostList()
-            end
-        end)
-
-        if isfolder(ghostRoot) then
-            local folders = listfiles(ghostRoot)
-            GWSScroll.CanvasSize = UDim2.new(0, 0, 0, (#folders + 1) * 27)
-            for _, f in ipairs(folders) do
-                if isfolder(f) then
-                    local n = string.match(f, "[^/\\]+$") or f
-                    local b = Instance.new("TextButton", GWSScroll)
-                    b.Text = n
-                    b.Size = UDim2.new(1, -5, 0, 25)
-                    b.BackgroundColor3 = C_SIDE
-                    b.TextColor3 = C_TEXT
-                    b.Font = Enum.Font.Gotham
-                    b.TextSize = 10
-                    b.ZIndex = 55
-                    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
-                    b.MouseButton1Click:Connect(function()
-                        currentWorkspace = n
-                        BtnGWorkspace.Text = currentWorkspace
-                        GWSList.Visible = false
-                        RefreshGhostList()
-                    end)
-                end
-            end
-        end
-    end
-
-    BtnGWorkspace.MouseButton1Click:Connect(function()
-        GWSList.Visible = not GWSList.Visible
-        if GWSList.Visible then
-            UpdateGWSList()
-        end
-    end)
-
-    local function StartCountdown(callback)
-        local count = 3
-        local cdLabel = Instance.new("TextLabel", UI and UI.ScreenGui or PageHelper.Parent.Parent)
-        cdLabel.Size = UDim2.new(1, 0, 0, 100)
-        cdLabel.Position = UDim2.new(0, 0, 0.4, 0)
-        cdLabel.BackgroundTransparency = 1
-        cdLabel.TextColor3 = C_ACCENT
-        cdLabel.Font = Enum.Font.GothamBlack
-        cdLabel.TextSize = 72
-        cdLabel.TextStrokeTransparency = 0
-        cdLabel.Text = tostring(count)
-
-        local c = LocalPlayer.Character
-        local root = c and c:FindFirstChild("HumanoidRootPart")
-        if root then
-            root.Anchored = true
-            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-            root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-        end
-
-        task.spawn(function()
-            while count > 0 do
-                cdLabel.Text = tostring(count)
-                task.wait(1)
-                count = count - 1
-            end
-            if root then
-                root.Anchored = false
-            end
-            cdLabel.Text = "GO!"
-            cdLabel.TextColor3 = C_GREEN
-            if callback then
-                callback()
-            end
-            task.wait(0.5)
-            cdLabel:Destroy()
-        end)
-    end
-
-    local BtnRecordGhost = Instance.new("TextButton", CardReplay)
-    BtnRecordGhost.Text = "RECORD NEW"
-    BtnRecordGhost.Size = UDim2.new(0.45, 0, 0, 30)
-    BtnRecordGhost.Position = UDim2.new(0.03, 0, 0, 75)
-    StyleBtn(BtnRecordGhost, C_TEXT)
-
-    local BtnPlayGhost = Instance.new("TextButton", CardReplay)
-    BtnPlayGhost.Text = "PLAY GHOST"
-    BtnPlayGhost.Size = UDim2.new(0.45, 0, 0, 30)
-    BtnPlayGhost.Position = UDim2.new(0.52, 0, 0, 75)
-    StyleBtn(BtnPlayGhost, C_TEXT_DIM)
-
-    local LblGhostStatus = Instance.new("TextLabel", CardReplay)
-    LblGhostStatus.Text = "STATUS: IDLE"
-    LblGhostStatus.Size = UDim2.new(0.94, 0, 0, 20)
-    LblGhostStatus.Position = UDim2.new(0.03, 0, 0, 110)
-    LblGhostStatus.BackgroundTransparency = 1
-    LblGhostStatus.TextColor3 = C_TEXT_DIM
-    LblGhostStatus.Font = Enum.Font.Code
-
-    local InpGhostName = Instance.new("TextBox", CardReplay)
-    InpGhostName.PlaceholderText = "Ghost Name..."
-    InpGhostName.Size = UDim2.new(0.6, 0, 0, 30)
-    InpGhostName.Position = UDim2.new(0.03, 0, 0, 135)
-    InpGhostName.BackgroundColor3 = C_SIDE
-    InpGhostName.TextColor3 = C_TEXT
-    InpGhostName.Font = Enum.Font.Gotham
-    InpGhostName.TextSize = 11
-    Instance.new("UICorner", InpGhostName).CornerRadius = UDim.new(0, 6)
-
-    local BtnSaveGhost = Instance.new("TextButton", CardReplay)
-    BtnSaveGhost.Text = "SAVE"
-    BtnSaveGhost.Size = UDim2.new(0.3, 0, 0, 30)
-    BtnSaveGhost.Position = UDim2.new(0.67, 0, 0, 135)
-    StyleBtn(BtnSaveGhost, C_ACCENT)
-
-    local GhostListScroll = Instance.new("ScrollingFrame", CardReplay)
-    GhostListScroll.Size = UDim2.new(0.94, 0, 0, 110)
-    GhostListScroll.Position = UDim2.new(0.03, 0, 0, 175)
-    GhostListScroll.BackgroundColor3 = C_SIDE
-    GhostListScroll.BorderSizePixel = 0
-    GhostListScroll.ScrollBarThickness = 4
-    Instance.new("UICorner", GhostListScroll).CornerRadius = UDim.new(0, 6)
-    Instance.new("UIListLayout", GhostListScroll).Padding = UDim.new(0, 2)
-
-    local BtnRefreshGhost = Instance.new("TextButton", CardReplay)
-    BtnRefreshGhost.Text = "REFRESH LIST"
-    BtnRefreshGhost.Size = UDim2.new(0.94, 0, 0, 25)
-    BtnRefreshGhost.Position = UDim2.new(0.03, 0, 0, 295)
-    StyleBtn(BtnRefreshGhost, C_TEXT)
-
-    local BtnClearGhost = Instance.new("TextButton", CardReplay)
-    BtnClearGhost.Text = "CLEAR GHOST"
-    BtnClearGhost.Size = UDim2.new(0.94, 0, 0, 25)
-    BtnClearGhost.Position = UDim2.new(0.03, 0, 0, 325)
-    StyleBtn(BtnClearGhost, C_RED)
-
-    RefreshGhostList = function()
-        for _, c in pairs(GhostListScroll:GetChildren()) do
-            if c:IsA("TextButton") then
-                c:Destroy()
-            end
-        end
-        local path = GetGhostPath()
-        if isfolder(path) then
-            local files = listfiles(path)
-            GhostListScroll.CanvasSize = UDim2.new(0, 0, 0, #files * 22)
-            for _, f in ipairs(files) do
-                local n = string.match(f, "[^/\\]+$"):gsub(".json", "")
-                local b = Instance.new("TextButton", GhostListScroll)
-                b.Text = "  " .. n
-                b.Size = UDim2.new(1, 0, 0, 20)
-                b.BackgroundColor3 = C_SIDE
-                b.TextColor3 = C_TEXT_DIM
-                b.TextXAlignment = Enum.TextXAlignment.Left
-                b.Font = Enum.Font.Gotham
-                b.TextSize = 10
-                Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
-
-                b.MouseButton1Click:Connect(function()
-                    local s, j = pcall(readfile, f)
-                    if s then
-                        local d = HttpService:JSONDecode(j)
-                        if d.Frames then
-                            GhostData = {}
-                            for _, fr in ipairs(d.Frames) do
-                                local frame = { Time = fr.Time, RootCF = TblToCF(fr.RootCF), Limbs = {} }
-                                for ln, lcf in pairs(fr.Limbs) do
-                                    frame.Limbs[ln] = TblToCF(lcf)
-                                end
-                                table.insert(GhostData, frame)
-                            end
-                            LblGhostStatus.Text = "LOADED: " .. n .. " (" .. #GhostData .. " Frames)"
-                            BtnPlayGhost.TextColor3 = C_TEXT
-                            BtnPlayGhost.UIStroke.Color = C_TEXT
-                        end
-                    end
-                end)
-            end
-        end
-    end
-
-    BtnRefreshGhost.MouseButton1Click:Connect(RefreshGhostList)
-
-    BtnSaveGhost.MouseButton1Click:Connect(function()
-        local name = InpGhostName.Text
-        if name == "" or #GhostData == 0 then
-            return
-        end
-        local saveData = { Frames = {} }
-        for _, frame in ipairs(GhostData) do
-            local saveFrame = { Time = frame.Time, RootCF = CFToTbl(frame.RootCF), Limbs = {} }
-            for limbName, limbCF in pairs(frame.Limbs) do
-                saveFrame.Limbs[limbName] = CFToTbl(limbCF)
-            end
-            table.insert(saveData.Frames, saveFrame)
-        end
-        writefile(GetGhostPath() .. "/" .. name .. ".json", HttpService:JSONEncode(saveData))
-        RefreshGhostList()
-        LblGhostStatus.Text = "SAVED: " .. name
-    end)
-
-    local function StopGhost()
-        if ghostRecLoop then
-            ghostRecLoop:Disconnect()
-            ghostRecLoop = nil
-        end
-        if ghostPlayLoop then
-            ghostPlayLoop:Disconnect()
-            ghostPlayLoop = nil
-        end
-        isGhostRecording = false
-        isGhostPlaying = false
-        BtnRecordGhost.Text = "RECORD NEW"
-        BtnRecordGhost.TextColor3 = C_TEXT
-        BtnRecordGhost.UIStroke.Color = C_TEXT
-        BtnPlayGhost.Text = "PLAY GHOST"
-        BtnPlayGhost.TextColor3 = (#GhostData > 0) and C_TEXT or C_TEXT_DIM
-        BtnPlayGhost.UIStroke.Color = (#GhostData > 0) and C_TEXT or C_TEXT_DIM
-        LblGhostStatus.Text = "STATUS: IDLE (" .. #GhostData .. " Frames)"
-        if GhostModel then
-            GhostModel:Destroy()
-            GhostModel = nil
-        end
-    end
-
-    BtnRecordGhost.MouseButton1Click:Connect(function()
-        if isGhostRecording then
-            StopGhost()
-        else
-            StopGhost()
-            StartCountdown(function()
-                GhostData = {}
-                isGhostRecording = true
-                BtnRecordGhost.Text = "STOP RECORD"
-                BtnRecordGhost.TextColor3 = C_RED
-                BtnRecordGhost.UIStroke.Color = C_RED
-                LblGhostStatus.Text = "STATUS: RECORDING..."
-                local c = LocalPlayer.Character
-                local partsToRecord = {}
-                if c then
-                    for _, p in pairs(c:GetDescendants()) do
-                        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-                            table.insert(partsToRecord, p)
-                        end
-                    end
-                end
-                local startTime = os.clock()
-                ghostRecLoop = RunService.Heartbeat:Connect(function()
-                    local char = LocalPlayer.Character
-                    local root = char and char:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        local frameData = { Time = os.clock() - startTime, RootCF = root.CFrame, Limbs = {} }
-                        for _, p in pairs(partsToRecord) do
-                            if p and p.Parent then
-                                frameData.Limbs[p.Name] = p.CFrame
-                            end
-                        end
-                        table.insert(GhostData, frameData)
-                        LblGhostStatus.Text = "REC: " .. string.format("%.1fs", os.clock() - startTime)
-                    end
-                end)
-                table.insert(Connections, ghostRecLoop)
-            end)
-        end
-    end)
-
-    BtnPlayGhost.MouseButton1Click:Connect(function()
-        if isGhostPlaying then
-            StopGhost()
-        elseif #GhostData > 0 then
-            StopGhost()
-            StartCountdown(function()
-                isGhostPlaying = true
-                BtnPlayGhost.Text = "STOP GHOST"
-                BtnPlayGhost.TextColor3 = C_RED
-                BtnPlayGhost.UIStroke.Color = C_RED
-                LblGhostStatus.Text = "STATUS: PLAYING..."
-                local c = LocalPlayer.Character
-                c.Archivable = true
-                GhostModel = c:Clone()
-                c.Archivable = false
-                GhostModel.Name = "StarshipGhost"
-                GhostModel.Parent = workspace
-                for _, p in pairs(GhostModel:GetDescendants()) do
-                    if p:IsA("BasePart") then
-                        p.Anchored = true
-                        p.CanCollide = false
-                        p.Transparency = 0.6
-                        p.Color = C_ACCENT
-                        p.Material = Enum.Material.ForceField
-                    elseif p:IsA("Script") or p:IsA("LocalScript") or p:IsA("Sound") then
-                        p:Destroy()
-                    elseif p:IsA("Humanoid") then
-                        p.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-                    end
-                end
-                local playStart = os.clock()
-                local index = 1
-                ghostPlayLoop = RunService.Heartbeat:Connect(function()
-                    if not GhostModel or not GhostModel.Parent then
-                        StopGhost()
-                        return
-                    end
-                    local timeElapsed = os.clock() - playStart
-                    while index < #GhostData and GhostData[index + 1].Time <= timeElapsed do
-                        index = index + 1
-                    end
-                    local frame = GhostData[index]
-                    if frame then
-                        if GhostModel.PrimaryPart then
-                            GhostModel:SetPrimaryPartCFrame(frame.RootCF)
-                        elseif GhostModel:FindFirstChild("HumanoidRootPart") then
-                            GhostModel.HumanoidRootPart.CFrame = frame.RootCF
-                        end
-                        for name, cf in pairs(frame.Limbs) do
-                            local p = GhostModel:FindFirstChild(name, true)
-                            if p and p:IsA("BasePart") then
-                                p.CFrame = cf
-                            end
-                        end
-                    end
-                    if index >= #GhostData then
-                        playStart = os.clock()
-                        index = 1
-                    end
-                end)
-                table.insert(Connections, ghostPlayLoop)
-            end)
-        end
-    end)
-
-    BtnClearGhost.MouseButton1Click:Connect(function()
-        StopGhost()
-        GhostData = {}
-        LblGhostStatus.Text = "STATUS: CLEARED"
-        BtnPlayGhost.TextColor3 = C_TEXT_DIM
-        BtnPlayGhost.UIStroke.Color = C_TEXT_DIM
-    end)
-
-    RefreshGhostList()
-
-    local function RestorePlatforms() end -- Placeholder if needed, or implement if logic exists
-
-    -- Cleanup Hook
-    local oldCleanup = UIHandlers.CleanupTools
-    UIHandlers.CleanupTools = function()
-        if oldCleanup then
-            oldCleanup()
-        end
-        if slopeLoop then
-            slopeLoop:Disconnect()
-            slopeLoop = nil
-        end
-        if slopeHUD then
-            slopeHUD:Destroy()
-            slopeHUD = nil
-        end
-        if slipLoop then
-            slipLoop:Disconnect()
-            slipLoop = nil
-        end
-        if fastClimbLoop then
-            fastClimbLoop:Disconnect()
-            fastClimbLoop = nil
-        end
-        if magnetLoop then
-            magnetLoop:Disconnect()
-            magnetLoop = nil
-        end
-        if stickLoop then
-            stickLoop:Disconnect()
-            stickLoop = nil
-        end
-        if espLoop then
-            espLoop:Disconnect()
-            espLoop = nil
-        end
-        if ghostRecLoop then
-            ghostRecLoop:Disconnect()
-            ghostRecLoop = nil
-        end
-        if ghostPlayLoop then
-            ghostPlayLoop:Disconnect()
-            ghostPlayLoop = nil
-        end
-        if GhostModel then
-            GhostModel:Destroy()
-            GhostModel = nil
-        end
-        if espContainer then
-            espContainer:ClearAllChildren()
-        end
-        RestorePlatforms()
-    end
-
-    -- Keybind Handler for Helper Features
-    local helperKeybindConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        if not input.KeyCode then return end
-
-        -- Skip if currently binding a keybind in ConfigTab (check global state)
-        if _G.StarshipIsBindingKeybind then
-            return
-        end
-
-        -- ToggleAutoJump
-        if Config.Keybinds and Config.Keybinds.ToggleAutoJump and input.KeyCode == Config.Keybinds.ToggleAutoJump then
-            if UIHandlers.ToggleAutoJump then
-                UIHandlers.ToggleAutoJump()
-            end
-        end
-
-        -- ToggleQuickBoost
-        if Config.Keybinds and Config.Keybinds.ToggleQuickBoost and input.KeyCode == Config.Keybinds.ToggleQuickBoost then
-            if UIHandlers.ToggleQuickBoost then
-                UIHandlers.ToggleQuickBoost()
-            end
-        end
-
-        -- ToggleAntiSlip
-        if Config.Keybinds and Config.Keybinds.ToggleAntiSlip and input.KeyCode == Config.Keybinds.ToggleAntiSlip then
-            if UIHandlers.ToggleAntiSlip then
-                UIHandlers.ToggleAntiSlip()
-            end
-        end
-
-        -- ToggleRealESP
-        if Config.Keybinds and Config.Keybinds.ToggleRealESP and input.KeyCode == Config.Keybinds.ToggleRealESP then
-            if UIHandlers.ToggleRealESP then
-                UIHandlers.ToggleRealESP()
-            end
-        end
-    end)
-    table.insert(Connections, helperKeybindConnection)
+	local Players = game:GetService("Players")
+	local RunService = game:GetService("RunService")
+	local UserInputService = game:GetService("UserInputService")
+	local TweenService = game:GetService("TweenService")
+	local HttpService = game:GetService("HttpService")
+
+	-- Use global StarshipColors for theme consistency
+	local Colors = _G.StarshipColors
+		or {
+			MAIN = Color3.fromRGB(10, 10, 14),
+			SIDE = Color3.fromRGB(15, 15, 20),
+			ACCENT = Color3.fromRGB(90, 110, 245),
+			TEXT = Color3.fromRGB(240, 240, 250),
+			TEXT_DIM = Color3.fromRGB(140, 140, 160),
+			ITEM = Color3.fromRGB(20, 20, 28),
+			RED = Color3.fromRGB(255, 80, 80),
+			YELLOW = Color3.fromRGB(255, 220, 60),
+			GREEN = Color3.fromRGB(60, 255, 160),
+		}
+	local C_MAIN = Colors.MAIN
+	local C_SIDE = Colors.SIDE
+	local C_ACCENT = Colors.ACCENT
+	local C_TEXT = Colors.TEXT
+	local C_TEXT_DIM = Colors.TEXT_DIM
+	local C_ITEM = Colors.ITEM
+	local C_RED = Colors.RED
+	local C_YELLOW = Colors.YELLOW
+	local C_GREEN = Colors.GREEN
+
+	-- Helper function to get localized text
+	local function L(key, ...)
+		if _G.StarshipLocale and _G.StarshipLocale.Get then
+			return _G.StarshipLocale.Get(key, ...)
+		end
+		return key
+	end
+
+	-- Helper function to show toast when feature is toggled
+	local function ShowFeatureToast(featureName, isEnabled)
+		if UI and UI.ShowToast then
+			local status = isEnabled and L("enabled") or L("disabled")
+			local toastType = isEnabled and "success" or "info"
+			UI.ShowToast(featureName, status, toastType, 2)
+		end
+	end
+
+	local FOLDER_NAME = "StarshipCore"
+
+	local function CFToTbl(cf)
+		return { cf:GetComponents() }
+	end
+	local function TblToCF(t)
+		return CFrame.new(unpack(t))
+	end
+
+	-- Ensure RegisterTheme exists
+	if not RegisterTheme then
+		RegisterTheme = function() end
+	end
+
+	-- Clear existing children for reactive refresh support
+	PageHelper:ClearAllChildren()
+
+	local HelperScroll = Instance.new("ScrollingFrame", PageHelper)
+	HelperScroll.Size = UDim2.new(1, 0, 1, 0)
+	HelperScroll.BackgroundTransparency = 1
+	HelperScroll.BorderSizePixel = 0
+	HelperScroll.ScrollBarThickness = 6
+	HelperScroll.ScrollBarImageColor3 = C_ACCENT
+	HelperScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	HelperScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+	RegisterTheme(HelperScroll, "ScrollBarImageColor3", "Accent")
+
+	local HelperLayout = Instance.new("UIListLayout", HelperScroll)
+	HelperLayout.Padding = UDim.new(0, 15)
+	HelperLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	HelperLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+	local function CreateCard(t, h, o)
+		local c = Instance.new("Frame", HelperScroll)
+		c.Size = UDim2.new(0.96, 0, 0, h)
+		c.BackgroundColor3 = C_ITEM
+		c.LayoutOrder = o
+		Instance.new("UICorner", c).CornerRadius = UDim.new(0, 12)
+		local s = Instance.new("UIStroke", c)
+		s.Color = C_ACCENT
+		s.Transparency = 0.8
+		s.Thickness = 1
+		local l = Instance.new("TextLabel", c)
+		l.Text = t
+		l.Size = UDim2.new(1, -20, 0, 30)
+		l.Position = UDim2.new(0, 15, 0, 0)
+		l.BackgroundTransparency = 1
+		l.TextColor3 = C_TEXT_DIM
+		l.Font = Enum.Font.GothamBold
+		l.TextSize = 11
+		l.TextXAlignment = Enum.TextXAlignment.Left
+
+		RegisterTheme(c, "BackgroundColor3", "Item")
+		RegisterTheme(s, "Color", "Accent")
+		RegisterTheme(l, "TextColor3", "TextDim")
+		return c
+	end
+
+	local function StyleBtn(btn, col)
+		btn.BackgroundColor3 = C_SIDE
+		btn.TextColor3 = col
+		btn.Font = Enum.Font.GothamBold
+		btn.TextSize = 11
+		Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+		local s = Instance.new("UIStroke", btn)
+		s.Color = col
+		s.Transparency = 0.7
+		s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+		RegisterTheme(btn, "BackgroundColor3", "Side")
+
+		-- Only register static colors
+		if col == C_ACCENT then
+			RegisterTheme(btn, "TextColor3", "Accent")
+			RegisterTheme(s, "Color", "Accent")
+		elseif col == C_TEXT then
+			RegisterTheme(btn, "TextColor3", "Text")
+			RegisterTheme(s, "Color", "Text")
+		elseif col == C_TEXT_DIM then
+			RegisterTheme(btn, "TextColor3", "TextDim")
+			RegisterTheme(s, "Color", "TextDim")
+		end
+	end
+
+	-- Helper function to create feature button with subtitle description
+	local function CreateFeatureButton(parent, text, subtitle, size, position, color)
+		local container = Instance.new("Frame", parent)
+		container.Size = size
+		container.Position = position
+		container.BackgroundTransparency = 1
+
+		local btn = Instance.new("TextButton", container)
+		btn.Text = text
+		btn.Size = UDim2.new(1, 0, 0, 35)
+		btn.Position = UDim2.new(0, 0, 0, 0)
+		StyleBtn(btn, color)
+
+		local desc = Instance.new("TextLabel", container)
+		desc.Text = subtitle
+		desc.Size = UDim2.new(1, 0, 0, 14)
+		desc.Position = UDim2.new(0, 0, 0, 37)
+		desc.BackgroundTransparency = 1
+		desc.TextColor3 = C_TEXT_DIM
+		desc.Font = Enum.Font.Gotham
+		desc.TextSize = 9
+		desc.TextXAlignment = Enum.TextXAlignment.Center
+		desc.TextWrapped = true
+		RegisterTheme(desc, "TextColor3", "TextDim")
+
+		return btn, container
+	end
+
+	-- 0. CHARACTER & FLY
+	local CardChar = CreateCard(L("character_fly"), 145, 0)
+
+	-- Speed
+	local WSVal = Instance.new("TextBox", CardChar)
+	WSVal.Text = ""
+	WSVal.PlaceholderText = "16"
+	WSVal.Size = UDim2.new(0.15, 0, 0, 35)
+	WSVal.Position = UDim2.new(0.82, 0, 0, 35)
+	WSVal.BackgroundColor3 = C_SIDE
+	WSVal.TextColor3 = C_TEXT
+	WSVal.Font = Enum.Font.Gotham
+	Instance.new("UICorner", WSVal).CornerRadius = UDim.new(0, 6)
+	local SldWS = Instance.new("TextButton", CardChar)
+	SldWS.Text = ""
+	SldWS.Size = UDim2.new(0.55, 0, 0, 6)
+	SldWS.Position = UDim2.new(0.25, 0, 0, 50)
+	SldWS.BackgroundColor3 = C_SIDE
+	SldWS.AutoButtonColor = false
+	Instance.new("UICorner", SldWS)
+	local FillWS = Instance.new("Frame", SldWS)
+	FillWS.Size = UDim2.new(0, 0, 1, 0)
+	FillWS.BackgroundColor3 = C_ACCENT
+	Instance.new("UICorner", FillWS)
+	local BtnTogWS = Instance.new("TextButton", CardChar)
+	BtnTogWS.Text = "SPEED: OFF"
+	BtnTogWS.Size = UDim2.new(0.2, 0, 0, 35)
+	BtnTogWS.Position = UDim2.new(0.03, 0, 0, 35)
+	StyleBtn(BtnTogWS, C_RED)
+
+	local isWSEnabled, wsCon, defWS, tgtWS = false, nil, 16, 16
+	local function UpdateWSVisual(v)
+		v = math.clamp(v, 0, 300)
+		local p = v / 300
+		FillWS.Size = UDim2.new(p, 0, 1, 0)
+		WSVal.Text = tostring(math.floor(v))
+	end
+	local function ApplySpeed(v)
+		local c = LocalPlayer.Character
+		local h = c and c:FindFirstChild("Humanoid")
+		if h then
+			if math.abs(h.WalkSpeed - v) > 5 then
+				TweenService:Create(h, TweenInfo.new(0.5), { WalkSpeed = v }):Play()
+			else
+				h.WalkSpeed = v
+			end
+		end
+	end
+	local function SetWS(v, up)
+		tgtWS = v
+		UpdateWSVisual(v)
+		if up and isWSEnabled then
+			ApplySpeed(v)
+		end
+	end
+	local function ToggleSpeed(forceEnable)
+		if forceEnable ~= nil then
+			if forceEnable == isWSEnabled then
+				return
+			end
+		end
+
+		local c = LocalPlayer.Character
+		local h = c and c:FindFirstChild("Humanoid")
+		if not isWSEnabled then
+			isWSEnabled = true
+			BtnTogWS.Text = "SPEED: ON"
+			BtnTogWS.TextColor3 = C_GREEN
+			BtnTogWS.UIStroke.Color = C_GREEN
+			if h then
+				defWS = h.WalkSpeed
+			end
+			SetWS(tgtWS, true)
+			if wsCon then
+				wsCon:Disconnect()
+			end
+			wsCon = RunService.Heartbeat:Connect(function()
+				local c = LocalPlayer.Character
+				local h = c and c:FindFirstChild("Humanoid")
+				if h and math.abs(h.WalkSpeed - tgtWS) > 1 then
+					h.WalkSpeed = tgtWS
+				end
+			end)
+			table.insert(Connections, wsCon)
+		else
+			isWSEnabled = false
+			BtnTogWS.Text = "SPEED: OFF"
+			BtnTogWS.TextColor3 = C_RED
+			BtnTogWS.UIStroke.Color = C_RED
+			if wsCon then
+				wsCon:Disconnect()
+				wsCon = nil
+			end
+			ApplySpeed(defWS)
+			UpdateWSVisual(tgtWS)
+		end
+	end
+	BtnTogWS.MouseButton1Click:Connect(function()
+		ToggleSpeed()
+	end)
+	UIHandlers.ToggleSpeed = ToggleSpeed
+	local dragWS = false
+	SldWS.MouseButton1Down:Connect(function()
+		dragWS = true
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragWS = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if dragWS and i.UserInputType == Enum.UserInputType.MouseMovement then
+			local sc = math.clamp((i.Position.X - SldWS.AbsolutePosition.X) / SldWS.AbsoluteSize.X, 0, 1)
+			local n = math.floor(sc * 300)
+			if isWSEnabled then
+				SetWS(n, true)
+			else
+				UpdateWSVisual(n)
+			end
+		end
+	end)
+	WSVal.FocusLost:Connect(function()
+		local v = tonumber(WSVal.Text)
+		if v then
+			if isWSEnabled then
+				SetWS(v, true)
+			else
+				UpdateWSVisual(v)
+			end
+		else
+			WSVal.Text = "16"
+		end
+	end)
+
+	-- Inf Jump
+	local BtnInfJump = Instance.new("TextButton", CardChar)
+	BtnInfJump.Text = "INFINITE JUMP: OFF"
+	BtnInfJump.Size = UDim2.new(0.94, 0, 0, 30)
+	BtnInfJump.Position = UDim2.new(0.03, 0, 0, 75)
+	StyleBtn(BtnInfJump, C_TEXT_DIM)
+	local isInfJump, infJumpCon = false, nil
+	local function ToggleInfJump(forceEnable)
+		if forceEnable ~= nil then
+			if forceEnable == isInfJump then
+				return
+			end
+		end
+
+		isInfJump = not isInfJump
+		BtnInfJump.Text = "INFINITE JUMP: " .. (isInfJump and "ON" or "OFF")
+		BtnInfJump.TextColor3 = isInfJump and C_GREEN or C_TEXT_DIM
+		BtnInfJump.UIStroke.Color = isInfJump and C_GREEN or C_TEXT_DIM
+		if isInfJump then
+			infJumpCon = UserInputService.JumpRequest:Connect(function()
+				local c = LocalPlayer.Character
+				if c then
+					local h = c:FindFirstChildOfClass("Humanoid")
+					if h then
+						h:ChangeState("Jumping")
+					end
+				end
+			end)
+			table.insert(Connections, infJumpCon)
+		else
+			if infJumpCon then
+				infJumpCon:Disconnect()
+				infJumpCon = nil
+			end
+		end
+	end
+	BtnInfJump.MouseButton1Click:Connect(function()
+		ToggleInfJump()
+	end)
+	UIHandlers.ToggleInfJump = ToggleInfJump
+
+	-- Fly
+	local BtnFly = Instance.new("TextButton", CardChar)
+	BtnFly.Text = "Fly: OFF"
+	BtnFly.Size = UDim2.new(0.45, 0, 0, 35)
+	BtnFly.Position = UDim2.new(0.03, 0, 0, 110)
+	StyleBtn(BtnFly, C_TEXT_DIM)
+	local InpFlySpd = Instance.new("TextBox", CardChar)
+	InpFlySpd.PlaceholderText = "Spd"
+	InpFlySpd.Text = "50"
+	InpFlySpd.Size = UDim2.new(0.45, 0, 0, 35)
+	InpFlySpd.Position = UDim2.new(0.52, 0, 0, 110)
+	InpFlySpd.BackgroundColor3 = C_SIDE
+	InpFlySpd.TextColor3 = C_TEXT
+	InpFlySpd.Font = Enum.Font.Gotham
+	Instance.new("UICorner", InpFlySpd).CornerRadius = UDim.new(0, 6)
+	local FlySpeed, isFlying = 50, false
+	InpFlySpd.FocusLost:Connect(function()
+		FlySpeed = tonumber(InpFlySpd.Text) or 50
+	end)
+
+	local function StopFly()
+		isFlying = false
+		BtnFly.Text = "Fly: OFF"
+		BtnFly.TextColor3 = C_TEXT_DIM
+		BtnFly.UIStroke.Color = C_TEXT_DIM
+		local c = LocalPlayer.Character
+		if c then
+			local r = c:FindFirstChild("HumanoidRootPart")
+			if r then
+				for _, x in pairs(r:GetChildren()) do
+					if x.Name == "AmethystFlyVel" or x.Name == "AmethystFlyGyro" then
+						x:Destroy()
+					end
+				end
+			end
+			local h = c:FindFirstChild("Humanoid")
+			if h then
+				h.PlatformStand = false
+			end
+		end
+		if Connections.FlyLoop then
+			Connections.FlyLoop:Disconnect()
+		end
+	end
+
+	local function StartFly()
+		local c = LocalPlayer.Character
+		local r = c and c:FindFirstChild("HumanoidRootPart")
+		local h = c and c:FindFirstChild("Humanoid")
+		if not c or not r or not h then
+			return
+		end
+		isFlying = true
+		BtnFly.Text = "Fly: ON"
+		BtnFly.TextColor3 = C_GREEN
+		BtnFly.UIStroke.Color = C_GREEN
+		h.PlatformStand = true
+		local bv = Instance.new("BodyVelocity", r)
+		bv.Name = "AmethystFlyVel"
+		bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+		bv.Velocity = Vector3.new(0, 0, 0)
+		local bg = Instance.new("BodyGyro", r)
+		bg.Name = "AmethystFlyGyro"
+		bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+		bg.P = 10000
+		bg.D = 1000
+
+		local flyLoop = game:GetService("RunService").RenderStepped:Connect(function()
+			if not isFlying or not c.Parent then
+				StopFly()
+				return
+			end
+			local cam = workspace.CurrentCamera
+			local m = Vector3.new(0, 0, 0)
+			local k = UserInputService:GetKeysPressed()
+			local W, A, S, D = false, false, false, false
+			for _, key in pairs(k) do
+				if key.KeyCode == Enum.KeyCode.W then
+					W = true
+				elseif key.KeyCode == Enum.KeyCode.A then
+					A = true
+				elseif key.KeyCode == Enum.KeyCode.S then
+					S = true
+				elseif key.KeyCode == Enum.KeyCode.D then
+					D = true
+				end
+			end
+			if W then
+				m = m + cam.CFrame.LookVector
+			end
+			if S then
+				m = m - cam.CFrame.LookVector
+			end
+			if A then
+				m = m - cam.CFrame.RightVector
+			end
+			if D then
+				m = m + cam.CFrame.RightVector
+			end
+			bg.CFrame = cam.CFrame
+			bv.Velocity = m * FlySpeed
+		end)
+
+		Connections.FlyLoop = flyLoop
+	end
+
+	local function ToggleFly(forceEnable)
+		if forceEnable ~= nil then
+			if forceEnable == isFlying then
+				return
+			end
+		end
+
+		if isFlying then
+			StopFly()
+		else
+			StartFly()
+		end
+	end
+	BtnFly.MouseButton1Click:Connect(function()
+		ToggleFly()
+	end)
+	UIHandlers.ToggleFly = ToggleFly
+
+	-- 4. JUMP ASSIST
+	do
+		local CardJump = CreateCard(L("jump_assist"), 100, 4)
+
+		-- Auto Jump
+		local BtnAutoJump, AutoJumpContainer = CreateFeatureButton(
+			CardJump,
+			L("auto_jump") .. ": " .. L("off"),
+			L("auto_jump_desc"),
+			UDim2.new(0.45, 0, 0, 55),
+			UDim2.new(0.03, 0, 0, 35),
+			C_TEXT_DIM
+		)
+
+		local isAutoJump, autoJumpLoop = false, nil
+
+		local function ToggleAutoJump(forceEnable)
+			-- Support forceEnable parameter for auto-enable
+			if forceEnable ~= nil then
+				if forceEnable == isAutoJump then
+					return
+				end
+			end
+
+			isAutoJump = not isAutoJump
+			BtnAutoJump.Text = L("auto_jump") .. ": " .. (isAutoJump and L("on") or L("off"))
+			BtnAutoJump.TextColor3 = isAutoJump and C_GREEN or C_TEXT_DIM
+			BtnAutoJump.UIStroke.Color = isAutoJump and C_GREEN or C_TEXT_DIM
+			ShowFeatureToast("Auto Jump", isAutoJump)
+
+			if isAutoJump then
+				autoJumpLoop = RunService.Heartbeat:Connect(function()
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChild("Humanoid")
+					if h and h.FloorMaterial ~= Enum.Material.Air then
+						h:ChangeState(Enum.HumanoidStateType.Jumping)
+					end
+				end)
+				table.insert(Connections, autoJumpLoop)
+			else
+				if autoJumpLoop then
+					autoJumpLoop:Disconnect()
+					autoJumpLoop = nil
+				end
+			end
+		end
+
+		BtnAutoJump.MouseButton1Click:Connect(function()
+			ToggleAutoJump()
+		end)
+		UIHandlers.ToggleAutoJump = ToggleAutoJump
+
+		-- Air Lock (Edge Assist + Velocity Boost for Obby)
+		local BtnAirLock, AirLockContainer = CreateFeatureButton(
+			CardJump,
+			L("air_lock") .. ": " .. L("off"),
+			L("air_lock_desc"),
+			UDim2.new(0.45, 0, 0, 55),
+			UDim2.new(0.52, 0, 0, 35),
+			C_TEXT_DIM
+		)
+
+		local isAirLock, airLockLoop = false, nil
+		local edgeBoostCooldown = false
+		local detectedEdgePosition = nil
+		local preDetectedEdge = nil -- Pre-detect while on ground
+		local preDetectedPart = nil -- Pre-detected part
+		local lastGroundTime = 0 -- Track when we left ground
+
+		-- Edge Detection Settings (BALANCED)
+		local EDGE_DETECT_DISTANCE = 12 -- Raycast distance to detect ledge
+		local EDGE_HEIGHT_TOLERANCE = 8 -- How much "almost there" we allow
+		local BOOST_POWER_UP = 10 -- Upward boost strength (increased)
+		local BOOST_POWER_FORWARD = 10 -- Forward boost strength
+		local BOOST_COOLDOWN = 0.4 -- Cooldown between boosts
+		local UPWARD_DETECT_DISTANCE = 10 -- Raycast distance upward for ladders above head
+
+		-- Ladder Grab Assist Settings
+		local LADDER_BOOST_MULTIPLIER = 1.0 -- Boost multiplier for ladder (reduced - no extra boost)
+		local PRE_DETECT_ENABLED = true -- Enable ground pre-detection
+		local INSTANT_BOOST_WINDOW = 0.15 -- Seconds after jump to use pre-detected target
+		local detectedLadderPart = nil -- Track detected ladder
+		local hasBostedThisJump = false -- Prevent multiple boosts per jump
+
+		-- Check if part is a VERTICAL ladder/truss (not diagonal/horizontal)
+		local function IsLadder(part)
+			if not part then
+				return false
+			end
+
+			-- Check if it's a TrussPart or has ladder-like name
+			local isLadderType = part:IsA("TrussPart")
+			if not isLadderType then
+				local name = part.Name:lower()
+				isLadderType = name:find("ladder")
+					or name:find("truss")
+					or name:find("climb")
+					or name:find("vine")
+					or name:find("rope")
+			end
+
+			if not isLadderType then
+				return false
+			end
+
+			-- Check orientation - only treat as ladder if mostly VERTICAL
+			-- Diagonal/horizontal ladders should be treated as platforms
+			local size = part.Size
+			local upVector = part.CFrame.UpVector
+
+			-- If the part's up vector is mostly vertical (Y > 0.7), it's a climbable ladder
+			-- If it's more horizontal/diagonal, treat as platform
+			local isVertical = math.abs(upVector.Y) > 0.7
+
+			-- Also check if height > width (tall ladder vs flat bridge)
+			local isTall = size.Y > math.max(size.X, size.Z) * 0.8
+
+			-- Only return true for VERTICAL ladders
+			return isVertical or isTall
+		end
+
+		-- Detect edge/ladder in front of player with MULTI-ANGLE detection for diagonal ladders
+		-- Returns: hitPosition, hitPart (to check if ladder)
+		-- Now uses MoveDirection for Shift Lock compatibility
+		local function DetectEdgeForward(character, rootPart, humanoid)
+			local rayParams = RaycastParams.new()
+			rayParams.FilterDescendantsInstances = { character }
+			rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+			local playerPos = rootPart.Position
+			local playerTop = playerPos.Y + 2
+
+			-- Use MoveDirection if available (for Shift Lock compatibility)
+			-- Fall back to LookVector if not moving
+			local moveDir = humanoid and humanoid.MoveDirection or Vector3.new(0, 0, 0)
+			local lookDir = rootPart.CFrame.LookVector
+
+			-- If moving, use move direction; otherwise use look direction
+			local primaryDir
+			if moveDir.Magnitude > 0.1 then
+				primaryDir = moveDir
+			else
+				primaryDir = lookDir
+			end
+
+			local rightDir = rootPart.CFrame.RightVector
+			local horizontalLook = Vector3.new(primaryDir.X, 0, primaryDir.Z)
+			if horizontalLook.Magnitude > 0 then
+				horizontalLook = horizontalLook.Unit
+			else
+				horizontalLook = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
+			end
+
+			-- Store best ladder hit (prioritize ladders!)
+			local bestLadderHit = nil
+			local bestLadderPart = nil
+			local bestLadderDist = math.huge
+
+			-- Store best edge hit
+			local bestEdgeHit = nil
+			local bestEdgePart = nil
+
+			-- Helper function to check hit and return if valid
+			local function CheckHit(hitResult, checkHeightDiff)
+				if not hitResult then
+					return nil, nil
+				end
+
+				local hitPart = hitResult.Instance
+				local hitPosition = hitResult.Position
+
+				-- For ladders, we don't need strict height check
+				if IsLadder(hitPart) then
+					local dist = (hitPosition - playerPos).Magnitude
+					if dist < bestLadderDist then
+						bestLadderDist = dist
+						bestLadderHit = hitPart.Position -- Use ladder center for better targeting
+						bestLadderPart = hitPart
+					end
+					return hitPosition, hitPart
+				end
+
+				-- For regular edges, check height difference
+				if checkHeightDiff then
+					local ledgeTop = hitPart.Position.Y + (hitPart.Size.Y / 2)
+					local heightDiff = ledgeTop - playerTop
+					if heightDiff > 0 and heightDiff <= EDGE_HEIGHT_TOLERANCE then
+						if not bestEdgeHit then
+							bestEdgeHit = hitPosition
+							bestEdgePart = hitPart
+						end
+						return hitPosition, hitPart
+					end
+				end
+
+				return nil, nil
+			end
+
+			-- MULTI-ANGLE RAYCAST for diagonal ladder detection
+			local angles = {
+				-- Forward directions
+				horizontalLook,
+				-- Diagonal up-forward (various angles for diagonal ladders)
+				(horizontalLook + Vector3.new(0, 0.3, 0)).Unit,
+				(horizontalLook + Vector3.new(0, 0.5, 0)).Unit,
+				(horizontalLook + Vector3.new(0, 0.8, 0)).Unit,
+				(horizontalLook + Vector3.new(0, 1.0, 0)).Unit,
+				(horizontalLook + Vector3.new(0, 1.5, 0)).Unit,
+				(horizontalLook + Vector3.new(0, 2.0, 0)).Unit,
+				-- Steep upward (for ladders above)
+				(horizontalLook * 0.5 + Vector3.new(0, 1, 0)).Unit,
+				(horizontalLook * 0.3 + Vector3.new(0, 1, 0)).Unit,
+				-- Slight left/right diagonal (for offset ladders)
+				(horizontalLook + rightDir * 0.3 + Vector3.new(0, 0.5, 0)).Unit,
+				(horizontalLook - rightDir * 0.3 + Vector3.new(0, 0.5, 0)).Unit,
+				(horizontalLook + rightDir * 0.3 + Vector3.new(0, 1.0, 0)).Unit,
+				(horizontalLook - rightDir * 0.3 + Vector3.new(0, 1.0, 0)).Unit,
+			}
+
+			-- Cast rays in all directions
+			for _, dir in ipairs(angles) do
+				local hitResult = workspace:Raycast(playerPos, dir * EDGE_DETECT_DISTANCE, rayParams)
+				CheckHit(hitResult, true)
+			end
+
+			-- Also raycast straight up
+			local upHit = workspace:Raycast(playerPos, Vector3.new(0, 1, 0) * UPWARD_DETECT_DISTANCE, rayParams)
+			if upHit then
+				CheckHit(upHit, false)
+				if IsLadder(upHit.Instance) then
+					local dist = (upHit.Position - playerPos).Magnitude
+					if dist < bestLadderDist then
+						bestLadderDist = dist
+						bestLadderHit = upHit.Instance.Position
+						bestLadderPart = upHit.Instance
+					end
+				end
+			end
+
+			-- Prioritize ladder hits over regular edges!
+			if bestLadderHit then
+				return bestLadderHit, bestLadderPart
+			end
+
+			if bestEdgeHit then
+				return bestEdgeHit, bestEdgePart
+			end
+
+			return nil, nil
+		end
+
+		-- Check if there's an obstacle above player's head
+		local function CheckOverhead(character, rootPart, checkDistance)
+			local rayParams = RaycastParams.new()
+			rayParams.FilterDescendantsInstances = { character }
+			rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+			-- Raycast from head position upward
+			local headPos = rootPart.Position + Vector3.new(0, 2, 0)
+			local hitResult = workspace:Raycast(headPos, Vector3.new(0, checkDistance, 0), rayParams)
+
+			if hitResult then
+				return true, hitResult.Position.Y - headPos.Y -- obstacle found, return distance
+			end
+			return false, checkDistance -- no obstacle
+		end
+
+		-- Boost toward the edge (SAFE VERSION - simple ADD, no replace)
+		local function BoostTowardEdge(rootPart, edgePosition, isLadderTarget)
+			if edgeBoostCooldown or hasBostedThisJump then
+				return false
+			end
+
+			local directionToEdge = (edgePosition - rootPart.Position)
+			local distance = directionToEdge.Magnitude
+
+			-- Don't boost if too close (already there)
+			if distance < 2 then
+				return false
+			end
+
+			local currentVel = rootPart.AssemblyLinearVelocity
+
+			-- Only boost if actually moving upward or forward (not falling fast)
+			if currentVel.Y < -20 then
+				return false
+			end
+
+			-- Check for overhead obstacles (increased check distance)
+			local character = rootPart.Parent
+			local hasOverhead, overheadDist = CheckOverhead(character, rootPart, 8)
+
+			local boostVelocity
+
+			if isLadderTarget and distance > 0 then
+				-- Ladder: boost toward it with VERY MINIMAL force
+				local directDir = directionToEdge.Unit
+				local boostStrength = BOOST_POWER_FORWARD * LADDER_BOOST_MULTIPLIER * 0.6 -- Reduced
+
+				-- Almost no upward boost for ladders to prevent head bump
+				local upwardBoost = 0
+				if not hasOverhead and overheadDist > 5 then
+					upwardBoost = 1 -- Only tiny upward if no obstacle
+				end
+
+				boostVelocity = Vector3.new(directDir.X * boostStrength, upwardBoost, directDir.Z * boostStrength)
+			else
+				-- Platform: horizontal + upward
+				-- Use direction to edge, or MoveDirection for Shift Lock compatibility
+				local horizontalDir = Vector3.new(directionToEdge.X, 0, directionToEdge.Z)
+				if horizontalDir.Magnitude > 0 then
+					horizontalDir = horizontalDir.Unit
+				else
+					-- Fall back to humanoid MoveDirection if available
+					local hum = rootPart.Parent and rootPart.Parent:FindFirstChildOfClass("Humanoid")
+					if hum and hum.MoveDirection.Magnitude > 0.1 then
+						horizontalDir = hum.MoveDirection
+					else
+						horizontalDir = rootPart.CFrame.LookVector
+					end
+				end
+
+				-- Simple upward based on if target is above
+				local heightDiff = edgePosition.Y - rootPart.Position.Y
+				local upwardBoost = heightDiff > 0 and math.clamp(heightDiff * 0.5, 4, BOOST_POWER_UP) or 2
+
+				-- Reduce upward boost if overhead obstacle detected (but keep more power)
+				if hasOverhead then
+					upwardBoost = math.min(upwardBoost, overheadDist * 0.6)
+				end
+
+				-- Use reduced forward boost
+				local forwardBoost = BOOST_POWER_FORWARD * 0.7
+
+				boostVelocity = Vector3.new(horizontalDir.X * forwardBoost, upwardBoost, horizontalDir.Z * forwardBoost)
+			end
+
+			-- SIMPLE ADD - don't mess with current velocity, just add boost
+			rootPart.AssemblyLinearVelocity = currentVel + boostVelocity
+
+			-- Mark as boosted this jump & set cooldown
+			hasBostedThisJump = true
+			edgeBoostCooldown = true
+			task.delay(BOOST_COOLDOWN, function()
+				edgeBoostCooldown = false
+			end)
+
+			return true
+		end
+
+		local function ToggleAirLock(forceEnable)
+			if forceEnable ~= nil then
+				if forceEnable == isAirLock then
+					return
+				end
+			end
+
+			isAirLock = not isAirLock
+			BtnAirLock.Text = "AIR LOCK: " .. (isAirLock and "ON" or "OFF")
+			BtnAirLock.TextColor3 = isAirLock and C_GREEN or C_TEXT_DIM
+			BtnAirLock.UIStroke.Color = isAirLock and C_GREEN or C_TEXT_DIM
+			ShowFeatureToast("Air Lock", isAirLock)
+
+			if isAirLock then
+				airLockLoop = RunService.RenderStepped:Connect(function()
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChild("Humanoid")
+					local r = c and c:FindFirstChild("HumanoidRootPart")
+
+					if h and r then
+						local state = h:GetState()
+						local velocity = r.AssemblyLinearVelocity
+						local currentTime = tick()
+
+						-- GROUND STATE: Reset boost flag & pre-detect
+						if
+							state == Enum.HumanoidStateType.Running
+							or state == Enum.HumanoidStateType.RunningNoPhysics
+							or state == Enum.HumanoidStateType.Landed
+						then
+							lastGroundTime = currentTime
+							hasBostedThisJump = false -- Reset boost flag when on ground
+
+							-- Pre-detect while moving on ground
+							if h.MoveDirection.Magnitude > 0.1 then
+								local hitPos, hitPart = DetectEdgeForward(c, r, h)
+								preDetectedEdge = hitPos
+								preDetectedPart = hitPart
+							end
+							-- Reset air detection
+							detectedEdgePosition = nil
+							detectedLadderPart = nil
+						end
+
+						-- AIR STATE: Only boost when jumping/falling AND not already boosted
+						if
+							(state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall)
+							and not hasBostedThisJump
+						then
+							local timeSinceGround = currentTime - lastGroundTime
+
+							-- Wait a tiny bit after jump to let normal jump physics work
+							if timeSinceGround < 0.1 then
+								return -- Let normal jump happen first
+							end
+
+							-- Use pre-detected target if available
+							if
+								not detectedEdgePosition
+								and preDetectedEdge
+								and timeSinceGround < INSTANT_BOOST_WINDOW
+							then
+								detectedEdgePosition = preDetectedEdge
+								detectedLadderPart = preDetectedPart
+							end
+
+							-- Detect in air if no target yet
+							if not detectedEdgePosition then
+								local hitPos, hitPart = DetectEdgeForward(c, r, h)
+								detectedEdgePosition = hitPos
+								detectedLadderPart = hitPart
+							end
+
+							-- Boost toward edge (only once per jump)
+							if detectedEdgePosition and not edgeBoostCooldown and not hasBostedThisJump then
+								local isLadderTarget = IsLadder(detectedLadderPart)
+								BoostTowardEdge(r, detectedEdgePosition, isLadderTarget)
+								-- Clear pre-detected after use
+								preDetectedEdge = nil
+								preDetectedPart = nil
+							end
+						end
+					end
+				end)
+				table.insert(Connections, airLockLoop)
+			else
+				if airLockLoop then
+					airLockLoop:Disconnect()
+					airLockLoop = nil
+				end
+			end
+		end
+		BtnAirLock.MouseButton1Click:Connect(function()
+			ToggleAirLock()
+		end)
+		UIHandlers.ToggleAirLock = ToggleAirLock
+	end
+
+	-- 5. QUICK BOOST (L2/R2 or A/D Control) + BUG JUMP SIMULATION
+	-- Technique: Press L2/R2 or A/D in air to get vertical boost
+	-- BUG JUMP: Press A/D + W together for 1.5x boost (works with Shift Lock ON/OFF)
+	do
+		local CardBoost = CreateCard("QUICK BOOST", 180, 5)
+
+		local BtnQuickBoost, QuickBoostContainer = CreateFeatureButton(
+			CardBoost,
+			L("quick_boost") .. ": " .. L("off"),
+			L("quick_boost_desc"),
+			UDim2.new(0.94, 0, 0, 35),
+			UDim2.new(0.03, 0, 0, 35),
+			C_TEXT_DIM
+		)
+
+		-- Bug Jump Toggle (A/D + W for extra boost)
+		local BtnBugJump = Instance.new("TextButton", CardBoost)
+		BtnBugJump.Text = "🚀 BUG JUMP: ON"
+		BtnBugJump.Size = UDim2.new(0.45, 0, 0, 30)
+		BtnBugJump.Position = UDim2.new(0.03, 0, 0, 75)
+		BtnBugJump.BackgroundColor3 = C_SIDE
+		BtnBugJump.TextColor3 = C_GREEN
+		BtnBugJump.Font = Enum.Font.GothamBlack
+		BtnBugJump.TextSize = 12
+		Instance.new("UICorner", BtnBugJump).CornerRadius = UDim.new(0, 6)
+
+		RegisterTheme(BtnBugJump, "BackgroundColor3", "Sidebar")
+
+		-- Bug Jump enabled by default
+		local bugJumpEnabled = true
+
+		BtnBugJump.MouseButton1Click:Connect(function()
+			bugJumpEnabled = not bugJumpEnabled
+			BtnBugJump.Text = "🚀 BUG JUMP: " .. (bugJumpEnabled and "ON" or "OFF")
+			BtnBugJump.TextColor3 = bugJumpEnabled and C_GREEN or C_TEXT_DIM
+		end)
+
+		-- Bug Jump Info Label - Using theme colors
+		local LblBugJumpInfo = Instance.new("TextLabel", CardBoost)
+		LblBugJumpInfo.Text = "⚡ A/D+W = 1.5x"
+		LblBugJumpInfo.Size = UDim2.new(0.45, 0, 0, 30)
+		LblBugJumpInfo.Position = UDim2.new(0.52, 0, 0, 75)
+		LblBugJumpInfo.BackgroundColor3 = C_SIDE
+		LblBugJumpInfo.TextColor3 = C_YELLOW
+		LblBugJumpInfo.Font = Enum.Font.GothamBlack
+		LblBugJumpInfo.TextSize = 12
+		Instance.new("UICorner", LblBugJumpInfo).CornerRadius = UDim.new(0, 6)
+
+		RegisterTheme(LblBugJumpInfo, "BackgroundColor3", "Sidebar")
+
+		-- Boost Power Slider Row (below the button)
+		local SliderRow = Instance.new("Frame", CardBoost)
+		SliderRow.Size = UDim2.new(0.94, 0, 0, 30)
+		SliderRow.Position = UDim2.new(0.03, 0, 0, 110)
+		SliderRow.BackgroundTransparency = 1
+
+		-- Clamp existing config value to new max of 25
+		Config.QuickBoostPower = math.clamp(Config.QuickBoostPower or 12, 0, 25)
+		local LblBoostPower = Instance.new("TextLabel", SliderRow)
+		LblBoostPower.Text = "BOOST POWER: " .. Config.QuickBoostPower
+		LblBoostPower.Size = UDim2.new(0.35, 0, 0, 20)
+		LblBoostPower.Position = UDim2.new(0, 0, 0.5, -10)
+		LblBoostPower.BackgroundTransparency = 1
+		LblBoostPower.TextColor3 = C_TEXT_DIM
+		LblBoostPower.Font = Enum.Font.GothamBold
+		LblBoostPower.TextSize = 10
+		LblBoostPower.TextXAlignment = Enum.TextXAlignment.Left
+
+		local SldBoostBg = Instance.new("TextButton", SliderRow)
+		SldBoostBg.Text = ""
+		SldBoostBg.Size = UDim2.new(0.6, 0, 0, 8)
+		SldBoostBg.Position = UDim2.new(0.38, 0, 0.5, -4)
+		SldBoostBg.BackgroundColor3 = C_SIDE
+		SldBoostBg.AutoButtonColor = false
+		Instance.new("UICorner", SldBoostBg).CornerRadius = UDim.new(0, 4)
+
+		local SldBoostFill = Instance.new("Frame", SldBoostBg)
+		SldBoostFill.Size = UDim2.new(Config.QuickBoostPower / 25, 0, 1, 0)
+		SldBoostFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldBoostFill).CornerRadius = UDim.new(0, 4)
+
+		-- Forward Momentum Slider
+		local SliderRow2 = Instance.new("Frame", CardBoost)
+		SliderRow2.Size = UDim2.new(0.94, 0, 0, 30)
+		SliderRow2.Position = UDim2.new(0.03, 0, 0, 145)
+		SliderRow2.BackgroundTransparency = 1
+
+		Config.BugJumpForward = Config.BugJumpForward or 8
+		local LblForward = Instance.new("TextLabel", SliderRow2)
+		LblForward.Text = "FORWARD: " .. Config.BugJumpForward
+		LblForward.Size = UDim2.new(0.35, 0, 0, 20)
+		LblForward.Position = UDim2.new(0, 0, 0.5, -10)
+		LblForward.BackgroundTransparency = 1
+		LblForward.TextColor3 = C_TEXT_DIM
+		LblForward.Font = Enum.Font.GothamBold
+		LblForward.TextSize = 10
+		LblForward.TextXAlignment = Enum.TextXAlignment.Left
+
+		local SldFwdBg = Instance.new("TextButton", SliderRow2)
+		SldFwdBg.Text = ""
+		SldFwdBg.Size = UDim2.new(0.6, 0, 0, 8)
+		SldFwdBg.Position = UDim2.new(0.38, 0, 0.5, -4)
+		SldFwdBg.BackgroundColor3 = C_SIDE
+		SldFwdBg.AutoButtonColor = false
+		Instance.new("UICorner", SldFwdBg).CornerRadius = UDim.new(0, 4)
+
+		local SldFwdFill = Instance.new("Frame", SldFwdBg)
+		SldFwdFill.Size = UDim2.new(Config.BugJumpForward / 20, 0, 1, 0)
+		SldFwdFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldFwdFill).CornerRadius = UDim.new(0, 4)
+
+		local function UpdateBoostSlider(input)
+			local rx = input.Position.X - SldBoostBg.AbsolutePosition.X
+			local sc = math.clamp(rx / SldBoostBg.AbsoluteSize.X, 0, 1)
+			Config.QuickBoostPower = math.floor(sc * 25) -- 0 to 25
+			SldBoostFill.Size = UDim2.new(sc, 0, 1, 0)
+			LblBoostPower.Text = "BOOST POWER: " .. Config.QuickBoostPower
+		end
+
+		local function UpdateForwardSlider(input)
+			local rx = input.Position.X - SldFwdBg.AbsolutePosition.X
+			local sc = math.clamp(rx / SldFwdBg.AbsoluteSize.X, 0, 1)
+			Config.BugJumpForward = math.floor(sc * 20) -- 0 to 20
+			SldFwdFill.Size = UDim2.new(sc, 0, 1, 0)
+			LblForward.Text = "FORWARD: " .. Config.BugJumpForward
+		end
+
+		local draggingBoost = false
+		local draggingFwd = false
+
+		SldBoostBg.MouseButton1Down:Connect(function()
+			draggingBoost = true
+		end)
+		SldFwdBg.MouseButton1Down:Connect(function()
+			draggingFwd = true
+		end)
+
+		UserInputService.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				draggingBoost = false
+				draggingFwd = false
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement then
+				if draggingBoost then
+					UpdateBoostSlider(input)
+				elseif draggingFwd then
+					UpdateForwardSlider(input)
+				end
+			end
+		end)
+
+		-- Quick Boost State - L2/R2 or A/D control + Bug Jump
+		local isQuickBoost, quickBoostLoop = false, nil
+		local hasBoostedThisJump = false -- Track if already boosted this jump
+		local boostCount = 0 -- Track boost count for multi-boost
+		local MAX_BOOSTS_PER_JUMP = 2 -- Allow 2 boosts per jump (normal + bug jump style)
+		local lastBoostTime = 0
+		local BOOST_COOLDOWN = 0.15 -- Cooldown between boosts
+
+		local wasOnGround = true
+		local lastAPressed = false
+		local lastDPressed = false
+		local lastWPressed = false
+		local lastSPressed = false
+
+		-- Gamepad Button State
+		local lastLTPressed = false
+		local lastRTPressed = false
+		local lastLSUp = false -- Left stick up
+
+		local function ToggleQuickBoost(forceEnable)
+			if forceEnable ~= nil then
+				if forceEnable == isQuickBoost then
+					return
+				end
+			end
+
+			isQuickBoost = not isQuickBoost
+			BtnQuickBoost.Text = L("quick_boost") .. ": " .. (isQuickBoost and L("on") or L("off"))
+			BtnQuickBoost.TextColor3 = isQuickBoost and C_GREEN or C_TEXT_DIM
+			BtnQuickBoost.UIStroke.Color = isQuickBoost and C_GREEN or C_TEXT_DIM
+			ShowFeatureToast("Quick Boost", isQuickBoost)
+
+			if isQuickBoost then
+				quickBoostLoop = RunService.Heartbeat:Connect(function(dt)
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChild("Humanoid")
+					local r = c and c:FindFirstChild("HumanoidRootPart")
+
+					if h and r then
+						local state = h:GetState()
+						local isOnGround = (
+							state == Enum.HumanoidStateType.Running
+							or state == Enum.HumanoidStateType.Landed
+							or h.FloorMaterial ~= Enum.Material.Air
+						)
+						local isInAir = (
+							state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall
+						)
+
+						-- Reset when landing
+						if isOnGround then
+							hasBoostedThisJump = false
+							boostCount = 0
+						end
+
+						-- Check keyboard keys
+						local aPressed = UserInputService:IsKeyDown(Enum.KeyCode.A)
+						local dPressed = UserInputService:IsKeyDown(Enum.KeyCode.D)
+						local wPressed = UserInputService:IsKeyDown(Enum.KeyCode.W)
+						local sPressed = UserInputService:IsKeyDown(Enum.KeyCode.S)
+
+						-- Detect key press transitions
+						local aJustPressed = aPressed and not lastAPressed
+						local dJustPressed = dPressed and not lastDPressed
+						local wJustPressed = wPressed and not lastWPressed
+
+						lastAPressed = aPressed
+						lastDPressed = dPressed
+						lastWPressed = wPressed
+						lastSPressed = sPressed
+
+						-- GAMEPAD LT/RT DETECTION
+						local ltPressed =
+							UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonL2)
+						local rtPressed =
+							UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonR2)
+
+						-- Gamepad left stick forward detection
+						local gamepadState = UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1)
+						local lsForward = false
+						for _, input in ipairs(gamepadState) do
+							if input.KeyCode == Enum.KeyCode.Thumbstick1 then
+								lsForward = input.Position.Y > 0.5
+								break
+							end
+						end
+
+						-- Detect button press transitions
+						local ltJustPressed = ltPressed and not lastLTPressed
+						local rtJustPressed = rtPressed and not lastRTPressed
+						local lsUpJustPressed = lsForward and not lastLSUp
+
+						lastLTPressed = ltPressed
+						lastRTPressed = rtPressed
+						lastLSUp = lsForward
+
+						-- Combine keyboard and gamepad triggers
+						local justMovedLeft = aJustPressed or ltJustPressed
+						local justMovedRight = dJustPressed or rtJustPressed
+						local justMovedForward = wJustPressed or lsUpJustPressed
+
+						-- Current time for cooldown check
+						local currentTime = tick()
+
+						-- Apply boost when in air
+						if
+							isInAir
+							and boostCount < MAX_BOOSTS_PER_JUMP
+							and (currentTime - lastBoostTime) > BOOST_COOLDOWN
+						then
+							local shouldBoost = justMovedLeft or justMovedRight
+
+							if shouldBoost then
+								local currentVel = r.AssemblyLinearVelocity
+								local baseBoost = Config.QuickBoostPower or 12
+								local forwardBoost = Config.BugJumpForward or 8
+
+								-- BUG JUMP DETECTION: A/D + W pressed together
+								local isBugJump = bugJumpEnabled and (aPressed or dPressed) and wPressed
+
+								-- Calculate boost multiplier
+								local boostMultiplier = 1.0
+								if isBugJump then
+									boostMultiplier = 1.5 -- 50% more boost for Bug Jump
+								end
+
+								local finalBoost = baseBoost * boostMultiplier
+								local maxYVel = 55 + finalBoost
+
+								-- Calculate new Y velocity
+								local newYVel = currentVel.Y + finalBoost
+
+								-- Cap velocity
+								if newYVel > maxYVel then
+									newYVel = maxYVel
+								end
+
+								-- Only boost if not already going up too fast
+								if currentVel.Y < maxYVel then
+									-- Get movement direction for forward momentum
+									local moveDir = h.MoveDirection
+									local lookDir = r.CFrame.LookVector
+
+									-- For Bug Jump, also add forward momentum
+									local forwardVelX = currentVel.X
+									local forwardVelZ = currentVel.Z
+
+									if isBugJump and forwardBoost > 0 then
+										-- Use camera direction for Shift Lock compatibility
+										local camera = workspace.CurrentCamera
+										local camLook = camera and camera.CFrame.LookVector or lookDir
+										local horizontalLook = Vector3.new(camLook.X, 0, camLook.Z)
+										if horizontalLook.Magnitude > 0.1 then
+											horizontalLook = horizontalLook.Unit
+										else
+											horizontalLook = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
+										end
+
+										-- Add forward momentum
+										forwardVelX = currentVel.X + horizontalLook.X * forwardBoost
+										forwardVelZ = currentVel.Z + horizontalLook.Z * forwardBoost
+									end
+
+									r.AssemblyLinearVelocity = Vector3.new(forwardVelX, newYVel, forwardVelZ)
+
+									boostCount = boostCount + 1
+									lastBoostTime = currentTime
+
+									-- Mark as boosted if we've used all boosts
+									if boostCount >= MAX_BOOSTS_PER_JUMP then
+										hasBoostedThisJump = true
+									end
+								end
+							end
+						end
+
+						wasOnGround = isOnGround
+					end
+				end)
+				table.insert(Connections, quickBoostLoop)
+			else
+				if quickBoostLoop then
+					quickBoostLoop:Disconnect()
+					quickBoostLoop = nil
+				end
+				hasBoostedThisJump = false
+				boostCount = 0
+				lastLTPressed = false
+				lastRTPressed = false
+			end
+		end
+
+		BtnQuickBoost.MouseButton1Click:Connect(function()
+			ToggleQuickBoost()
+		end)
+		UIHandlers.ToggleQuickBoost = ToggleQuickBoost
+	end
+
+	-- 1. ALWAYS MOMENTUM
+	local CardMomentum = CreateCard(L("always_momentum"), 100, 1)
+
+	local BtnMomentum, MomentumContainer = CreateFeatureButton(
+		CardMomentum,
+		L("always_momentum") .. ": " .. L("off"),
+		L("always_momentum_desc"),
+		UDim2.new(0.94, 0, 0, 55),
+		UDim2.new(0.03, 0, 0, 35),
+		C_TEXT_DIM
+	)
+
+	local isMomentum, momentumLoop = false, nil
+	local lockedSpeed = nil
+	local momentumHUD = nil
+
+	local function CreateMomentumHUD()
+		if momentumHUD then
+			return
+		end
+		local screenGui = Instance.new("ScreenGui")
+		screenGui.Name = "MomentumHUD"
+		screenGui.ResetOnSpawn = false
+		screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+		local frame = Instance.new("Frame", screenGui)
+		frame.Name = "HUDFrame"
+		frame.Size = UDim2.new(0, 160, 0, 55)
+		frame.Position = UDim2.new(0.5, -80, 1, -70)
+		frame.AnchorPoint = Vector2.new(0.5, 1)
+		frame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+		frame.BackgroundTransparency = 0.3
+		Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+		local stroke = Instance.new("UIStroke", frame)
+		stroke.Color = C_ACCENT
+		stroke.Transparency = 0.5
+
+		local title = Instance.new("TextLabel", frame)
+		title.Name = "Title"
+		title.Text = "MOMENTUM"
+		title.Size = UDim2.new(1, 0, 0, 18)
+		title.Position = UDim2.new(0, 0, 0, 3)
+		title.BackgroundTransparency = 1
+		title.TextColor3 = C_ACCENT
+		title.Font = Enum.Font.GothamBold
+		title.TextSize = 10
+
+		local speedLabel = Instance.new("TextLabel", frame)
+		speedLabel.Name = "Speed"
+		speedLabel.Text = "0"
+		speedLabel.Size = UDim2.new(1, 0, 0, 22)
+		speedLabel.Position = UDim2.new(0, 0, 0, 20)
+		speedLabel.BackgroundTransparency = 1
+		speedLabel.TextColor3 = C_GREEN
+		speedLabel.Font = Enum.Font.GothamBlack
+		speedLabel.TextSize = 20
+
+		local lockLabel = Instance.new("TextLabel", frame)
+		lockLabel.Name = "Lock"
+		lockLabel.Text = "LOCKED: --"
+		lockLabel.Size = UDim2.new(1, 0, 0, 12)
+		lockLabel.Position = UDim2.new(0, 0, 0, 42)
+		lockLabel.BackgroundTransparency = 1
+		lockLabel.TextColor3 = C_TEXT_DIM
+		lockLabel.Font = Enum.Font.Gotham
+		lockLabel.TextSize = 9
+
+		momentumHUD = screenGui
+	end
+
+	local function DestroyMomentumHUD()
+		if momentumHUD then
+			momentumHUD:Destroy()
+			momentumHUD = nil
+		end
+	end
+
+	local function UpdateMomentumHUD(currentSpeed, locked)
+		if not momentumHUD then
+			return
+		end
+		local frame = momentumHUD:FindFirstChild("HUDFrame")
+		if not frame then
+			return
+		end
+
+		local speedLbl = frame:FindFirstChild("Speed")
+		local lockLbl = frame:FindFirstChild("Lock")
+
+		if speedLbl then
+			speedLbl.Text = string.format("%.1f", currentSpeed or 0)
+		end
+
+		if lockLbl then
+			if locked then
+				lockLbl.Text = string.format("LOCKED: %.1f", locked)
+			else
+				lockLbl.Text = "LOCKED: --"
+			end
+		end
+	end
+
+	local function ToggleMomentum(forceEnable)
+		if forceEnable ~= nil then
+			if forceEnable == isMomentum then
+				return
+			end
+		end
+
+		isMomentum = not isMomentum
+		BtnMomentum.Text = L("always_momentum") .. ": " .. (isMomentum and L("on") or L("off"))
+		BtnMomentum.TextColor3 = isMomentum and C_GREEN or C_TEXT_DIM
+		BtnMomentum.UIStroke.Color = isMomentum and C_GREEN or C_TEXT_DIM
+		ShowFeatureToast("Always Momentum", isMomentum)
+
+		if isMomentum then
+			lockedSpeed = nil
+			CreateMomentumHUD()
+			momentumLoop = RunService.Heartbeat:Connect(function()
+				local c = LocalPlayer.Character
+				local h = c and c:FindFirstChild("Humanoid")
+				local r = c and c:FindFirstChild("HumanoidRootPart")
+
+				if h and r and h.MoveDirection.Magnitude > 0.1 then
+					local vel = r.AssemblyLinearVelocity
+					local horizontalSpeed = Vector3.new(vel.X, 0, vel.Z).Magnitude
+
+					if lockedSpeed == nil then
+						lockedSpeed = horizontalSpeed
+					end
+
+					if horizontalSpeed < lockedSpeed then
+						local moveDir = h.MoveDirection.Unit
+						r.AssemblyLinearVelocity = Vector3.new(moveDir.X * lockedSpeed, vel.Y, moveDir.Z * lockedSpeed)
+					elseif horizontalSpeed > lockedSpeed + 1 then
+						lockedSpeed = lockedSpeed + 1
+					end
+
+					UpdateMomentumHUD(horizontalSpeed, lockedSpeed)
+				else
+					lockedSpeed = nil
+					UpdateMomentumHUD(0, nil)
+				end
+			end)
+			table.insert(Connections, momentumLoop)
+		else
+			if momentumLoop then
+				momentumLoop:Disconnect()
+				momentumLoop = nil
+			end
+			lockedSpeed = nil
+			DestroyMomentumHUD()
+		end
+	end
+
+	BtnMomentum.MouseButton1Click:Connect(function()
+		ToggleMomentum()
+	end)
+	UIHandlers.ToggleMomentum = ToggleMomentum
+
+	-- 2. ANTI-SLIP
+	local CardSlip = CreateCard(L("anti_slip"), 155, 2)
+
+	local BtnSlip, SlipContainer = CreateFeatureButton(
+		CardSlip,
+		L("anti_slip") .. ": " .. L("off"),
+		L("anti_slip_desc"),
+		UDim2.new(0.94, 0, 0, 55),
+		UDim2.new(0.03, 0, 0, 35),
+		C_RED
+	)
+
+	-- Size Slider
+	local LblSize = Instance.new("TextLabel", CardSlip)
+	LblSize.Text = L("size") .. ": 0.5"
+	LblSize.Size = UDim2.new(1, -20, 0, 20)
+	LblSize.Position = UDim2.new(0, 15, 0, 95)
+	LblSize.BackgroundTransparency = 1
+	LblSize.TextColor3 = C_TEXT_DIM
+	LblSize.Font = Enum.Font.GothamBold
+	LblSize.TextSize = 10
+	LblSize.TextXAlignment = Enum.TextXAlignment.Left
+
+	local SldBg = Instance.new("TextButton", CardSlip)
+	SldBg.Text = ""
+	SldBg.Size = UDim2.new(0.9, 0, 0, 6)
+	SldBg.Position = UDim2.new(0.05, 0, 0, 115)
+	SldBg.BackgroundColor3 = C_SIDE
+	SldBg.AutoButtonColor = false
+	Instance.new("UICorner", SldBg).CornerRadius = UDim.new(0, 3)
+
+	local SldFill = Instance.new("Frame", SldBg)
+	SldFill.Size = UDim2.new(0.3, 0, 1, 0) -- Default 30% = size 3
+	SldFill.BackgroundColor3 = C_ACCENT
+	Instance.new("UICorner", SldFill).CornerRadius = UDim.new(0, 3)
+
+	local targetSize = 3 -- Default size 3 studs
+	local isSlipOn = false
+	local slipLoop = nil
+	local modifiedParts = {}
+
+	LblSize.Text = L("size") .. ": 3.0" -- Update default label
+
+	local function UpdateSlider(input)
+		local rx = input.Position.X - SldBg.AbsolutePosition.X
+		local sc = math.clamp(rx / SldBg.AbsoluteSize.X, 0, 1)
+		targetSize = 1 + (sc * 9) -- Range 1-10 studs
+		SldFill.Size = UDim2.new(sc, 0, 1, 0)
+		LblSize.Text = L("size") .. ": " .. string.format("%.1f", targetSize)
+	end
+
+	local dragging = false
+	SldBg.MouseButton1Down:Connect(function()
+		dragging = true
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+			UpdateSlider(i)
+		end
+	end)
+
+	local lastSafeY = nil
+	local lastGroundPart = nil
+	local visualPart = nil
+
+	local function ToggleAntiSlip(forceEnable)
+		if forceEnable ~= nil then
+			if forceEnable == isSlipOn then
+				return
+			end
+		end
+
+		isSlipOn = not isSlipOn
+		BtnSlip.Text = L("anti_slip") .. ": " .. (isSlipOn and L("on") or L("off"))
+		BtnSlip.TextColor3 = isSlipOn and C_GREEN or C_RED
+		BtnSlip.UIStroke.Color = isSlipOn and C_GREEN or C_RED
+		ShowFeatureToast("Anti-Slip", isSlipOn)
+
+		if isSlipOn then
+			lastSafeY = nil
+			lastGroundPart = nil
+
+			-- Create visual indicator
+			visualPart = Instance.new("Part")
+			visualPart.Name = "StarshipAntiSlipVisual"
+			visualPart.Anchored = true
+			visualPart.CanCollide = false
+			visualPart.CanQuery = false
+			visualPart.CanTouch = false
+			visualPart.Transparency = 0.5
+			visualPart.Color = Color3.fromRGB(0, 255, 100)
+			visualPart.Material = Enum.Material.Neon
+			visualPart.Size = Vector3.new(targetSize, 0.1, targetSize)
+			visualPart.CastShadow = false
+			visualPart.Parent = workspace
+
+			slipLoop = RunService.Heartbeat:Connect(function()
+				local c = LocalPlayer.Character
+				if not c then
+					return
+				end
+
+				local r = c:FindFirstChild("HumanoidRootPart")
+				local h = c:FindFirstChild("Humanoid")
+				if not r or not h then
+					return
+				end
+
+				local params = RaycastParams.new()
+				params.FilterDescendantsInstances = { c, visualPart }
+				params.FilterType = Enum.RaycastFilterType.Exclude
+
+				local playerPos = r.Position
+				local halfSize = targetSize / 2
+
+				-- Multi-raycast untuk mencari ground dalam radius
+				local rayPositions = {
+					playerPos,
+					playerPos + Vector3.new(halfSize, 0, 0),
+					playerPos + Vector3.new(-halfSize, 0, 0),
+					playerPos + Vector3.new(0, 0, halfSize),
+					playerPos + Vector3.new(0, 0, -halfSize),
+					playerPos + Vector3.new(halfSize, 0, halfSize),
+					playerPos + Vector3.new(-halfSize, 0, halfSize),
+					playerPos + Vector3.new(halfSize, 0, -halfSize),
+					playerPos + Vector3.new(-halfSize, 0, -halfSize),
+				}
+
+				local foundGround = false
+				local highestY = -math.huge
+
+				for _, pos in ipairs(rayPositions) do
+					local ray = workspace:Raycast(pos, Vector3.new(0, -50, 0), params)
+					if ray and ray.Instance and not ray.Instance:IsA("Terrain") then
+						foundGround = true
+						if ray.Position.Y > highestY then
+							highestY = ray.Position.Y
+							lastGroundPart = ray.Instance
+						end
+					end
+				end
+
+				if foundGround then
+					lastSafeY = highestY + 3
+
+					-- Update visual
+					if visualPart then
+						visualPart.Size = Vector3.new(targetSize, 0.1, targetSize)
+						visualPart.CFrame = CFrame.new(playerPos.X, highestY + 0.05, playerPos.Z)
+					end
+				else
+					if visualPart then
+						visualPart.Position = Vector3.new(0, -9999, 0)
+					end
+				end
+
+				-- Keep player from falling - but allow jumping
+				if lastSafeY then
+					local vel = r.AssemblyLinearVelocity
+					local state = h:GetState()
+					local isJumping = state == Enum.HumanoidStateType.Jumping or vel.Y > 1
+
+					if not isJumping and r.Position.Y < lastSafeY - 0.3 and vel.Y < 0 then
+						r.CFrame = CFrame.new(r.Position.X, lastSafeY, r.Position.Z) * (r.CFrame - r.CFrame.Position)
+						r.AssemblyLinearVelocity = Vector3.new(vel.X, 0, vel.Z)
+						h:ChangeState(Enum.HumanoidStateType.Running)
+					end
+				end
+			end)
+			table.insert(Connections, slipLoop)
+		else
+			if slipLoop then
+				slipLoop:Disconnect()
+				slipLoop = nil
+			end
+			lastSafeY = nil
+			lastGroundPart = nil
+
+			-- Remove visual part
+			if visualPart then
+				visualPart:Destroy()
+				visualPart = nil
+			end
+
+			modifiedParts = {}
+		end
+	end
+	BtnSlip.MouseButton1Click:Connect(function()
+		ToggleAntiSlip()
+	end)
+	UIHandlers.ToggleAntiSlip = ToggleAntiSlip
+
+	-- 3. ANTI-RAGDOLL
+	local CardRagdoll = CreateCard(L("anti_ragdoll"), 140, 3)
+
+	local BtnRagdoll, RagdollContainer = CreateFeatureButton(
+		CardRagdoll,
+		L("anti_ragdoll") .. ": " .. L("off"),
+		L("anti_ragdoll_desc"),
+		UDim2.new(0.94, 0, 0, 55),
+		UDim2.new(0.03, 0, 0, 35),
+		C_RED
+	)
+
+	-- Max Velocity Slider
+	local LblMaxVel = Instance.new("TextLabel", CardRagdoll)
+	LblMaxVel.Text = L("max_velocity") .. ": 50"
+	LblMaxVel.Size = UDim2.new(1, -20, 0, 20)
+	LblMaxVel.Position = UDim2.new(0, 15, 0, 95)
+	LblMaxVel.BackgroundTransparency = 1
+	LblMaxVel.TextColor3 = C_TEXT_DIM
+	LblMaxVel.Font = Enum.Font.GothamBold
+	LblMaxVel.TextSize = 10
+	LblMaxVel.TextXAlignment = Enum.TextXAlignment.Left
+
+	local SldVelBg = Instance.new("TextButton", CardRagdoll)
+	SldVelBg.Text = ""
+	SldVelBg.Size = UDim2.new(0.9, 0, 0, 6)
+	SldVelBg.Position = UDim2.new(0.05, 0, 0, 115)
+	SldVelBg.BackgroundColor3 = C_SIDE
+	SldVelBg.AutoButtonColor = false
+	Instance.new("UICorner", SldVelBg).CornerRadius = UDim.new(0, 3)
+
+	local SldVelFill = Instance.new("Frame", SldVelBg)
+	SldVelFill.Size = UDim2.new(0.5, 0, 1, 0) -- Default 50% = 100
+	SldVelFill.BackgroundColor3 = C_ACCENT
+	Instance.new("UICorner", SldVelFill).CornerRadius = UDim.new(0, 3)
+
+	local maxVelocity = 100 -- Default max velocity
+	local isRagdollOn = false
+	local ragdollLoop = nil
+	local stateConnection = nil
+
+	local function UpdateVelSlider(input)
+		local rx = input.Position.X - SldVelBg.AbsolutePosition.X
+		local sc = math.clamp(rx / SldVelBg.AbsoluteSize.X, 0, 1)
+		maxVelocity = math.floor(50 + (sc * 150)) -- Range 50-200
+		SldVelFill.Size = UDim2.new(sc, 0, 1, 0)
+		LblMaxVel.Text = L("max_velocity") .. ": " .. maxVelocity
+	end
+
+	local draggingVel = false
+	SldVelBg.MouseButton1Down:Connect(function()
+		draggingVel = true
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+			draggingVel = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if draggingVel and i.UserInputType == Enum.UserInputType.MouseMovement then
+			UpdateVelSlider(i)
+		end
+	end)
+
+	local function ToggleAntiRagdoll(forceEnable)
+		if forceEnable ~= nil then
+			if forceEnable == isRagdollOn then
+				return
+			end
+		end
+
+		isRagdollOn = not isRagdollOn
+		BtnRagdoll.Text = "ANTI-RAGDOLL: " .. (isRagdollOn and "ON" or "OFF")
+		BtnRagdoll.TextColor3 = isRagdollOn and C_GREEN or C_RED
+		BtnRagdoll.UIStroke.Color = isRagdollOn and C_GREEN or C_RED
+		ShowFeatureToast("Anti-Ragdoll", isRagdollOn)
+
+		if isRagdollOn then
+			local c = LocalPlayer.Character
+			local h = c and c:FindFirstChildOfClass("Humanoid")
+
+			if h then
+				-- Disable ragdoll states
+				h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+				h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+
+				-- Listen for state changes to force recovery
+				stateConnection = h.StateChanged:Connect(function(oldState, newState)
+					if newState == Enum.HumanoidStateType.Ragdoll or newState == Enum.HumanoidStateType.FallingDown then
+						h:ChangeState(Enum.HumanoidStateType.GettingUp)
+						task.wait(0.1)
+						h:ChangeState(Enum.HumanoidStateType.Running)
+					end
+				end)
+				table.insert(Connections, stateConnection)
+			end
+
+			-- Velocity clamp loop
+			ragdollLoop = RunService.Heartbeat:Connect(function()
+				local c = LocalPlayer.Character
+				if not c then
+					return
+				end
+
+				local r = c:FindFirstChild("HumanoidRootPart")
+				local h = c:FindFirstChildOfClass("Humanoid")
+				if not r or not h then
+					return
+				end
+
+				-- Ensure states stay disabled
+				if h:GetStateEnabled(Enum.HumanoidStateType.Ragdoll) then
+					h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+				end
+				if h:GetStateEnabled(Enum.HumanoidStateType.FallingDown) then
+					h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+				end
+
+				-- Clamp velocity to prevent fling
+				local vel = r.AssemblyLinearVelocity
+				local horizontalVel = Vector3.new(vel.X, 0, vel.Z)
+				local horizontalSpeed = horizontalVel.Magnitude
+
+				if horizontalSpeed > maxVelocity then
+					local clampedHorizontal = horizontalVel.Unit * maxVelocity
+					r.AssemblyLinearVelocity = Vector3.new(clampedHorizontal.X, vel.Y, clampedHorizontal.Z)
+				end
+
+				-- Clamp vertical velocity (prevent super fling up)
+				if vel.Y > maxVelocity then
+					r.AssemblyLinearVelocity = Vector3.new(vel.X, maxVelocity, vel.Z)
+				end
+
+				-- Force recovery if somehow in ragdoll
+				local state = h:GetState()
+				if state == Enum.HumanoidStateType.Ragdoll or state == Enum.HumanoidStateType.FallingDown then
+					h:ChangeState(Enum.HumanoidStateType.GettingUp)
+				end
+			end)
+			table.insert(Connections, ragdollLoop)
+
+			-- Handle respawn
+			LocalPlayer.CharacterAdded:Connect(function(newChar)
+				if not isRagdollOn then
+					return
+				end
+				task.wait(0.5)
+				local newHum = newChar:FindFirstChildOfClass("Humanoid")
+				if newHum then
+					newHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+					newHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+				end
+			end)
+		else
+			-- Disable
+			if ragdollLoop then
+				ragdollLoop:Disconnect()
+				ragdollLoop = nil
+			end
+			if stateConnection then
+				stateConnection:Disconnect()
+				stateConnection = nil
+			end
+
+			-- Re-enable states
+			local c = LocalPlayer.Character
+			local h = c and c:FindFirstChildOfClass("Humanoid")
+			if h then
+				h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+				h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+			end
+		end
+	end
+
+	BtnRagdoll.MouseButton1Click:Connect(function()
+		ToggleAntiRagdoll()
+	end)
+	UIHandlers.ToggleAntiRagdoll = ToggleAntiRagdoll
+
+	-- 5. REAL PATH ESP
+	local CardESP = CreateCard(L("real_path_esp"), 175, 5)
+
+	local BtnRealESP, RealESPContainer = CreateFeatureButton(
+		CardESP,
+		L("real_path_esp") .. ": " .. L("off"),
+		L("real_path_esp_desc"),
+		UDim2.new(0.94, 0, 0, 55),
+		UDim2.new(0.03, 0, 0, 35),
+		C_RED
+	)
+
+	-- Color Legend
+	local LblColorInfo = Instance.new("TextLabel", CardESP)
+	LblColorInfo.Text = L("color_info")
+	LblColorInfo.Size = UDim2.new(0.94, 0, 0, 18)
+	LblColorInfo.Position = UDim2.new(0.03, 0, 0, 95)
+	LblColorInfo.BackgroundTransparency = 1
+	LblColorInfo.TextColor3 = C_TEXT_DIM
+	LblColorInfo.TextSize = 12
+	LblColorInfo.Font = Enum.Font.GothamBold
+	LblColorInfo.TextXAlignment = Enum.TextXAlignment.Left
+
+	local LblGreen = Instance.new("TextLabel", CardESP)
+	LblGreen.Text = L("green_safe")
+	LblGreen.Size = UDim2.new(0.94, 0, 0, 14)
+	LblGreen.Position = UDim2.new(0.03, 0, 0, 111)
+	LblGreen.BackgroundTransparency = 1
+	LblGreen.TextColor3 = Color3.new(0, 1, 0)
+	LblGreen.TextSize = 10
+	LblGreen.Font = Enum.Font.Gotham
+	LblGreen.TextXAlignment = Enum.TextXAlignment.Left
+
+	local LblCyan = Instance.new("TextLabel", CardESP)
+	LblCyan.Text = L("cyan_ladder")
+	LblCyan.Size = UDim2.new(0.94, 0, 0, 14)
+	LblCyan.Position = UDim2.new(0.03, 0, 0, 125)
+	LblCyan.BackgroundTransparency = 1
+	LblCyan.TextColor3 = Color3.fromRGB(0, 255, 255)
+	LblCyan.TextSize = 10
+	LblCyan.Font = Enum.Font.Gotham
+	LblCyan.TextXAlignment = Enum.TextXAlignment.Left
+
+	local LblOrange = Instance.new("TextLabel", CardESP)
+	LblOrange.Text = L("orange_ladder")
+	LblOrange.Size = UDim2.new(0.94, 0, 0, 14)
+	LblOrange.Position = UDim2.new(0.03, 0, 0, 139)
+	LblOrange.BackgroundTransparency = 1
+	LblOrange.TextColor3 = Color3.fromRGB(255, 165, 0)
+	LblOrange.TextSize = 10
+	LblOrange.Font = Enum.Font.Gotham
+	LblOrange.TextXAlignment = Enum.TextXAlignment.Left
+
+	local LblRed = Instance.new("TextLabel", CardESP)
+	LblRed.Text = L("red_fake")
+	LblRed.Size = UDim2.new(0.94, 0, 0, 14)
+	LblRed.Position = UDim2.new(0.03, 0, 0, 153)
+	LblRed.BackgroundTransparency = 1
+	LblRed.TextColor3 = Color3.new(1, 0, 0)
+	LblRed.TextSize = 10
+	LblRed.Font = Enum.Font.Gotham
+	LblRed.TextXAlignment = Enum.TextXAlignment.Left
+
+	local isRealESP, espLoop = false, nil
+	local espContainer = Instance.new("Folder", workspace)
+	espContainer.Name = "StarshipESP"
+	local highlightedParts = {} -- Track highlighted parts by reference
+
+	-- Check if part has decal/texture (invisible but has sticker) - GLOBAL
+	local function HasDecalOrTexture(part)
+		for _, child in pairs(part:GetChildren()) do
+			if child:IsA("Decal") or child:IsA("Texture") or child:IsA("SurfaceGui") then
+				return true
+			end
+		end
+		return false
+	end
+
+	-- Simple check: CanCollide = walkable
+	local function IsPlatformWalkable(part)
+		return part.CanCollide == true
+	end
+
+	local function CreateHighlight(part, color)
+		if highlightedParts[part] then
+			return
+		end
+		highlightedParts[part] = true
+
+		local h = Instance.new("BoxHandleAdornment")
+		h.Name = "ESP_" .. tostring(part:GetDebugId())
+		h.Adornee = part
+		h.Size = part.Size + Vector3.new(0.1, 0.1, 0.1)
+		h.Color3 = color
+		h.Transparency = 0.5
+		h.ZIndex = 0
+		h.AlwaysOnTop = true
+		h.Parent = espContainer
+		part.AncestryChanged:Connect(function()
+			if not part:IsDescendantOf(game) then
+				h:Destroy()
+				highlightedParts[part] = nil
+			end
+		end)
+	end
+
+	local function ToggleRealESP(forceEnable)
+		if forceEnable ~= nil then
+			if forceEnable == isRealESP then
+				return
+			end
+		end
+
+		isRealESP = not isRealESP
+		BtnRealESP.Text = L("real_path_esp") .. ": " .. (isRealESP and L("on") or L("off"))
+		BtnRealESP.TextColor3 = isRealESP and C_GREEN or C_RED
+		BtnRealESP.UIStroke.Color = isRealESP and C_GREEN or C_RED
+		ShowFeatureToast("Real Path ESP", isRealESP)
+
+		if isRealESP then
+			-- Scan and test each platform with raycast
+			local function ScanAllParts(charPos, range)
+				for _, p in pairs(workspace:GetDescendants()) do
+					if p:IsA("BasePart") then
+						-- Include: visible parts OR invisible parts with decal/texture OR any CanCollide part
+						local shouldInclude = p.Transparency < 0.95 or HasDecalOrTexture(p) or p.CanCollide
+
+						if shouldInclude then
+							-- Skip character parts and ESP container
+							local isCharPart = p:FindFirstAncestorOfClass("Model")
+								and p:FindFirstAncestorOfClass("Model"):FindFirstChild("Humanoid")
+							if not isCharPart and not p:IsDescendantOf(espContainer) then
+								local dist = (p.Position - charPos).Magnitude
+								if dist <= range then
+									local color
+									local isLadder = p:IsA("TrussPart")
+										or p.Name:lower():find("ladder")
+										or p.Name:lower():find("truss")
+										or p.Name:lower():find("climb")
+
+									if isLadder then
+										if p.CanCollide then
+											color = Color3.fromRGB(0, 255, 255) -- CYAN = Ladder WALKABLE
+										else
+											color = Color3.fromRGB(255, 165, 0) -- ORANGE = Ladder NOT WALKABLE
+										end
+									elseif IsPlatformWalkable(p) then
+										color = Color3.new(0, 1, 0) -- Green = SAFE
+									else
+										color = Color3.new(1, 0, 0) -- Red = NOT SAFE
+									end
+									CreateHighlight(p, color)
+								end
+							end
+						end
+					end
+				end
+			end
+
+			local c = LocalPlayer.Character
+			local r = c and c:FindFirstChild("HumanoidRootPart")
+			if r then
+				ScanAllParts(r.Position, 75)
+			end
+
+			-- Periodic rescan for new parts entering range (every 0.5 sec)
+			local lastScan = 0
+			espLoop = RunService.Heartbeat:Connect(function()
+				local now = tick()
+				if now - lastScan < 0.5 then
+					return
+				end -- Only scan every 0.5 seconds
+				lastScan = now
+
+				local c = LocalPlayer.Character
+				local r = c and c:FindFirstChild("HumanoidRootPart")
+				if r then
+					local range = 75
+					local params = OverlapParams.new()
+					params.FilterDescendantsInstances = { c, espContainer }
+					params.FilterType = Enum.RaycastFilterType.Exclude
+					local parts = workspace:GetPartBoundsInBox(r.CFrame, Vector3.new(range, range, range), params)
+					for _, p in pairs(parts) do
+						if p:IsA("BasePart") then
+							local shouldInclude = p.Transparency < 0.95 or HasDecalOrTexture(p) or p.CanCollide
+							if shouldInclude then
+								local isCharPart = p:FindFirstAncestorOfClass("Model")
+									and p:FindFirstAncestorOfClass("Model"):FindFirstChild("Humanoid")
+								if not isCharPart then
+									local color
+									local isLadder = p:IsA("TrussPart")
+										or p.Name:lower():find("ladder")
+										or p.Name:lower():find("truss")
+										or p.Name:lower():find("climb")
+
+									if isLadder then
+										if p.CanCollide then
+											color = Color3.fromRGB(0, 255, 255) -- CYAN = Ladder WALKABLE
+										else
+											color = Color3.fromRGB(255, 165, 0) -- ORANGE = Ladder NOT WALKABLE
+										end
+									elseif IsPlatformWalkable(p) then
+										color = Color3.new(0, 1, 0)
+									else
+										color = Color3.new(1, 0, 0)
+									end
+									CreateHighlight(p, color)
+								end
+							end
+						end
+					end
+				end
+			end)
+			table.insert(Connections, espLoop)
+		else
+			if espLoop then
+				espLoop:Disconnect()
+				espLoop = nil
+			end
+			espContainer:ClearAllChildren()
+			highlightedParts = {} -- Reset tracking table
+		end
+	end
+	BtnRealESP.MouseButton1Click:Connect(function()
+		ToggleRealESP()
+	end)
+	UIHandlers.ToggleRealESP = ToggleRealESP
+
+	-- 6. GHOST REPLAY
+	local CardReplay = CreateCard("GHOST REPLAY", 370, 6)
+	local currentWorkspace = "Default"
+
+	local function GetGhostPath()
+		local ghostRoot = "StarshipCore/StarshipGhosts"
+		if not isfolder(ghostRoot) then
+			makefolder(ghostRoot)
+		end
+		local path = ghostRoot .. "/" .. currentWorkspace
+		if not isfolder(path) then
+			makefolder(path)
+		end
+		return path
+	end
+
+	local GhostData = {}
+	local isGhostRecording = false
+	local isGhostPlaying = false
+	local ghostRecLoop = nil
+	local ghostPlayLoop = nil
+	local GhostModel = nil
+
+	-- WORKSPACE SELECTOR
+	local LblGWorkspace = Instance.new("TextLabel", CardReplay)
+	LblGWorkspace.Text = "WS:"
+	LblGWorkspace.Size = UDim2.new(0.15, 0, 0, 25)
+	LblGWorkspace.Position = UDim2.new(0.03, 0, 0, 35)
+	LblGWorkspace.BackgroundTransparency = 1
+	LblGWorkspace.TextColor3 = C_TEXT_DIM
+	LblGWorkspace.Font = Enum.Font.GothamBold
+	LblGWorkspace.TextSize = 10
+	LblGWorkspace.TextXAlignment = Enum.TextXAlignment.Left
+
+	local BtnGWorkspace = Instance.new("TextButton", CardReplay)
+	BtnGWorkspace.Text = currentWorkspace
+	BtnGWorkspace.Size = UDim2.new(0.75, 0, 0, 25)
+	BtnGWorkspace.Position = UDim2.new(0.22, 0, 0, 35)
+	BtnGWorkspace.BackgroundColor3 = C_SIDE
+	BtnGWorkspace.TextColor3 = C_ACCENT
+	BtnGWorkspace.Font = Enum.Font.Gotham
+	BtnGWorkspace.TextSize = 11
+	Instance.new("UICorner", BtnGWorkspace).CornerRadius = UDim.new(0, 4)
+	local sws = Instance.new("UIStroke", BtnGWorkspace)
+	sws.Color = C_ACCENT
+	sws.Transparency = 0.6
+	sws.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+	local GWSList = Instance.new("Frame", CardReplay)
+	GWSList.Size = UDim2.new(0.75, 0, 0, 100)
+	GWSList.Position = UDim2.new(0.22, 0, 0, 65)
+	GWSList.BackgroundColor3 = C_SIDE
+	GWSList.Visible = false
+	GWSList.ZIndex = 50
+	Instance.new("UICorner", GWSList).CornerRadius = UDim.new(0, 6)
+	local sl = Instance.new("UIStroke", GWSList)
+	sl.Color = C_ACCENT
+	sl.Transparency = 0.6
+
+	local GWSScroll = Instance.new("ScrollingFrame", GWSList)
+	GWSScroll.Size = UDim2.new(1, 0, 1, 0)
+	GWSScroll.BackgroundTransparency = 1
+	GWSScroll.BorderSizePixel = 0
+	GWSScroll.ScrollBarThickness = 4
+	GWSScroll.ZIndex = 55
+	Instance.new("UIListLayout", GWSScroll).Padding = UDim.new(0, 2)
+
+	local function RefreshGhostList() end -- Forward declaration
+
+	local function UpdateGWSList()
+		for _, c in pairs(GWSScroll:GetChildren()) do
+			if c:IsA("TextButton") or c:IsA("TextBox") then
+				c:Destroy()
+			end
+		end
+
+		-- Path yang benar: StarshipCore/StarshipGhosts
+		local ghostRoot = "StarshipCore/StarshipGhosts"
+		if not isfolder(ghostRoot) then
+			makefolder(ghostRoot)
+		end
+
+		-- Input untuk workspace baru
+		local NewWSInput = Instance.new("TextBox", GWSScroll)
+		NewWSInput.PlaceholderText = "+ New..."
+		NewWSInput.Text = ""
+		NewWSInput.Size = UDim2.new(1, -5, 0, 25)
+		NewWSInput.BackgroundColor3 = C_ITEM
+		NewWSInput.TextColor3 = C_TEXT
+		NewWSInput.PlaceholderColor3 = C_GREEN
+		NewWSInput.Font = Enum.Font.Gotham
+		NewWSInput.TextSize = 10
+		NewWSInput.ZIndex = 55
+		Instance.new("UICorner", NewWSInput).CornerRadius = UDim.new(0, 4)
+
+		NewWSInput.FocusLost:Connect(function(enterPressed)
+			if enterPressed and NewWSInput.Text ~= "" then
+				local newName = NewWSInput.Text
+				local newPath = ghostRoot .. "/" .. newName
+				if not isfolder(newPath) then
+					makefolder(newPath)
+				end
+				currentWorkspace = newName
+				BtnGWorkspace.Text = currentWorkspace
+				GWSList.Visible = false
+				RefreshGhostList()
+			end
+		end)
+
+		if isfolder(ghostRoot) then
+			local folders = listfiles(ghostRoot)
+			GWSScroll.CanvasSize = UDim2.new(0, 0, 0, (#folders + 1) * 27)
+			for _, f in ipairs(folders) do
+				if isfolder(f) then
+					local n = string.match(f, "[^/\\]+$") or f
+					local b = Instance.new("TextButton", GWSScroll)
+					b.Text = n
+					b.Size = UDim2.new(1, -5, 0, 25)
+					b.BackgroundColor3 = C_SIDE
+					b.TextColor3 = C_TEXT
+					b.Font = Enum.Font.Gotham
+					b.TextSize = 10
+					b.ZIndex = 55
+					Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+					b.MouseButton1Click:Connect(function()
+						currentWorkspace = n
+						BtnGWorkspace.Text = currentWorkspace
+						GWSList.Visible = false
+						RefreshGhostList()
+					end)
+				end
+			end
+		end
+	end
+
+	BtnGWorkspace.MouseButton1Click:Connect(function()
+		GWSList.Visible = not GWSList.Visible
+		if GWSList.Visible then
+			UpdateGWSList()
+		end
+	end)
+
+	local function StartCountdown(callback)
+		local count = 3
+		local cdLabel = Instance.new("TextLabel", UI and UI.ScreenGui or PageHelper.Parent.Parent)
+		cdLabel.Size = UDim2.new(1, 0, 0, 100)
+		cdLabel.Position = UDim2.new(0, 0, 0.4, 0)
+		cdLabel.BackgroundTransparency = 1
+		cdLabel.TextColor3 = C_ACCENT
+		cdLabel.Font = Enum.Font.GothamBlack
+		cdLabel.TextSize = 72
+		cdLabel.TextStrokeTransparency = 0
+		cdLabel.Text = tostring(count)
+
+		local c = LocalPlayer.Character
+		local root = c and c:FindFirstChild("HumanoidRootPart")
+		if root then
+			root.Anchored = true
+			root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+		end
+
+		task.spawn(function()
+			while count > 0 do
+				cdLabel.Text = tostring(count)
+				task.wait(1)
+				count = count - 1
+			end
+			if root then
+				root.Anchored = false
+			end
+			cdLabel.Text = "GO!"
+			cdLabel.TextColor3 = C_GREEN
+			if callback then
+				callback()
+			end
+			task.wait(0.5)
+			cdLabel:Destroy()
+		end)
+	end
+
+	local BtnRecordGhost = Instance.new("TextButton", CardReplay)
+	BtnRecordGhost.Text = "RECORD NEW"
+	BtnRecordGhost.Size = UDim2.new(0.45, 0, 0, 30)
+	BtnRecordGhost.Position = UDim2.new(0.03, 0, 0, 75)
+	StyleBtn(BtnRecordGhost, C_TEXT)
+
+	local BtnPlayGhost = Instance.new("TextButton", CardReplay)
+	BtnPlayGhost.Text = "PLAY GHOST"
+	BtnPlayGhost.Size = UDim2.new(0.45, 0, 0, 30)
+	BtnPlayGhost.Position = UDim2.new(0.52, 0, 0, 75)
+	StyleBtn(BtnPlayGhost, C_TEXT_DIM)
+
+	local LblGhostStatus = Instance.new("TextLabel", CardReplay)
+	LblGhostStatus.Text = "STATUS: IDLE"
+	LblGhostStatus.Size = UDim2.new(0.94, 0, 0, 20)
+	LblGhostStatus.Position = UDim2.new(0.03, 0, 0, 110)
+	LblGhostStatus.BackgroundTransparency = 1
+	LblGhostStatus.TextColor3 = C_TEXT_DIM
+	LblGhostStatus.Font = Enum.Font.Code
+
+	local InpGhostName = Instance.new("TextBox", CardReplay)
+	InpGhostName.PlaceholderText = "Ghost Name..."
+	InpGhostName.Size = UDim2.new(0.6, 0, 0, 30)
+	InpGhostName.Position = UDim2.new(0.03, 0, 0, 135)
+	InpGhostName.BackgroundColor3 = C_SIDE
+	InpGhostName.TextColor3 = C_TEXT
+	InpGhostName.Font = Enum.Font.Gotham
+	InpGhostName.TextSize = 11
+	Instance.new("UICorner", InpGhostName).CornerRadius = UDim.new(0, 6)
+
+	local BtnSaveGhost = Instance.new("TextButton", CardReplay)
+	BtnSaveGhost.Text = "SAVE"
+	BtnSaveGhost.Size = UDim2.new(0.3, 0, 0, 30)
+	BtnSaveGhost.Position = UDim2.new(0.67, 0, 0, 135)
+	StyleBtn(BtnSaveGhost, C_ACCENT)
+
+	local GhostListScroll = Instance.new("ScrollingFrame", CardReplay)
+	GhostListScroll.Size = UDim2.new(0.94, 0, 0, 110)
+	GhostListScroll.Position = UDim2.new(0.03, 0, 0, 175)
+	GhostListScroll.BackgroundColor3 = C_SIDE
+	GhostListScroll.BorderSizePixel = 0
+	GhostListScroll.ScrollBarThickness = 4
+	Instance.new("UICorner", GhostListScroll).CornerRadius = UDim.new(0, 6)
+	Instance.new("UIListLayout", GhostListScroll).Padding = UDim.new(0, 2)
+
+	local BtnRefreshGhost = Instance.new("TextButton", CardReplay)
+	BtnRefreshGhost.Text = "REFRESH LIST"
+	BtnRefreshGhost.Size = UDim2.new(0.94, 0, 0, 25)
+	BtnRefreshGhost.Position = UDim2.new(0.03, 0, 0, 295)
+	StyleBtn(BtnRefreshGhost, C_TEXT)
+
+	local BtnClearGhost = Instance.new("TextButton", CardReplay)
+	BtnClearGhost.Text = "CLEAR GHOST"
+	BtnClearGhost.Size = UDim2.new(0.94, 0, 0, 25)
+	BtnClearGhost.Position = UDim2.new(0.03, 0, 0, 325)
+	StyleBtn(BtnClearGhost, C_RED)
+
+	RefreshGhostList = function()
+		for _, c in pairs(GhostListScroll:GetChildren()) do
+			if c:IsA("TextButton") then
+				c:Destroy()
+			end
+		end
+		local path = GetGhostPath()
+		if isfolder(path) then
+			local files = listfiles(path)
+			GhostListScroll.CanvasSize = UDim2.new(0, 0, 0, #files * 22)
+			for _, f in ipairs(files) do
+				local n = string.match(f, "[^/\\]+$"):gsub(".json", "")
+				local b = Instance.new("TextButton", GhostListScroll)
+				b.Text = "  " .. n
+				b.Size = UDim2.new(1, 0, 0, 20)
+				b.BackgroundColor3 = C_SIDE
+				b.TextColor3 = C_TEXT_DIM
+				b.TextXAlignment = Enum.TextXAlignment.Left
+				b.Font = Enum.Font.Gotham
+				b.TextSize = 10
+				Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+
+				b.MouseButton1Click:Connect(function()
+					local s, j = pcall(readfile, f)
+					if s then
+						local d = HttpService:JSONDecode(j)
+						if d.Frames then
+							GhostData = {}
+							for _, fr in ipairs(d.Frames) do
+								local frame = { Time = fr.Time, RootCF = TblToCF(fr.RootCF), Limbs = {} }
+								for ln, lcf in pairs(fr.Limbs) do
+									frame.Limbs[ln] = TblToCF(lcf)
+								end
+								table.insert(GhostData, frame)
+							end
+							LblGhostStatus.Text = "LOADED: " .. n .. " (" .. #GhostData .. " Frames)"
+							BtnPlayGhost.TextColor3 = C_TEXT
+							BtnPlayGhost.UIStroke.Color = C_TEXT
+						end
+					end
+				end)
+			end
+		end
+	end
+
+	BtnRefreshGhost.MouseButton1Click:Connect(RefreshGhostList)
+
+	BtnSaveGhost.MouseButton1Click:Connect(function()
+		local name = InpGhostName.Text
+		if name == "" or #GhostData == 0 then
+			return
+		end
+		local saveData = { Frames = {} }
+		for _, frame in ipairs(GhostData) do
+			local saveFrame = { Time = frame.Time, RootCF = CFToTbl(frame.RootCF), Limbs = {} }
+			for limbName, limbCF in pairs(frame.Limbs) do
+				saveFrame.Limbs[limbName] = CFToTbl(limbCF)
+			end
+			table.insert(saveData.Frames, saveFrame)
+		end
+		writefile(GetGhostPath() .. "/" .. name .. ".json", HttpService:JSONEncode(saveData))
+		RefreshGhostList()
+		LblGhostStatus.Text = "SAVED: " .. name
+	end)
+
+	local function StopGhost()
+		if ghostRecLoop then
+			ghostRecLoop:Disconnect()
+			ghostRecLoop = nil
+		end
+		if ghostPlayLoop then
+			ghostPlayLoop:Disconnect()
+			ghostPlayLoop = nil
+		end
+		isGhostRecording = false
+		isGhostPlaying = false
+		BtnRecordGhost.Text = "RECORD NEW"
+		BtnRecordGhost.TextColor3 = C_TEXT
+		BtnRecordGhost.UIStroke.Color = C_TEXT
+		BtnPlayGhost.Text = "PLAY GHOST"
+		BtnPlayGhost.TextColor3 = (#GhostData > 0) and C_TEXT or C_TEXT_DIM
+		BtnPlayGhost.UIStroke.Color = (#GhostData > 0) and C_TEXT or C_TEXT_DIM
+		LblGhostStatus.Text = "STATUS: IDLE (" .. #GhostData .. " Frames)"
+		if GhostModel then
+			GhostModel:Destroy()
+			GhostModel = nil
+		end
+	end
+
+	BtnRecordGhost.MouseButton1Click:Connect(function()
+		if isGhostRecording then
+			StopGhost()
+		else
+			StopGhost()
+			StartCountdown(function()
+				GhostData = {}
+				isGhostRecording = true
+				BtnRecordGhost.Text = "STOP RECORD"
+				BtnRecordGhost.TextColor3 = C_RED
+				BtnRecordGhost.UIStroke.Color = C_RED
+				LblGhostStatus.Text = "STATUS: RECORDING..."
+				local c = LocalPlayer.Character
+				local partsToRecord = {}
+				if c then
+					for _, p in pairs(c:GetDescendants()) do
+						if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+							table.insert(partsToRecord, p)
+						end
+					end
+				end
+				local startTime = os.clock()
+				ghostRecLoop = RunService.Heartbeat:Connect(function()
+					local char = LocalPlayer.Character
+					local root = char and char:FindFirstChild("HumanoidRootPart")
+					if root then
+						local frameData = { Time = os.clock() - startTime, RootCF = root.CFrame, Limbs = {} }
+						for _, p in pairs(partsToRecord) do
+							if p and p.Parent then
+								frameData.Limbs[p.Name] = p.CFrame
+							end
+						end
+						table.insert(GhostData, frameData)
+						LblGhostStatus.Text = "REC: " .. string.format("%.1fs", os.clock() - startTime)
+					end
+				end)
+				table.insert(Connections, ghostRecLoop)
+			end)
+		end
+	end)
+
+	BtnPlayGhost.MouseButton1Click:Connect(function()
+		if isGhostPlaying then
+			StopGhost()
+		elseif #GhostData > 0 then
+			StopGhost()
+			StartCountdown(function()
+				isGhostPlaying = true
+				BtnPlayGhost.Text = "STOP GHOST"
+				BtnPlayGhost.TextColor3 = C_RED
+				BtnPlayGhost.UIStroke.Color = C_RED
+				LblGhostStatus.Text = "STATUS: PLAYING..."
+				local c = LocalPlayer.Character
+				c.Archivable = true
+				GhostModel = c:Clone()
+				c.Archivable = false
+				GhostModel.Name = "StarshipGhost"
+				GhostModel.Parent = workspace
+				for _, p in pairs(GhostModel:GetDescendants()) do
+					if p:IsA("BasePart") then
+						p.Anchored = true
+						p.CanCollide = false
+						p.Transparency = 0.6
+						p.Color = C_ACCENT
+						p.Material = Enum.Material.ForceField
+					elseif p:IsA("Script") or p:IsA("LocalScript") or p:IsA("Sound") then
+						p:Destroy()
+					elseif p:IsA("Humanoid") then
+						p.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+					end
+				end
+				local playStart = os.clock()
+				local index = 1
+				ghostPlayLoop = RunService.Heartbeat:Connect(function()
+					if not GhostModel or not GhostModel.Parent then
+						StopGhost()
+						return
+					end
+					local timeElapsed = os.clock() - playStart
+					while index < #GhostData and GhostData[index + 1].Time <= timeElapsed do
+						index = index + 1
+					end
+					local frame = GhostData[index]
+					if frame then
+						if GhostModel.PrimaryPart then
+							GhostModel:SetPrimaryPartCFrame(frame.RootCF)
+						elseif GhostModel:FindFirstChild("HumanoidRootPart") then
+							GhostModel.HumanoidRootPart.CFrame = frame.RootCF
+						end
+						for name, cf in pairs(frame.Limbs) do
+							local p = GhostModel:FindFirstChild(name, true)
+							if p and p:IsA("BasePart") then
+								p.CFrame = cf
+							end
+						end
+					end
+					if index >= #GhostData then
+						playStart = os.clock()
+						index = 1
+					end
+				end)
+				table.insert(Connections, ghostPlayLoop)
+			end)
+		end
+	end)
+
+	BtnClearGhost.MouseButton1Click:Connect(function()
+		StopGhost()
+		GhostData = {}
+		LblGhostStatus.Text = "STATUS: CLEARED"
+		BtnPlayGhost.TextColor3 = C_TEXT_DIM
+		BtnPlayGhost.UIStroke.Color = C_TEXT_DIM
+	end)
+
+	RefreshGhostList()
+
+	local function RestorePlatforms() end -- Placeholder if needed, or implement if logic exists
+
+	-- Cleanup Hook
+	local oldCleanup = UIHandlers.CleanupTools
+	UIHandlers.CleanupTools = function()
+		if oldCleanup then
+			oldCleanup()
+		end
+		if slopeLoop then
+			slopeLoop:Disconnect()
+			slopeLoop = nil
+		end
+		if slopeHUD then
+			slopeHUD:Destroy()
+			slopeHUD = nil
+		end
+		if slipLoop then
+			slipLoop:Disconnect()
+			slipLoop = nil
+		end
+		if fastClimbLoop then
+			fastClimbLoop:Disconnect()
+			fastClimbLoop = nil
+		end
+		if magnetLoop then
+			magnetLoop:Disconnect()
+			magnetLoop = nil
+		end
+		if stickLoop then
+			stickLoop:Disconnect()
+			stickLoop = nil
+		end
+		if espLoop then
+			espLoop:Disconnect()
+			espLoop = nil
+		end
+		if ghostRecLoop then
+			ghostRecLoop:Disconnect()
+			ghostRecLoop = nil
+		end
+		if ghostPlayLoop then
+			ghostPlayLoop:Disconnect()
+			ghostPlayLoop = nil
+		end
+		if GhostModel then
+			GhostModel:Destroy()
+			GhostModel = nil
+		end
+		if espContainer then
+			espContainer:ClearAllChildren()
+		end
+		RestorePlatforms()
+	end
+
+	-- Keybind Handler for Helper Features
+	local helperKeybindConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then
+			return
+		end
+		if not input.KeyCode then
+			return
+		end
+
+		-- Skip if currently binding a keybind in ConfigTab (check global state)
+		if _G.StarshipIsBindingKeybind then
+			return
+		end
+
+		-- ToggleAutoJump
+		if Config.Keybinds and Config.Keybinds.ToggleAutoJump and input.KeyCode == Config.Keybinds.ToggleAutoJump then
+			if UIHandlers.ToggleAutoJump then
+				UIHandlers.ToggleAutoJump()
+			end
+		end
+
+		-- ToggleQuickBoost
+		if
+			Config.Keybinds
+			and Config.Keybinds.ToggleQuickBoost
+			and input.KeyCode == Config.Keybinds.ToggleQuickBoost
+		then
+			if UIHandlers.ToggleQuickBoost then
+				UIHandlers.ToggleQuickBoost()
+			end
+		end
+
+		-- ToggleAntiSlip
+		if Config.Keybinds and Config.Keybinds.ToggleAntiSlip and input.KeyCode == Config.Keybinds.ToggleAntiSlip then
+			if UIHandlers.ToggleAntiSlip then
+				UIHandlers.ToggleAntiSlip()
+			end
+		end
+
+		-- ToggleRealESP
+		if Config.Keybinds and Config.Keybinds.ToggleRealESP and input.KeyCode == Config.Keybinds.ToggleRealESP then
+			if UIHandlers.ToggleRealESP then
+				UIHandlers.ToggleRealESP()
+			end
+		end
+	end)
+	table.insert(Connections, helperKeybindConnection)
 end
 
 return SetupHelperUI

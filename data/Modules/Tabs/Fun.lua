@@ -12,16 +12,28 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		return key
 	end
 
-	-- UPDATED THEME
-	local C_MAIN = Color3.fromRGB(10, 10, 14)
-	local C_SIDE = Color3.fromRGB(15, 15, 20)
-	local C_ACCENT = Color3.fromRGB(90, 110, 245) -- Midnight Blue
-	local C_TEXT = Color3.fromRGB(240, 240, 250)
-	local C_TEXT_DIM = Color3.fromRGB(140, 140, 160)
-	local C_ITEM = Color3.fromRGB(20, 20, 28)
-	local C_RED = Color3.fromRGB(255, 80, 80)
-	local C_YELLOW = Color3.fromRGB(255, 220, 60)
-	local C_GREEN = Color3.fromRGB(60, 255, 160)
+	-- Use global StarshipColors for theme consistency
+	local Colors = _G.StarshipColors
+		or {
+			MAIN = Color3.fromRGB(10, 10, 14),
+			SIDE = Color3.fromRGB(15, 15, 20),
+			ACCENT = Color3.fromRGB(90, 110, 245),
+			TEXT = Color3.fromRGB(240, 240, 250),
+			TEXT_DIM = Color3.fromRGB(140, 140, 160),
+			ITEM = Color3.fromRGB(20, 20, 28),
+			RED = Color3.fromRGB(255, 80, 80),
+			YELLOW = Color3.fromRGB(255, 220, 60),
+			GREEN = Color3.fromRGB(60, 255, 160),
+		}
+	local C_MAIN = Colors.MAIN
+	local C_SIDE = Colors.SIDE
+	local C_ACCENT = Colors.ACCENT
+	local C_TEXT = Colors.TEXT
+	local C_TEXT_DIM = Colors.TEXT_DIM
+	local C_ITEM = Colors.ITEM
+	local C_RED = Colors.RED
+	local C_YELLOW = Colors.YELLOW
+	local C_GREEN = Colors.GREEN
 
 	for _, c in pairs(PageFun:GetChildren()) do
 		c:Destroy()

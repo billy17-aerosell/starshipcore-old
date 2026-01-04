@@ -6,15 +6,28 @@ local function SetupTargetRecordingWindow(LocalPlayer, UI, Connections, UIHandle
 	local HttpService = game:GetService("HttpService")
 	local CoreGui = game:GetService("CoreGui")
 
-	local C_MAIN = Color3.fromRGB(10, 10, 14)
-	local C_SIDE = Color3.fromRGB(15, 15, 20)
-	local C_ACCENT = Color3.fromRGB(90, 110, 245)
-	local C_TEXT = Color3.fromRGB(240, 240, 250)
-	local C_TEXT_DIM = Color3.fromRGB(140, 140, 160)
-	local C_ITEM = Color3.fromRGB(20, 20, 28)
-	local C_RED = Color3.fromRGB(255, 80, 80)
-	local C_YELLOW = Color3.fromRGB(255, 220, 60)
-	local C_GREEN = Color3.fromRGB(60, 255, 160)
+	-- Use global StarshipColors for theme consistency
+	local Colors = _G.StarshipColors
+		or {
+			MAIN = Color3.fromRGB(10, 10, 14),
+			SIDE = Color3.fromRGB(15, 15, 20),
+			ACCENT = Color3.fromRGB(90, 110, 245),
+			TEXT = Color3.fromRGB(240, 240, 250),
+			TEXT_DIM = Color3.fromRGB(140, 140, 160),
+			ITEM = Color3.fromRGB(20, 20, 28),
+			RED = Color3.fromRGB(255, 80, 80),
+			YELLOW = Color3.fromRGB(255, 220, 60),
+			GREEN = Color3.fromRGB(60, 255, 160),
+		}
+	local C_MAIN = Colors.MAIN
+	local C_SIDE = Colors.SIDE
+	local C_ACCENT = Colors.ACCENT
+	local C_TEXT = Colors.TEXT
+	local C_TEXT_DIM = Colors.TEXT_DIM
+	local C_ITEM = Colors.ITEM
+	local C_RED = Colors.RED
+	local C_YELLOW = Colors.YELLOW
+	local C_GREEN = Colors.GREEN
 
 	local function L(key)
 		if _G.StarshipLocale and _G.StarshipLocale.Get then
@@ -685,22 +698,479 @@ local function SetupTargetRecordingWindow(LocalPlayer, UI, Connections, UIHandle
 	end
 end
 
+-- Cinematic Camera Setup (separate function to avoid local register limit)
+local function SetupCinematicCamera(
+	HelperScroll,
+	LocalPlayer,
+	UI,
+	Connections,
+	UIHandlers,
+	RegisterTheme,
+	CreateCard,
+	StyleBtn,
+	C_ACCENT,
+	C_SIDE,
+	C_TEXT,
+	C_TEXT_DIM,
+	C_GREEN,
+	C_RED
+)
+	local RunService = game:GetService("RunService")
+	local UserInputService = game:GetService("UserInputService")
+
+	local CardCinematic = CreateCard("🎬 CINEMATIC CAMERA", 280, 10)
+
+	-- State variables
+	local cinematicEnabled = false
+	local cinematicLoop = nil
+	local cinematicBarsGui = nil
+	local hiddenGameUI = {}
+	local originalCameraType = nil
+
+	-- Settings
+	local cinematicMode = "Orbit"
+	local orbitSpeed = 15 -- slow smooth orbit
+	local cameraDistance = 45 -- drone-like distance
+	local cameraHeight = 20 -- high aerial view
+	local cutInterval = 5
+	local barsSize = 80
+	local barsEnabled = true
+	local hideUIEnabled = true
+
+	local currentOrbitAngle = 0
+	local lastCutTime = 0
+	local currentCutIndex = 1
+
+	local multiCutAngles = {
+		{ distance = 40, height = 18, angleOffset = 0 }, -- Behind drone
+		{ distance = 35, height = 15, angleOffset = 45 }, -- Side aerial
+		{ distance = 50, height = 25, angleOffset = 180 }, -- Front high drone
+		{ distance = 30, height = 10, angleOffset = -30 }, -- Lower angle
+		{ distance = 55, height = 30, angleOffset = 90 }, -- Epic far aerial
+	}
+
+	local function CreateCinematicBars()
+		if cinematicBarsGui then
+			return
+		end
+		cinematicBarsGui = Instance.new("ScreenGui")
+		cinematicBarsGui.Name = "StarshipCinematicBars"
+		cinematicBarsGui.ResetOnSpawn = false
+		cinematicBarsGui.IgnoreGuiInset = true
+		cinematicBarsGui.DisplayOrder = 999
+		pcall(function()
+			cinematicBarsGui.Parent = game:GetService("CoreGui")
+		end)
+		if not cinematicBarsGui.Parent then
+			cinematicBarsGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+		end
+		local topBar = Instance.new("Frame", cinematicBarsGui)
+		topBar.Name = "TopBar"
+		topBar.Size = UDim2.new(1, 0, 0, barsSize)
+		topBar.Position = UDim2.new(0, 0, 0, 0)
+		topBar.BackgroundColor3 = Color3.new(0, 0, 0)
+		topBar.BorderSizePixel = 0
+		topBar.ZIndex = 100
+		local bottomBar = Instance.new("Frame", cinematicBarsGui)
+		bottomBar.Name = "BottomBar"
+		bottomBar.Size = UDim2.new(1, 0, 0, barsSize)
+		bottomBar.Position = UDim2.new(0, 0, 1, -barsSize)
+		bottomBar.BackgroundColor3 = Color3.new(0, 0, 0)
+		bottomBar.BorderSizePixel = 0
+		bottomBar.ZIndex = 100
+	end
+
+	local function UpdateBarsSize()
+		if cinematicBarsGui then
+			local t = cinematicBarsGui:FindFirstChild("TopBar")
+			local b = cinematicBarsGui:FindFirstChild("BottomBar")
+			if t then
+				t.Size = UDim2.new(1, 0, 0, barsSize)
+			end
+			if b then
+				b.Size = UDim2.new(1, 0, 0, barsSize)
+				b.Position = UDim2.new(0, 0, 1, -barsSize)
+			end
+		end
+	end
+
+	local function DestroyCinematicBars()
+		if cinematicBarsGui then
+			cinematicBarsGui:Destroy()
+			cinematicBarsGui = nil
+		end
+	end
+
+	local function HideGameUI()
+		local pg = LocalPlayer:FindFirstChild("PlayerGui")
+		if not pg then
+			return
+		end
+		for _, g in pairs(pg:GetChildren()) do
+			if g:IsA("ScreenGui") and g.Name ~= "StarshipCinematicBars" and not g.Name:match("^Starship") then
+				if g.Enabled then
+					hiddenGameUI[g] = true
+					g.Enabled = false
+				end
+			end
+		end
+		pcall(function()
+			game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
+		end)
+	end
+
+	local function ShowGameUI()
+		for g, _ in pairs(hiddenGameUI) do
+			if g and g.Parent then
+				g.Enabled = true
+			end
+		end
+		hiddenGameUI = {}
+		pcall(function()
+			game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.All, true)
+		end)
+	end
+
+	local function GetTargetCharacter()
+		if _G.StarshipPlaybackCharacter then
+			return _G.StarshipPlaybackCharacter
+		end
+		return LocalPlayer.Character
+	end
+
+	local function UpdateOrbitCamera(dt)
+		local c = GetTargetCharacter()
+		if not c then
+			return
+		end
+		local r = c:FindFirstChild("HumanoidRootPart")
+		if not r then
+			return
+		end
+		currentOrbitAngle = currentOrbitAngle + (orbitSpeed * dt)
+		if currentOrbitAngle >= 360 then
+			currentOrbitAngle = currentOrbitAngle - 360
+		end
+		local rad = math.rad(currentOrbitAngle)
+		local pos = r.Position
+			+ Vector3.new(math.cos(rad) * cameraDistance, cameraHeight, math.sin(rad) * cameraDistance)
+		workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+		workspace.CurrentCamera.CFrame = CFrame.lookAt(pos, r.Position + Vector3.new(0, 2, 0))
+	end
+
+	local function UpdateFollowCamera(dt)
+		local c = GetTargetCharacter()
+		if not c then
+			return
+		end
+		local r = c:FindFirstChild("HumanoidRootPart")
+		if not r then
+			return
+		end
+		local look = r.CFrame.LookVector
+		local pos = r.Position - (look * cameraDistance) + Vector3.new(0, cameraHeight, 0)
+		workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+		workspace.CurrentCamera.CFrame = workspace.CurrentCamera.CFrame:Lerp(
+			CFrame.lookAt(pos, r.Position + Vector3.new(0, 2, 0)),
+			math.min(1, dt * 5)
+		)
+	end
+
+	local function UpdateRandomCamera(dt)
+		local c = GetTargetCharacter()
+		if not c then
+			return
+		end
+		local r = c:FindFirstChild("HumanoidRootPart")
+		if not r then
+			return
+		end
+		if tick() - lastCutTime >= cutInterval then
+			lastCutTime = tick()
+			currentOrbitAngle = math.random(0, 360)
+			cameraDistance = math.random(8, 20)
+			cameraHeight = math.random(2, 10)
+		end
+		local rad = math.rad(currentOrbitAngle)
+		local pos = r.Position
+			+ Vector3.new(math.cos(rad) * cameraDistance, cameraHeight, math.sin(rad) * cameraDistance)
+		workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+		workspace.CurrentCamera.CFrame = workspace.CurrentCamera.CFrame:Lerp(
+			CFrame.lookAt(pos, r.Position + Vector3.new(0, 2, 0)),
+			math.min(1, dt * 3)
+		)
+	end
+
+	local function UpdateMultiCutCamera(dt)
+		local c = GetTargetCharacter()
+		if not c then
+			return
+		end
+		local r = c:FindFirstChild("HumanoidRootPart")
+		if not r then
+			return
+		end
+		if tick() - lastCutTime >= cutInterval then
+			lastCutTime = tick()
+			currentCutIndex = currentCutIndex + 1
+			if currentCutIndex > #multiCutAngles then
+				currentCutIndex = 1
+			end
+		end
+		local cut = multiCutAngles[currentCutIndex]
+		local ang = math.atan2(r.CFrame.LookVector.X, r.CFrame.LookVector.Z) + math.rad(cut.angleOffset)
+		local pos = r.Position + Vector3.new(math.cos(ang) * cut.distance, cut.height, math.sin(ang) * cut.distance)
+		workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+		workspace.CurrentCamera.CFrame = workspace.CurrentCamera.CFrame:Lerp(
+			CFrame.lookAt(pos, r.Position + Vector3.new(0, 2, 0)),
+			math.min(1, dt * 4)
+		)
+	end
+
+	local function ToggleCinematic()
+		cinematicEnabled = not cinematicEnabled
+		if cinematicEnabled then
+			originalCameraType = workspace.CurrentCamera.CameraType
+			lastCutTime = tick()
+			currentOrbitAngle = 0
+			currentCutIndex = 1
+			if barsEnabled then
+				CreateCinematicBars()
+			end
+			if hideUIEnabled then
+				HideGameUI()
+			end
+			cinematicLoop = RunService.RenderStepped:Connect(function(dt)
+				if cinematicMode == "Orbit" then
+					UpdateOrbitCamera(dt)
+				elseif cinematicMode == "Follow" then
+					UpdateFollowCamera(dt)
+				elseif cinematicMode == "Random" then
+					UpdateRandomCamera(dt)
+				elseif cinematicMode == "MultiCut" then
+					UpdateMultiCutCamera(dt)
+				end
+			end)
+			table.insert(Connections, cinematicLoop)
+		else
+			if cinematicLoop then
+				cinematicLoop:Disconnect()
+				cinematicLoop = nil
+			end
+			workspace.CurrentCamera.CameraType = originalCameraType or Enum.CameraType.Custom
+			DestroyCinematicBars()
+			ShowGameUI()
+		end
+		return cinematicEnabled
+	end
+
+	UIHandlers.ToggleCinematic = ToggleCinematic
+	UIHandlers.SetCinematicMode = function(m)
+		cinematicMode = m
+	end
+
+	-- UI Elements
+	local BtnCinematic = Instance.new("TextButton", CardCinematic)
+	BtnCinematic.Text = "🎬 CINEMATIC: OFF"
+	BtnCinematic.Size = UDim2.new(0.94, 0, 0, 35)
+	BtnCinematic.Position = UDim2.new(0.03, 0, 0, 30)
+	StyleBtn(BtnCinematic, C_RED)
+	BtnCinematic.MouseButton1Click:Connect(function()
+		local e = ToggleCinematic()
+		BtnCinematic.Text = "🎬 CINEMATIC: " .. (e and "ON" or "OFF")
+		BtnCinematic.TextColor3 = e and C_GREEN or C_RED
+		BtnCinematic.UIStroke.Color = e and C_GREEN or C_RED
+	end)
+
+	local LblMode = Instance.new("TextLabel", CardCinematic)
+	LblMode.Text = "Camera Mode:"
+	LblMode.Size = UDim2.new(0.94, 0, 0, 18)
+	LblMode.Position = UDim2.new(0.03, 0, 0, 70)
+	LblMode.BackgroundTransparency = 1
+	LblMode.TextColor3 = C_TEXT_DIM
+	LblMode.Font = Enum.Font.GothamBold
+	LblMode.TextSize = 10
+	LblMode.TextXAlignment = Enum.TextXAlignment.Left
+
+	local modeButtons = {}
+	local modes = { "Orbit", "Follow", "Random", "MultiCut" }
+	local modeEmojis = { Orbit = "🔄", Follow = "👁️", Random = "🎲", MultiCut = "🎬" }
+	for i, m in ipairs(modes) do
+		local btn = Instance.new("TextButton", CardCinematic)
+		btn.Text = modeEmojis[m]
+		btn.Size = UDim2.new(0.22, 0, 0, 28)
+		btn.Position = UDim2.new(0.03 + (i - 1) * 0.24, 0, 0, 88)
+		btn.BackgroundColor3 = (m == cinematicMode) and C_ACCENT or C_SIDE
+		btn.TextColor3 = (m == cinematicMode) and C_TEXT or C_TEXT_DIM
+		btn.Font = Enum.Font.GothamBold
+		btn.TextSize = 14
+		Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+		btn.MouseButton1Click:Connect(function()
+			cinematicMode = m
+			for k, v in pairs(modeButtons) do
+				v.BackgroundColor3 = (k == m) and C_ACCENT or C_SIDE
+				v.TextColor3 = (k == m) and C_TEXT or C_TEXT_DIM
+			end
+		end)
+		modeButtons[m] = btn
+	end
+
+	local LblModeDesc = Instance.new("TextLabel", CardCinematic)
+	LblModeDesc.Text = "🔄=Orbit  👁️=Follow  🎲=Random  🎬=MultiCut"
+	LblModeDesc.Size = UDim2.new(0.94, 0, 0, 15)
+	LblModeDesc.Position = UDim2.new(0.03, 0, 0, 118)
+	LblModeDesc.BackgroundTransparency = 1
+	LblModeDesc.TextColor3 = C_TEXT_DIM
+	LblModeDesc.Font = Enum.Font.Gotham
+	LblModeDesc.TextSize = 8
+	LblModeDesc.TextXAlignment = Enum.TextXAlignment.Center
+
+	local BtnBars = Instance.new("TextButton", CardCinematic)
+	BtnBars.Text = "📽️ Bars: ON"
+	BtnBars.Size = UDim2.new(0.45, 0, 0, 28)
+	BtnBars.Position = UDim2.new(0.03, 0, 0, 138)
+	StyleBtn(BtnBars, C_GREEN)
+	BtnBars.MouseButton1Click:Connect(function()
+		barsEnabled = not barsEnabled
+		BtnBars.Text = "📽️ Bars: " .. (barsEnabled and "ON" or "OFF")
+		BtnBars.TextColor3 = barsEnabled and C_GREEN or C_TEXT_DIM
+		BtnBars.UIStroke.Color = barsEnabled and C_GREEN or C_TEXT_DIM
+		if cinematicEnabled then
+			if barsEnabled then
+				CreateCinematicBars()
+			else
+				DestroyCinematicBars()
+			end
+		end
+	end)
+
+	local BtnHideUI = Instance.new("TextButton", CardCinematic)
+	BtnHideUI.Text = "👁️ Hide UI: ON"
+	BtnHideUI.Size = UDim2.new(0.45, 0, 0, 28)
+	BtnHideUI.Position = UDim2.new(0.52, 0, 0, 138)
+	StyleBtn(BtnHideUI, C_GREEN)
+	BtnHideUI.MouseButton1Click:Connect(function()
+		hideUIEnabled = not hideUIEnabled
+		BtnHideUI.Text = "👁️ Hide UI: " .. (hideUIEnabled and "ON" or "OFF")
+		BtnHideUI.TextColor3 = hideUIEnabled and C_GREEN or C_TEXT_DIM
+		BtnHideUI.UIStroke.Color = hideUIEnabled and C_GREEN or C_TEXT_DIM
+		if cinematicEnabled then
+			if hideUIEnabled then
+				HideGameUI()
+			else
+				ShowGameUI()
+			end
+		end
+	end)
+
+	-- Simplified sliders labels
+	local LblSpeed = Instance.new("TextLabel", CardCinematic)
+	LblSpeed.Text = "Speed: " .. orbitSpeed .. "°/s | Dist: " .. cameraDistance .. " | Height: " .. cameraHeight
+	LblSpeed.Size = UDim2.new(0.94, 0, 0, 20)
+	LblSpeed.Position = UDim2.new(0.03, 0, 0, 172)
+	LblSpeed.BackgroundTransparency = 1
+	LblSpeed.TextColor3 = C_TEXT_DIM
+	LblSpeed.Font = Enum.Font.GothamBold
+	LblSpeed.TextSize = 9
+	LblSpeed.TextXAlignment = Enum.TextXAlignment.Left
+
+	local LblCut = Instance.new("TextLabel", CardCinematic)
+	LblCut.Text = "Cut Interval: " .. cutInterval .. "s | Bar Size: " .. barsSize .. "px"
+	LblCut.Size = UDim2.new(0.94, 0, 0, 20)
+	LblCut.Position = UDim2.new(0.03, 0, 0, 195)
+	LblCut.BackgroundTransparency = 1
+	LblCut.TextColor3 = C_TEXT_DIM
+	LblCut.Font = Enum.Font.GothamBold
+	LblCut.TextSize = 9
+	LblCut.TextXAlignment = Enum.TextXAlignment.Left
+
+	-- Quick presets
+	local BtnPreset1 = Instance.new("TextButton", CardCinematic)
+	BtnPreset1.Text = "🎥 Wide Orbit"
+	BtnPreset1.Size = UDim2.new(0.3, 0, 0, 25)
+	BtnPreset1.Position = UDim2.new(0.03, 0, 0, 220)
+	StyleBtn(BtnPreset1, C_ACCENT)
+	BtnPreset1.MouseButton1Click:Connect(function()
+		cinematicMode = "Orbit"
+		orbitSpeed = 10
+		cameraDistance = 50
+		cameraHeight = 22
+		LblSpeed.Text = "Speed: " .. orbitSpeed .. "°/s | Dist: " .. cameraDistance .. " | Height: " .. cameraHeight
+		for k, v in pairs(modeButtons) do
+			v.BackgroundColor3 = (k == "Orbit") and C_ACCENT or C_SIDE
+		end
+	end)
+
+	local BtnPreset2 = Instance.new("TextButton", CardCinematic)
+	BtnPreset2.Text = "🎬 Action"
+	BtnPreset2.Size = UDim2.new(0.3, 0, 0, 25)
+	BtnPreset2.Position = UDim2.new(0.35, 0, 0, 220)
+	StyleBtn(BtnPreset2, C_ACCENT)
+	BtnPreset2.MouseButton1Click:Connect(function()
+		cinematicMode = "MultiCut"
+		cutInterval = 3
+		cameraDistance = 40
+		cameraHeight = 18
+		LblSpeed.Text = "Speed: " .. orbitSpeed .. "°/s | Dist: " .. cameraDistance .. " | Height: " .. cameraHeight
+		LblCut.Text = "Cut Interval: " .. cutInterval .. "s | Bar Size: " .. barsSize .. "px"
+		for k, v in pairs(modeButtons) do
+			v.BackgroundColor3 = (k == "MultiCut") and C_ACCENT or C_SIDE
+		end
+	end)
+
+	local BtnPreset3 = Instance.new("TextButton", CardCinematic)
+	BtnPreset3.Text = "🎲 Random"
+	BtnPreset3.Size = UDim2.new(0.3, 0, 0, 25)
+	BtnPreset3.Position = UDim2.new(0.67, 0, 0, 220)
+	StyleBtn(BtnPreset3, C_ACCENT)
+	BtnPreset3.MouseButton1Click:Connect(function()
+		cinematicMode = "Random"
+		cutInterval = 4
+		LblCut.Text = "Cut Interval: " .. cutInterval .. "s | Bar Size: " .. barsSize .. "px"
+		for k, v in pairs(modeButtons) do
+			v.BackgroundColor3 = (k == "Random") and C_ACCENT or C_SIDE
+		end
+	end)
+
+	local LblInfo = Instance.new("TextLabel", CardCinematic)
+	LblInfo.Text = "💡 Aktifkan sebelum playback untuk efek sinematik"
+	LblInfo.Size = UDim2.new(0.94, 0, 0, 20)
+	LblInfo.Position = UDim2.new(0.03, 0, 0, 250)
+	LblInfo.BackgroundTransparency = 1
+	LblInfo.TextColor3 = C_ACCENT
+	LblInfo.Font = Enum.Font.Gotham
+	LblInfo.TextSize = 9
+	LblInfo.TextXAlignment = Enum.TextXAlignment.Center
+end
+
 local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
 	local Players = game:GetService("Players")
 	local RunService = game:GetService("RunService")
 	local UserInputService = game:GetService("UserInputService")
 	local HttpService = game:GetService("HttpService")
 
-	-- UPDATED THEME
-	local C_MAIN = Color3.fromRGB(10, 10, 14)
-	local C_SIDE = Color3.fromRGB(15, 15, 20)
-	local C_ACCENT = Color3.fromRGB(90, 110, 245) -- Midnight Blue
-	local C_TEXT = Color3.fromRGB(240, 240, 250)
-	local C_TEXT_DIM = Color3.fromRGB(140, 140, 160)
-	local C_ITEM = Color3.fromRGB(20, 20, 28)
-	local C_RED = Color3.fromRGB(255, 80, 80)
-	local C_YELLOW = Color3.fromRGB(255, 220, 60)
-	local C_GREEN = Color3.fromRGB(60, 255, 160)
+	-- Use global StarshipColors for theme consistency
+	local Colors = _G.StarshipColors
+		or {
+			MAIN = Color3.fromRGB(10, 10, 14),
+			SIDE = Color3.fromRGB(15, 15, 20),
+			ACCENT = Color3.fromRGB(90, 110, 245),
+			TEXT = Color3.fromRGB(240, 240, 250),
+			TEXT_DIM = Color3.fromRGB(140, 140, 160),
+			ITEM = Color3.fromRGB(20, 20, 28),
+			RED = Color3.fromRGB(255, 80, 80),
+			YELLOW = Color3.fromRGB(255, 220, 60),
+			GREEN = Color3.fromRGB(60, 255, 160),
+		}
+	local C_MAIN = Colors.MAIN
+	local C_SIDE = Colors.SIDE
+	local C_ACCENT = Colors.ACCENT
+	local C_TEXT = Colors.TEXT
+	local C_TEXT_DIM = Colors.TEXT_DIM
+	local C_ITEM = Colors.ITEM
+	local C_RED = Colors.RED
+	local C_YELLOW = Colors.YELLOW
+	local C_GREEN = Colors.GREEN
 
 	-- Helper function to get localized text
 	local function L(key, ...)
@@ -3121,6 +3591,26 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 		ShaderStatus.Text = L("shader_disabled")
 		ShaderStatus.TextColor3 = C_TEXT_DIM
 	end)
+
+	-- ═══════════════════════════════════════════════════════════════════════════
+	-- 🎬 CINEMATIC CAMERA - Separate function to avoid local register limit
+	-- ═══════════════════════════════════════════════════════════════════════════
+	SetupCinematicCamera(
+		ToolsScroll,
+		LocalPlayer,
+		UI,
+		Connections,
+		UIHandlers,
+		RegisterTheme,
+		CreateCard,
+		StyleBtn,
+		C_ACCENT,
+		C_SIDE,
+		C_TEXT,
+		C_TEXT_DIM,
+		C_GREEN,
+		C_RED
+	)
 
 	-- ═══════════════════════════════════════════════════════════════════════════
 	-- TARGET RECORDING - Button to open separate window
