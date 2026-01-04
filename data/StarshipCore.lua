@@ -9598,7 +9598,7 @@ _G.StarshipSetup.show = function(onDone)
 		_G.StarshipSetup.stroke.Thickness = 2
 
 		_G.StarshipSetup.title = Instance.new("TextLabel", _G.StarshipSetup.card)
-		_G.StarshipSetup.title.Text = "INITIAL SETUP"
+		_G.StarshipSetup.title.Text = L("initial_setup")
 		_G.StarshipSetup.title.Size = UDim2.new(1, 0, 0, 40)
 		_G.StarshipSetup.title.BackgroundTransparency = 1
 		_G.StarshipSetup.title.TextColor3 = C_TEXT
@@ -9606,7 +9606,7 @@ _G.StarshipSetup.show = function(onDone)
 		_G.StarshipSetup.title.TextSize = 18
 
 		_G.StarshipSetup.sub = Instance.new("TextLabel", _G.StarshipSetup.card)
-		_G.StarshipSetup.sub.Text = "Configure your preferences"
+		_G.StarshipSetup.sub.Text = L("configure_preferences")
 		_G.StarshipSetup.sub.Size = UDim2.new(1, 0, 0, 20)
 		_G.StarshipSetup.sub.Position = UDim2.new(0, 0, 0, 38)
 		_G.StarshipSetup.sub.BackgroundTransparency = 1
@@ -9626,7 +9626,7 @@ _G.StarshipSetup.show = function(onDone)
 		Instance.new("UICorner", _G.StarshipSetup.anonFrame).CornerRadius = UDim.new(0, 8)
 
 		_G.StarshipSetup.anonLbl = Instance.new("TextLabel", _G.StarshipSetup.anonFrame)
-		_G.StarshipSetup.anonLbl.Text = "Anonymous Mode"
+		_G.StarshipSetup.anonLbl.Text = L("anonymous_mode")
 		_G.StarshipSetup.anonLbl.Size = UDim2.new(0.6, 0, 0, 25)
 		_G.StarshipSetup.anonLbl.Position = UDim2.new(0.05, 0, 0, 5)
 		_G.StarshipSetup.anonLbl.BackgroundTransparency = 1
@@ -9636,7 +9636,7 @@ _G.StarshipSetup.show = function(onDone)
 		_G.StarshipSetup.anonLbl.TextXAlignment = Enum.TextXAlignment.Left
 
 		_G.StarshipSetup.anonDesc = Instance.new("TextLabel", _G.StarshipSetup.anonFrame)
-		_G.StarshipSetup.anonDesc.Text = "Hide identity with random name"
+		_G.StarshipSetup.anonDesc.Text = L("anonymous_desc")
 		_G.StarshipSetup.anonDesc.Size = UDim2.new(0.7, 0, 0, 15)
 		_G.StarshipSetup.anonDesc.Position = UDim2.new(0.05, 0, 0, 28)
 		_G.StarshipSetup.anonDesc.BackgroundTransparency = 1
@@ -9670,7 +9670,7 @@ _G.StarshipSetup.show = function(onDone)
 		Instance.new("UICorner", _G.StarshipSetup.tagFrame).CornerRadius = UDim.new(0, 8)
 
 		_G.StarshipSetup.tagLbl = Instance.new("TextLabel", _G.StarshipSetup.tagFrame)
-		_G.StarshipSetup.tagLbl.Text = "Show Nametags"
+		_G.StarshipSetup.tagLbl.Text = L("show_nametags")
 		_G.StarshipSetup.tagLbl.Size = UDim2.new(0.6, 0, 0, 25)
 		_G.StarshipSetup.tagLbl.Position = UDim2.new(0.05, 0, 0, 5)
 		_G.StarshipSetup.tagLbl.BackgroundTransparency = 1
@@ -9680,7 +9680,7 @@ _G.StarshipSetup.show = function(onDone)
 		_G.StarshipSetup.tagLbl.TextXAlignment = Enum.TextXAlignment.Left
 
 		_G.StarshipSetup.tagDesc = Instance.new("TextLabel", _G.StarshipSetup.tagFrame)
-		_G.StarshipSetup.tagDesc.Text = "Display VIP/Script tags"
+		_G.StarshipSetup.tagDesc.Text = L("nametags_desc")
 		_G.StarshipSetup.tagDesc.Size = UDim2.new(0.7, 0, 0, 15)
 		_G.StarshipSetup.tagDesc.Position = UDim2.new(0.05, 0, 0, 28)
 		_G.StarshipSetup.tagDesc.BackgroundTransparency = 1
@@ -9708,7 +9708,7 @@ _G.StarshipSetup.show = function(onDone)
 
 		-- Dont show again
 		_G.StarshipSetup.skipBtn = Instance.new("TextButton", _G.StarshipSetup.card)
-		_G.StarshipSetup.skipBtn.Text = (_G.StarshipSetup.dontShow and "[X] " or "[ ] ") .. "Don't show again"
+		_G.StarshipSetup.skipBtn.Text = (_G.StarshipSetup.dontShow and "[X] " or "[ ] ") .. L("dont_show_again")
 		_G.StarshipSetup.skipBtn.Size = UDim2.new(0.9, 0, 0, 25)
 		_G.StarshipSetup.skipBtn.Position = UDim2.new(0.05, 0, 0, 200)
 		_G.StarshipSetup.skipBtn.BackgroundTransparency = 1
@@ -9719,12 +9719,12 @@ _G.StarshipSetup.show = function(onDone)
 
 		_G.StarshipSetup.skipBtn.MouseButton1Click:Connect(function()
 			_G.StarshipSetup.dontShow = not _G.StarshipSetup.dontShow
-			_G.StarshipSetup.skipBtn.Text = (_G.StarshipSetup.dontShow and "[X] " or "[ ] ") .. "Don't show again"
+			_G.StarshipSetup.skipBtn.Text = (_G.StarshipSetup.dontShow and "[X] " or "[ ] ") .. L("dont_show_again")
 		end)
 
 		-- Continue
 		_G.StarshipSetup.continueBtn = Instance.new("TextButton", _G.StarshipSetup.card)
-		_G.StarshipSetup.continueBtn.Text = "CONTINUE"
+		_G.StarshipSetup.continueBtn.Text = L("continue_btn")
 		_G.StarshipSetup.continueBtn.Size = UDim2.new(0.9, 0, 0, 40)
 		_G.StarshipSetup.continueBtn.Position = UDim2.new(0.05, 0, 0, 235)
 		_G.StarshipSetup.continueBtn.BackgroundColor3 = C_ACCENT

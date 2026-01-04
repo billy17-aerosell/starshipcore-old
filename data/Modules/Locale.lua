@@ -418,6 +418,16 @@ local Translations = {
 		tp = "TP",
 		executor_info = "EXECUTOR INFO",
 
+		-- Initial Setup
+		initial_setup = "INITIAL SETUP",
+		configure_preferences = "Configure your preferences",
+		anonymous_mode = "Anonymous Mode",
+		anonymous_desc = "Hide identity with random name",
+		show_nametags = "Show Nametags",
+		nametags_desc = "Display VIP/Script tags",
+		dont_show_again = "Don't show again",
+		continue_btn = "CONTINUE",
+
 		-- Warp Tab
 		warp_points = "WARP POINTS & CONFIGS",
 		add_point = "ADD POINT",
@@ -904,6 +914,16 @@ local Translations = {
 		copy_discord = "SALIN UNDANGAN DISCORD",
 		tp = "TP",
 		executor_info = "INFO EXECUTOR",
+
+		-- Initial Setup
+		initial_setup = "PENGATURAN AWAL",
+		configure_preferences = "Atur preferensimu",
+		anonymous_mode = "Mode Anonim",
+		anonymous_desc = "Sembunyikan identitas dengan nama acak",
+		show_nametags = "Tampilkan Nametag",
+		nametags_desc = "Tampilkan tag VIP/Script",
+		dont_show_again = "Jangan tampilkan lagi",
+		continue_btn = "LANJUTKAN",
 
 		-- Warp Tab
 		warp_points = "TITIK WARP & KONFIGURASI",
