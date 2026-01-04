@@ -12,6 +12,7 @@ local MODULES = {
 	"CloudRecording.lua",
 	"UIComponents.lua",
 	"ConnectionManager.lua",
+	"Changelog.lua",
 }
 local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua", "Emotes.lua", "ConfigTab.lua" }
 
@@ -1099,6 +1100,17 @@ local function main()
 	end
 
 	func()
+
+	-- ══════════════════════════════════════════════════════════════════
+	-- CHANGELOG CHECK: Show update modal if there's a new version
+	-- ══════════════════════════════════════════════════════════════════
+	task.spawn(function()
+		task.wait(3) -- Wait for UI to fully load
+
+		if LoadedModules["Changelog.lua"] and LoadedModules["Changelog.lua"].CheckAndShow then
+			LoadedModules["Changelog.lua"].CheckAndShow()
+		end
+	end)
 
 	-- ══════════════════════════════════════════════════════════════════
 	-- SECURITY CLEANUP: Remove sensitive data from global environment

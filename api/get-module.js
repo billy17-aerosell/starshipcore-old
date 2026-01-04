@@ -76,6 +76,7 @@ const ALLOWED_MODULES = [
   "CloudRecording.lua",
   "UIComponents.lua",
   "ConnectionManager.lua",
+  "Changelog.lua",
   "Modules/CloudRecording.lua",
   "PathEditor.lua",
   "PathEditorUI.lua",
