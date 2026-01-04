@@ -134,6 +134,8 @@
         .status-badge-container {
             display: flex;
             justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
             margin-bottom: 20px;
         }
 
@@ -1562,13 +1564,22 @@
         <section class="hero">
             <img src="/starship-logo.png" alt="Starship Logo" class="hero-logo">
             
-            <!-- Status Badge -->
+            <!-- Status Badges (PC & Mobile) -->
             <div class="status-badge-container">
-                <div class="status-badge loading" id="status-badge" title="Loading status...">
+                <!-- PC Status -->
+                <div class="status-badge loading" id="status-badge-pc" title="Loading PC status...">
                     <div class="status-indicator"></div>
                     <div class="status-text">
-                        <span class="status-label" data-i18n="system_status">Status Sistem</span>
-                        <span class="status-value" id="status-value" data-i18n="loading">Memuat...</span>
+                        <span class="status-label">💻 PC</span>
+                        <span class="status-value" id="status-value-pc" data-i18n="loading">Memuat...</span>
+                    </div>
+                </div>
+                <!-- Mobile Status -->
+                <div class="status-badge loading" id="status-badge-mobile" title="Loading Mobile status...">
+                    <div class="status-indicator"></div>
+                    <div class="status-text">
+                        <span class="status-label">📱 Mobile</span>
+                        <span class="status-value" id="status-value-mobile" data-i18n="loading">Memuat...</span>
                     </div>
                 </div>
             </div>
@@ -2824,32 +2835,54 @@
 
         // ============ STATUS BADGE ============
         async function fetchSystemStatus() {
-            const badge = document.getElementById('status-badge');
-            const statusValue = document.getElementById('status-value');
+            const badgePc = document.getElementById('status-badge-pc');
+            const statusValuePc = document.getElementById('status-value-pc');
+            const badgeMobile = document.getElementById('status-badge-mobile');
+            const statusValueMobile = document.getElementById('status-value-mobile');
             
             try {
+                // Fetch both platforms at once
                 const response = await fetch('/api/tags?action=status');
                 const data = await response.json();
                 
                 if (data.success) {
-                    // Update badge class
-                    badge.className = `status-badge ${data.status}`;
-                    badge.title = data.message || data.description;
+                    // Update PC badge
+                    if (data.pc) {
+                        badgePc.className = `status-badge ${data.pc.status}`;
+                        badgePc.title = data.pc.message || 'PC Status';
+                        statusValuePc.textContent = `${data.pc.emoji} ${data.pc.label}`;
+                    }
                     
-                    // Update text
-                    statusValue.textContent = `${data.emoji} ${data.label}`;
+                    // Update Mobile badge
+                    if (data.mobile) {
+                        badgeMobile.className = `status-badge ${data.mobile.status}`;
+                        badgeMobile.title = data.mobile.message || 'Mobile Status';
+                        statusValueMobile.textContent = `${data.mobile.emoji} ${data.mobile.label}`;
+                    }
                     
-                    // If maintenance, show prominent banner
-                    if (data.status === 'maintenance' || data.status === 'offline') {
-                        showMaintenanceBanner(data);
+                    // If any platform is maintenance/offline, show banner
+                    const pcDown = data.pc?.status === 'maintenance' || data.pc?.status === 'offline';
+                    const mobileDown = data.mobile?.status === 'maintenance' || data.mobile?.status === 'offline';
+                    
+                    if (pcDown || mobileDown) {
+                        showMaintenanceBanner({
+                            status: pcDown && mobileDown ? 'offline' : 'maintenance',
+                            emoji: pcDown && mobileDown ? '🔴' : '🟠',
+                            label: pcDown && mobileDown ? 'All Systems' : (pcDown ? 'PC' : 'Mobile'),
+                            message: pcDown && mobileDown 
+                                ? 'All systems are under maintenance' 
+                                : (pcDown ? 'PC is under maintenance' : 'Mobile is under maintenance')
+                        });
                     } else {
                         hideMaintenanceBanner();
                     }
                 }
             } catch (e) {
                 console.error('Failed to fetch status:', e);
-                badge.className = 'status-badge online';
-                statusValue.textContent = '🟢 Online';
+                badgePc.className = 'status-badge online';
+                statusValuePc.textContent = '🟢 Online';
+                badgeMobile.className = 'status-badge online';
+                statusValueMobile.textContent = '🟢 Online';
             }
         }
         
