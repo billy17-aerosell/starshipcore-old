@@ -34,6 +34,45 @@
             --radius: 0;
         }
 
+        /* ============ DARK MODE ============ */
+        body.dark-mode {
+            --bg: #0a0a0f;
+            --bg-alt: #12121a;
+            --black: #e0e0e0;
+            --white: #1a1a24;
+            --accent-1: #ff7043;
+            --accent-2: #b388ff;
+            --accent-3: #69f0ae;
+            --accent-4: #fff176;
+            --accent-5: #4dd0e1;
+            --border: 3px solid var(--black);
+            --border-thick: 4px solid var(--black);
+            --shadow: 6px 6px 0 rgba(100, 100, 120, 0.4);
+            --shadow-sm: 4px 4px 0 rgba(100, 100, 120, 0.3);
+            --shadow-hover: 8px 8px 0 rgba(100, 100, 120, 0.5);
+        }
+
+        body.dark-mode .marquee-wrapper {
+            background: linear-gradient(90deg, #1a1a2e, #16213e);
+        }
+
+        body.dark-mode .status-badge {
+            background: #1a1a24;
+        }
+
+        body.dark-mode .platform-card,
+        body.dark-mode .duration-card,
+        body.dark-mode .summary-card,
+        body.dark-mode .input-container {
+            background: #16162a;
+            border-color: #3a3a5a;
+        }
+
+        body.dark-mode .platform-card:hover,
+        body.dark-mode .duration-card:hover {
+            box-shadow: 6px 6px 0 rgba(124, 77, 255, 0.4);
+        }
+
         html {
             scroll-behavior: smooth;
         }
@@ -1399,6 +1438,84 @@
             color: var(--white);
         }
 
+        /* ============ DARK MODE TOGGLE ============ */
+        .theme-toggle {
+            position: fixed;
+            top: 15px;
+            right: 120px;
+            background: var(--white);
+            border: var(--border);
+            box-shadow: var(--shadow-sm);
+            z-index: 1000;
+            width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1.2rem;
+        }
+
+        .theme-toggle:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: var(--shadow);
+        }
+
+        body.dark-mode .theme-toggle {
+            background: #1a1a24;
+        }
+
+        /* ============ SKELETON LOADER ============ */
+        .skeleton {
+            background: linear-gradient(90deg, var(--bg-alt) 25%, var(--bg) 50%, var(--bg-alt) 75%);
+            background-size: 200% 100%;
+            animation: skeleton-shimmer 1.5s infinite;
+            border-radius: 4px;
+        }
+
+        @keyframes skeleton-shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .user-preview-skeleton {
+            display: none;
+            gap: 15px;
+            padding: 15px;
+            background: var(--bg-alt);
+            border: var(--border);
+            margin-top: 15px;
+        }
+
+        .user-preview-skeleton.visible {
+            display: flex;
+            align-items: center;
+        }
+
+        .skeleton-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+        }
+
+        .skeleton-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .skeleton-name {
+            width: 150px;
+            height: 20px;
+        }
+
+        .skeleton-id {
+            width: 200px;
+            height: 14px;
+        }
+
         @media (max-width: 768px) {
             .lang-switcher {
                 top: 10px;
@@ -1407,6 +1524,13 @@
             .lang-btn {
                 padding: 8px 12px;
                 font-size: 0.7rem;
+            }
+            .theme-toggle {
+                top: 10px;
+                right: 85px;
+                width: 40px;
+                height: 40px;
+                font-size: 1rem;
             }
         }
     </style>
@@ -1417,6 +1541,11 @@
         <button class="lang-btn active" onclick="setLanguage('id')" id="lang-id">🇮🇩 ID</button>
         <button class="lang-btn" onclick="setLanguage('en')" id="lang-en">🇬🇧 EN</button>
     </div>
+
+    <!-- Dark Mode Toggle -->
+    <button class="theme-toggle" onclick="toggleDarkMode()" id="theme-toggle" title="Toggle Dark Mode">
+        🌙
+    </button>
 
     <!-- Marquee -->
     <div class="marquee-wrapper">
@@ -1576,6 +1705,15 @@
                     <div class="user-details">
                         <h4 id="user-name" data-i18n="loading">Memuat...</h4>
                         <p id="user-id-display">ID: </p>
+                    </div>
+                </div>
+                
+                <!-- Skeleton Loader -->
+                <div class="user-preview-skeleton" id="user-preview-skeleton">
+                    <div class="skeleton skeleton-avatar"></div>
+                    <div class="skeleton-info">
+                        <div class="skeleton skeleton-name"></div>
+                        <div class="skeleton skeleton-id"></div>
                     </div>
                 </div>
             </div>
@@ -2152,6 +2290,29 @@
             return translations[currentLang][key] || translations['id'][key] || key;
         }
 
+        // ============ DARK MODE ============
+        function toggleDarkMode() {
+            const body = document.body;
+            const toggle = document.getElementById('theme-toggle');
+            const isDark = body.classList.toggle('dark-mode');
+            
+            localStorage.setItem('starship_darkmode', isDark ? 'true' : 'false');
+            toggle.textContent = isDark ? '☀️' : '🌙';
+        }
+
+        function initDarkMode() {
+            const savedMode = localStorage.getItem('starship_darkmode');
+            const toggle = document.getElementById('theme-toggle');
+            
+            if (savedMode === 'true') {
+                document.body.classList.add('dark-mode');
+                toggle.textContent = '☀️';
+            }
+        }
+
+        // Initialize dark mode on load
+        initDarkMode();
+
         // ============ PRICING ============
         const PRICING = {
             mobile: {
@@ -2256,6 +2417,7 @@
             const input = document.getElementById('userid-input');
             const status = document.getElementById('input-status');
             const preview = document.getElementById('user-preview');
+            const skeleton = document.getElementById('user-preview-skeleton');
             const userInput = input.value.trim();
 
             clearTimeout(validateTimeout);
@@ -2263,14 +2425,18 @@
             if (!userInput) {
                 status.innerHTML = '';
                 preview.classList.remove('visible');
+                skeleton.classList.remove('visible');
                 validatedUserId = null;
                 validatedUsername = null;
                 updateSummary();
                 return;
             }
 
+            // Show skeleton loader while searching
             status.innerHTML = '<div class="spinner"></div>';
             status.className = 'input-status checking';
+            preview.classList.remove('visible');
+            skeleton.classList.add('visible');
 
             validateTimeout = setTimeout(async () => {
                 try {
@@ -2294,6 +2460,9 @@
                         document.getElementById('user-avatar').src = data.avatar;
                         document.getElementById('user-name').textContent = data.displayName || data.name;
                         document.getElementById('user-id-display').textContent = `@${data.name} • ID: ${data.id}`;
+                        
+                        // Hide skeleton, show actual preview
+                        skeleton.classList.remove('visible');
                         preview.classList.add('visible');
 
                         updateSteps(4);
@@ -2310,6 +2479,7 @@
                     status.innerHTML = t('not_found');
                     status.className = 'input-status invalid';
                     preview.classList.remove('visible');
+                    skeleton.classList.remove('visible');
                     validatedUserId = null;
                     validatedUsername = null;
                     updateSummary();
