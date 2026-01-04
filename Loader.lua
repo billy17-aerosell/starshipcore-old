@@ -425,27 +425,28 @@ local function createLoadingUI()
 		end
 	end)
 
-	-- Logo Icon (Animated "S") with FLOATING effect
+	-- Logo Icon with FLOATING effect (Image version)
 	local LogoContainer = Instance.new("Frame", MainFrame)
-	LogoContainer.Size = UDim2.new(0, 100, 0, 100)
-	LogoContainer.Position = UDim2.new(0.5, -50, 0.33, 0)
+	LogoContainer.Size = UDim2.new(0, 80, 0, 80)
+	LogoContainer.Position = UDim2.new(0.5, -40, 0.31, 0)
 	LogoContainer.BackgroundTransparency = 1
 	LogoContainer.ZIndex = 10
 
-	local Logo = Instance.new("TextLabel", LogoContainer)
-	Logo.Text = "S"
+	local Logo = Instance.new("ImageLabel", LogoContainer)
+	Logo.Image = "https://starship-core.my.id/starship-logo.png"
 	Logo.Size = UDim2.new(1, 0, 1, 0)
 	Logo.BackgroundTransparency = 1
-	Logo.TextColor3 = Color3.fromRGB(90, 110, 245)
-	Logo.Font = Enum.Font.GothamBlack
-	Logo.TextSize = 72
-	Logo.TextTransparency = 0
+	Logo.ScaleType = Enum.ScaleType.Fit
 	Logo.ZIndex = 10
 
-	local LogoGlow = Instance.new("UIStroke", Logo)
-	LogoGlow.Color = Color3.fromRGB(90, 110, 245)
-	LogoGlow.Thickness = 3
-	LogoGlow.Transparency = 0.4
+	-- Optional: Add glow effect behind logo
+	local LogoGlowBg = Instance.new("Frame", LogoContainer)
+	LogoGlowBg.Size = UDim2.new(1.3, 0, 1.3, 0)
+	LogoGlowBg.Position = UDim2.new(-0.15, 0, -0.15, 0)
+	LogoGlowBg.BackgroundColor3 = Color3.fromRGB(90, 110, 245)
+	LogoGlowBg.BackgroundTransparency = 0.85
+	LogoGlowBg.ZIndex = 9
+	Instance.new("UICorner", LogoGlowBg).CornerRadius = UDim.new(1, 0)
 
 	-- Title Text
 	local Title = Instance.new("TextLabel", MainFrame)
@@ -524,29 +525,30 @@ local function createLoadingUI()
 	WelcomeMsg.TextTransparency = 0
 	WelcomeMsg.ZIndex = 10
 
-	-- Logo Animation: Rainbow + Pulse + FLOATING
+	-- Logo Animation: Pulse + FLOATING + Glow color cycle
 	task.spawn(function()
 		local t = 0
 		local floatOffset = 0
+		local baseSize = 80
 		while Logo and Logo.Parent do
 			t = t + 0.025
 			floatOffset = floatOffset + 0.08
 
 			-- Rainbow color cycle (faster)
 			local c = Color3.fromHSV(t % 1, 0.85, 1)
-			Logo.TextColor3 = c
-			LogoGlow.Color = c
 			Title.TextColor3 = c
 			ProgressFill.BackgroundColor3 = c
 			ProgressGlow.Color = c
+			LogoGlowBg.BackgroundColor3 = c
 
-			-- Pulse size
-			local pulse = 1 + math.sin(t * 4) * 0.04
-			Logo.TextSize = 72 * pulse
+			-- Pulse size for container
+			local pulse = 1 + math.sin(t * 4) * 0.05
+			local newSize = baseSize * pulse
+			LogoContainer.Size = UDim2.new(0, newSize, 0, newSize)
+			LogoContainer.Position = UDim2.new(0.5, -newSize / 2, 0.31, math.sin(floatOffset) * 5)
 
-			-- Floating bob animation
-			local floatY = math.sin(floatOffset) * 5
-			LogoContainer.Position = UDim2.new(0.5, -50, 0.33, floatY)
+			-- Glow pulsing
+			LogoGlowBg.BackgroundTransparency = 0.8 + math.sin(t * 3) * 0.1
 
 			task.wait(0.02)
 		end
