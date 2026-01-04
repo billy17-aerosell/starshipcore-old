@@ -204,57 +204,88 @@ async function sendDiscordStatusUpdate(status, message, discordWebhookUrl) {
     }
 }
 
-// Channel name formats for each status
+// Channel name formats for each status (per platform)
 const STATUS_CHANNEL_NAMES = {
-    online: '🔒 🟢 | LIVE',
-    maintenance: '🔒 🟠 | MAINTENANCE',
-    offline: '🔒 🔴 | OFFLINE',
-    degraded: '🔒 🟡 | DEGRADED',
-    updating: '🔒 🔵 | UPDATING'
+    pc: {
+        online: '🔒 🟢 PC | LIVE',
+        maintenance: '🔒 🟠 PC | MAINTENANCE',
+        offline: '🔒 🔴 PC | OFFLINE',
+        degraded: '🔒 🟡 PC | DEGRADED',
+        updating: '🔒 🔵 PC | UPDATING'
+    },
+    mobile: {
+        online: '🔒 🟢 MOBILE | LIVE',
+        maintenance: '🔒 🟠 MOBILE | MAINTENANCE',
+        offline: '🔒 🔴 MOBILE | OFFLINE',
+        degraded: '🔒 🟡 MOBILE | DEGRADED',
+        updating: '🔒 🔵 MOBILE | UPDATING'
+    }
 };
 
-// Rename Discord channel to show status (like voice channel with lock)
-async function updateDiscordChannelName(status) {
+// Platform channel IDs
+const PLATFORM_CHANNEL_IDS = {
+    pc: process.env.DISCORD_STATUS_CHANNEL_ID, // Existing PC channel
+    mobile: '1457417278155915530' // New Mobile channel
+};
+
+// Rename Discord channel to show status (per platform)
+async function updateDiscordChannelName(status, platform = null) {
     const botToken = process.env.DISCORD_BOT_TOKEN;
-    const channelId = process.env.DISCORD_STATUS_CHANNEL_ID;
     
     console.log('[Status] Attempting channel rename...');
-    console.log('[Status] Channel ID:', channelId ? channelId.substring(0, 6) + '...' : 'NOT SET');
     console.log('[Status] Bot Token:', botToken ? 'SET (' + botToken.length + ' chars)' : 'NOT SET');
+    console.log('[Status] Platform:', platform || 'all');
     
-    if (!botToken || !channelId) {
-        console.log('[Status] Discord channel rename skipped: missing BOT_TOKEN or STATUS_CHANNEL_ID');
+    if (!botToken) {
+        console.log('[Status] Discord channel rename skipped: missing BOT_TOKEN');
         return false;
     }
     
-    const channelName = STATUS_CHANNEL_NAMES[status] || STATUS_CHANNEL_NAMES.online;
-    console.log('[Status] Target channel name:', channelName);
+    // Determine which channels to update
+    const platformsToUpdate = platform && platform !== 'all' ? [platform] : ['pc', 'mobile'];
+    let allSuccess = true;
     
-    try {
-        const response = await fetch(`https://discord.com/api/v10/channels/${channelId}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bot ${botToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                name: channelName
-            })
-        });
-        
-        if (response.ok) {
-            console.log(`[Status] ✅ Discord channel renamed to: ${channelName}`);
-            return true;
-        } else {
-            const error = await response.text();
-            console.error('[Status] ❌ Failed to rename Discord channel:', error);
-            console.error('[Status] Response status:', response.status);
-            return false;
+    for (const plat of platformsToUpdate) {
+        const channelId = PLATFORM_CHANNEL_IDS[plat];
+        if (!channelId) {
+            console.log(`[Status] No channel ID for platform: ${plat}`);
+            continue;
         }
-    } catch (e) {
-        console.error('[Status] Discord channel rename error:', e);
-        return false;
+        
+        const channelName = STATUS_CHANNEL_NAMES[plat]?.[status] || STATUS_CHANNEL_NAMES[plat]?.online;
+        if (!channelName) {
+            console.log(`[Status] No channel name format for: ${plat}/${status}`);
+            continue;
+        }
+        
+        console.log(`[Status] Updating ${plat} channel to: ${channelName}`);
+        
+        try {
+            const response = await fetch(`https://discord.com/api/v10/channels/${channelId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bot ${botToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: channelName
+                })
+            });
+            
+            if (response.ok) {
+                console.log(`[Status] ✅ ${plat.toUpperCase()} channel renamed to: ${channelName}`);
+            } else {
+                const error = await response.text();
+                console.error(`[Status] ❌ Failed to rename ${plat} channel:`, error);
+                allSuccess = false;
+            }
+        } catch (e) {
+            console.error(`[Status] Discord ${plat} channel rename error:`, e);
+            allSuccess = false;
+        }
     }
+    
+    return allSuccess;
 }
 
 
@@ -408,8 +439,12 @@ export default async function handler(req, res) {
         //     discordMessageId = await sendDiscordStatusUpdate(status, message, discordWebhookUrl);
         // }
 
-        // Update Discord channel name (🔒 🟢 | LIVE format)
-        const channelUpdated = await updateDiscordChannelName(status);
+        // Get platform from request body (pc, mobile, or all/null)
+        const platform = req.body.platform;
+        const effectivePlatform = platform === 'all' ? null : platform;
+
+        // Update Discord channel name (per platform)
+        const channelUpdated = await updateDiscordChannelName(status, effectivePlatform);
 
         const newStatus = {
             status,
@@ -417,9 +452,7 @@ export default async function handler(req, res) {
             lastUpdated: new Date().toISOString()
         };
         
-        // Get platform from request body (pc, mobile, or all/null)
-        const platform = req.body.platform;
-        await saveStatus(newStatus, platform === 'all' ? null : platform);
+        await saveStatus(newStatus, effectivePlatform);
         const statusInfo = STATUS_TYPES[status];
         
         return res.status(200).json({
