@@ -1099,18 +1099,31 @@ local function main()
 		loaderGui:Destroy()
 	end
 
-	func()
-
 	-- ══════════════════════════════════════════════════════════════════
-	-- CHANGELOG CHECK: Show update modal if there's a new version
+	-- CHANGELOG CHECK: Show update modal BEFORE main UI loads
+	-- User must dismiss changelog before main script runs
 	-- ══════════════════════════════════════════════════════════════════
-	task.spawn(function()
-		task.wait(3) -- Wait for UI to fully load
+	if LoadedModules["Changelog.lua"] then
+		local changelogModule = LoadedModules["Changelog.lua"]
 
-		if LoadedModules["Changelog.lua"] and LoadedModules["Changelog.lua"].CheckAndShow then
-			LoadedModules["Changelog.lua"].CheckAndShow()
+		-- Fetch changelog data
+		local changelogData = changelogModule.FetchChangelog()
+		if changelogData then
+			local lastSeen = changelogModule.GetLastSeenVersion()
+			local serverVersion = changelogData.currentVersion or "0.0.0"
+
+			-- Check if there's a new version
+			if changelogModule.IsNewerVersion(serverVersion, lastSeen) then
+				warn("[Changelog] New version detected! Showing modal before main UI...")
+				-- Show modal in BLOCKING mode - waits until user dismisses
+				changelogModule.ShowModal(changelogData, true)
+				warn("[Changelog] User dismissed changelog, loading main UI...")
+			end
 		end
-	end)
+	end
+
+	-- Now load the main script
+	func()
 
 	-- ══════════════════════════════════════════════════════════════════
 	-- SECURITY CLEANUP: Remove sensitive data from global environment

@@ -133,7 +133,9 @@ function Changelog.IsNewerVersion(v1, v2)
 end
 
 -- Create changelog modal UI
-function Changelog.ShowModal(changelogData)
+-- If waitForDismiss is true, function will wait until user closes modal
+function Changelog.ShowModal(changelogData, waitForDismiss)
+	local dismissed = false
 	-- Remove existing modal if any
 	local existing = CoreGui:FindFirstChild("StarshipChangelog")
 	if existing then
@@ -203,19 +205,24 @@ function Changelog.ShowModal(changelogData)
 	CloseBtn.BorderSizePixel = 0
 	Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
 
-	-- Content scroll
+	-- Content scroll - calculate proper height
 	local Content = Instance.new("ScrollingFrame", Modal)
-	Content.Size = UDim2.new(1, -20, 1, -120)
+	Content.Size = UDim2.new(1, -20, 1, -130) -- More space for button
 	Content.Position = UDim2.new(0, 10, 0, 60)
 	Content.BackgroundTransparency = 1
 	Content.BorderSizePixel = 0
-	Content.ScrollBarThickness = 4
+	Content.ScrollBarThickness = 5
 	Content.ScrollBarImageColor3 = COLORS.Accent
 	Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	Content.CanvasSize = UDim2.new(0, 0, 0, 0)
 
 	local ContentLayout = Instance.new("UIListLayout", Content)
-	ContentLayout.Padding = UDim.new(0, 15)
+	ContentLayout.Padding = UDim.new(0, 12)
 	ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+	-- Add padding to content
+	local contentPadding = Instance.new("UIPadding", Content)
+	contentPadding.PaddingBottom = UDim.new(0, 10)
 
 	-- Add updates
 	if changelogData.updates then
@@ -309,6 +316,7 @@ function Changelog.ShowModal(changelogData)
 	-- Close handlers
 	local function closeModal()
 		Changelog.SaveLastSeenVersion(changelogData.currentVersion or CURRENT_VERSION)
+		dismissed = true
 
 		TweenService:Create(Overlay, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
 		TweenService:Create(Modal, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
@@ -327,6 +335,14 @@ function Changelog.ShowModal(changelogData)
 			closeModal()
 		end
 	end)
+
+	-- If blocking mode, wait until dismissed
+	if waitForDismiss then
+		while not dismissed do
+			task.wait(0.1)
+		end
+		task.wait(0.3) -- Wait for animation
+	end
 
 	return ScreenGui
 end
