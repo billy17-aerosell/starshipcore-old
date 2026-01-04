@@ -24,6 +24,29 @@ local COLORS = {
 	Close = Color3.fromRGB(255, 80, 80),
 }
 
+-- Locale translations
+local LOCALE = {
+	en = {
+		title = "What's New in v",
+		gotIt = "Got it!",
+		latest = "LATEST",
+	},
+	id = {
+		title = "Yang Baru di v",
+		gotIt = "Mengerti!",
+		latest = "TERBARU",
+	},
+}
+
+local function getLang()
+	return _G.StarshipLanguage or "en"
+end
+
+local function getText(key)
+	local lang = getLang()
+	return LOCALE[lang] and LOCALE[lang][key] or LOCALE.en[key]
+end
+
 -- Helper: Safe file operations
 local function safeReadFile(path)
 	local success, result = pcall(function()
@@ -185,7 +208,7 @@ function Changelog.ShowModal(changelogData, waitForDismiss)
 	TitleIcon.TextSize = 24
 
 	local Title = Instance.new("TextLabel", Header)
-	Title.Text = "What's New in v" .. (changelogData.currentVersion or CURRENT_VERSION)
+	Title.Text = getText("title") .. (changelogData.currentVersion or CURRENT_VERSION)
 	Title.Size = UDim2.new(1, -100, 1, 0)
 	Title.Position = UDim2.new(0, 50, 0, 0)
 	Title.BackgroundTransparency = 1
@@ -298,7 +321,7 @@ function Changelog.ShowModal(changelogData, waitForDismiss)
 	GotItBtn.Size = UDim2.new(1, -40, 0, 40)
 	GotItBtn.Position = UDim2.new(0, 20, 1, -55)
 	GotItBtn.BackgroundColor3 = COLORS.Accent
-	GotItBtn.Text = "Got it!"
+	GotItBtn.Text = getText("gotIt")
 	GotItBtn.TextColor3 = Color3.new(1, 1, 1)
 	GotItBtn.Font = Enum.Font.GothamBold
 	GotItBtn.TextSize = 16

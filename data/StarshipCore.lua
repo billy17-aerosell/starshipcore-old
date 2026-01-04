@@ -491,7 +491,12 @@ local Config = ConfigData.DefaultConfig
 do
 	local CONFIG_FOLDER = "StarshipCore/StarshipConfigs"
 	pcall(function()
-		if isfile and isfile(CONFIG_FOLDER .. "/Language.json") then
+		-- FIRST: Check if language was set by Language Picker (from Loader)
+		if _G.StarshipLanguage then
+			Config.Language = _G.StarshipLanguage
+			warn("[Starship] Using language from picker: " .. Config.Language)
+		-- FALLBACK: Load from saved file
+		elseif isfile and isfile(CONFIG_FOLDER .. "/Language.json") then
 			local langData = HttpService:JSONDecode(readfile(CONFIG_FOLDER .. "/Language.json"))
 			if langData and langData.Language then
 				Config.Language = langData.Language
