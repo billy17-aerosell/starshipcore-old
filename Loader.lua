@@ -1,9 +1,18 @@
 local HttpService = game:GetService("HttpService")
-local VERCEL_URL = "https://starship-core.my.id"
+local SERVER_URL = "https://starship-core.my.id"
 local FOLDER_NAME = "StarshipCore"
 local MODULES_FOLDER = FOLDER_NAME .. "/Modules"
 local TABS_FOLDER = MODULES_FOLDER .. "/Tabs"
-local MODULES = { "Config.lua", "UI.lua", "Intro.lua", "Animations.lua", "Locale.lua", "CloudRecording.lua" }
+local MODULES = {
+	"Config.lua",
+	"UI.lua",
+	"Intro.lua",
+	"Animations.lua",
+	"Locale.lua",
+	"CloudRecording.lua",
+	"UIComponents.lua",
+	"ConnectionManager.lua",
+}
 local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua", "Emotes.lua", "ConfigTab.lua" }
 
 -- In-memory module storage (no files saved to disk for security!)
@@ -158,10 +167,7 @@ end
 
 -- Download and load module directly to memory (no file saved!)
 local function downloadModule(moduleName, userId)
-	local url = VERCEL_URL .. "/api/get-module?name=" .. moduleName .. "&user=" .. userId
-
-	-- Debug: Log URL being called
-	-- warn("[Starship] Downloading: " .. url)
+	local url = SERVER_URL .. "/api/get-module?name=" .. moduleName .. "&user=" .. userId
 
 	local success, response = pcall(function()
 		return game:HttpGet(url)
@@ -174,9 +180,6 @@ local function downloadModule(moduleName, userId)
 		end
 		return false
 	end
-
-	-- Debug: Log response preview
-	-- warn("[Starship] Response preview: " .. response:sub(1, 100))
 
 	-- Check if response is JSON error
 	if response:find('"error"') then
@@ -667,12 +670,11 @@ local function showError(message)
 	end)
 end
 
--- Configuration (Production)
-local SECURE_API_URL = "https://starship-core.my.id"
+-- Configuration (Production) - Uses SERVER_URL defined at top
 
 -- Check system status before loading
 local function checkSystemStatus()
-	local statusUrl = SECURE_API_URL .. "/api/tags?action=status"
+	local statusUrl = SERVER_URL .. "/api/tags?action=status"
 	local success, response = pcall(function()
 		return game:HttpGet(statusUrl)
 	end)
@@ -848,15 +850,10 @@ local function main()
 
 	-- Detect device HWID for binding
 	local deviceHWID = getDeviceHWID()
-	print("[StarshipCore] Device HWID: " .. (deviceHWID:sub(1, 16) or "unknown") .. "...")
 
 	-- STEP 1: Call secure loader for authentication & webhook notification
 	-- SECURITY: Using obscured endpoint name with HWID
-	local authUrl = SECURE_API_URL
-		.. "/api/pc-ld-q8r4?userId="
-		.. userId
-		.. "&hwid="
-		.. HttpService:UrlEncode(deviceHWID)
+	local authUrl = SERVER_URL .. "/api/pc-ld-q8r4?userId=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
 	local authSuccess, authResponse = pcall(function()
 		return game:HttpGet(authUrl)
 	end)
@@ -881,7 +878,7 @@ local function main()
 	end
 
 	-- STEP 2: Now call /api/load to get the encrypted script (with HWID)
-	local targetUrl = SECURE_API_URL .. "/api/load?user=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
+	local targetUrl = SERVER_URL .. "/api/load?user=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
 
 	local success, response = pcall(function()
 		return game:HttpGet(targetUrl)
@@ -1085,9 +1082,6 @@ local function main()
 		if getgenv().StarshipTemp then
 			getgenv().StarshipTemp = nil
 		end
-
-		-- Debug log (remove in production if needed)
-		-- print("[StarshipCore] Security cleanup completed - globals cleared")
 	end)
 
 	-- ══════════════════════════════════════════════════════════════════
@@ -1106,7 +1100,7 @@ local function main()
 			end
 
 			-- Check system status
-			local statusUrl = SECURE_API_URL .. "/api/tags?action=status"
+			local statusUrl = SERVER_URL .. "/api/tags?action=status"
 			local success, response = pcall(function()
 				return game:HttpGet(statusUrl)
 			end)
@@ -1120,7 +1114,6 @@ local function main()
 				if data and data.success then
 					if data.status == "maintenance" or data.status == "offline" or data.status == "updating" then
 						-- Status changed to maintenance/offline/updating - close UI
-						print("[StarshipCore] Server status changed to:", data.status)
 
 						-- Try to close the main UI
 						pcall(function()
