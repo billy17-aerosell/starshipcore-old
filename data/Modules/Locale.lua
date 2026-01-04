@@ -493,6 +493,13 @@ local Translations = {
 		recording_data_cleared = "Recording data cleared",
 		recordings = "Recordings",
 		no_files = "No files found",
+
+		-- Async Loading
+		loading_recording = "Loading Recording...",
+		parsing_large_file = "Parsing large file...",
+		processing_frames = "Processing frames...",
+		recording_loaded = "Recording Loaded",
+		invalid_recording_file = "Invalid recording file",
 	},
 
 	-- ═══════════════════════════════════════════════════════════════════
@@ -973,6 +980,13 @@ local Translations = {
 		recording_data_cleared = "Data rekaman dihapus",
 		recordings = "Rekaman",
 		no_files = "Tidak ada file",
+
+		-- Async Loading
+		loading_recording = "Memuat Rekaman...",
+		parsing_large_file = "Memproses file besar...",
+		processing_frames = "Memproses frame...",
+		recording_loaded = "Rekaman Dimuat",
+		invalid_recording_file = "File rekaman tidak valid",
 	},
 }
 

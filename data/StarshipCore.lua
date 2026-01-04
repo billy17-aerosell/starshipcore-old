@@ -3971,68 +3971,123 @@ local function SelectRecording(fn)
 	end
 	StopPlayback() -- Reset state but keep selection logic below
 
-	local s, j = pcall(readfile, p)
-	if not s then
-		return
-	end
-	local d = HttpService:JSONDecode(j)
-	currentFrameData = d.Frames or d
-	currentPlaybackFile = fn
-	currentPlaybackTime = 0
-	if not currentFrameData or #currentFrameData < 2 then
-		return
-	end
-	currentTotalDuration = currentFrameData[#currentFrameData].t
+	-- Async loading for large files to prevent UI freeze
+	task.spawn(function()
+		-- Check file size first (approximate by reading)
+		local fileContent
+		local isLargeFile = false
 
-	currentPlaybackSource = "Recorder" -- Set source flag
+		-- Show loading indicator for better UX
+		ShowLoadingModal(true, L("loading_recording") or "Loading Recording...", 0)
 
-	if isPathEnabled then
-		GeneratePlaybackPath(currentFrameData)
-	else
-		ClearPath()
-	end
-
-	local startFrame = currentFrameData[1]
-	local targetPos = (startFrame.pos and Vector3.new(startFrame.pos.x, startFrame.pos.y, startFrame.pos.z))
-		or (startFrame.r and TblToCF(startFrame.r).Position)
-	if targetPos then
-		CreateStartBaseplate(targetPos)
-	end
-
-	-- STRICT DISTANCE VALIDATION - Block if too far
-	local c = LocalPlayer.Character
-	local r = c and c:FindFirstChild("HumanoidRootPart")
-	if r and #currentFrameData > 0 then
-		local recordedPlaceId = d.PlaceId
-		local currentPlaceId = game.PlaceId
-		local placeIdMatch = (recordedPlaceId == nil) or (recordedPlaceId == currentPlaceId)
-		local dist = GetDistanceToNearestPathPoint(currentFrameData, r.Position)
-
-		-- BLOCK if distance is too far (regardless of PlaceId)
-		if dist > MAP_DISTANCE_THRESHOLD then
-			-- Clear selection since we're blocking
-			currentFrameData = nil
-			currentPlaybackFile = nil
-			ClearPath()
-
-			if placeIdMatch then
-				ShowToast(L("error_wrong_game"), L("path_far_same_game", dist), "error", 5)
-			else
-				ShowToast(L("error_wrong_game"), L("wrong_game_warning", dist), "error", 5)
-			end
-			return -- BLOCK selection
+		local s, j = pcall(readfile, p)
+		if not s then
+			ShowLoadingModal(false)
+			return
 		end
 
-		-- Distance is OK - show warning if different PlaceId
-		if not placeIdMatch then
+		fileContent = j
+		isLargeFile = #fileContent > 500000 -- >500KB is considered large
+
+		if isLargeFile then
+			ShowLoadingModal(true, L("parsing_large_file") or "Parsing large file...", 0.3)
+			task.wait() -- Yield to allow UI update
+		end
+
+		-- Parse JSON
+		local parseSuccess, d = pcall(function()
+			return HttpService:JSONDecode(fileContent)
+		end)
+
+		if not parseSuccess then
+			ShowLoadingModal(false)
+			ShowToast(L("error") or "Error", L("invalid_recording_file") or "Invalid recording file", "error", 3)
+			return
+		end
+
+		if isLargeFile then
+			ShowLoadingModal(true, L("processing_frames") or "Processing frames...", 0.6)
+			task.wait()
+		end
+
+		currentFrameData = d.Frames or d
+		currentPlaybackFile = fn
+		currentPlaybackTime = 0
+
+		if not currentFrameData or #currentFrameData < 2 then
+			ShowLoadingModal(false)
+			return
+		end
+
+		currentTotalDuration = currentFrameData[#currentFrameData].t
+		currentPlaybackSource = "Recorder" -- Set source flag
+
+		if isLargeFile then
+			ShowLoadingModal(true, L("generating_path") or "Generating path...", 0.8)
+			task.wait()
+		end
+
+		if isPathEnabled then
+			GeneratePlaybackPath(currentFrameData)
+		else
+			ClearPath()
+		end
+
+		local startFrame = currentFrameData[1]
+		local targetPos = (startFrame.pos and Vector3.new(startFrame.pos.x, startFrame.pos.y, startFrame.pos.z))
+			or (startFrame.r and TblToCF(startFrame.r).Position)
+		if targetPos then
+			CreateStartBaseplate(targetPos)
+		end
+
+		ShowLoadingModal(false)
+
+		-- STRICT DISTANCE VALIDATION - Block if too far
+		local c = LocalPlayer.Character
+		local r = c and c:FindFirstChild("HumanoidRootPart")
+		if r and #currentFrameData > 0 then
+			local recordedPlaceId = d.PlaceId
+			local currentPlaceId = game.PlaceId
+			local placeIdMatch = (recordedPlaceId == nil) or (recordedPlaceId == currentPlaceId)
+			local dist = GetDistanceToNearestPathPoint(currentFrameData, r.Position)
+
+			-- BLOCK if distance is too far (regardless of PlaceId)
+			if dist > MAP_DISTANCE_THRESHOLD then
+				-- Clear selection since we're blocking
+				currentFrameData = nil
+				currentPlaybackFile = nil
+				ClearPath()
+
+				if placeIdMatch then
+					ShowToast(L("error_wrong_game"), L("path_far_same_game", dist), "error", 5)
+				else
+					ShowToast(L("error_wrong_game"), L("wrong_game_warning", dist), "error", 5)
+				end
+				return -- BLOCK selection
+			end
+
+			-- Distance is OK - show warning if different PlaceId
+			if not placeIdMatch then
+				ShowToast(
+					L("warning_different_game"),
+					L("different_placeid_nearby", tostring(recordedPlaceId), tostring(currentPlaceId)),
+					"warning",
+					4
+				)
+			end
+		end
+
+		-- Show success toast for large files
+		if isLargeFile then
+			local frameCount = #currentFrameData
 			ShowToast(
-				L("warning_different_game"),
-				L("different_placeid_nearby", tostring(recordedPlaceId), tostring(currentPlaceId)),
-				"warning",
-				4
+				L("recording_loaded") or "Recording Loaded",
+				string.format("%s (%d frames)", fn, frameCount),
+				"success",
+				2
 			)
 		end
-	end
+	end)
 end
 
 local function RenameFile(o, n)
