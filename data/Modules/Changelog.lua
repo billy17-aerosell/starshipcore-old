@@ -147,6 +147,7 @@ function Changelog.ShowModal(changelogData, waitForDismiss)
 	ScreenGui.Parent = CoreGui
 	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	ScreenGui.DisplayOrder = 9999
+	ScreenGui.IgnoreGuiInset = true
 
 	-- Background overlay
 	local Overlay = Instance.new("Frame", ScreenGui)
