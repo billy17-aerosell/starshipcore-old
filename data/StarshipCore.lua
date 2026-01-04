@@ -1301,18 +1301,78 @@ local function GetMergerWorkspacePath()
 end
 
 local Connections = {}
+local SpawnedGuis = {} -- Track spawned GUIs for cleanup
+
 local function CleanupConnections()
+	-- Disconnect all tracked connections safely
 	for _, c in pairs(Connections) do
 		if c then
-			c:Disconnect()
+			pcall(function()
+				if typeof(c) == "RBXScriptConnection" then
+					c:Disconnect()
+				end
+			end)
 		end
 	end
 	Connections = {}
+
+	-- Destroy any spawned GUIs
+	for _, gui in pairs(SpawnedGuis) do
+		if gui and typeof(gui) == "Instance" then
+			pcall(function()
+				gui:Destroy()
+			end)
+		end
+	end
+	SpawnedGuis = {}
+
+	-- Clean character body movers left by features
+	local character = LocalPlayer.Character
+	if character then
+		local rootPart = character:FindFirstChild("HumanoidRootPart")
+		if rootPart then
+			for _, child in pairs(rootPart:GetChildren()) do
+				-- Clean Starship-created body movers
+				if child.Name:find("Starship") or child.Name:find("Amethyst") then
+					pcall(function()
+						child:Destroy()
+					end)
+				end
+			end
+		end
+
+		-- Reset humanoid states
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			pcall(function()
+				humanoid.PlatformStand = false
+			end)
+		end
+	end
+
+	-- Call module cleanup handlers
 	if UIHandlers and UIHandlers.CleanupTools then
 		pcall(function()
 			UIHandlers.CleanupTools()
 		end)
 	end
+
+	if UIHandlers and UIHandlers.CleanupTargetRecording then
+		pcall(function()
+			UIHandlers.CleanupTargetRecording()
+		end)
+	end
+
+	-- Clear global references
+	_G.StarshipAnimDB = nil
+
+	DevLog("Cleanup completed: All connections and resources released")
+end
+
+-- Helper to track spawned GUIs
+local function TrackGui(gui)
+	table.insert(SpawnedGuis, gui)
+	return gui
 end
 
 local SetupTextBoxInputSink
