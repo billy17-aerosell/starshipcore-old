@@ -439,15 +439,6 @@ local function createLoadingUI()
 	Logo.ScaleType = Enum.ScaleType.Fit
 	Logo.ZIndex = 10
 
-	-- Optional: Add glow effect behind logo
-	local LogoGlowBg = Instance.new("Frame", LogoContainer)
-	LogoGlowBg.Size = UDim2.new(1.3, 0, 1.3, 0)
-	LogoGlowBg.Position = UDim2.new(-0.15, 0, -0.15, 0)
-	LogoGlowBg.BackgroundColor3 = Color3.fromRGB(90, 110, 245)
-	LogoGlowBg.BackgroundTransparency = 0.85
-	LogoGlowBg.ZIndex = 9
-	Instance.new("UICorner", LogoGlowBg).CornerRadius = UDim.new(1, 0)
-
 	-- Title Text
 	local Title = Instance.new("TextLabel", MainFrame)
 	Title.Text = "STARSHIP"
@@ -525,7 +516,7 @@ local function createLoadingUI()
 	WelcomeMsg.TextTransparency = 0
 	WelcomeMsg.ZIndex = 10
 
-	-- Logo Animation: Pulse + FLOATING + Glow color cycle
+	-- Logo Animation: Pulse + FLOATING
 	task.spawn(function()
 		local t = 0
 		local floatOffset = 0
@@ -539,16 +530,12 @@ local function createLoadingUI()
 			Title.TextColor3 = c
 			ProgressFill.BackgroundColor3 = c
 			ProgressGlow.Color = c
-			LogoGlowBg.BackgroundColor3 = c
 
 			-- Pulse size for container
 			local pulse = 1 + math.sin(t * 4) * 0.05
 			local newSize = baseSize * pulse
 			LogoContainer.Size = UDim2.new(0, newSize, 0, newSize)
 			LogoContainer.Position = UDim2.new(0.5, -newSize / 2, 0.31, math.sin(floatOffset) * 5)
-
-			-- Glow pulsing
-			LogoGlowBg.BackgroundTransparency = 0.8 + math.sin(t * 3) * 0.1
 
 			task.wait(0.02)
 		end
