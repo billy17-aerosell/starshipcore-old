@@ -16,15 +16,21 @@ const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
 async function checkEventAccess(userId) {
   // Skip if EVENT_CODE_API not configured
   if (!EVENT_CODE_API) {
+    console.log("[Event Check] EVENT_CODE_API not configured, skipping");
     return { hasAccess: false };
   }
   
   try {
     const apiUrl = `${EVENT_CODE_API}?action=check&userId=${userId}`;
+    console.log(`[Event Check] Calling: ${apiUrl}`);
+    
     const response = await fetch(apiUrl);
     const data = await response.json();
+    
+    console.log(`[Event Check] Response for ${userId}:`, JSON.stringify(data));
 
     if (data.success && data.hasAccess) {
+      console.log(`[Event Check] ✅ User ${userId} has event access`);
       return {
         hasAccess: true,
         codeUsed: data.codeUsed,
@@ -33,9 +39,10 @@ async function checkEventAccess(userId) {
         remainingHours: data.remainingHours,
       };
     }
+    console.log(`[Event Check] ❌ User ${userId} has NO event access`);
     return { hasAccess: false };
   } catch (error) {
-    console.error("Event code check error:", error.message);
+    console.error("[Event Check] Error:", error.message);
     return { hasAccess: false };
   }
 }
