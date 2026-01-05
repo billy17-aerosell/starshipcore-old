@@ -1,6 +1,7 @@
 // Unified Load API - Serves encrypted script after authentication
 // Supports both PC and Mobile platforms via ?platform=mobile query parameter
 // With Discord Webhook Logging Integration and cross-platform detection
+// v2.1.0 - Fixed event access for expired VIP users (2026-01-05)
 
 // Owner userId - bypasses cross-platform restrictions
 const OWNER_USER_ID = "9268011358";
