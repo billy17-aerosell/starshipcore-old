@@ -499,6 +499,9 @@ export default async function handler(req, res) {
   const config = PLATFORM_CONFIG[platform];
   const platformLabel = config.label;
 
+  // Global Event System Status
+  const isEventActive = String(process.env.EVENT_SYSTEM_ACTIVE).toLowerCase() !== "false";
+
   // Get user ID (different param names for PC vs Mobile)
   const userId = req.query.user || req.query.userId;
 
@@ -569,9 +572,7 @@ export default async function handler(req, res) {
           // Check if expired - but also check event access first!
           if (user.expiresAt && new Date(user.expiresAt) < new Date()) {
             // VIP expired - check if event system is active AND user has event access
-            const isEventSystemActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
-            
-            if (isEventSystemActive) {
+            if (isEventActive) {
               const eventAccess = await checkEventAccess(userId);
               if (eventAccess.hasAccess) {
                 // Has event access! Return success
@@ -589,33 +590,31 @@ export default async function handler(req, res) {
             }
             
             // No event access, return expired
-            return res.status(200).json({
-              success: true,
-              status: "denied",
-              message: "VIP access expired",
-              hasAccess: false
-            });
+              return res.status(200).json({
+                success: true,
+                status: "denied",
+                message: "VIP access expired",
+                hasAccess: false,
+                isEventActive: isEventActive
+              });
           }
           
           // User is VIP and Active - return isBanned:false for periodic check
           // But hasAccess:false so mobile-loader proceeds to VIP auth flow (not event flow)
-          return res.status(200).json({
-            success: true,
-            isBanned: false,
-            hasAccess: false,  // VIP should use VIP auth, not event auth
-            isVIP: true,
-            message: "Active VIP - use VIP auth flow"
-          });
+            return res.status(200).json({
+              success: true,
+              isBanned: false,
+              hasAccess: false,  // VIP should use VIP auth, not event auth
+              isVIP: true,
+              message: "Active VIP - use VIP auth flow",
+              isEventActive: isEventActive
+            });
         }
       }
     } catch (e) {
       console.error("[Ban Check] Redis error:", e);
     }
 
-    // 2. FALLBACK TO EVENT SYSTEM CHECK
-    // Check if event system is active globally
-    const isEventActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
-    
     if (!isEventActive) {
       return res.status(200).json({ 
         success: false, 
@@ -643,18 +642,17 @@ export default async function handler(req, res) {
 
   if (action === "redeem") {
     // Check if event system is active globally
-    const isEventActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
-    
     if (!isEventActive) {
       return res.status(200).json({ 
         success: false, 
-        message: "Event system is currently disabled"
+        message: "Event system is currently disabled",
+        isEventActive: isEventActive
       });
     }
 
     // Redeem event code
     if (!EVENT_CODE_API) {
-      return res.status(200).json({ success: false, message: "Event system not configured" });
+      return res.status(200).json({ success: false, message: "Event system not configured", isEventActive: isEventActive });
     }
     
     if (!code) {
@@ -708,7 +706,7 @@ export default async function handler(req, res) {
       return res.status(200).json(data);
     } catch (error) {
       console.error("[Event Redeem] Error:", error.message);
-      return res.status(200).json({ success: false, message: "Gagal terhubung ke server" });
+      return res.status(200).json({ success: false, message: "Gagal terhubung ke server", isEventActive: isEventActive });
     }
   }
 
@@ -753,6 +751,7 @@ export default async function handler(req, res) {
               status: "denied",
               message: `${platform.toUpperCase()} VIP access expired`,
               expiredAt: expiryDate.toISOString(),
+              isEventActive: isEventActive
             });
           }
         }
@@ -786,6 +785,7 @@ export default async function handler(req, res) {
             status: "denied",
             message: "Device tidak dikenali. Hubungi admin untuk reset HWID.",
             reason: "HWID_MISMATCH",
+            isEventActive: isEventActive
           });
         }
 
@@ -858,6 +858,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           status: "denied",
           message: `${platform.toUpperCase()} VIP access suspended`,
+          isEventActive: isEventActive
         });
       }
     }
@@ -967,6 +968,7 @@ export default async function handler(req, res) {
         hint: `Your whitelist is for ${config.otherLabel.replace(/[📱💻]/g, "").trim()} only. Purchase ${platform.toUpperCase()} VIP for ${platform} access.`,
         currentLicense: config.otherLabel.replace(/[📱💻]/g, "").trim(),
         attemptedPlatform: platform.toUpperCase(),
+        isEventActive: isEventActive
       });
     }
 
@@ -1001,6 +1003,7 @@ export default async function handler(req, res) {
             hint: `Your whitelist is for ${config.otherLabel.replace(/[📱💻]/g, "").trim()} only. Purchase ${platform.toUpperCase()} VIP for ${platform} access.`,
             currentLicense: config.otherLabel.replace(/[📱💻]/g, "").trim(),
             attemptedPlatform: platform.toUpperCase(),
+            isEventActive: isEventActive
           });
         }
       } catch (err) {
@@ -1025,6 +1028,7 @@ export default async function handler(req, res) {
                 status: "denied",
                 message: `${platform.toUpperCase()} access expired`,
                 expiredAt: expiryDate.toISOString(),
+                isEventActive: isEventActive
               });
             }
           }
@@ -1074,6 +1078,7 @@ export default async function handler(req, res) {
                 status: "denied",
                 message: "License Expired",
                 expiredAt: new Date(userData.expiry * 1000).toISOString(),
+                isEventActive: isEventActive
               });
             }
           }
@@ -1123,9 +1128,6 @@ export default async function handler(req, res) {
 
     // === CHECK EVENT CODE ACCESS (Google Sheets) - Mobile Only ===
     if (platform === "mobile") {
-      // Check if event system is active globally
-      const isEventActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
-
       if (isEventActive) {
         const eventAccess = await checkEventAccess(userId);
         
@@ -1184,9 +1186,6 @@ export default async function handler(req, res) {
         message: `❌ User not in ${platform} whitelist\nUserID: ${userId}`,
       });
     }
-
-    // Check if event system is active globally
-    const isEventActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
 
     return res.status(200).json({
       status: "denied",
