@@ -558,9 +558,26 @@ export default async function handler(req, res) {
             });
           }
           
-          // Check if expired
+          // Check if expired - but also check event access first!
           if (user.expiresAt && new Date(user.expiresAt) < new Date()) {
-             return res.status(200).json({
+            // VIP expired - check if user has event access
+            const eventAccess = await checkEventAccess(userId);
+            if (eventAccess.hasAccess) {
+              // Has event access! Return success
+              return res.status(200).json({
+                success: true,
+                hasAccess: true,
+                isEventAccess: true,
+                codeUsed: eventAccess.codeUsed,
+                expiresAt: eventAccess.expiresAt,
+                remainingDays: eventAccess.remainingDays,
+                remainingHours: eventAccess.remainingHours,
+                message: "Event access active (VIP expired)"
+              });
+            }
+            
+            // No event access, return expired
+            return res.status(200).json({
               success: true,
               status: "denied",
               message: "VIP access expired",
