@@ -590,13 +590,14 @@ export default async function handler(req, res) {
             }
             
             // No event access, return expired
-              return res.status(200).json({
-                success: true,
-                status: "denied",
-                message: "VIP access expired",
-                hasAccess: false,
-                isEventActive: isEventActive
-              });
+            const expiryDate = new Date(user.expiresAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+            return res.status(200).json({
+              success: true,
+              status: "denied",
+              message: `MOBILE VIP access expired\n(Expired at: ${expiryDate} WIB)`,
+              hasAccess: false,
+              isEventActive: isEventActive
+            });
           }
           
           // User is VIP and Active - return isBanned:false for periodic check
@@ -747,9 +748,10 @@ export default async function handler(req, res) {
               });
             }
 
+            const formattedExpiry = new Date(vipUser.expiresAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
             return res.status(200).json({
               status: "denied",
-              message: `${platform.toUpperCase()} VIP access expired`,
+              message: `${platform.toUpperCase()} VIP access expired\n(Expired at: ${formattedExpiry} WIB)`,
               expiredAt: expiryDate.toISOString(),
               isEventActive: isEventActive
             });
@@ -1024,9 +1026,10 @@ export default async function handler(req, res) {
           if (userData.expiresAt) {
             const expiryDate = new Date(userData.expiresAt);
             if (expiryDate < new Date()) {
+              const formattedExpiry = new Date(userData.expiresAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
               return res.status(200).json({
                 status: "denied",
-                message: `${platform.toUpperCase()} access expired`,
+                message: `${platform.toUpperCase()} access expired\n(Expired at: ${formattedExpiry} WIB)`,
                 expiredAt: expiryDate.toISOString(),
                 isEventActive: isEventActive
               });
@@ -1074,9 +1077,10 @@ export default async function handler(req, res) {
           // Check PC expiry (file-based)
           if (platform === "pc" && userData.expiry) {
             if (now > userData.expiry) {
+              const formattedExpiry = new Date(userData.expiry * 1000).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
               return res.status(200).json({
                 status: "denied",
-                message: "License Expired",
+                message: `License Expired\n(Expired at: ${formattedExpiry} WIB)`,
                 expiredAt: new Date(userData.expiry * 1000).toISOString(),
                 isEventActive: isEventActive
               });
