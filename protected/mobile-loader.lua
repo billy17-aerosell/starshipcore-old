@@ -1338,33 +1338,54 @@ local function main()
 	local username = LocalPlayer.Name
 	task.wait(0.2)
 
-	-- Step 3: Check if user has active event access first
-	updateStatus("Checking event access...", 0.3)
-	local eventData, eventError = checkEventAccess(userId)
+	-- Step 3: Check if event system is active first
+	updateStatus("Checking access...", 0.3)
 
-	if eventData and eventData.success and eventData.hasAccess then
-		-- User has active event access!
-		updateStatus("Event access found!", 0.5)
-		task.wait(0.3)
+	-- Quick check to see if event system is enabled (via auth endpoint)
+	local quickCheckUrl = MOBILE_AUTH_API .. "?userId=" .. userId .. "&action=check"
+	local quickSuccess, quickResponse = pcall(function()
+		return game:HttpGet(quickCheckUrl)
+	end)
 
-		local sessionData = {
-			Role = "EVENT",
-			Duration = tostring(eventData.remainingDays) .. " DAYS",
-			Expiry = eventData.expiresAt,
-			RemainingDays = eventData.remainingDays,
-			RemainingHours = eventData.remainingHours,
-			ActivatedAt = os.date("%Y-%m-%d %H:%M:%S"),
-			Platform = "mobile",
-			CodeUsed = eventData.codeUsed,
-			IsEventAccess = true,
-			Username = username,
-		}
+	local isEventSystemActive = true -- Default to true if can't determine
+	if quickSuccess and quickResponse then
+		local quickData = nil
+		pcall(function()
+			quickData = HttpService:JSONDecode(quickResponse)
+		end)
+		if quickData and quickData.isEventActive == false then
+			isEventSystemActive = false
+		end
+	end
 
-		updateStatus("Access granted! (" .. tostring(eventData.remainingDays or "N/A") .. " days left)", 0.7)
-		task.wait(0.3)
+	-- Only check Google Sheets event access if event system is active
+	if isEventSystemActive then
+		local eventData, eventError = checkEventAccess(userId)
 
-		loadMobileUI(sessionData, loaderGui, updateStatus)
-		return
+		if eventData and eventData.success and eventData.hasAccess then
+			-- User has active event access!
+			updateStatus("Event access found!", 0.5)
+			task.wait(0.3)
+
+			local sessionData = {
+				Role = "EVENT",
+				Duration = tostring(eventData.remainingDays) .. " DAYS",
+				Expiry = eventData.expiresAt,
+				RemainingDays = eventData.remainingDays,
+				RemainingHours = eventData.remainingHours,
+				ActivatedAt = os.date("%Y-%m-%d %H:%M:%S"),
+				Platform = "mobile",
+				CodeUsed = eventData.codeUsed,
+				IsEventAccess = true,
+				Username = username,
+			}
+
+			updateStatus("Access granted! (" .. tostring(eventData.remainingDays or "N/A") .. " days left)", 0.7)
+			task.wait(0.3)
+
+			loadMobileUI(sessionData, loaderGui, updateStatus)
+			return
+		end
 	end
 
 	-- Step 4: Authenticate with MOBILE-SPECIFIC Server (Separate from PC)
