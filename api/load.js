@@ -650,7 +650,7 @@ export default async function handler(req, res) {
           owner: `${username || "Unknown"} (${userId})`,
           ip: clientIP,
           platform: platformLabel,
-          hwidStatus: hwidResult ? (hwidResult.isNew ? "New HWID Registered" : "HWID Bound") : "Protected",
+          hwidStatus: "Event Code",
           timestamp: timestamp,
           message: `✅ Event code berhasil di-redeem!\n**Code:** \`${code}\`\n**Duration:** ${data.duration || "N/A"} days\n**Expires:** ${data.expiresAt || "N/A"}`,
         });
@@ -667,7 +667,7 @@ export default async function handler(req, res) {
             owner: `${username || "Unknown"} (${userId})`,
             ip: clientIP,
             platform: platformLabel,
-            hwidStatus: hwidResult ? (hwidResult.isNew ? "New HWID Registered" : "HWID Bound") : "Protected",
+            hwidStatus: "Event Code",
             timestamp: timestamp,
             message: `❌ Event code gagal: ${data.message}`,
           });
