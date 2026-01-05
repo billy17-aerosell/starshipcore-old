@@ -84,8 +84,10 @@ local function SafeCreateFolder(path)
 	end)
 	if not success then
 		filesystemAvailable = false
-		warn("[StarshipCore] Filesystem not available:", err)
-		warn("[StarshipCore] Recording/Save features will not work in this game")
+		if DEV_MODE then
+			warn("[StarshipCore] Filesystem not available:", err)
+			warn("[StarshipCore] Recording/Save features will not work in this game")
+		end
 	end
 	return success
 end
@@ -494,7 +496,7 @@ do
 		-- FIRST: Check if language was set by Language Picker (from Loader)
 		if _G.StarshipLanguage then
 			Config.Language = _G.StarshipLanguage
-			warn("[Starship] Using language from picker: " .. Config.Language)
+			DevLog("Using language from picker: " .. Config.Language)
 		-- FALLBACK: Load from saved file
 		elseif isfile and isfile(CONFIG_FOLDER .. "/Language.json") then
 			local langData = HttpService:JSONDecode(readfile(CONFIG_FOLDER .. "/Language.json"))
@@ -966,14 +968,16 @@ local function OptimizeMergedData(recordingData)
 	}
 
 	local reduction = (1 - #optimizedFrames / originalFrameCount) * 100
-	warn(
-		string.format(
-			"[Starship] Merge Optimized: %d -> %d frames (%.0f%% frame reduction)",
-			originalFrameCount,
-			#optimizedFrames,
-			reduction
+	if DEV_MODE then
+		warn(
+			string.format(
+				"[Starship] Merge Optimized: %d -> %d frames (%.0f%% frame reduction)",
+				originalFrameCount,
+				#optimizedFrames,
+				reduction
+			)
 		)
-	)
+	end
 
 	return result
 end
@@ -2030,7 +2034,9 @@ local function SaveRecording(fn)
 
 	if not success then
 		ShowToast("Save Error", "Failed: " .. tostring(err), "error", 4)
-		warn("[StarshipCore] SaveRecording failed:", err)
+		if DEV_MODE then
+			warn("[StarshipCore] SaveRecording failed:", err)
+		end
 		return false
 	end
 
@@ -4203,6 +4209,36 @@ local MainCorner = Instance.new("UICorner", MainBg)
 MainCorner.CornerRadius = UDim.new(0, 12)
 RegisterTheme(MainBg, "BackgroundColor3", "Main")
 
+-- LOGO OVERLAY (Transparent watermark effect)
+local LogoOverlay = Instance.new("ImageLabel", Main)
+LogoOverlay.Name = "LogoOverlay"
+LogoOverlay.AnchorPoint = Vector2.new(0.5, 0.5)
+LogoOverlay.Position = UDim2.new(0.55, 0, 0.5, 0) -- Offset to center of content area (accounting for sidebar)
+LogoOverlay.Size = UDim2.new(0, 380, 0, 380)
+LogoOverlay.BackgroundTransparency = 1
+LogoOverlay.Image = "https://www.roblox.com/asset/?id=123840945153526" -- Starship Logo (same format as MinIcon)
+LogoOverlay.ImageTransparency = 0.78 -- Visible but subtle watermark
+LogoOverlay.ImageColor3 = Color3.fromRGB(255, 255, 255) -- White tint
+LogoOverlay.ScaleType = Enum.ScaleType.Fit
+LogoOverlay.ZIndex = 999 -- High ZIndex to ensure visibility
+
+-- Add subtle pulse animation to logo overlay
+task.spawn(function()
+	while LogoOverlay and LogoOverlay.Parent do
+		TweenService:Create(LogoOverlay, TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+			ImageTransparency = 0.72,
+		}):Play()
+		task.wait(4)
+		if not LogoOverlay or not LogoOverlay.Parent then
+			break
+		end
+		TweenService:Create(LogoOverlay, TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+			ImageTransparency = 0.88,
+		}):Play()
+		task.wait(4)
+	end
+end)
+
 -- Blur Glow Effect (Behind Background)
 local MainBlur = Instance.new("ImageLabel", Main)
 MainBlur.Name = "BlurGlow"
@@ -4334,7 +4370,7 @@ do
 	MinLogo.Size = UDim2.new(1, -8, 1, -8)
 	MinLogo.Position = UDim2.new(0, 4, 0, 4)
 	MinLogo.BackgroundTransparency = 1
-	MinLogo.Image = "https://www.roblox.com/asset/?id=91946746369709"
+	MinLogo.Image = "https://www.roblox.com/asset/?id=123840945153526"
 	MinLogo.ScaleType = Enum.ScaleType.Fit
 	MinLogo.ZIndex = 101
 
@@ -5637,7 +5673,7 @@ end
 
 -- 4. Rewind UI (Hidden by default) - Wrapped in do...end to save registers
 local RewindFrame = Instance.new("Frame", PageRecord)
-RewindFrame.Size = UDim2.new(1, 0, 0, 70)
+RewindFrame.Size = UDim2.new(1, 0, 0, 100) -- Increased height for BEFORE FALL button
 RewindFrame.BackgroundColor3 = C_ITEM
 RewindFrame.Visible = false
 RewindFrame.LayoutOrder = 4
@@ -5659,7 +5695,7 @@ RegisterTheme(RewindTimeLbl, "TextColor3", "Accent")
 local RewindSliderBg = Instance.new("TextButton", RewindFrame)
 RewindSliderBg.Text = ""
 RewindSliderBg.Size = UDim2.new(0.9, 0, 0, 6)
-RewindSliderBg.Position = UDim2.new(0.05, 0, 0.45, 0)
+RewindSliderBg.Position = UDim2.new(0.05, 0, 0, 30) -- Adjusted for new layout
 RewindSliderBg.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 RewindSliderBg.AutoButtonColor = false
 Instance.new("UICorner", RewindSliderBg)
@@ -5712,17 +5748,97 @@ do
 	local btnResume = Instance.new("TextButton", RewindFrame)
 	btnResume.Text = L("resume_recording")
 	RegisterLocalizedUI(btnResume, "resume_recording")
-	btnResume.Size = UDim2.new(0.9, 0, 0, 25)
-	btnResume.Position = UDim2.new(0.05, 0, 0.65, 0)
+	btnResume.Size = UDim2.new(0.43, 0, 0, 25) -- Smaller to fit beside Before Fall button
+	btnResume.Position = UDim2.new(0.05, 0, 0, 45)
 	btnResume.BackgroundColor3 = C_GREEN
 	btnResume.TextColor3 = Color3.new(1, 1, 1)
-	Instance.new("UICorner", btnResume)
+	btnResume.Font = Enum.Font.GothamBold
+	btnResume.TextSize = 11
+	Instance.new("UICorner", btnResume).CornerRadius = UDim.new(0, 6)
 	btnResume.MouseButton1Click:Connect(function()
 		UIHandlers.StartCountdown(function()
 			CutAndResume(RewindSelectedTime)
 			RewindFrame.Visible = false
 		end)
 	end)
+
+	-- BEFORE FALL Button - Find last safe position before jump/fall
+	local btnBeforeFall = Instance.new("TextButton", RewindFrame)
+	btnBeforeFall.Text = "⏪ " .. L("before_fall")
+	btnBeforeFall.Size = UDim2.new(0.43, 0, 0, 25)
+	btnBeforeFall.Position = UDim2.new(0.52, 0, 0, 45)
+	btnBeforeFall.BackgroundColor3 = C_ACCENT
+	btnBeforeFall.TextColor3 = Color3.new(1, 1, 1)
+	btnBeforeFall.Font = Enum.Font.GothamBold
+	btnBeforeFall.TextSize = 10
+	Instance.new("UICorner", btnBeforeFall).CornerRadius = UDim.new(0, 6)
+	RegisterTheme(btnBeforeFall, "BackgroundColor3", "Accent")
+	RegisterDynamicUI(btnBeforeFall, function(el)
+		el.Text = "⏪ " .. L("before_fall")
+	end)
+
+	btnBeforeFall.MouseButton1Click:Connect(function()
+		if #recordedData.Frames < 2 then
+			ShowToast(L("before_fall"), L("before_fall_not_enough"), "warning", 2)
+			return
+		end
+
+		-- Find the last frame that was on ground before a fall/jump
+		local lastGroundTime = nil
+		local wasInAir = false
+
+		-- Scan from end to find the most recent ground position before air state
+		for i = #recordedData.Frames, 1, -1 do
+			local frame = recordedData.Frames[i]
+			local stName = frame.st and string.match(frame.st, "Enum%.HumanoidStateType%.(%w+)")
+			local isInAir = (stName == "Jumping" or stName == "Freefall")
+
+			if isInAir then
+				wasInAir = true
+			elseif wasInAir then
+				-- Found ground frame right before air state
+				lastGroundTime = frame.t
+				break
+			end
+		end
+
+		if lastGroundTime and lastGroundTime > 0 then
+			-- Set slider to this position (with small margin)
+			local targetTime = math.max(0, lastGroundTime - 0.5)
+			local maxTime = recordedData.Frames[#recordedData.Frames].t
+			local sc = targetTime / maxTime
+
+			RewindSelectedTime = targetTime
+			RewindSliderFill.Size = UDim2.new(sc, 0, 1, 0)
+			RewindTimeLbl.Text = string.format("%.2fs / %.2fs", targetTime, maxTime)
+
+			-- Flash button to show success
+			local origColor = btnBeforeFall.BackgroundColor3
+			btnBeforeFall.BackgroundColor3 = C_GREEN
+			task.delay(0.3, function()
+				if btnBeforeFall and btnBeforeFall.Parent then
+					btnBeforeFall.BackgroundColor3 = origColor
+				end
+			end)
+
+			ShowToast(L("before_fall"), string.format(L("before_fall_set"), targetTime), "success", 2)
+		else
+			ShowToast(L("before_fall"), L("before_fall_no_fall"), "info", 2)
+		end
+	end)
+
+	-- Hint label
+	local hintLbl = Instance.new("TextLabel", RewindFrame)
+	hintLbl.Text = L("before_fall_hint")
+	hintLbl.Size = UDim2.new(0.9, 0, 0, 14)
+	hintLbl.Position = UDim2.new(0.05, 0, 0, 75)
+	hintLbl.BackgroundTransparency = 1
+	hintLbl.TextColor3 = C_TEXT_DIM
+	hintLbl.Font = Enum.Font.Gotham
+	hintLbl.TextSize = 9
+	hintLbl.TextXAlignment = Enum.TextXAlignment.Center
+	RegisterTheme(hintLbl, "TextColor3", "TextDim")
+	RegisterLocalizedUI(hintLbl, "before_fall_hint")
 end
 -- 5. File List (Unified) - Defined earlier to be accessible
 local ShowSaveRecordingModal -- Forward Declaration
@@ -5736,7 +5852,7 @@ local ShowSaveRecordingModal -- Forward Declaration
 
 	RewindFrame:GetPropertyChangedSignal("Visible"):Connect(function()
 		if RewindFrame.Visible then
-			FileListCard.Size = UDim2.new(1, 0, 1, -270) -- Shrink to make room for RewindFrame (200 + 70)
+			FileListCard.Size = UDim2.new(1, 0, 1, -300) -- Shrink to make room for RewindFrame (200 + 100)
 		else
 			FileListCard.Size = UDim2.new(1, 0, 1, -200) -- Restore size
 		end
@@ -7251,14 +7367,16 @@ function UIHandlers.InitMergerUI()
 					finalData = OptimizeMergedData(finalData)
 					local optimizedSize = #HttpService:JSONEncode(finalData)
 					local savedPercent = math.floor((1 - optimizedSize / originalSize) * 100)
-					warn(
-						string.format(
-							"[Starship] Size: %.1f MB -> %.1f MB (%d%% saved)",
-							originalSize / 1024 / 1024,
-							optimizedSize / 1024 / 1024,
-							savedPercent
+					if DEV_MODE then
+						warn(
+							string.format(
+								"[Starship] Size: %.1f MB -> %.1f MB (%d%% saved)",
+								originalSize / 1024 / 1024,
+								optimizedSize / 1024 / 1024,
+								savedPercent
+							)
 						)
-					)
+					end
 				end
 
 				-- Saving (90% to 100%)

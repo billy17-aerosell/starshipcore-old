@@ -124,57 +124,97 @@ function checkAccess(userId) {
   }
 
   const data = redeemedSheet.getDataRange().getValues();
+  const now = new Date();
   
-  // Find user in redeemed list
+  // Track user entries - find ACTIVE entry, not first entry
+  let activeEntry = null;
+  let latestExpiredEntry = null;
+  let isSuspended = false;
+  let suspendedRow = -1;
+  
+  // Scan ALL entries for this user
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const rowUserId = String(row[0]);
+    
+    if (rowUserId !== String(userId)) continue;
+    
     const codeUsed = row[2];
     const expiresAt = row[4];
     const status = String(row[5]).toLowerCase();
+    const expiryDate = new Date(expiresAt);
     
-    if (rowUserId === String(userId)) {
-      // Check if suspended
-      if (status === "suspended" || status === "banned") {
-        return jsonResponse({
-          success: false,
-          hasAccess: false,
-          isBanned: true,
-          banReason: "Access suspended by administrator",
-          message: "Access suspended"
-        });
-      }
-      
-      // Check expiry
-      const expiryDate = new Date(expiresAt);
-      const now = new Date();
-      
-      if (expiryDate < now) {
-        // Update status to expired
-        redeemedSheet.getRange(i + 1, 6).setValue("expired");
-        
-        return jsonResponse({
-          success: false,
-          hasAccess: false,
-          message: "Access expired",
-          expiredAt: formatDate(expiryDate)
-        });
-      }
-      
-      // Calculate remaining time
-      const diffMs = expiryDate - now;
-      const remainingDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      const remainingHours = Math.floor(diffMs / (1000 * 60 * 60));
-      
-      return jsonResponse({
-        success: true,
-        hasAccess: true,
-        codeUsed: codeUsed,
-        expiresAt: formatDate(expiryDate),
-        remainingDays: remainingDays,
-        remainingHours: remainingHours
-      });
+    // Check if suspended/banned - takes priority
+    if (status === "suspended" || status === "banned") {
+      isSuspended = true;
+      suspendedRow = i;
+      continue;
     }
+    
+    // Check if this entry is still active (not expired)
+    if (expiryDate > now && status === "active") {
+      // Found active entry! Use this one
+      if (!activeEntry || expiryDate > new Date(activeEntry.expiresAt)) {
+        activeEntry = {
+          rowIndex: i,
+          codeUsed: codeUsed,
+          expiresAt: expiresAt,
+          expiryDate: expiryDate
+        };
+      }
+    } else if (expiryDate < now) {
+      // Track latest expired entry for reporting
+      if (!latestExpiredEntry || expiryDate > new Date(latestExpiredEntry.expiresAt)) {
+        latestExpiredEntry = {
+          rowIndex: i,
+          expiresAt: expiresAt,
+          expiryDate: expiryDate
+        };
+      }
+      // Update status to expired if not already
+      if (status !== "expired") {
+        redeemedSheet.getRange(i + 1, 6).setValue("expired");
+      }
+    }
+  }
+  
+  // Return results based on what we found
+  
+  // If user is suspended, deny
+  if (isSuspended) {
+    return jsonResponse({
+      success: false,
+      hasAccess: false,
+      isBanned: true,
+      banReason: "Access suspended by administrator",
+      message: "Access suspended"
+    });
+  }
+  
+  // If found active entry, grant access
+  if (activeEntry) {
+    const diffMs = activeEntry.expiryDate - now;
+    const remainingDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const remainingHours = Math.floor(diffMs / (1000 * 60 * 60));
+    
+    return jsonResponse({
+      success: true,
+      hasAccess: true,
+      codeUsed: activeEntry.codeUsed,
+      expiresAt: formatDate(activeEntry.expiryDate),
+      remainingDays: remainingDays,
+      remainingHours: remainingHours
+    });
+  }
+  
+  // If only expired entries found
+  if (latestExpiredEntry) {
+    return jsonResponse({
+      success: false,
+      hasAccess: false,
+      message: "Access expired",
+      expiredAt: formatDate(latestExpiredEntry.expiryDate)
+    });
   }
   
   // User not found - also check if they're in banned sheet

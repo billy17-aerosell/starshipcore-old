@@ -16,6 +16,9 @@ local MODULES = {
 }
 local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua", "Emotes.lua", "ConfigTab.lua" }
 
+-- Dev mode detection (for debug logging)
+local DEV_MODE = false
+
 -- In-memory module storage (no files saved to disk for security!)
 local LoadedModules = {}
 
@@ -175,8 +178,10 @@ local function downloadModule(moduleName, userId)
 	end)
 
 	if not success or not response or response == "" then
-		warn("[Starship] Failed to download module: " .. moduleName)
-		if response then
+		if DEV_MODE then
+			warn("[Starship] Failed to download module: " .. moduleName)
+		end
+		if DEV_MODE and response then
 			warn("[Starship] Response: " .. tostring(response):sub(1, 200))
 		end
 		return false
@@ -184,7 +189,9 @@ local function downloadModule(moduleName, userId)
 
 	-- Check if response is JSON error
 	if response:find('"error"') then
-		warn("[Starship] Module error: " .. moduleName .. " - " .. response)
+		if DEV_MODE then
+			warn("[Starship] Module error: " .. moduleName .. " - " .. response)
+		end
 		return false
 	end
 
@@ -195,8 +202,10 @@ local function downloadModule(moduleName, userId)
 	end)
 
 	if not parseSuccess then
-		warn("[Starship] JSON parse failed for " .. moduleName .. ": " .. tostring(parseError))
-		warn("[Starship] Raw response: " .. response:sub(1, 300))
+		if DEV_MODE then
+			warn("[Starship] JSON parse failed for " .. moduleName .. ": " .. tostring(parseError))
+			warn("[Starship] Raw response: " .. response:sub(1, 300))
+		end
 
 		-- Check if it's actually a Lua script (starts with comment or local/return)
 		local trimmed = response:match("^%s*(.-)%s*$") or response
@@ -209,11 +218,15 @@ local function downloadModule(moduleName, userId)
 					LoadedModules[moduleName] = result
 					return true
 				else
-					warn("[Starship] Execute error for " .. moduleName .. ": " .. tostring(result))
+					if DEV_MODE then
+						warn("[Starship] Execute error for " .. moduleName .. ": " .. tostring(result))
+					end
 					return false
 				end
 			else
-				warn("[Starship] Loadstring error for " .. moduleName .. ": " .. tostring(err))
+				if DEV_MODE then
+					warn("[Starship] Loadstring error for " .. moduleName .. ": " .. tostring(err))
+				end
 				return false
 			end
 		end
@@ -246,8 +259,10 @@ local function downloadModule(moduleName, userId)
 				or trimmed:match("^function%s")
 			)
 		then
-			warn("[Starship] Decrypted content doesn't look like Lua for " .. moduleName)
-			warn("[Starship] First 200 chars: " .. decryptedContent:sub(1, 200))
+			if DEV_MODE then
+				warn("[Starship] Decrypted content doesn't look like Lua for " .. moduleName)
+				warn("[Starship] First 200 chars: " .. decryptedContent:sub(1, 200))
+			end
 			return false
 		end
 
@@ -259,22 +274,32 @@ local function downloadModule(moduleName, userId)
 				LoadedModules[moduleName] = result
 				return true
 			else
-				warn("[Starship] Execute error for " .. moduleName .. ": " .. tostring(result))
+				if DEV_MODE then
+					warn("[Starship] Execute error for " .. moduleName .. ": " .. tostring(result))
+				end
 				return false
 			end
 		else
-			warn("[Starship] Loadstring error for " .. moduleName .. ": " .. tostring(err))
+			if DEV_MODE then
+				warn("[Starship] Loadstring error for " .. moduleName .. ": " .. tostring(err))
+			end
 			return false
 		end
 	elseif data and data.status == "denied" then
-		warn("[Starship] Access denied for module: " .. moduleName)
+		if DEV_MODE then
+			warn("[Starship] Access denied for module: " .. moduleName)
+		end
 		return false
 	elseif data and data.error then
-		warn("[Starship] API error for " .. moduleName .. ": " .. tostring(data.error))
+		if DEV_MODE then
+			warn("[Starship] API error for " .. moduleName .. ": " .. tostring(data.error))
+		end
 		return false
 	else
-		warn("[Starship] Unknown response format for " .. moduleName)
-		warn("[Starship] Data: " .. tostring(data and HttpService:JSONEncode(data) or "nil"))
+		if DEV_MODE then
+			warn("[Starship] Unknown response format for " .. moduleName)
+			warn("[Starship] Data: " .. tostring(data and HttpService:JSONEncode(data) or "nil"))
+		end
 		return false
 	end
 end
@@ -541,28 +566,19 @@ local function createLoadingUI()
 	MainFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 15)
 	MainFrame.BackgroundTransparency = 0
 
-	-- Gradient overlay for depth effect
-	local GradientTop = Instance.new("Frame", MainFrame)
-	GradientTop.Size = UDim2.new(1, 0, 0.5, 0)
-	GradientTop.Position = UDim2.new(0, 0, 0, 0)
-	GradientTop.BackgroundTransparency = 1
-	GradientTop.ZIndex = 1
+	-- Background is now uniform (removed gradient overlays that caused visible line)
 
-	local GradientBottom = Instance.new("Frame", MainFrame)
-	GradientBottom.Size = UDim2.new(1, 0, 0.5, 0)
-	GradientBottom.Position = UDim2.new(0, 0, 0.5, 0)
-	GradientBottom.BackgroundColor3 = Color3.fromRGB(15, 10, 30)
-	GradientBottom.BackgroundTransparency = 0.7
-	GradientBottom.ZIndex = 1
-
-	-- Add subtle radial glow in center
-	local CenterGlow = Instance.new("Frame", MainFrame)
-	CenterGlow.Size = UDim2.new(0, 400, 0, 400)
-	CenterGlow.Position = UDim2.new(0.5, -200, 0.4, -200)
-	CenterGlow.BackgroundColor3 = Color3.fromRGB(90, 110, 245)
-	CenterGlow.BackgroundTransparency = 0.92
-	CenterGlow.ZIndex = 1
-	Instance.new("UICorner", CenterGlow).CornerRadius = UDim.new(1, 0)
+	-- Large Logo Overlay in center (replaces circle glow)
+	local CenterLogo = Instance.new("ImageLabel", MainFrame)
+	CenterLogo.Name = "CenterLogoOverlay"
+	CenterLogo.Size = UDim2.new(0, 450, 0, 450)
+	CenterLogo.Position = UDim2.new(0.5, -225, 0.4, -225)
+	CenterLogo.BackgroundTransparency = 1
+	CenterLogo.Image = "rbxassetid://123840945153526" -- Starship Logo
+	CenterLogo.ImageTransparency = 0.85 -- Subtle watermark effect
+	CenterLogo.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	CenterLogo.ScaleType = Enum.ScaleType.Fit
+	CenterLogo.ZIndex = 1
 
 	-- Floating Particles Container
 	local ParticleContainer = Instance.new("Frame", MainFrame)
@@ -636,13 +652,13 @@ local function createLoadingUI()
 
 	-- Logo Icon with FLOATING effect (Image version)
 	local LogoContainer = Instance.new("Frame", MainFrame)
-	LogoContainer.Size = UDim2.new(0, 80, 0, 80)
-	LogoContainer.Position = UDim2.new(0.5, -40, 0.31, 0)
+	LogoContainer.Size = UDim2.new(0, 140, 0, 140)
+	LogoContainer.Position = UDim2.new(0.5, -70, 0.26, 0)
 	LogoContainer.BackgroundTransparency = 1
 	LogoContainer.ZIndex = 10
 
 	local Logo = Instance.new("ImageLabel", LogoContainer)
-	Logo.Image = "rbxassetid://91946746369709"
+	Logo.Image = "rbxassetid://123840945153526"
 	Logo.Size = UDim2.new(1, 0, 1, 0)
 	Logo.BackgroundTransparency = 1
 	Logo.ScaleType = Enum.ScaleType.Fit
@@ -717,7 +733,7 @@ local function createLoadingUI()
 	local WelcomeMsg = Instance.new("TextLabel", MainFrame)
 	WelcomeMsg.Text = "Welcome back, " .. game:GetService("Players").LocalPlayer.Name .. "!"
 	WelcomeMsg.Size = UDim2.new(1, 0, 0, 20)
-	WelcomeMsg.Position = UDim2.new(0, 0, 0.26, 0)
+	WelcomeMsg.Position = UDim2.new(0, 0, 0.20, 0)
 	WelcomeMsg.BackgroundTransparency = 1
 	WelcomeMsg.TextColor3 = Color3.fromRGB(140, 140, 160)
 	WelcomeMsg.Font = Enum.Font.Gotham
@@ -729,7 +745,7 @@ local function createLoadingUI()
 	task.spawn(function()
 		local t = 0
 		local floatOffset = 0
-		local baseSize = 80
+		local baseSize = 140
 		while Logo and Logo.Parent do
 			t = t + 0.025
 			floatOffset = floatOffset + 0.08
@@ -1314,12 +1330,18 @@ local function main()
 	if savedLang then
 		-- Use saved language
 		_G.StarshipLanguage = savedLang
-		warn("[Language] Loaded saved language: " .. savedLang)
+		if DEV_MODE then
+			warn("[Language] Loaded saved language: " .. savedLang)
+		end
 	else
 		-- First-time user, show picker
-		warn("[Language] No saved language, showing picker...")
+		if DEV_MODE then
+			warn("[Language] No saved language, showing picker...")
+		end
 		showLanguagePicker()
-		warn("[Language] Selected: " .. tostring(_G.StarshipLanguage))
+		if DEV_MODE then
+			warn("[Language] Selected: " .. tostring(_G.StarshipLanguage))
+		end
 	end
 
 	-- ══════════════════════════════════════════════════════════════════
@@ -1337,10 +1359,14 @@ local function main()
 
 			-- Check if there's a new version
 			if changelogModule.IsNewerVersion(serverVersion, lastSeen) then
-				warn("[Changelog] New version detected! Showing modal before main UI...")
+				if DEV_MODE then
+					warn("[Changelog] New version detected! Showing modal before main UI...")
+				end
 				-- Show modal in BLOCKING mode - waits until user dismisses
 				changelogModule.ShowModal(changelogData, true)
-				warn("[Changelog] User dismissed changelog, loading main UI...")
+				if DEV_MODE then
+					warn("[Changelog] User dismissed changelog, loading main UI...")
+				end
 			end
 		end
 	end

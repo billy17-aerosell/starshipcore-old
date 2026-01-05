@@ -12,6 +12,7 @@ local Changelog = {}
 local SERVER_URL = _G.StarshipServerURL or "https://starship-core.my.id"
 local CONFIG_FILE = "StarshipCore/config.json"
 local CURRENT_VERSION = "1.4.0" -- Update this when releasing new versions
+local DEV_MODE = _G.StarshipDevMode or false
 
 -- Colors
 local COLORS = {
@@ -109,29 +110,39 @@ end
 function Changelog.FetchChangelog()
 	local url = SERVER_URL .. "/changelog.json?t=" .. os.time() -- Cache bust
 
-	warn("[Changelog] Fetching from: " .. url)
+	if DEV_MODE then
+		warn("[Changelog] Fetching from: " .. url)
+	end
 
 	local success, response = pcall(function()
 		return game:HttpGet(url)
 	end)
 
 	if not success or not response then
-		warn("[Changelog] Fetch failed:", response or "no response")
+		if DEV_MODE then
+			warn("[Changelog] Fetch failed:", response or "no response")
+		end
 		return nil
 	end
 
-	warn("[Changelog] Response received, length: " .. #response)
+	if DEV_MODE then
+		warn("[Changelog] Response received, length: " .. #response)
+	end
 
 	local parseSuccess, data = pcall(function()
 		return HttpService:JSONDecode(response)
 	end)
 
 	if not parseSuccess or not data then
-		warn("[Changelog] Parse failed")
+		if DEV_MODE then
+			warn("[Changelog] Parse failed")
+		end
 		return nil
 	end
 
-	warn("[Changelog] Parsed successfully, version: " .. tostring(data.currentVersion))
+	if DEV_MODE then
+		warn("[Changelog] Parsed successfully, version: " .. tostring(data.currentVersion))
+	end
 
 	return data
 end
@@ -377,24 +388,34 @@ function Changelog.CheckAndShow()
 		-- Wait a bit for UI to settle
 		task.wait(2)
 
-		warn("[Changelog] Starting check...")
+		if DEV_MODE then
+			warn("[Changelog] Starting check...")
+		end
 
 		local changelogData = Changelog.FetchChangelog()
 		if not changelogData then
-			warn("[Changelog] Failed to fetch data, skipping")
+			if DEV_MODE then
+				warn("[Changelog] Failed to fetch data, skipping")
+			end
 			return
 		end
 
 		local lastSeen = Changelog.GetLastSeenVersion()
 		local serverVersion = changelogData.currentVersion or CURRENT_VERSION
 
-		warn("[Changelog] Last seen: " .. lastSeen .. ", Server: " .. serverVersion)
+		if DEV_MODE then
+			warn("[Changelog] Last seen: " .. lastSeen .. ", Server: " .. serverVersion)
+		end
 
 		if Changelog.IsNewerVersion(serverVersion, lastSeen) then
-			warn("[Changelog] New version detected! Showing modal...")
+			if DEV_MODE then
+				warn("[Changelog] New version detected! Showing modal...")
+			end
 			Changelog.ShowModal(changelogData)
 		else
-			warn("[Changelog] No new version, skipping modal")
+			if DEV_MODE then
+				warn("[Changelog] No new version, skipping modal")
+			end
 		end
 	end)
 end

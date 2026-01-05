@@ -510,6 +510,13 @@ local Translations = {
 		processing_frames = "Processing frames...",
 		recording_loaded = "Recording Loaded",
 		invalid_recording_file = "Invalid recording file",
+
+		-- Before Fall (Rewind)
+		before_fall = "BEFORE FALL",
+		before_fall_hint = "Drag slider or use BEFORE FALL to jump to safe position",
+		before_fall_not_enough = "Not enough frames recorded",
+		before_fall_set = "Set to %.1fs (before jump/fall)",
+		before_fall_no_fall = "No fall detected in recording",
 	},
 
 	-- ═══════════════════════════════════════════════════════════════════
@@ -1007,6 +1014,13 @@ local Translations = {
 		processing_frames = "Memproses frame...",
 		recording_loaded = "Rekaman Dimuat",
 		invalid_recording_file = "File rekaman tidak valid",
+
+		-- Before Fall (Rewind)
+		before_fall = "SEBELUM JATUH",
+		before_fall_hint = "Seret slider atau gunakan SEBELUM JATUH untuk lompat ke posisi aman",
+		before_fall_not_enough = "Frame yang direkam tidak cukup",
+		before_fall_set = "Diatur ke %.1fs (sebelum lompat/jatuh)",
+		before_fall_no_fall = "Tidak ada jatuhan terdeteksi di rekaman",
 	},
 }
 

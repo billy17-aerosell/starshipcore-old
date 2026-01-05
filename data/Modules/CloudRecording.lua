@@ -196,14 +196,16 @@ local function OptimizeForMobile(recordingData)
 		-- Skip other metadata that's not essential
 	}
 
-	print(
-		string.format(
-			"[CloudRecording] Optimized: %d -> %d frames (%.1f%% reduction)",
-			originalFrameCount,
-			#optimizedFrames,
-			(1 - #optimizedFrames / originalFrameCount) * 100
+	if DEV_MODE then
+		print(
+			string.format(
+				"[CloudRecording] Optimized: %d -> %d frames (%.1f%% reduction)",
+				originalFrameCount,
+				#optimizedFrames,
+				(1 - #optimizedFrames / originalFrameCount) * 100
+			)
 		)
-	)
+	end
 
 	return result
 end
