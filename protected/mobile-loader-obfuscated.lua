@@ -1405,17 +1405,21 @@ local function main()
 		if loaderGui then
 			loaderGui:Destroy()
 		end
-		-- Show event code UI as fallback
-		showEventCodeUI(function(sessionData)
-			-- On success, load mobile UI
-			local newLoaderGui, newUpdateStatus = createLoadingUI()
-			newUpdateStatus("Access granted!", 0.7)
-			task.wait(0.3)
-			loadMobileUI(sessionData, newLoaderGui, newUpdateStatus)
-		end, function()
-			-- On cancel, show error
+		-- Only show event code UI if event system is active
+		if isEventSystemActive then
+			showEventCodeUI(function(sessionData)
+				-- On success, load mobile UI
+				local newLoaderGui, newUpdateStatus = createLoadingUI()
+				newUpdateStatus("Access granted!", 0.7)
+				task.wait(0.3)
+				loadMobileUI(sessionData, newLoaderGui, newUpdateStatus)
+			end, function()
+				-- On cancel, show error
+				showError("Connection Failed\nServer Unreachable")
+			end)
+		else
 			showError("Connection Failed\nServer Unreachable")
-		end)
+		end
 		return
 	end
 
@@ -1442,8 +1446,8 @@ local function main()
 			loaderGui:Destroy()
 		end
 
-		-- Check if event system is active (from server response)
-		if data.isEventActive == false then
+		-- Check if event system is active (use previously determined value OR from server response)
+		if not isEventSystemActive or data.isEventActive == false then
 			-- Event system disabled -> Show error directly
 			local errorMsg = data.message or "Access Denied"
 			if data.hint then
