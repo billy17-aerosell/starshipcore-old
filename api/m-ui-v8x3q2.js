@@ -263,9 +263,12 @@ export default async function handler(req, res) {
               `[${timestamp}] ⏳ Mobile UI - VIP expired, checking event access - UserID: ${userId}`,
             );
             
+            // Check if event system is active globally
+            const isEventSystemActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
+            
             // Check if user has active event access before blocking
             const eventAccess = await checkEventAccess(userId);
-            if (eventAccess.hasAccess) {
+            if (isEventSystemActive && eventAccess.hasAccess) {
               console.log(
                 `[${timestamp}] 🎟️ EXPIRED VIP + EVENT ACCESS - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
               );
@@ -396,40 +399,47 @@ export default async function handler(req, res) {
 
     // === CHECK EVENT CODE ACCESS (Google Sheets) ===
     // Re-enabled with improved security - only grants access, doesn't bypass whitelist
-    const eventAccess = await checkEventAccess(userId);
+    // Check if event system is active globally FIRST
+    const isEventSystemActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
     
-    if (eventAccess.hasAccess) {
+    if (!isEventSystemActive) {
+      console.log(`[${timestamp}] ⚠️ Event system disabled - blocking event access for UserID: ${userId}`);
+    } else {
+      const eventAccess = await checkEventAccess(userId);
+      
+      if (eventAccess.hasAccess) {
+        console.log(
+          `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
+        );
+      
+        // Read MobileUI.lua (obfuscated version for security) from data folder
+        const uiPath = path.join(process.cwd(), "data", "MobileUI-obfuscated.lua");
+
+        if (!fs.existsSync(uiPath)) {
+          return res.status(500).send('error("Mobile UI not available")');
+        }
+
+        let uiScript = fs.readFileSync(uiPath, "utf8");
+        
+        // Inject R2 Event Code for cloud access
+        if (R2_EVENT_CODE) {
+          const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
+          uiScript = eventCodeInjection + uiScript;
+          console.log(`[${timestamp}] 🔑 Injected R2 event code for event user`);
+        }
+
+        // Note: Discord webhook sent from load.js instead (to avoid duplicate)
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("X-Platform", "mobile");
+        res.setHeader("X-Auth", "event");
+        return res.status(200).send(uiScript);
+      }
+      
       console.log(
-        `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
+        `[${timestamp}] ℹ️ No event access - UserID: ${userId} | IP: ${clientIP}`,
       );
-      
-      // Read MobileUI.lua (obfuscated version for security) from data folder
-      const uiPath = path.join(process.cwd(), "data", "MobileUI-obfuscated.lua");
-
-      if (!fs.existsSync(uiPath)) {
-        return res.status(500).send('error("Mobile UI not available")');
-      }
-
-      let uiScript = fs.readFileSync(uiPath, "utf8");
-      
-      // Inject R2 Event Code for cloud access
-      if (R2_EVENT_CODE) {
-        const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
-        uiScript = eventCodeInjection + uiScript;
-        console.log(`[${timestamp}] 🔑 Injected R2 event code for event user`);
-      }
-
-      // Note: Discord webhook sent from load.js instead (to avoid duplicate)
-      res.setHeader("Content-Type", "text/plain; charset=utf-8");
-      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-      res.setHeader("X-Platform", "mobile");
-      res.setHeader("X-Auth", "event");
-      return res.status(200).send(uiScript);
     }
-    
-    console.log(
-      `[${timestamp}] ℹ️ No event access - UserID: ${userId} | IP: ${clientIP}`,
-    );
 
     // === NOT WHITELISTED ===
     console.log(
