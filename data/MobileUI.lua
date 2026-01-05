@@ -13,6 +13,9 @@ local LocalPlayer = Players.LocalPlayer
 local VERSION = "1.0.0-mobile"
 local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 
+-- DEV_MODE detection (same as StarshipCore)
+local DEV_MODE = _G.StarshipDevMode or false
+
 -- ══════════════════════════════════════════════════════════════════
 -- LOAD WINDUI
 -- ══════════════════════════════════════════════════════════════════
@@ -121,12 +124,16 @@ end
 -- CREATE WINDOW
 -- ══════════════════════════════════════════════════════════════════
 local Window = WindUI:CreateWindow({
-	Title = "STARSHIP PREMIUM",
+	Title = "STARSHIP",
+	Icon = "rbxassetid://123840945153526", -- Logo next to title
+	IconSize = 28, -- Icon size at root level
 	Author = "By StarshipCore Team",
 	Size = UDim2.fromOffset(360, 520),
 	Transparent = true,
 	Theme = Settings.Theme,
 	SideBarWidth = 170,
+	BackgroundImageTransparency = 0.85, -- Logo transparency
+	Background = "rbxassetid://123840945153526", -- Starship Logo as background
 	User = {
 		Enabled = true,
 		Anonymous = true, -- Set to true to hide real username
@@ -145,7 +152,7 @@ local Window = WindUI:CreateWindow({
 		end,
 	},
 	Topbar = {
-		Height = 44,
+		Height = 60, -- Increased height for larger icon
 		ButtonsType = "Default", -- "Default" or "Mac" style buttons (minimize, close)
 	},
 	OpenButton = {
@@ -168,8 +175,10 @@ getgenv().StarshipWindow = Window
 getgenv().StarshipWindUI = WindUI
 
 -- ══════════════════════════════════════════════════════════════════
--- FPS, PING & ROLE TAGS (Top bar display)
+-- LOGO OVERLAY (Using WindUI's built-in Background Image Settings)
 -- ══════════════════════════════════════════════════════════════════
+Window:SetBackgroundImage("rbxassetid://91946746369709")
+Window:SetBackgroundImageTransparency(0.85)
 
 -- Get session data from StarshipSession (set by main loader)
 local function GetSessionData()
@@ -454,7 +463,7 @@ local function CheckBanStatus()
 	isBanCheckRunning = false
 
 	if not success then
-		warn("[StarshipCore] Ban check failed: Connection error")
+		-- Connection error - silent failure in production
 		return
 	end
 
@@ -467,15 +476,31 @@ local function CheckBanStatus()
 	-- Check if banned
 	if data then
 		if data.isBanned then
-			warn("[StarshipCore] User is BANNED - Terminating script")
+			-- User is banned - terminate script (silent in production)
 			ShowBannedMessage("You have been banned.\nReason: " .. (data.banReason or "Violation of terms"))
 			return true -- Return banned status
 		end
 
 		if data.status == "denied" then
-			warn("[StarshipCore] Access DENIED - " .. (data.message or "Unknown reason"))
+			-- Access denied - terminate script (silent in production)
 			ShowBannedMessage(data.message or "Your access has been revoked.")
 			return true
+		end
+
+		-- ══════════════════════════════════════════════════════════════════
+		-- EVENT ACCESS CHECK - Kick if event system is disabled
+		-- ══════════════════════════════════════════════════════════════════
+		-- Check if user is using event access and if it's still valid
+		local sessionData = getgenv().StarshipSessionData
+		if sessionData and sessionData.IsEventAccess then
+			-- User is using event access - check if still has access
+			if data.hasAccess == false and not data.isVIP then
+				-- Event access revoked (EVENT_SYSTEM_ACTIVE = false or event expired)
+				ShowBannedMessage(
+					"Event access has been disabled.\n\nThe event system is currently inactive.\nPlease purchase VIP to continue."
+				)
+				return true
+			end
 		end
 	end
 
@@ -505,7 +530,7 @@ task.spawn(function()
 	end
 end)
 
-print("[StarshipCore] 🔒 Periodic ban check enabled (every 5 minutes)")
+-- Ban check initialized (silent in production)
 
 -- Cloud recording storage (in memory for mobile) - declared early for PlayRecording access
 local CloudRecordingData = nil
@@ -641,7 +666,7 @@ local function SaveToCache(recordingId, recordingData)
 		writefile(cachePath, jsonData)
 	end)
 
-	if success then
+	if success and DEV_MODE then
 		print("[Cache] Saved recording to cache: " .. recordingId)
 	end
 
@@ -687,7 +712,9 @@ local function ClearCache()
 		pcall(delfile, filePath)
 	end
 
-	print("[Cache] Cache cleared")
+	if DEV_MODE then
+		print("[Cache] Cache cleared")
+	end
 	return true
 end
 
@@ -4853,7 +4880,9 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 		ChunkedState.currentLoadingChunk = -1
 
 		if not success then
-			warn("[Chunked] Failed to load chunk " .. chunkIndex)
+			if DEV_MODE then
+				warn("[Chunked] Failed to load chunk " .. chunkIndex)
+			end
 			if callback then
 				callback(false, nil)
 			end

@@ -164,122 +164,238 @@ local function createLoadingUI()
 		screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 	end
 
-	-- Background
+	-- Background (Fullscreen dark)
 	local background = Instance.new("Frame")
 	background.Name = "Background"
 	background.Size = UDim2.new(1, 0, 1, 0)
-	background.BackgroundColor3 = Color3.fromHex("#0a0a0f")
+	background.BackgroundColor3 = Color3.fromRGB(8, 8, 15)
 	background.BorderSizePixel = 0
 	background.Parent = screenGui
 
-	-- Gradient
-	local gradient = Instance.new("UIGradient")
-	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromHex("#0a0a0f")),
-		ColorSequenceKeypoint.new(0.5, Color3.fromHex("#1a1a2e")),
-		ColorSequenceKeypoint.new(1, Color3.fromHex("#0a0a0f")),
-	})
-	gradient.Rotation = 45
-	gradient.Parent = background
+	-- Large Logo Overlay (Background watermark)
+	local logoOverlay = Instance.new("ImageLabel")
+	logoOverlay.Name = "LogoOverlay"
+	logoOverlay.Size = UDim2.new(0, 350, 0, 350)
+	logoOverlay.Position = UDim2.new(0.5, -175, 0.4, -175)
+	logoOverlay.BackgroundTransparency = 1
+	logoOverlay.Image = "rbxassetid://123840945153526"
+	logoOverlay.ImageTransparency = 0.88
+	logoOverlay.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	logoOverlay.ScaleType = Enum.ScaleType.Fit
+	logoOverlay.ZIndex = 1
+	logoOverlay.Parent = background
 
-	-- Main Container
-	local container = Instance.new("Frame")
-	container.Name = "Container"
-	container.Size = UDim2.new(0, 320, 0, 200)
-	container.Position = UDim2.new(0.5, 0, 0.5, 0)
-	container.AnchorPoint = Vector2.new(0.5, 0.5)
-	container.BackgroundColor3 = Color3.fromHex("#16162a")
-	container.BorderSizePixel = 0
-	container.Parent = background
+	-- Floating Particles Container
+	local particleContainer = Instance.new("Frame")
+	particleContainer.Name = "Particles"
+	particleContainer.Size = UDim2.new(1, 0, 1, 0)
+	particleContainer.BackgroundTransparency = 1
+	particleContainer.ClipsDescendants = true
+	particleContainer.ZIndex = 2
+	particleContainer.Parent = background
 
-	local containerCorner = Instance.new("UICorner")
-	containerCorner.CornerRadius = UDim.new(0, 16)
-	containerCorner.Parent = container
+	-- Create floating particles
+	task.spawn(function()
+		for i = 1, 15 do
+			if not screenGui or not screenGui.Parent then
+				break
+			end
 
-	local containerStroke = Instance.new("UIStroke")
-	containerStroke.Color = Color3.fromHex("#6366f1")
-	containerStroke.Thickness = 2
-	containerStroke.Transparency = 0.5
-	containerStroke.Parent = container
+			local particle = Instance.new("Frame")
+			local size = math.random(3, 6)
+			particle.Size = UDim2.new(0, size, 0, size)
+			particle.Position = UDim2.new(math.random(), 0, math.random(), 0)
+			particle.BackgroundColor3 = Color3.fromHSV(0.65 + math.random() * 0.1, 0.8, 1)
+			particle.BackgroundTransparency = 0.5
+			particle.BorderSizePixel = 0
+			particle.ZIndex = 3
+			particle.Parent = particleContainer
 
-	-- Logo/Title
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(1, 0)
+			corner.Parent = particle
+
+			-- Animate particle
+			task.spawn(function()
+				local startY = particle.Position.Y.Scale
+				local startX = particle.Position.X.Scale
+				local floatSpeed = math.random(8, 20) / 10000
+
+				while particle and particle.Parent do
+					local newY = startY - floatSpeed
+					if newY < -0.1 then
+						newY = 1.1
+						startY = 1.1
+						startX = math.random()
+					end
+					startY = newY
+
+					local sway = math.sin(os.clock() * 2 + i) * 0.02
+					particle.Position = UDim2.new(startX + sway, 0, newY, 0)
+					particle.BackgroundTransparency = 0.4 + math.sin(os.clock() * 2 + i) * 0.2
+
+					task.wait(0.03)
+				end
+			end)
+			task.wait(0.05)
+		end
+	end)
+
+	-- Welcome Message (Top)
+	local welcomeMsg = Instance.new("TextLabel")
+	welcomeMsg.Name = "Welcome"
+	welcomeMsg.Size = UDim2.new(1, 0, 0, 25)
+	welcomeMsg.Position = UDim2.new(0, 0, 0.18, 0)
+	welcomeMsg.BackgroundTransparency = 1
+	welcomeMsg.Text = "Welcome back, " .. LocalPlayer.Name .. "!"
+	welcomeMsg.TextColor3 = Color3.fromRGB(60, 255, 180)
+	welcomeMsg.TextSize = 14
+	welcomeMsg.Font = Enum.Font.Gotham
+	welcomeMsg.ZIndex = 10
+	welcomeMsg.Parent = background
+
+	-- Logo Container (Large, centered)
+	local logoContainer = Instance.new("Frame")
+	logoContainer.Name = "LogoContainer"
+	logoContainer.Size = UDim2.new(0, 120, 0, 120)
+	logoContainer.Position = UDim2.new(0.5, -60, 0.28, 0)
+	logoContainer.BackgroundTransparency = 1
+	logoContainer.ZIndex = 10
+	logoContainer.Parent = background
+
+	local logo = Instance.new("ImageLabel")
+	logo.Name = "Logo"
+	logo.Image = "rbxassetid://123840945153526"
+	logo.Size = UDim2.new(1, 0, 1, 0)
+	logo.BackgroundTransparency = 1
+	logo.ScaleType = Enum.ScaleType.Fit
+	logo.ZIndex = 10
+	logo.Parent = logoContainer
+
+	-- Title Text
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
-	title.Size = UDim2.new(1, -40, 0, 40)
-	title.Position = UDim2.new(0.5, 0, 0, 30)
-	title.AnchorPoint = Vector2.new(0.5, 0)
+	title.Text = "STARSHIP"
+	title.Size = UDim2.new(1, 0, 0, 45)
+	title.Position = UDim2.new(0, 0, 0.50, 0)
 	title.BackgroundTransparency = 1
-	title.Text = "⭐ STARSHIP MOBILE"
-	title.TextColor3 = Color3.fromHex("#ffffff")
-	title.TextSize = 24
-	title.Font = Enum.Font.GothamBold
-	title.Parent = container
+	title.TextColor3 = Color3.fromRGB(90, 110, 245)
+	title.Font = Enum.Font.GothamBlack
+	title.TextSize = 36
+	title.ZIndex = 10
+	title.Parent = background
 
-	-- Status Text
+	-- Subtitle / Status Text
 	local statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "Status"
-	statusLabel.Size = UDim2.new(1, -40, 0, 25)
-	statusLabel.Position = UDim2.new(0.5, 0, 0, 85)
-	statusLabel.AnchorPoint = Vector2.new(0.5, 0)
-	statusLabel.BackgroundTransparency = 1
 	statusLabel.Text = "Initializing..."
-	statusLabel.TextColor3 = Color3.fromHex("#a1a1aa")
-	statusLabel.TextSize = 14
-	statusLabel.Font = Enum.Font.Gotham
-	statusLabel.Parent = container
+	statusLabel.Size = UDim2.new(1, 0, 0, 25)
+	statusLabel.Position = UDim2.new(0, 0, 0.58, 0)
+	statusLabel.BackgroundTransparency = 1
+	statusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+	statusLabel.Font = Enum.Font.GothamMedium
+	statusLabel.TextSize = 13
+	statusLabel.ZIndex = 10
+	statusLabel.Parent = background
 
-	-- Progress Bar Background
-	local progressBg = Instance.new("Frame")
-	progressBg.Name = "ProgressBg"
-	progressBg.Size = UDim2.new(1, -60, 0, 8)
-	progressBg.Position = UDim2.new(0.5, 0, 0, 130)
-	progressBg.AnchorPoint = Vector2.new(0.5, 0)
-	progressBg.BackgroundColor3 = Color3.fromHex("#2a2a3e")
-	progressBg.BorderSizePixel = 0
-	progressBg.Parent = container
+	-- Progress Bar Container
+	local progressContainer = Instance.new("Frame")
+	progressContainer.Name = "ProgressBg"
+	progressContainer.Size = UDim2.new(0.6, 0, 0, 6)
+	progressContainer.Position = UDim2.new(0.2, 0, 0.65, 0)
+	progressContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+	progressContainer.BorderSizePixel = 0
+	progressContainer.ZIndex = 10
+	progressContainer.Parent = background
 
-	local progressBgCorner = Instance.new("UICorner")
-	progressBgCorner.CornerRadius = UDim.new(1, 0)
-	progressBgCorner.Parent = progressBg
+	local progressCorner = Instance.new("UICorner")
+	progressCorner.CornerRadius = UDim.new(1, 0)
+	progressCorner.Parent = progressContainer
+
+	local progressGlow = Instance.new("UIStroke")
+	progressGlow.Color = Color3.fromRGB(90, 110, 245)
+	progressGlow.Thickness = 1
+	progressGlow.Transparency = 0.7
+	progressGlow.Parent = progressContainer
 
 	-- Progress Bar Fill
 	local progressFill = Instance.new("Frame")
 	progressFill.Name = "Fill"
 	progressFill.Size = UDim2.new(0, 0, 1, 0)
-	progressFill.BackgroundColor3 = Color3.fromHex("#6366f1")
+	progressFill.BackgroundColor3 = Color3.fromRGB(90, 110, 245)
 	progressFill.BorderSizePixel = 0
-	progressFill.Parent = progressBg
+	progressFill.ZIndex = 11
+	progressFill.Parent = progressContainer
 
-	local progressFillCorner = Instance.new("UICorner")
-	progressFillCorner.CornerRadius = UDim.new(1, 0)
-	progressFillCorner.Parent = progressFill
+	local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(1, 0)
+	fillCorner.Parent = progressFill
 
-	local progressGradient = Instance.new("UIGradient")
-	progressGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromHex("#6366f1")),
-		ColorSequenceKeypoint.new(1, Color3.fromHex("#8b5cf6")),
-	})
-	progressGradient.Parent = progressFill
+	-- Progress Percentage
+	local progressText = Instance.new("TextLabel")
+	progressText.Name = "ProgressText"
+	progressText.Text = "0%"
+	progressText.Size = UDim2.new(1, 0, 0, 20)
+	progressText.Position = UDim2.new(0, 0, 0.69, 0)
+	progressText.BackgroundTransparency = 1
+	progressText.TextColor3 = Color3.fromRGB(120, 140, 255)
+	progressText.Font = Enum.Font.GothamBold
+	progressText.TextSize = 12
+	progressText.ZIndex = 10
+	progressText.Parent = background
 
 	-- Version label
 	local versionLabel = Instance.new("TextLabel")
 	versionLabel.Name = "Version"
 	versionLabel.Size = UDim2.new(1, 0, 0, 20)
-	versionLabel.Position = UDim2.new(0.5, 0, 1, -25)
-	versionLabel.AnchorPoint = Vector2.new(0.5, 0)
+	versionLabel.Position = UDim2.new(0, 0, 0.92, 0)
 	versionLabel.BackgroundTransparency = 1
 	versionLabel.Text = "v1.0.0-mobile"
-	versionLabel.TextColor3 = Color3.fromHex("#4a4a5e")
+	versionLabel.TextColor3 = Color3.fromRGB(70, 70, 90)
 	versionLabel.TextSize = 11
 	versionLabel.Font = Enum.Font.Gotham
-	versionLabel.Parent = container
+	versionLabel.ZIndex = 10
+	versionLabel.Parent = background
+
+	-- Logo Animation: Pulse + Float + Rainbow color
+	task.spawn(function()
+		local t = 0
+		local floatOffset = 0
+		local baseSize = 120
+		while logo and logo.Parent do
+			t = t + 0.02
+			floatOffset = floatOffset + 0.06
+
+			-- Rainbow color cycle for title and progress
+			local c = Color3.fromHSV(t % 1, 0.85, 1)
+			title.TextColor3 = c
+			progressFill.BackgroundColor3 = c
+			progressGlow.Color = c
+
+			-- Pulse size for logo container
+			local pulse = 1 + math.sin(t * 4) * 0.04
+			local newSize = baseSize * pulse
+			logoContainer.Size = UDim2.new(0, newSize, 0, newSize)
+			logoContainer.Position = UDim2.new(0.5, -newSize / 2, 0.28, math.sin(floatOffset) * 5)
+
+			task.wait(0.02)
+		end
+	end)
 
 	-- Update function
 	local function updateStatus(text, progress)
+		-- Obfuscate specific module names
+		if string.find(text, "Downloading:") then
+			text = "Loading Module #" .. math.random(1000, 9999)
+		elseif string.find(text, "Updating") then
+			text = "Preparing Assets..."
+		end
+
 		statusLabel.Text = text
 		TweenService:Create(progressFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			Size = UDim2.new(progress, 0, 1, 0),
 		}):Play()
+		progressText.Text = math.floor(progress * 100) .. "%"
 	end
 
 	return screenGui, updateStatus
@@ -743,6 +859,9 @@ end
 -- ══════════════════════════════════════════════════════════════════
 
 local function loadMobileUI(sessionData, loaderGui, updateStatus)
+	-- Store session data globally for periodic access check in MobileUI
+	getgenv().StarshipSessionData = sessionData
+
 	if updateStatus then
 		updateStatus("Loading Starship Mobile...", 0.85)
 	end
@@ -938,7 +1057,7 @@ local function loadMobileUI(sessionData, loaderGui, updateStatus)
 						or statusData.status == "updating"
 					then
 						-- Status changed to maintenance/offline/updating - close UI
-						print("[StarshipCore Mobile] Server status changed to:", statusData.status)
+						-- (Debug print removed for production)
 
 						-- Try to close the main UI
 						pcall(function()
@@ -1253,7 +1372,7 @@ local function main()
 
 	-- Detect device HWID for binding
 	local deviceHWID = getDeviceHWID()
-	print("[StarshipCore] Device HWID: " .. (deviceHWID:sub(1, 16) or "unknown") .. "...")
+	-- HWID detection complete (debug print removed for production)
 
 	-- Call mobile-load API (separate whitelist from PC)
 	local authUrl = MOBILE_AUTH_API .. "?userId=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
