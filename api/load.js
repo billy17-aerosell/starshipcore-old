@@ -714,7 +714,7 @@ export default async function handler(req, res) {
                 owner: vipUser.username,
                 ip: clientIP,
                 platform: platformLabel,
-                hwidStatus: hwidResult ? (hwidResult.isNew ? "New HWID Registered" : "HWID Bound") : "Protected",
+                hwidStatus: "VIP Expired",
                 timestamp: timestamp,
                 message: `❌ ${platformLabel} VIP access expired for ${vipUser.username}\nExpired: ${expiryDate.toISOString()}`,
               });
@@ -820,7 +820,7 @@ export default async function handler(req, res) {
             owner: vipUser.username,
             ip: clientIP,
             platform: platformLabel,
-            hwidStatus: hwidResult ? (hwidResult.isNew ? "New HWID Registered" : "HWID Bound") : "Protected",
+            hwidStatus: "Suspended",
             timestamp: timestamp,
             message: `🚫 Suspended user attempted access: ${vipUser.username}`,
           });
@@ -1114,7 +1114,7 @@ export default async function handler(req, res) {
               owner: `UserID: ${userId}`,
               ip: clientIP,
               platform: platformLabel,
-              hwidStatus: hwidResult ? (hwidResult.isNew ? "New HWID Registered" : "HWID Bound") : "Protected",
+              hwidStatus: "Event Code",
               timestamp: timestamp,
               message: `✅ Event access granted\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
             });
@@ -1150,7 +1150,7 @@ export default async function handler(req, res) {
         owner: `UserID: ${userId}`,
         ip: clientIP,
         platform: platformLabel,
-        hwidStatus: hwidResult ? (hwidResult.isNew ? "New HWID Registered" : "HWID Bound") : "Protected",
+        hwidStatus: "Not Whitelisted",
         timestamp: timestamp,
         message: `❌ User not in ${platform} whitelist\nUserID: ${userId}`,
       });
@@ -1219,7 +1219,7 @@ async function handleMobileSuccess(
         owner: mobileUser.username + " (" + userId + ")",
         ip: clientIP,
         platform: "Mobile",
-        hwidStatus: hwidResult ? (hwidResult.isNew ? "New HWID Registered" : "HWID Bound") : "Protected",
+        hwidStatus: "Protected",
         timestamp: timestamp,
         message: "Mobile VIP access granted - Duration: " + (mobileUser.expiresAt ? remainingDays + " days" : "LIFETIME"),
       });
