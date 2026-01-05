@@ -260,8 +260,38 @@ export default async function handler(req, res) {
           const expiryDate = new Date(mobileUser.expiresAt);
           if (expiryDate < new Date()) {
             console.log(
-              `[${timestamp}] ❌ Mobile UI - VIP expired - UserID: ${userId}`,
+              `[${timestamp}] ⏳ Mobile UI - VIP expired, checking event access - UserID: ${userId}`,
             );
+            
+            // Check if user has active event access before blocking
+            const eventAccess = await checkEventAccess(userId);
+            if (eventAccess.hasAccess) {
+              console.log(
+                `[${timestamp}] 🎟️ EXPIRED VIP + EVENT ACCESS - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
+              );
+              
+              // Serve UI via event access
+              const uiPath = path.join(process.cwd(), "data", "MobileUI-obfuscated.lua");
+              if (!fs.existsSync(uiPath)) {
+                return res.status(500).send('error("Mobile UI not available")');
+              }
+
+              let uiScript = fs.readFileSync(uiPath, "utf8");
+              
+              // Inject R2 Event Code for cloud access
+              if (R2_EVENT_CODE) {
+                const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
+                uiScript = eventCodeInjection + uiScript;
+              }
+
+              res.setHeader("Content-Type", "text/plain; charset=utf-8");
+              res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+              res.setHeader("X-Platform", "mobile");
+              res.setHeader("X-Auth", "event");
+              return res.status(200).send(uiScript);
+            }
+            
+            // No event access, block as expired
             return res
               .status(403)
               .send('error("Mobile VIP access expired. Please renew.")');
