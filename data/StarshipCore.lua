@@ -1750,15 +1750,20 @@ do
 		"Lv",
 		"lv",
 		"LV",
-		-- Checkpoint variations
+		-- Checkpoint variations (including camelCase)
 		"Checkpoint",
 		"checkpoint",
 		"CHECKPOINT",
+		"CheckPoint", -- camelCase variation
 		"CP",
 		"cp",
 		"Chkpt",
 		"chkpt",
 		"CHKPT",
+		-- Summit (mountain obbies)
+		"Summit",
+		"summit",
+		"SUMMIT",
 		-- Floor/Tower games
 		"Floor",
 		"floor",
