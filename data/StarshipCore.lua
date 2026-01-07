@@ -1740,25 +1740,72 @@ end
 do
 	-- Common leaderstat names to detect (stored in table to save locals)
 	local LEADERSTAT_NAMES = {
+		-- Common stage/level names
 		"Stage",
 		"stage",
 		"STAGE",
 		"Level",
 		"level",
 		"LEVEL",
+		"Lv",
+		"lv",
+		"LV",
+		-- Checkpoint variations
 		"Checkpoint",
 		"checkpoint",
 		"CHECKPOINT",
 		"CP",
 		"cp",
+		"Chkpt",
+		"chkpt",
+		"CHKPT",
+		-- Floor/Tower games
 		"Floor",
 		"floor",
 		"FLOOR",
+		-- Wave/Round games
+		"Wave",
+		"wave",
+		"WAVE",
+		"Round",
+		"round",
+		"ROUND",
+		-- Section/Part games
+		"Section",
+		"section",
+		"SECTION",
+		"Part",
+		"part",
+		"PART",
+		-- Zone/Area games
+		"Zone",
+		"zone",
+		"ZONE",
+		"Area",
+		"area",
+		"AREA",
+		-- Phase games
+		"Phase",
+		"phase",
+		"PHASE",
+		-- Room/Sector games
+		"Room",
+		"room",
+		"ROOM",
+		"Sector",
+		"sector",
+		"SECTOR",
+		-- Racing games
+		"Lap",
+		"lap",
+		"LAP",
+		-- Progress/Wins
+		"Progress",
+		"progress",
+		"PROGRESS",
 		"Wins",
 		"wins",
 		"WINS",
-		"Progress",
-		"progress",
 	}
 
 	-- Keywords to look for when extracting short game name (obby names usually start with these)
