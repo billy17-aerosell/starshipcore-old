@@ -751,6 +751,15 @@ local S = {
 	isBinding = false,
 	isAutoCloudSync = false, -- NEW: Auto-sync merged files to cloud
 	isOptimizeMerge = true, -- NEW: Optimize merged files (reduce size 50-70%)
+	-- AUTO-CHECKPOINT SYSTEM
+	isAutoCheckpoint = false, -- Enable auto-save on checkpoint/stage change
+	isAutoStopOnCheckpoint = true, -- Stop recording after checkpoint save (default ON)
+
+	autoCheckpointBaseName = "", -- Base name for checkpoint recordings
+	checkpointSaveCount = 0, -- Number of checkpoint saves in current session
+	lastCheckpointStage = nil, -- Last saved stage to prevent duplicates
+	checkpointStartFrame = 1, -- Frame index where current segment starts (for non-cumulative saves)
+	detectedLeaderstat = nil, -- Auto-detected leaderstat name
 	currentWorkspace = "Default",
 	currentMergerWorkspace = "Default",
 	GlobalKeyDuration = "N/A",
@@ -1724,6 +1733,424 @@ local function GeneratePlaybackPath(frames)
 	end)
 end
 
+-- ═══════════════════════════════════════════════════════════════════
+-- AUTO-CHECKPOINT SYSTEM (Wrapped to reduce local variable count)
+-- Automatically saves recording when stage/checkpoint changes
+-- ═══════════════════════════════════════════════════════════════════
+do
+	-- Common leaderstat names to detect (stored in table to save locals)
+	local LEADERSTAT_NAMES = {
+		"Stage",
+		"stage",
+		"STAGE",
+		"Level",
+		"level",
+		"LEVEL",
+		"Checkpoint",
+		"checkpoint",
+		"CHECKPOINT",
+		"CP",
+		"cp",
+		"Floor",
+		"floor",
+		"FLOOR",
+		"Wins",
+		"wins",
+		"WINS",
+		"Progress",
+		"progress",
+	}
+
+	-- Keywords to look for when extracting short game name (obby names usually start with these)
+	local GAME_NAME_KEYWORDS = {
+		"Mount",
+		"MT",
+		"Gunung", -- Mountain obbies
+		"Tower",
+		"TOWER", -- Tower obbies
+		"Obby",
+		"OBBY", -- Generic obby
+		"Climb",
+		"CLIMB", -- Climbing games
+		"Escape",
+		"ESCAPE", -- Escape games
+		"Jump",
+		"JUMP", -- Jump games
+		"Parkour",
+		"PARKOUR", -- Parkour games
+		"Run",
+		"RUN", -- Running games
+		"Race",
+		"RACE", -- Racing games
+		"Temple",
+		"TEMPLE", -- Temple games
+		"Castle",
+		"CASTLE", -- Castle games
+		"Sky",
+		"SKY", -- Sky games
+		"Island",
+		"ISLAND", -- Island games
+		"World",
+		"WORLD", -- World games
+	}
+
+	-- Extract short game name from full game name
+	-- e.g. "(X2 FREE AVA + SPEED COIL) MOUNT PAPA" -> "MT PAPA"
+	local function ExtractShortGameName(fullName)
+		if not fullName or fullName == "" then
+			return "Recording"
+		end
+
+		-- First, try to find keywords in the game name
+		for _, keyword in ipairs(GAME_NAME_KEYWORDS) do
+			local pattern = keyword .. "%s*%w+"
+			local match = fullName:match(pattern)
+			if match then
+				-- Shorten "Mount" to "MT" and "Gunung" to "GN"
+				match = match:gsub("^Mount%s+", "MT "):gsub("^MOUNT%s+", "MT ")
+				match = match:gsub("^Gunung%s+", "GN "):gsub("^GUNUNG%s+", "GN ")
+				-- Clean up and limit length
+				return match:gsub("[^%w%s]", ""):sub(1, 15)
+			end
+		end
+
+		-- Fallback: Remove content in brackets/parentheses and take first meaningful part
+		local cleaned = fullName
+			:gsub("%[.-%]", "") -- Remove [...]
+			:gsub("%(.-%)", "") -- Remove (...)
+			:gsub("{.-}", "") -- Remove {...}
+			:gsub("^%s+", "") -- Trim leading spaces
+			:gsub("[^%w%s]", "") -- Remove special chars
+			:gsub("%s+", " ") -- Normalize spaces
+
+		-- Take first 2-3 words
+		local words = {}
+		for word in cleaned:gmatch("%S+") do
+			table.insert(words, word)
+			if #words >= 2 then
+				break
+			end
+		end
+
+		if #words > 0 then
+			return table.concat(words, " "):sub(1, 15)
+		end
+
+		return "Recording"
+	end
+
+	-- Store for external use (e.g., auto-fill base name input)
+	UIHandlers.ExtractShortGameName = ExtractShortGameName
+
+	-- Detect leaderstat value object - stored in UIHandlers
+	UIHandlers.DetectLeaderstat = function()
+		local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+		if not leaderstats then
+			return nil, nil
+		end
+
+		for _, name in ipairs(LEADERSTAT_NAMES) do
+			local stat = leaderstats:FindFirstChild(name)
+			if stat and (stat:IsA("IntValue") or stat:IsA("NumberValue") or stat:IsA("StringValue")) then
+				return stat, name
+			end
+		end
+
+		for _, child in pairs(leaderstats:GetChildren()) do
+			if child:IsA("IntValue") or child:IsA("NumberValue") then
+				return child, child.Name
+			end
+		end
+		return nil, nil
+	end
+
+	-- Save checkpoint snapshot (without stopping recording) - ASYNC to prevent lag
+	-- Now saves ONLY frames since last checkpoint (non-cumulative)
+	-- isStageIncrease: true = stage went UP, false = stage went DOWN (skip auto-stop for decrease)
+	UIHandlers.SaveCheckpointSnapshot = function(stageValue, isStageIncrease)
+		print(
+			"───────────────────────────────────────────────────────"
+		)
+		print("[SaveCheckpointSnapshot] CALLED")
+		print("  └─ Stage Value:", stageValue)
+		print("  └─ Auto-Stop Enabled:", S.isAutoStopOnCheckpoint)
+		print("  └─ Stage Direction:", isStageIncrease and "INCREASE ↑" or "DECREASE ↓")
+		print(
+			"───────────────────────────────────────────────────────"
+		)
+
+		local totalFrames = recordedData and recordedData.Frames and #recordedData.Frames or 0
+		local startFrame = S.checkpointStartFrame or 1
+		local segmentFrameCount = totalFrames - startFrame + 1
+
+		print("[SaveCheckpointSnapshot] Frame Info:")
+		print("  └─ Total Frames:", totalFrames)
+		print("  └─ Start Frame:", startFrame)
+		print("  └─ Segment Frames:", segmentFrameCount)
+
+		if segmentFrameCount < 10 then
+			print("[SaveCheckpointSnapshot] SKIPPED - Not enough frames:", segmentFrameCount)
+			DevLog("[Checkpoint] Not enough frames since last checkpoint:", segmentFrameCount)
+			return false
+		end
+
+		-- Capture frame range for this segment (before async)
+		local frameStart = startFrame
+		local frameEnd = totalFrames
+		local baseName = S.autoCheckpointBaseName
+		if not baseName or baseName == "" then
+			local ok, info = pcall(function()
+				return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+			end)
+			-- Use ExtractShortGameName to get a shorter, cleaner name
+			local fullName = (ok and info and info.Name) or ""
+			baseName = ExtractShortGameName(fullName)
+		end
+
+		-- Use "Summit" instead of "Stage0" for loop completion
+		local stageSuffix
+		if tonumber(stageValue) == 0 then
+			stageSuffix = "_Summit"
+		else
+			stageSuffix = "_Stage" .. tostring(stageValue)
+		end
+		local filename = baseName .. stageSuffix
+
+		-- Update state immediately (before async)
+		S.checkpointSaveCount = S.checkpointSaveCount + 1
+		S.lastCheckpointStage = stageValue
+		-- Update start frame for next segment (frames after this save)
+		S.checkpointStartFrame = frameEnd + 1
+
+		-- Show toast immediately for feedback
+		-- For Summit (stage 0 / loop completion), ALWAYS auto-stop
+		-- For normal checkpoints, respect the isAutoStopOnCheckpoint setting
+		local isSummit = (tonumber(stageValue) == 0)
+		local willAutoStop = isSummit or (S.isAutoStopOnCheckpoint and isStageIncrease)
+		if willAutoStop then
+			ShowToast(L("checkpoint_saved"), L("checkpoint_recording_stopped", filename .. ".json"), "success", 3)
+		else
+			ShowToast(L("checkpoint_saved"), L("checkpoint_saved_as", filename .. ".json"), "success", 2)
+		end
+
+		-- Handle Auto Stop BEFORE async save (so recording stops immediately)
+		-- Only auto-stop when stage INCREASES, not when it decreases (loop back to basecamp)
+		if willAutoStop then
+			local isSummit = (tonumber(stageValue) == 0)
+			print("🛑 [AUTO-STOP] Recording stopped!")
+			print("  └─ Filename:", filename .. ".json")
+			print("  └─ Type:", isSummit and "🏔️ SUMMIT (Loop Complete)" or "📍 Checkpoint")
+			isRecording = false
+			isPaused = false
+			if Connections.Record then
+				Connections.Record:Disconnect()
+				Connections.Record = nil
+			end
+			if Connections.Preview then
+				Connections.Preview:Disconnect()
+				Connections.Preview = nil
+			end
+			if UIHandlers.CleanupCheckpointMonitor then
+				UIHandlers.CleanupCheckpointMonitor()
+			end
+			-- Clear path visualization
+			ClearPath()
+			if PathContainer then
+				PathContainer:ClearAllChildren()
+			end
+			local char = LocalPlayer.Character
+			if char then
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					hrp.Anchored = false
+				end
+				local hum = char:FindFirstChild("Humanoid")
+				if hum then
+					hum.AutoRotate = true
+				end
+			end
+			if UIHandlers.OnRecordingStateChange then
+				UIHandlers.OnRecordingStateChange(false)
+			end
+		elseif S.isAutoStopOnCheckpoint and not isStageIncrease then
+			print("⏸️ [AUTO-STOP SKIPPED] Stage decreased - waiting for door/teleport")
+			print("  └─ Recording continues so you can walk to the door")
+		end
+
+		-- Run the heavy save operation in background (ASYNC)
+		task.spawn(function()
+			local snapshot = {
+				FPS = recordedData.FPS,
+				Frames = {},
+				Mode = recordedData.Mode or (isFlexibleRecording and "Flexible" or "Strict"),
+				RigType = recordedData.RigType,
+				HipHeight = recordedData.HipHeight,
+				RootHeight = recordedData.RootHeight,
+				PlaceId = game.PlaceId,
+				CheckpointStage = stageValue,
+				SavedAt = os.time(),
+				IsCheckpointSave = true,
+				SegmentInfo = { startFrame = frameStart, endFrame = frameEnd }, -- Debug info
+			}
+
+			-- Copy ONLY frames from this segment (frameStart to frameEnd)
+			-- Also adjust timestamps so the segment starts at t=0
+			local CHUNK_SIZE = 500
+			local firstFrameTime = recordedData.Frames[frameStart] and recordedData.Frames[frameStart].t or 0
+			local outputIndex = 0
+
+			for i = frameStart, frameEnd do
+				outputIndex = outputIndex + 1
+				local frame = recordedData.Frames[i]
+				if frame then
+					-- Copy frame and adjust timestamp
+					local newFrame = {}
+					for k, v in pairs(frame) do
+						newFrame[k] = v
+					end
+					newFrame.t = frame.t - firstFrameTime -- Adjust to start at 0
+					snapshot.Frames[outputIndex] = newFrame
+				end
+
+				if outputIndex % CHUNK_SIZE == 0 then
+					task.wait() -- Yield to prevent freeze
+				end
+			end
+
+			local ok, err = pcall(function()
+				local path = GetWorkspacePath()
+				if not path then
+					error("GetWorkspacePath returned nil")
+				end
+				if writefile then
+					writefile(path .. "/" .. filename .. ".json", HttpService:JSONEncode(snapshot))
+				else
+					error("writefile not available")
+				end
+			end)
+
+			if ok then
+				DevLog(
+					"[Checkpoint] Saved:",
+					filename,
+					"(" .. outputIndex .. " frames, segment " .. frameStart .. "-" .. frameEnd .. ")"
+				)
+				if RefreshPlayerList then
+					RefreshPlayerList()
+				end
+				if UIHandlers.RefreshMergerList then
+					UIHandlers.RefreshMergerList()
+				end
+				if UIHandlers.UpdateCheckpointStatus then
+					UIHandlers.UpdateCheckpointStatus()
+				end
+			else
+				DevLog("[Checkpoint] Save failed:", err)
+				ShowToast("Save Error", tostring(err):sub(1, 50), "error", 3)
+			end
+		end)
+
+		return true
+	end
+
+	-- Setup checkpoint monitoring
+	UIHandlers.SetupCheckpointMonitor = function()
+		if Connections.Checkpoint then
+			Connections.Checkpoint:Disconnect()
+			Connections.Checkpoint = nil
+		end
+
+		if not S.isAutoCheckpoint then
+			return
+		end
+
+		local stat, statName = UIHandlers.DetectLeaderstat()
+		if not stat then
+			ShowToast("Auto-Checkpoint", L("checkpoint_no_leaderstat"), "warning", 3)
+			S.detectedLeaderstat = nil
+			return
+		end
+
+		S.detectedLeaderstat = statName
+		S.lastCheckpointStage = stat.Value
+
+		Connections.Checkpoint = stat.Changed:Connect(function(newValue)
+			-- Detailed console logging for debugging
+			local oldValue = S.lastCheckpointStage or 0
+			local numNew = tonumber(newValue) or 0
+			local numOld = tonumber(oldValue) or 0
+
+			print(
+				"═══════════════════════════════════════════════════════"
+			)
+			print("[Checkpoint] STAGE CHANGE DETECTED")
+			print("  └─ Old Stage:", oldValue, "(type:", type(oldValue), ")")
+			print("  └─ New Stage:", newValue, "(type:", type(newValue), ")")
+			print("  └─ isRecording:", isRecording)
+			print("  └─ isPaused:", isPaused)
+			print("  └─ Auto-Stop Enabled:", S.isAutoStopOnCheckpoint)
+			print(
+				"  └─ Direction:",
+				numNew > numOld and "INCREASE ↑" or (numNew < numOld and "DECREASE ↓" or "SAME")
+			)
+			print(
+				"═══════════════════════════════════════════════════════"
+			)
+
+			if not isRecording or isPaused then
+				print("[Checkpoint] Skipped - Not recording or paused")
+				return
+			end
+			if S.lastCheckpointStage == newValue then
+				print("[Checkpoint] Skipped - Same value")
+				return
+			end
+
+			DevLog("[Checkpoint] Stage changed:", oldValue, "->", newValue)
+
+			-- Determine if stage increased or decreased
+			local isStageIncrease = numNew > numOld
+
+			if isStageIncrease then
+				-- Stage INCREASED: Normal checkpoint, save immediately
+				UIHandlers.SaveCheckpointSnapshot(newValue, true)
+			else
+				-- Stage DECREASED: Start waiting for teleport back to start position
+				print("⏳ [LOOP DETECTION] Stage decreased - waiting for teleport to start position")
+				print("  └─ Will save when player teleports back to recording start")
+
+				-- Store this for later when we detect teleport
+				S.pendingLoopSave = {
+					stageValue = newValue,
+					triggeredAt = tick(),
+				}
+				S.lastCheckpointStage = newValue -- Update stage tracking
+
+				-- Start monitoring for teleport (checked in recorder heartbeat)
+				S.waitingForTeleport = true
+
+				ShowToast("🔄 " .. L("loop_detected"), L("waiting_for_teleport"), "info", 3)
+			end
+		end)
+
+		ShowToast(L("auto_checkpoint_enabled"), L("checkpoint_monitoring", statName), "success", 2)
+	end
+
+	-- Cleanup checkpoint monitor
+	UIHandlers.CleanupCheckpointMonitor = function()
+		if Connections.Checkpoint then
+			Connections.Checkpoint:Disconnect()
+			Connections.Checkpoint = nil
+		end
+		S.checkpointSaveCount = 0
+		S.lastCheckpointStage = nil
+		S.checkpointStartFrame = 1 -- Reset segment start for next session
+		S.waitingForTeleport = false
+		S.pendingLoopSave = nil
+		S.lastTeleportCheckPos = nil
+	end
+end
+
 -- --- RECORDER ---
 local function StopRecording()
 	isRecording = false
@@ -1733,6 +2160,15 @@ local function StopRecording()
 	end
 	if Connections.Preview then
 		Connections.Preview:Disconnect()
+	end
+	-- Cleanup checkpoint monitoring
+	if UIHandlers.CleanupCheckpointMonitor then
+		UIHandlers.CleanupCheckpointMonitor()
+	end
+	-- Clear path visualization
+	ClearPath()
+	if PathContainer then
+		PathContainer:ClearAllChildren()
 	end
 	ResetChar()
 end
@@ -1761,6 +2197,10 @@ local function StartRecording()
 
 	isRecording = true
 	isPaused = false
+	S.checkpointStartFrame = 1 -- Reset segment tracking for new recording
+	S.waitingForTeleport = false -- Clear teleport waiting state
+	S.pendingLoopSave = nil
+	S.recordingStartPosition = r.Position -- Save starting position for loop detection
 
 	-- CROSS-RIG SUPPORT: Detect and save RigType & height metadata
 	local h = c:FindFirstChild("Humanoid")
@@ -1811,6 +2251,50 @@ local function StartRecording()
 		local h = char:FindFirstChild("Humanoid")
 		if not r or not h then
 			return
+		end
+
+		-- TELEPORT DETECTION FOR LOOP RECORDING
+		-- Check if we're waiting for teleport back to start position
+		if S.waitingForTeleport and S.recordingStartPosition and S.pendingLoopSave then
+			local currentPos = r.Position
+			local startPos = S.recordingStartPosition
+
+			-- Initialize last position tracking if not set
+			if not S.lastTeleportCheckPos then
+				S.lastTeleportCheckPos = currentPos
+			end
+
+			-- Calculate distance from LAST position (to detect sudden teleport)
+			local distanceFromLast = (currentPos - S.lastTeleportCheckPos).Magnitude
+			-- Calculate distance from START position
+			local distanceFromStart = (Vector3.new(currentPos.X, 0, currentPos.Z) - Vector3.new(
+				startPos.X,
+				0,
+				startPos.Z
+			)).Magnitude
+
+			-- TELEPORT DETECTION: Sudden large position change (>100 studs in one frame = teleport)
+			local TELEPORT_JUMP_THRESHOLD = 100 -- studs (sudden movement = teleport)
+
+			if distanceFromLast > TELEPORT_JUMP_THRESHOLD then
+				print("🎯 [TELEPORT DETECTED] Sudden large position change!")
+				print("  └─ Jumped:", string.format("%.1f", distanceFromLast), "studs")
+				print("  └─ Distance from start:", string.format("%.1f", distanceFromStart), "studs")
+				print("  └─ ✅ Loop complete - Triggering save...")
+
+				-- Save the checkpoint now (any teleport after stage decrease means loop complete)
+				local stageValue = S.pendingLoopSave.stageValue
+				S.waitingForTeleport = false
+				S.pendingLoopSave = nil
+				S.lastTeleportCheckPos = nil
+
+				-- Save with auto-stop enabled (this is a completed loop)
+				UIHandlers.SaveCheckpointSnapshot(stageValue, true)
+				return -- Exit early after triggering save
+			end
+
+			-- Update last position for next frame
+			S.lastTeleportCheckPos = currentPos
 		end
 
 		local fd = { t = os.clock() - startTime }
@@ -1917,6 +2401,11 @@ local function StartRecording()
 			end
 		end
 	end)
+
+	-- Setup auto-checkpoint monitoring if enabled
+	if S.isAutoCheckpoint and UIHandlers.SetupCheckpointMonitor then
+		UIHandlers.SetupCheckpointMonitor()
+	end
 end
 local function CutAndResume(cutTime)
 	if Connections.Preview then
@@ -2097,7 +2586,11 @@ local function StopPlayback()
 	lastPlaybackTime = 0
 	-- Do NOT clear currentPlaybackFile here, as it breaks replayability from the UI
 	ResetChar()
+	-- Clear all path visualization
 	ClearPath()
+	if PathContainer then
+		PathContainer:ClearAllChildren()
+	end
 
 	-- Reset WalkSpeed to default when stopping
 	local c = LocalPlayer.Character
@@ -2159,7 +2652,7 @@ local function PausePlayback()
 	end
 end
 
-local MAP_DISTANCE_THRESHOLD = 500 -- Jarak maksimal sebelum block (dalam studs)
+local MAP_DISTANCE_THRESHOLD = 1500 -- Jarak maksimal sebelum block (dalam studs) - increased for merged recordings
 
 -- Cek jarak ke titik TERDEKAT di path (bukan hanya titik awal)
 local function GetDistanceToNearestPathPoint(frames, playerPos)
@@ -2307,28 +2800,37 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 			if r and #currentFrameData > 0 then
 				local recordedPlaceId = d.PlaceId
 				local currentPlaceId = game.PlaceId
-				local placeIdMatch = (recordedPlaceId == nil) or (recordedPlaceId == currentPlaceId)
-				local dist = GetDistanceToNearestPathPoint(currentFrameData, r.Position)
+				local placeIdMatch = (recordedPlaceId ~= nil) and (recordedPlaceId == currentPlaceId)
 
-				-- BLOCK if distance is too far (regardless of PlaceId)
-				if dist > MAP_DISTANCE_THRESHOLD then
-					ShowLoadingModal(false)
-					if placeIdMatch then
-						ShowToast(L("error_wrong_game"), L("path_far_same_game", dist), "error", 5)
-					else
-						ShowToast(L("error_wrong_game"), L("wrong_game_warning", dist), "error", 5)
+				-- If PlaceId matches (same game), ALWAYS allow - no distance check needed
+				if placeIdMatch then
+					-- Same game, proceed with playback
+					DevLog("[Playback] PlaceId matches, allowing playback")
+				else
+					-- PlaceId doesn't match or missing - check distance as fallback
+					local dist = GetDistanceToNearestPathPoint(currentFrameData, r.Position)
+
+					if dist > MAP_DISTANCE_THRESHOLD then
+						ShowLoadingModal(false)
+						if recordedPlaceId == nil then
+							-- No PlaceId saved in recording, but too far
+							ShowToast(L("error_wrong_game"), L("path_far_same_game", math.floor(dist)), "error", 5)
+						else
+							-- Different PlaceId AND too far
+							ShowToast(L("error_wrong_game"), L("wrong_game_warning", math.floor(dist)), "error", 5)
+						end
+						return -- BLOCK playback
 					end
-					return -- BLOCK playback
-				end
 
-				-- Distance is OK - show warning if different PlaceId
-				if not placeIdMatch then
-					ShowToast(
-						L("warning_different_game"),
-						L("different_placeid_nearby", tostring(recordedPlaceId), tostring(currentPlaceId)),
-						"warning",
-						4
-					)
+					-- Distance is OK but different/missing PlaceId - show warning
+					if recordedPlaceId ~= nil then
+						ShowToast(
+							L("warning_different_game"),
+							L("different_placeid_nearby", tostring(recordedPlaceId), tostring(currentPlaceId)),
+							"warning",
+							4
+						)
+					end
 				end
 			end
 		end
@@ -2394,8 +2896,18 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 		-- If we are starting from 0 (not resuming), only jump if we are close enough to the path
 		if not isResuming then
+			-- Check distance to FIRST frame specifically
+			local firstFrame = currentFrameData[1]
+			local firstPos = (firstFrame.pos and Vector3.new(firstFrame.pos.x, firstFrame.pos.y, firstFrame.pos.z))
+				or (firstFrame.r and TblToCF(firstFrame.r).Position)
+			local distToFirst = firstPos and (rPos - firstPos).Magnitude or math.huge
+
+			-- PRIORITY: If player is close to first frame, ALWAYS start from 0
+			-- This ensures merged recordings start from beginning when player is at start position
+			if distToFirst < 30 then
+				currentPlaybackTime = 0
 			-- If the nearest point is within the last 2 seconds, force restart from 0
-			if bestT >= (currentTotalDuration - 2.0) then
+			elseif bestT >= (currentTotalDuration - 2.0) then
 				currentPlaybackTime = 0
 				-- Snap to Start: If nearest point is within first 1 second, start from 0
 			elseif bestT < 1.0 then
@@ -5246,6 +5758,7 @@ PageRecord = Instance.new("Frame", ContentArea)
 PageRecord.Size = UDim2.new(1, 0, 1, 0)
 PageRecord.Position = UDim2.new(0, 0, 0, 0)
 PageRecord.BackgroundTransparency = 1
+PageRecord.ClipsDescendants = true -- Prevent content from going outside the page
 PageRecord.Visible = true
 PageMerge = Instance.new("Frame", ContentArea)
 PageMerge.Size = UDim2.new(1, 0, 1, 0)
@@ -5470,7 +5983,7 @@ end
 -- RECORDER UI (Unified Control Center)
 local UIListRecord = Instance.new("UIListLayout", PageRecord)
 UIListRecord.SortOrder = Enum.SortOrder.LayoutOrder
-UIListRecord.Padding = UDim.new(0, 8)
+UIListRecord.Padding = UDim.new(0, 5) -- Reduced padding for compact layout
 
 -- 1. Status Card
 local StatusIcon
@@ -5537,7 +6050,7 @@ end
 -- 2. Control Grid
 do
 	local ControlGrid = Instance.new("Frame", PageRecord)
-	ControlGrid.Size = UDim2.new(1, 0, 0, 80)
+	ControlGrid.Size = UDim2.new(1, 0, 0, 45) -- Reduced height for compact layout
 	ControlGrid.BackgroundTransparency = 1
 	ControlGrid.LayoutOrder = 2
 	local GridLay = Instance.new("UIGridLayout", ControlGrid)
@@ -5591,7 +6104,7 @@ end
 local BtnTogglePath
 do
 	local SettingsPanel = Instance.new("Frame", PageRecord)
-	SettingsPanel.Size = UDim2.new(1, 0, 0, 40) -- Reduced height, only Mode and Path
+	SettingsPanel.Size = UDim2.new(1, 0, 0, 95) -- Reduced height (removed Auto Rewind row)
 	SettingsPanel.BackgroundColor3 = C_ITEM
 	SettingsPanel.LayoutOrder = 3
 	Instance.new("UICorner", SettingsPanel).CornerRadius = UDim.new(0, 8)
@@ -5669,6 +6182,160 @@ do
 			UIHandlers.OnTogglePathClick()
 		end
 	end)
+
+	-- === AUTO-CHECKPOINT UI ===
+	-- Row 2: Auto-Checkpoint Toggle + Base Name Input
+	local BtnAutoCheckpoint = Instance.new("TextButton", SettingsPanel)
+	BtnAutoCheckpoint.Text = L("auto_checkpoint") .. ": " .. L("off")
+	RegisterDynamicUI(BtnAutoCheckpoint, function(el)
+		el.Text = L("auto_checkpoint") .. ": " .. (S.isAutoCheckpoint and L("on") or L("off"))
+	end)
+	BtnAutoCheckpoint.Size = UDim2.new(0.5, -10, 0, 26)
+	BtnAutoCheckpoint.Position = UDim2.new(0, 5, 0, 40)
+	BtnAutoCheckpoint.BackgroundColor3 = C_MAIN
+	BtnAutoCheckpoint.TextColor3 = S.isAutoCheckpoint and C_GREEN or C_RED
+	BtnAutoCheckpoint.Font = Enum.Font.GothamBold
+	BtnAutoCheckpoint.TextSize = 9
+	Instance.new("UICorner", BtnAutoCheckpoint).CornerRadius = UDim.new(0, 6)
+	RegisterTheme(BtnAutoCheckpoint, "BackgroundColor3", "Main")
+
+	-- Base Name Input for Checkpoint
+	local CheckpointNameInput = Instance.new("TextBox", SettingsPanel)
+	CheckpointNameInput.PlaceholderText = L("checkpoint_base_name")
+	CheckpointNameInput.Text = S.autoCheckpointBaseName or ""
+	CheckpointNameInput.Size = UDim2.new(0.5, -10, 0, 26)
+	CheckpointNameInput.Position = UDim2.new(0.5, 5, 0, 40)
+	CheckpointNameInput.BackgroundColor3 = C_MAIN
+	CheckpointNameInput.TextColor3 = C_TEXT
+	CheckpointNameInput.PlaceholderColor3 = C_TEXT_DIM
+	CheckpointNameInput.Font = Enum.Font.Gotham
+	CheckpointNameInput.TextSize = 10
+	CheckpointNameInput.ClearTextOnFocus = false
+	Instance.new("UICorner", CheckpointNameInput).CornerRadius = UDim.new(0, 6)
+	RegisterTheme(CheckpointNameInput, "BackgroundColor3", "Main")
+	RegisterTheme(CheckpointNameInput, "TextColor3", "Text")
+	RegisterTheme(CheckpointNameInput, "PlaceholderColor3", "TextDim")
+	RegisterDynamicUI(CheckpointNameInput, function(el)
+		el.PlaceholderText = L("checkpoint_base_name")
+	end)
+	SetupTextBoxInputSink(CheckpointNameInput)
+
+	-- Row 3: Auto Stop Toggle (only visible when Auto-Checkpoint is ON)
+	local BtnAutoStop = Instance.new("TextButton", SettingsPanel)
+	BtnAutoStop.Text = L("auto_stop") .. ": " .. (S.isAutoStopOnCheckpoint and L("on") or L("off"))
+	RegisterDynamicUI(BtnAutoStop, function(el)
+		el.Text = L("auto_stop") .. ": " .. (S.isAutoStopOnCheckpoint and L("on") or L("off"))
+	end)
+	BtnAutoStop.Size = UDim2.new(0.5, -10, 0, 22)
+	BtnAutoStop.Position = UDim2.new(0, 5, 0, 68)
+	BtnAutoStop.BackgroundColor3 = C_MAIN
+	BtnAutoStop.TextColor3 = S.isAutoStopOnCheckpoint and C_GREEN or C_ACCENT
+	BtnAutoStop.Font = Enum.Font.GothamMedium
+	BtnAutoStop.TextSize = 10
+	BtnAutoStop.Visible = S.isAutoCheckpoint
+	Instance.new("UICorner", BtnAutoStop).CornerRadius = UDim.new(0, 6)
+	RegisterTheme(BtnAutoStop, "BackgroundColor3", "Main")
+
+	-- Status Label for Checkpoint (shows save count) - positioned next to Auto Stop
+	local CheckpointStatusLbl = Instance.new("TextLabel", SettingsPanel)
+	CheckpointStatusLbl.Text = ""
+	CheckpointStatusLbl.Size = UDim2.new(0.5, -10, 0, 22)
+	CheckpointStatusLbl.Position = UDim2.new(0.5, 5, 0, 68)
+	CheckpointStatusLbl.BackgroundTransparency = 1
+	CheckpointStatusLbl.TextColor3 = C_GREEN
+	CheckpointStatusLbl.Font = Enum.Font.GothamMedium
+	CheckpointStatusLbl.TextSize = 10
+	CheckpointStatusLbl.TextXAlignment = Enum.TextXAlignment.Center
+	CheckpointStatusLbl.Visible = false -- Will be updated by UpdateCheckpointStatus
+	RegisterTheme(CheckpointStatusLbl, "TextColor3", "Green")
+
+	-- ========== UPDATE VISIBILITY FUNCTION ==========
+	-- Single source of truth for visibility logic
+	local function UpdateCheckpointStatus()
+		-- Auto Stop button: visible when auto-checkpoint is on
+		BtnAutoStop.Visible = S.isAutoCheckpoint
+
+		-- Status label: visible when auto-checkpoint is ON
+		CheckpointStatusLbl.Visible = S.isAutoCheckpoint
+
+		-- Update status text
+		if S.isAutoCheckpoint then
+			if S.detectedLeaderstat then
+				CheckpointStatusLbl.Text = "📍 " .. L("checkpoint_saves", S.checkpointSaveCount)
+				CheckpointStatusLbl.TextColor3 = C_GREEN
+			else
+				CheckpointStatusLbl.Text = "⚠️ N/A"
+				CheckpointStatusLbl.TextColor3 = C_YELLOW
+			end
+		else
+			CheckpointStatusLbl.Text = ""
+		end
+	end
+
+	-- ========== CONNECT ALL CLICK HANDLERS ==========
+	-- Auto Stop Toggle
+	BtnAutoStop.MouseButton1Click:Connect(function()
+		S.isAutoStopOnCheckpoint = not S.isAutoStopOnCheckpoint
+		BtnAutoStop.Text = L("auto_stop") .. ": " .. (S.isAutoStopOnCheckpoint and L("on") or L("off"))
+		BtnAutoStop.TextColor3 = S.isAutoStopOnCheckpoint and C_GREEN or C_ACCENT
+		UpdateCheckpointStatus() -- Update visibility
+	end)
+
+	-- Toggle Auto-Checkpoint
+	BtnAutoCheckpoint.MouseButton1Click:Connect(function()
+		S.isAutoCheckpoint = not S.isAutoCheckpoint
+		BtnAutoCheckpoint.Text = L("auto_checkpoint") .. ": " .. (S.isAutoCheckpoint and L("on") or L("off"))
+		BtnAutoCheckpoint.TextColor3 = S.isAutoCheckpoint and C_GREEN or C_RED
+
+		if S.isAutoCheckpoint then
+			-- Detect leaderstat immediately to provide feedback
+			local stat, statName = UIHandlers.DetectLeaderstat()
+			if stat then
+				S.detectedLeaderstat = statName
+				ShowToast(L("auto_checkpoint_enabled"), L("checkpoint_detected", statName), "success", 2)
+			else
+				ShowToast("Auto-Checkpoint", L("checkpoint_no_leaderstat"), "warning", 3)
+			end
+
+			-- Auto-fill base name if empty
+			if (not S.autoCheckpointBaseName or S.autoCheckpointBaseName == "") and UIHandlers.ExtractShortGameName then
+				task.spawn(function()
+					local ok, info = pcall(function()
+						return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+					end)
+					if ok and info and info.Name then
+						local shortName = UIHandlers.ExtractShortGameName(info.Name)
+						S.autoCheckpointBaseName = shortName
+						CheckpointNameInput.Text = shortName
+					end
+				end)
+			end
+		else
+			-- Cleanup when disabled
+			if UIHandlers.CleanupCheckpointMonitor then
+				UIHandlers.CleanupCheckpointMonitor()
+			end
+			S.detectedLeaderstat = nil
+			ShowToast(L("auto_checkpoint_disabled"), "", "info", 2)
+		end
+
+		UpdateCheckpointStatus()
+	end)
+
+	-- Update base name when changed
+	CheckpointNameInput.FocusLost:Connect(function()
+		S.autoCheckpointBaseName = CheckpointNameInput.Text
+	end)
+
+	-- Store handler for external updates
+	UIHandlers.UpdateCheckpointStatus = UpdateCheckpointStatus
+	UIHandlers.SetCheckpointBaseName = function(name)
+		S.autoCheckpointBaseName = name
+		CheckpointNameInput.Text = name
+	end
+
+	-- Set initial visibility state
+	UpdateCheckpointStatus()
 end
 
 -- 4. Rewind UI (Hidden by default) - Wrapped in do...end to save registers
@@ -5844,17 +6511,18 @@ end
 local ShowSaveRecordingModal -- Forward Declaration
 (function()
 	local FileListCard = Instance.new("Frame", PageRecord)
-	FileListCard.Size = UDim2.new(1, 0, 1, -200) -- Fill remaining space
+	FileListCard.Size = UDim2.new(1, 0, 1, -180) -- Fill remaining space (adjusted for smaller SettingsPanel)
 	FileListCard.BackgroundColor3 = C_ITEM
 	FileListCard.LayoutOrder = 5
+	FileListCard.ClipsDescendants = true -- Prevent items from showing outside the card
 	Instance.new("UICorner", FileListCard).CornerRadius = UDim.new(0, 8)
 	RegisterTheme(FileListCard, "BackgroundColor3", "Item")
 
 	RewindFrame:GetPropertyChangedSignal("Visible"):Connect(function()
 		if RewindFrame.Visible then
-			FileListCard.Size = UDim2.new(1, 0, 1, -300) -- Shrink to make room for RewindFrame (200 + 100)
+			FileListCard.Size = UDim2.new(1, 0, 1, -280) -- Shrink to make room for RewindFrame
 		else
-			FileListCard.Size = UDim2.new(1, 0, 1, -200) -- Restore size
+			FileListCard.Size = UDim2.new(1, 0, 1, -180) -- Restore size
 		end
 	end)
 
@@ -5968,15 +6636,22 @@ local ShowSaveRecordingModal -- Forward Declaration
 				local fullPath = jsonFiles[i]
 				local fileName = string.match(fullPath, "[^/\\]+$") or fullPath
 				local baseName = string.gsub(fileName, "%.json$", "")
-				local numPart = string.match(baseName, "(%d+)$")
 				local sortKey
 
-				if numPart and string.len(numPart) > 0 then
-					local prefixLen = string.len(baseName) - string.len(numPart)
-					local prefix = string.sub(baseName, 1, prefixLen)
-					sortKey = "1" .. string.lower(prefix) .. padZero(tonumber(numPart) or 0)
+				-- Check if it's a Summit file (should be at the bottom)
+				if string.find(baseName, "_Summit$") then
+					-- Summit files get a "9" prefix to sort last
+					local prefix = string.gsub(baseName, "_Summit$", "")
+					sortKey = "9" .. string.lower(prefix) .. padZero(9999)
 				else
-					sortKey = "0" .. string.lower(baseName) .. padZero(0)
+					local numPart = string.match(baseName, "(%d+)$")
+					if numPart and string.len(numPart) > 0 then
+						local prefixLen = string.len(baseName) - string.len(numPart)
+						local prefix = string.sub(baseName, 1, prefixLen)
+						sortKey = "1" .. string.lower(prefix) .. padZero(tonumber(numPart) or 0)
+					else
+						sortKey = "0" .. string.lower(baseName) .. padZero(0)
+					end
 				end
 
 				table.insert(sortable, { path = fullPath, key = sortKey })
@@ -6651,21 +7326,28 @@ UIHandlers.RefreshMergerList = function()
 			local fullPath = jsonFiles[i]
 			local fileName = string.match(fullPath, "[^/\\]+$") or fullPath
 			local baseName = string.gsub(fileName, "%.json$", "")
-
-			-- Extract angka di akhir
-			local numPart = string.match(baseName, "(%d+)$")
 			local sortKey
 
-			if numPart and string.len(numPart) > 0 then
-				-- Ada angka di akhir
-				local prefixLen = string.len(baseName) - string.len(numPart)
-				local prefix = string.sub(baseName, 1, prefixLen)
-				local number = tonumber(numPart) or 0
-				-- Sort key: "1" (priority) + prefix lowercase + padded number
-				sortKey = "1" .. string.lower(prefix) .. padZero(number)
+			-- Check if it's a Summit file (should be at the bottom)
+			if string.find(baseName, "_Summit$") then
+				-- Summit files get a "9" prefix to sort last
+				local prefix = string.gsub(baseName, "_Summit$", "")
+				sortKey = "9" .. string.lower(prefix) .. padZero(9999)
 			else
-				-- Tidak ada angka
-				sortKey = "0" .. string.lower(baseName) .. padZero(0)
+				-- Extract angka di akhir
+				local numPart = string.match(baseName, "(%d+)$")
+
+				if numPart and string.len(numPart) > 0 then
+					-- Ada angka di akhir
+					local prefixLen = string.len(baseName) - string.len(numPart)
+					local prefix = string.sub(baseName, 1, prefixLen)
+					local number = tonumber(numPart) or 0
+					-- Sort key: "1" (priority) + prefix lowercase + padded number
+					sortKey = "1" .. string.lower(prefix) .. padZero(number)
+				else
+					-- Tidak ada angka
+					sortKey = "0" .. string.lower(baseName) .. padZero(0)
+				end
 			end
 
 			table.insert(sortableFiles, {
@@ -7529,7 +8211,7 @@ function UIHandlers.SetupListMapUI()
 
 			BtnCloud.MouseButton1Click:Connect(function()
 				S.isAutoCloudSync = not S.isAutoCloudSync
-				BtnCloud.Text = "☁️ " .. (S.isAutoCloudSync and "ON" or "OFF")
+				BtnCloud.Text = "☁�� " .. (S.isAutoCloudSync and "ON" or "OFF")
 				BtnCloud.BackgroundColor3 = S.isAutoCloudSync and C_ACCENT or C_MAIN
 				ShowToast(
 					"☁️ Auto Sync",
@@ -8863,28 +9545,42 @@ function UIHandlers.SetupListMapUI()
 	end)
 
 	-- Button Actions (Popup)
+	local playBtnDebounce = false -- Prevent double-click causing fast playback
 	PBtnPlay.MouseButton1Click:Connect(function()
+		-- Debounce to prevent double-click
+		if playBtnDebounce then
+			return
+		end
+		playBtnDebounce = true
+		task.delay(0.3, function()
+			playBtnDebounce = false
+		end)
+
 		if isPlaying and currentPlaybackSource == "Merger" then
 			PausePlayback()
 		elseif currentPlaybackFile then
-			-- STRICT DISTANCE VALIDATION BEFORE PLAY
+			-- SMART VALIDATION BEFORE PLAY - PlaceId-based
 			if currentFrameData and #currentFrameData > 0 then
 				local c = LocalPlayer.Character
 				local r = c and c:FindFirstChild("HumanoidRootPart")
 				if r then
 					local recordedPlaceId = currentFrameData.PlaceId
 					local currentPlaceId = game.PlaceId
-					local placeIdMatch = (recordedPlaceId == nil) or (recordedPlaceId == currentPlaceId)
-					local dist = GetDistanceToNearestPathPoint(currentFrameData, r.Position)
+					local placeIdMatch = (recordedPlaceId ~= nil) and (recordedPlaceId == currentPlaceId)
 
-					-- BLOCK if distance is too far (regardless of PlaceId)
-					if dist > MAP_DISTANCE_THRESHOLD then
-						if placeIdMatch then
-							ShowToast(L("error_wrong_game"), L("path_far_same_game", dist), "error", 5)
-						else
-							ShowToast(L("error_wrong_game"), L("wrong_game_warning", dist), "error", 5)
+					-- If PlaceId matches (same game), ALWAYS allow - no distance check
+					if not placeIdMatch then
+						-- PlaceId doesn't match or missing - check distance as fallback
+						local dist = GetDistanceToNearestPathPoint(currentFrameData, r.Position)
+
+						if dist > MAP_DISTANCE_THRESHOLD then
+							if recordedPlaceId == nil then
+								ShowToast(L("error_wrong_game"), L("path_far_same_game", math.floor(dist)), "error", 5)
+							else
+								ShowToast(L("error_wrong_game"), L("wrong_game_warning", math.floor(dist)), "error", 5)
+							end
+							return -- BLOCK playback
 						end
-						return -- BLOCK playback
 					end
 				end
 			end

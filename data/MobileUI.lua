@@ -127,7 +127,7 @@ local Window = WindUI:CreateWindow({
 	Title = "STARSHIP",
 	Icon = "rbxassetid://123840945153526", -- Logo next to title
 	IconSize = 28, -- Icon size at root level
-	Author = "By StarshipCore Team",
+	Author = "By StarshipCore",
 	Size = UDim2.fromOffset(360, 520),
 	Transparent = true,
 	Theme = Settings.Theme,
@@ -3685,6 +3685,56 @@ local function PlayRecording(fileName, force)
 		PlaybackState.frameData.RootHeight = data.RootHeight -- Cross-rig: ground height at recording
 		PlaybackState.frameData.HipHeight = data.HipHeight -- Recorded HipHeight
 		PlaybackState.frameData.FPS = data.FPS
+		PlaybackState.frameData.PlaceId = data.PlaceId -- Store for validation
+
+		-- PLACEID-BASED VALIDATION (Same as PC)
+		-- If PlaceId matches, always allow. Otherwise check distance.
+		local recordedPlaceId = data.PlaceId
+		local currentPlaceId = game.PlaceId
+		local placeIdMatch = (recordedPlaceId ~= nil) and (recordedPlaceId == currentPlaceId)
+
+		if not placeIdMatch then
+			-- PlaceId doesn't match or missing - check distance as fallback
+			local char = LocalPlayer.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if hrp and #framesToPlay > 0 then
+				local MAP_DISTANCE_THRESHOLD = 1500 -- Same as PC
+
+				-- Find distance to nearest path point
+				local minDist = math.huge
+				local sampleInterval = math.max(1, math.floor(#framesToPlay / 20))
+				for i = 1, #framesToPlay, sampleInterval do
+					local f = framesToPlay[i]
+					local pos
+					if f.pos then
+						pos = Vector3.new(f.pos.x, f.pos.y, f.pos.z)
+					elseif f.r then
+						pos = TblToCF(f.r).Position
+					end
+					if pos then
+						local dist = (hrp.Position - pos).Magnitude
+						if dist < minDist then
+							minDist = dist
+						end
+						if minDist < MAP_DISTANCE_THRESHOLD then
+							break -- Early exit
+						end
+					end
+				end
+
+				if minDist > MAP_DISTANCE_THRESHOLD then
+					WindUI:Notify({
+						Title = "🛑 Wrong Game",
+						Content = string.format(
+							"Path is %d studs away. You may be in the wrong game.",
+							math.floor(minDist)
+						),
+						Duration = 5,
+					})
+					return -- BLOCK playback
+				end
+			end
+		end
 
 		PlaybackState.currentFile = fileName
 		PlaybackState.currentTime = 0
@@ -5487,7 +5537,17 @@ local function ToggleMiniPlayer(state)
 
 		-- 1. PLAY/PAUSE Button (Green)
 		local playBtn, playStroke = createButton("▶", Color3.fromRGB(34, 197, 94), 0, "Play/Pause")
+		local playDebounce = false -- Prevent double-click
 		playBtn.MouseButton1Click:Connect(function()
+			-- Debounce to prevent double-click causing fast playback
+			if playDebounce then
+				return
+			end
+			playDebounce = true
+			task.delay(0.3, function()
+				playDebounce = false
+			end)
+
 			if not selectedFile then
 				WindUI:Notify({ Title = "⚠️", Content = "Select file first!", Duration = 1.5 })
 				return
@@ -6003,7 +6063,7 @@ FunTab:Toggle({
 
 FunTab:Divider()
 
--- ══════════════════════════════════════════════════════════════════
+-- ═══════════════════════���════════��═════════════════════════════════
 -- 👻 INVISIBLE
 -- ══════════════════════════════════════════════════════════════════
 FunTab:Section({ Title = "👻 Invisible", TextSize = 20 })
@@ -6195,90 +6255,178 @@ FunTab:Toggle({
 
 FunTab:Divider()
 
--- ══════════════════════════════════════════════════════════════════
--- 🚶 AUTO FOLLOW
+-- 🚶 AUTO FOLLOW (with Animation Support)
 -- ══════════════════════════════════════════════════════════════════
 FunTab:Section({ Title = "🚶 Auto Follow", TextSize = 20 })
 
-local followTarget = nil
-local isFollowing = false
-local followLoop = nil
+-- Consolidated into single table to reduce local variable count
+local FunFollow = {
+	target = nil,
+	isFollowing = false,
+	followLoop = nil,
+	animLoop = nil,
+	exactMode = true,
+	animEnabled = true,
+	getHRP = function(_, char)
+		return char and char:FindFirstChild("HumanoidRootPart")
+	end,
+	getHum = function(_, char)
+		return char and char:FindFirstChild("Humanoid")
+	end,
+}
 
 FunTab:Dropdown({
 	Title = "Select Target",
 	Desc = "Choose player to follow",
 	Values = GetPlayerList(),
 	Callback = function(selected)
-		followTarget = Players:FindFirstChild(selected)
+		FunFollow.target = Players:FindFirstChild(selected)
 		WindUI:Notify({ Title = "Follow", Content = "Target: " .. selected, Duration = 2 })
 	end,
 })
 
 FunTab:Toggle({
-	Title = "Auto Follow",
-	Desc = "Follow selected player automatically",
+	Title = "📍 Exact Position Mode",
+	Desc = "ON: Same position as target | OFF: Stay behind",
+	Value = true,
+	Callback = function(state)
+		FunFollow.exactMode = state
+	end,
+})
+
+FunTab:Toggle({
+	Title = "🎭 Animation Mirroring",
+	Desc = "Mirror target's walking animations",
+	Value = true,
+	Callback = function(state)
+		FunFollow.animEnabled = state
+	end,
+})
+FunTab:Toggle({
+	Title = "🚶 Enable Auto Follow",
+	Desc = "Follow selected player",
 	Value = false,
 	Callback = function(state)
-		isFollowing = state
+		FunFollow.isFollowing = state
 
-		if isFollowing then
-			if not followTarget then
+		if FunFollow.isFollowing then
+			if not FunFollow.target then
 				WindUI:Notify({ Title = "Error", Content = "Please select a target first!", Duration = 2 })
 				return
 			end
 
-			if not followTarget.Parent then
+			if not FunFollow.target.Parent then
 				WindUI:Notify({ Title = "Error", Content = "Player left the game!", Duration = 2 })
-				followTarget = nil
+				FunFollow.target = nil
 				return
 			end
 
-			followLoop = RunService.Heartbeat:Connect(function()
-				if not isFollowing or not followTarget then
-					isFollowing = false
-					if followLoop then
-						followLoop:Disconnect()
-						followLoop = nil
+			-- Main follow loop (RenderStepped for smooth position)
+			FunFollow.followLoop = RunService.RenderStepped:Connect(function()
+				if not FunFollow.isFollowing or not FunFollow.target then
+					FunFollow.isFollowing = false
+					if FunFollow.followLoop then
+						FunFollow.followLoop:Disconnect()
+						FunFollow.followLoop = nil
+					end
+					if FunFollow.animLoop then
+						FunFollow.animLoop:Disconnect()
+						FunFollow.animLoop = nil
 					end
 					return
 				end
 
-				if not followTarget.Parent then
-					isFollowing = false
-					if followLoop then
-						followLoop:Disconnect()
-						followLoop = nil
+				if not FunFollow.target.Parent then
+					FunFollow.isFollowing = false
+					if FunFollow.followLoop then
+						FunFollow.followLoop:Disconnect()
+						FunFollow.followLoop = nil
 					end
-					WindUI:Notify({ Title = "Follow", Content = "Target left the game!", Duration = 2 })
+					if FunFollow.animLoop then
+						FunFollow.animLoop:Disconnect()
+						FunFollow.animLoop = nil
+					end
+					WindUI:Notify({ Title = "Follow", Content = "Target left!", Duration = 2 })
 					return
 				end
 
 				local myChar = GetCharacter()
-				local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-				local myHum = myChar and myChar:FindFirstChild("Humanoid")
+				local myHRP = FunFollow:getHRP(myChar)
+				local myHum = FunFollow:getHum(myChar)
 
-				local tChar = followTarget.Character
-				local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
-				local tHum = tChar and tChar:FindFirstChild("Humanoid")
+				local tChar = FunFollow.target.Character
+				local tHRP = FunFollow:getHRP(tChar)
+				local tHum = FunFollow:getHum(tChar)
 
 				if not (myHRP and myHum and tHRP and tHum and tHum.Health > 0) then
 					return
 				end
 
-				local look = tHRP.CFrame.LookVector
-				local behindPos = tHRP.Position - (look * 4) + Vector3.new(0, 0, 0)
-				local frontPoint = behindPos + look
-
-				myHRP.CFrame = CFrame.new(behindPos, frontPoint)
+				pcall(function()
+					if FunFollow.exactMode then
+						myHRP.CFrame = tHRP.CFrame
+						myHum.PlatformStand = false
+						myHRP.Velocity = tHRP.Velocity
+					else
+						local look = tHRP.CFrame.LookVector
+						local behindPos = tHRP.Position - (look * 4)
+						local frontPoint = behindPos + look
+						myHRP.CFrame = myHRP.CFrame:Lerp(CFrame.new(behindPos, frontPoint), 0.5)
+						myHum.PlatformStand = false
+					end
+				end)
 			end)
 
-			WindUI:Notify({ Title = "Follow", Content = "Following " .. followTarget.Name, Duration = 3 })
-		else
-			if followLoop then
-				followLoop:Disconnect()
-				followLoop = nil
-			end
+			-- Animation loop (Heartbeat - same as PC)
+			FunFollow.animLoop = RunService.Heartbeat:Connect(function()
+				if not FunFollow.isFollowing or not FunFollow.target or not FunFollow.animEnabled then
+					return
+				end
 
+				local myChar = GetCharacter()
+				local tChar = FunFollow.target.Character
+				if not (myChar and tChar) then
+					return
+				end
+
+				local myHum = FunFollow:getHum(myChar)
+				local tHum = FunFollow:getHum(tChar)
+				local tHRP = FunFollow:getHRP(tChar)
+
+				if myHum and tHum and tHRP then
+					pcall(function()
+						local targetMoveDir = tHum.MoveDirection
+						local isMoving = targetMoveDir.Magnitude > 0.1
+
+						if isMoving then
+							myHum:Move(targetMoveDir, false)
+						else
+							myHum:Move(Vector3.new(0, 0, 0), false)
+						end
+
+						-- Copy humanoid states
+						local tState = tHum:GetState()
+						if tState == Enum.HumanoidStateType.Jumping then
+							myHum.Jump = true
+						elseif tState == Enum.HumanoidStateType.Freefall then
+							myHum:ChangeState(Enum.HumanoidStateType.Freefall)
+						elseif tState == Enum.HumanoidStateType.Seated then
+							myHum.Sit = true
+						end
+					end)
+				end
+			end)
+
+			WindUI:Notify({ Title = "Follow", Content = "Following " .. FunFollow.target.Name, Duration = 3 })
+		else
+			if FunFollow.followLoop then
+				FunFollow.followLoop:Disconnect()
+				FunFollow.followLoop = nil
+			end
+			if FunFollow.animLoop then
+				FunFollow.animLoop:Disconnect()
+				FunFollow.animLoop = nil
+			end
 			WindUI:Notify({ Title = "Follow", Content = "Follow stopped.", Duration = 2 })
 		end
 	end,

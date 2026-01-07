@@ -1915,7 +1915,7 @@
             </div>
             <div class="modal-footer">
                 <button class="modal-btn secondary" onclick="closePaymentModal()">Batal</button>
-                <button class="modal-btn primary" onclick="openSaweria()">🚀 Buka Saweria</button>
+                <a href="#" id="saweria-link" class="modal-btn primary" onclick="return openSaweria(event)" target="_blank" rel="noopener noreferrer">🚀 Buka Saweria</a>
             </div>
         </div>
     </div>
@@ -2104,6 +2104,15 @@
         .modal-btn:hover {
             transform: translate(-2px, -2px);
             box-shadow: var(--shadow);
+        }
+        
+        /* Anchor button styling */
+        a.modal-btn {
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
         }
         
         @media (max-width: 500px) {
@@ -2557,45 +2566,61 @@
             document.body.style.overflow = '';
         }
 
-        async function openSaweria() {
-            if (pendingPaymentData) {
-                // First check if user is already VIP
-                let wasAlreadyVip = false;
-                let existingVipData = null;
-                
-                try {
-                    const checkResponse = await fetch(`/api/roblox-user?userId=${validatedUserId}&checkVip=true&platform=${selectedPlatform}`);
-                    const checkData = await checkResponse.json();
-                    wasAlreadyVip = checkData.isVip;
-                    existingVipData = checkData;
-                } catch (e) {
-                    console.log('Could not check existing VIP status');
-                }
-
-                // Save pending order to localStorage
-                const pendingOrder = {
-                    platform: selectedPlatform,
-                    platformName: PRICING[selectedPlatform].name,
-                    duration: selectedDuration,
-                    durationLabel: PRICING[selectedPlatform].durations[selectedDuration].label,
-                    userId: validatedUserId,
-                    username: validatedUsername,
-                    amount: pendingPaymentData.amount,
-                    message: pendingPaymentData.message,
-                    timestamp: new Date().toISOString(),
-                    wasAlreadyVip: wasAlreadyVip,
-                    previousUpdatedAt: existingVipData?.updatedAt || null
-                };
-                localStorage.setItem('starship_pending_order', JSON.stringify(pendingOrder));
-
-                // Open Saweria
-                window.open(pendingPaymentData.saweriaUrl, '_blank');
-                
-                // Close modal and show waiting page
+        function openSaweria(event) {
+            if (!pendingPaymentData) {
+                event.preventDefault();
+                return false;
+            }
+            
+            // Save pending order to localStorage immediately (synchronous)
+            const pendingOrder = {
+                platform: selectedPlatform,
+                platformName: PRICING[selectedPlatform].name,
+                duration: selectedDuration,
+                durationLabel: PRICING[selectedPlatform].durations[selectedDuration].labelKey ? t(PRICING[selectedPlatform].durations[selectedDuration].labelKey) : selectedDuration,
+                userId: validatedUserId,
+                username: validatedUsername,
+                amount: pendingPaymentData.amount,
+                message: pendingPaymentData.message,
+                timestamp: new Date().toISOString(),
+                wasAlreadyVip: false, // Will be checked when returning
+                previousUpdatedAt: null
+            };
+            localStorage.setItem('starship_pending_order', JSON.stringify(pendingOrder));
+            
+            // Update anchor href immediately before click completes
+            const saweriaLink = document.getElementById('saweria-link');
+            saweriaLink.href = pendingPaymentData.saweriaUrl;
+            
+            // Check VIP status in background (non-blocking)
+            checkVipStatusInBackground();
+            
+            // Close modal and show waiting page after a small delay
+            setTimeout(() => {
                 closePaymentModal();
                 showWaitingPage();
-                
                 showToast(t('dont_forget_paste'), 'success');
+            }, 100);
+            
+            // Allow the native anchor click to proceed (opens Saweria in new tab)
+            return true;
+        }
+        
+        // Background VIP check - updates localStorage if needed
+        async function checkVipStatusInBackground() {
+            try {
+                const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
+                if (!pendingOrder) return;
+                
+                const checkResponse = await fetch(`/api/roblox-user?userId=${pendingOrder.userId}&checkVip=true&platform=${pendingOrder.platform}`);
+                const checkData = await checkResponse.json();
+                
+                // Update the pending order with VIP status
+                pendingOrder.wasAlreadyVip = checkData.isVip;
+                pendingOrder.previousUpdatedAt = checkData.updatedAt || null;
+                localStorage.setItem('starship_pending_order', JSON.stringify(pendingOrder));
+            } catch (e) {
+                console.log('Could not check existing VIP status:', e);
             }
         }
 
