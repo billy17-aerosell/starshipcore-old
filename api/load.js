@@ -502,16 +502,6 @@ export default async function handler(req, res) {
   // Global Event System Status
   const isEventActive = String(process.env.EVENT_SYSTEM_ACTIVE).toLowerCase() !== "false";
 
-  // Get user ID (different param names for PC vs Mobile)
-  const userId = req.query.user || req.query.userId;
-
-  if (!userId) {
-    console.log(
-      `[${new Date().toISOString()}] ❌ ${platformLabel} - Missing userId parameter`,
-    );
-    return res.status(400).json({ error: "Missing User ID" });
-  }
-
   const now = Math.floor(Date.now() / 1000);
   const timestamp = new Date().toISOString();
   const clientIP = getClientIP(req);
@@ -523,7 +513,7 @@ export default async function handler(req, res) {
   const username = req.query.username;
   const hwid = req.query.hwid || "";
 
-  // === ADMIN: RESET HWID ===
+  // === ADMIN: RESET HWID (handled before userId check since it uses targetUserId) ===
   if (action === "reset_hwid") {
     const adminSecret = req.query.adminSecret || req.headers["x-admin-secret"];
     const targetUserId = req.query.targetUserId;
@@ -547,6 +537,16 @@ export default async function handler(req, res) {
     } else {
       return res.status(500).json({ success: false, message: "Failed to reset HWID" });
     }
+  }
+
+  // Get user ID (different param names for PC vs Mobile)
+  const userId = req.query.user || req.query.userId;
+
+  if (!userId) {
+    console.log(
+      `[${new Date().toISOString()}] ❌ ${platformLabel} - Missing userId parameter`,
+    );
+    return res.status(400).json({ error: "Missing User ID" });
   }
 
   if (action === "status" || action === "check") {
