@@ -447,6 +447,73 @@ export default async function handler(req, res) {
         });
     }
 
+    // ============ MAINTENANCE HISTORY (ADMIN) - GET ============
+    if (req.method === 'GET' && req.query.action === 'maintenance_history') {
+        const adminSecret = req.headers['x-admin-secret'];
+        if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: 'Unauthorized' });
+        }
+
+        const redisClient = await getRedis();
+        if (!redisClient) {
+            return res.status(500).json({ success: false, error: 'Database unavailable' });
+        }
+
+        // Get current status
+        const currentStatusResult = { pc: { status: 'online' }, mobile: { status: 'online' } };
+        for (const [plat, config] of Object.entries(PLATFORM_CONFIG)) {
+            const startTime = await redisClient.get(config.maintenanceKey);
+            if (startTime) {
+                const duration = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
+                currentStatusResult[plat] = {
+                    status: 'maintenance',
+                    inMaintenance: true,
+                    startedAt: startTime,
+                    runningDurationText: formatDuration(duration)
+                };
+            } else {
+                const statusData = await redisClient.get(config.statusKey);
+                if (statusData) {
+                    const parsed = JSON.parse(statusData);
+                    currentStatusResult[plat] = {
+                        status: parsed.status || 'online',
+                        inMaintenance: false
+                    };
+                }
+            }
+        }
+
+        // Get history from both platforms
+        let history = [];
+        let statistics = { totalMaintenance: 0, totalDowntime: 0, totalCompensation: 0, totalUsersCompensated: 0 };
+
+        for (const [plat, config] of Object.entries(PLATFORM_CONFIG)) {
+            const historyData = await redisClient.get(config.historyKey);
+            const platHistory = historyData ? JSON.parse(historyData) : [];
+            history = history.concat(platHistory);
+
+            for (const entry of platHistory) {
+                statistics.totalMaintenance++;
+                statistics.totalDowntime += entry.actualDuration || 0;
+                statistics.totalCompensation += entry.compensationGiven || 0;
+                statistics.totalUsersCompensated += entry.usersCompensated || 0;
+            }
+        }
+
+        history.sort((a, b) => new Date(b.endAt) - new Date(a.endAt));
+
+        return res.status(200).json({
+            success: true,
+            currentStatus: currentStatusResult,
+            history,
+            statistics: {
+                ...statistics,
+                totalDowntimeText: formatDuration(statistics.totalDowntime),
+                totalCompensationText: formatDuration(statistics.totalCompensation)
+            }
+        });
+    }
+
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
