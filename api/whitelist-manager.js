@@ -127,7 +127,10 @@ export default async function handler(req, res) {
   }
 
   // Determine platform (default: pc)
-  const platform = req.query.platform === "mobile" ? "mobile" : "pc";
+  // Read from query parameter OR request body (for admin panel compatibility)
+  const platformFromQuery = req.query.platform;
+  const platformFromBody = req.body?.platform;
+  const platform = (platformFromQuery === "mobile" || platformFromBody === "mobile") ? "mobile" : "pc";
   const config = PLATFORM_CONFIG[platform];
   const platformLabel = platform === "mobile" ? "📱 Mobile" : "💻 PC";
 
