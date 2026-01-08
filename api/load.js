@@ -1418,15 +1418,22 @@ async function handlePCSuccess(
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // SECURITY UPGRADE: Using AES-256-CBC instead of XOR
+  // ENCRYPTION: Using XOR for maximum executor compatibility
+  // Security is maintained via Server-Side Token Verification
   // ═══════════════════════════════════════════════════════════════════
   
-  // Generate AES-256 key (32 bytes = 256 bits)
-  const aesKey = generateAESKey();
+  // Generate dynamic XOR key (64 chars hex = 32 bytes)
+  const dynamicKey = crypto.randomBytes(32).toString('hex');
   
-  // Encrypt script with AES-256-CBC
-  const scriptContent = scriptBuffer.toString('utf8');
-  const { encrypted: encryptedScript, iv: encryptionIV } = encryptAES(scriptContent, aesKey);
+  // XOR encrypt the script (working with raw bytes to preserve UTF-8)
+  const scriptBytes = scriptBuffer; // Already a Buffer (bytes)
+  const encryptedBytes = Buffer.alloc(scriptBytes.length);
+  for (let i = 0; i < scriptBytes.length; i++) {
+    const byteVal = scriptBytes[i];
+    const keyCode = dynamicKey.charCodeAt(i % dynamicKey.length);
+    encryptedBytes[i] = byteVal ^ keyCode;
+  }
+  const encryptedBase64 = encryptedBytes.toString('base64');
 
   // Check for pending announcement (compensation, etc.)
   let announcement = null;
@@ -1452,9 +1459,10 @@ async function handlePCSuccess(
     }
   }
 
-  // Create response data
+  // Create response data (XOR encrypted, like mobile style)
   const responseData = {
     status: "success",
+    platform: "pc",
     role: vipUser.type || config.defaultType,
     duration: vipUser.expiresAt ? `${remainingDays} days` : "LIFETIME",
     expiry: vipUser.expiresAt
@@ -1464,11 +1472,11 @@ async function handlePCSuccess(
     activatedAt: vipUser.addedAt
       ? Math.floor(new Date(vipUser.addedAt).getTime() / 1000)
       : null,
-    // AES encrypted payload
-    key: aesKey,
-    iv: encryptionIV,
-    blob: encryptedScript,
-    encType: "aes256", // Indicates encryption type for client
+    username: vipUser.username,
+    // XOR encrypted payload (simpler, more compatible)
+    key: dynamicKey,
+    blob: encryptedBase64,
+    encType: "xor", // Indicates XOR encryption for client
     announcement: announcement,
   };
 

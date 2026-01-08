@@ -59,70 +59,10 @@ local function base64Decode(data)
 end
 
 -- ══════════════════════════════════════════════════════════════════
--- SECURITY v3.0: AES-256 Decryption + SERVER-SIDE Token Verification
+-- SECURITY v3.0: SERVER-SIDE Token Verification
 -- NO SECRET KEYS STORED ON CLIENT - Server validates tokens!
+-- XOR Encryption for maximum executor compatibility
 -- ══════════════════════════════════════════════════════════════════
-
--- Hex string to bytes
-local function hexToBytes(hex)
-	local bytes = {}
-	for i = 1, #hex, 2 do
-		local byte = tonumber(hex:sub(i, i + 1), 16)
-		if byte then
-			table.insert(bytes, byte)
-		end
-	end
-	return bytes
-end
-
--- Bytes to string
-local function bytesToString(bytes)
-	local chars = {}
-	for i, b in ipairs(bytes) do
-		table.insert(chars, string.char(b))
-	end
-	return table.concat(chars)
-end
-
--- AES-256-CBC Decryption (using executor's crypto if available)
-local function aesDecrypt(encryptedBase64, keyHex, ivHex)
-	local keyBytes = bytesToString(hexToBytes(keyHex))
-	local ivBytes = bytesToString(hexToBytes(ivHex))
-	local encryptedData = base64Decode(encryptedBase64)
-
-	-- Try using executor's built-in crypto (Synapse X style - 3 args)
-	if syn and syn.crypt and syn.crypt.decrypt then
-		local success, result = pcall(function()
-			return syn.crypt.decrypt(encryptedData, keyBytes, ivBytes)
-		end)
-		if success and result then
-			return result
-		end
-	end
-
-	-- Try crypt library with algorithm parameter (Fluxus, Delta, Wave style - 4 args)
-	if crypt and crypt.decrypt then
-		-- Try with 4 arguments first (algorithm required)
-		local success, result = pcall(function()
-			return crypt.decrypt(encryptedData, keyBytes, ivBytes, "aes-cbc")
-		end)
-		if success and result then
-			return result
-		end
-
-		-- Fallback to 3 arguments if 4 args failed
-		success, result = pcall(function()
-			return crypt.decrypt(encryptedData, keyBytes, ivBytes)
-		end)
-		if success and result then
-			return result
-		end
-	end
-
-	-- Fallback: Base64 decode only (for testing - NOT SECURE)
-	warn("[StarshipCore] ⚠️ No AES library found. Using fallback decryption.")
-	return base64Decode(encryptedBase64)
-end
 
 -- SERVER-SIDE Token Verification
 -- Client sends token to server for validation - NO SECRET NEEDED!
@@ -1500,52 +1440,32 @@ local function main()
 	updateStatus("Decrypting Secure Payload...", 0.8)
 
 	local encryptedBlob = data.blob
+	local dynamicKey = data.key
 	local decryptedCode = nil
 
-	-- Check encryption type
-	if data.encType == "aes256" then
-		-- AES-256 Decryption (New v3.0 method)
-		local aesKey = data.key
-		local aesIV = data.iv
-
-		if not aesKey or not aesIV or not encryptedBlob then
-			if loaderGui then
-				loaderGui:Destroy()
-			end
-			showError("Security Error: Missing encryption parameters")
-			return
+	if not dynamicKey or not encryptedBlob then
+		if loaderGui then
+			loaderGui:Destroy()
 		end
-
-		-- Decrypt using AES
-		local success, result = pcall(function()
-			return aesDecrypt(encryptedBlob, aesKey, aesIV)
-		end)
-
-		if not success or not result then
-			if loaderGui then
-				loaderGui:Destroy()
-			end
-			showError("Decryption Error: " .. tostring(result or "Failed"))
-			return
-		end
-
-		decryptedCode = result
-	else
-		-- Legacy XOR Decryption (Backward compatibility)
-		local dynamicKey = data.key
-
-		if not dynamicKey or not encryptedBlob then
-			if loaderGui then
-				loaderGui:Destroy()
-			end
-			showError("Security Error: Missing Key/Blob")
-			return
-		end
-
-		-- Proses Dekripsi: Base64 -> XOR (pakai key dinamis dari server)
-		local encryptedString = base64Decode(encryptedBlob)
-		decryptedCode = xorEncrypt(encryptedString, dynamicKey)
+		showError("Security Error: Missing Key/Blob")
+		return
 	end
+
+	-- Decrypt using XOR (simple, compatible with all executors)
+	local success, result = pcall(function()
+		local encryptedString = base64Decode(encryptedBlob)
+		return xorEncrypt(encryptedString, dynamicKey)
+	end)
+
+	if not success or not result then
+		if loaderGui then
+			loaderGui:Destroy()
+		end
+		showError("Decryption Error: " .. tostring(result or "Failed"))
+		return
+	end
+
+	decryptedCode = result
 
 	-- Hapus BOM character jika ada (U+feff) agar loadstring tidak error
 	if string.byte(decryptedCode, 1, 3) == "\239\187\191" then
