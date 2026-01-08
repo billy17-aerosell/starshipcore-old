@@ -1351,8 +1351,8 @@
             } else {
                 tableBody.innerHTML = pageUsers.map(user => {
                     const status = getStatus(user);
-                    const added = user.addedAt ? new Date(user.addedAt).toLocaleDateString('id-ID') : '-';
-                    const expiry = user.expiresAt ? new Date(user.expiresAt).toLocaleDateString('id-ID') : 'Lifetime';
+                    const added = user.addedAt ? new Date(user.addedAt).toLocaleString('id-ID', {dateStyle: 'short', timeStyle: 'short'}) : '-';
+                    const expiry = user.expiresAt ? new Date(user.expiresAt).toLocaleString('id-ID', {dateStyle: 'short', timeStyle: 'short'}) : 'Lifetime';
                     const initial = (user.username || 'U')[0].toUpperCase();
                     const isSuspended = user.status === 'suspended';
                     const suspendBtn = isSuspended 
