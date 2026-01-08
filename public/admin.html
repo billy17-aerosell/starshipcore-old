@@ -686,6 +686,184 @@
 
         /* Hidden utility */
         .hidden { display: none !important; }
+
+        /* ═══════════════════════════════════════ */
+        /* MODAL */
+        /* ═══════════════════════════════════════ */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9000;
+            padding: 20px;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 500px;
+            border: 1px solid var(--border-color);
+            transform: translateY(20px);
+            transition: transform 0.3s ease;
+        }
+
+        .modal-overlay.show .modal {
+            transform: translateY(0);
+        }
+
+        .modal-header {
+            padding: 20px 25px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
+        }
+
+        .modal-close:hover {
+            background: var(--danger);
+            color: white;
+            border-color: var(--danger);
+        }
+
+        .modal-body {
+            padding: 25px;
+        }
+
+        .modal-footer {
+            padding: 20px 25px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px 15px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .duration-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .duration-btn {
+            padding: 12px;
+            border-radius: 10px;
+            border: 2px solid var(--border-color);
+            background: var(--bg-dark);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .duration-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .duration-btn.active {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-color: transparent;
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--success), #16a34a);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
+        }
+
+        /* Confirm Modal */
+        .confirm-icon {
+            font-size: 48px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .confirm-message {
+            text-align: center;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .confirm-message strong {
+            color: var(--text-primary);
+        }
     </style>
 </head>
 <body>
@@ -914,6 +1092,102 @@
     <!-- Toast Container -->
     <div id="toast" class="toast"></div>
 
+    <!-- Add/Edit User Modal -->
+    <div id="userModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="userModalTitle">➕ Add User</h2>
+                <button class="modal-close" onclick="closeUserModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>User ID *</label>
+                    <input type="text" id="modalUserId" placeholder="Enter user ID (e.g., 123456789)">
+                </div>
+                <div class="form-group">
+                    <label>Username *</label>
+                    <input type="text" id="modalUsername" placeholder="Enter username">
+                </div>
+                <div class="form-group">
+                    <label>Duration</label>
+                    <div class="duration-grid">
+                        <button type="button" class="duration-btn" data-days="1" onclick="selectDuration(1)">1 Day</button>
+                        <button type="button" class="duration-btn" data-days="3" onclick="selectDuration(3)">3 Days</button>
+                        <button type="button" class="duration-btn" data-days="7" onclick="selectDuration(7)">7 Days</button>
+                        <button type="button" class="duration-btn" data-days="14" onclick="selectDuration(14)">14 Days</button>
+                        <button type="button" class="duration-btn active" data-days="30" onclick="selectDuration(30)">30 Days</button>
+                        <button type="button" class="duration-btn" data-days="lifetime" onclick="selectDuration('lifetime')">♾️ Lifetime</button>
+                    </div>
+                    <input type="hidden" id="modalDuration" value="30">
+                </div>
+                <div class="form-group">
+                    <label>Note (Optional)</label>
+                    <input type="text" id="modalNote" placeholder="Add a note...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeUserModal()">Cancel</button>
+                <button class="btn btn-primary" id="userModalSubmit" onclick="submitUserModal()">
+                    ➕ Add User
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="modal-overlay">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2 class="modal-title">🗑️ Confirm Delete</h2>
+                <button class="modal-close" onclick="closeDeleteModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="confirm-icon">⚠️</div>
+                <div class="confirm-message">
+                    Are you sure you want to delete user <strong id="deleteUserName">-</strong>?
+                    <br><br>
+                    This action cannot be undone.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeDeleteModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">
+                    🗑️ Delete User
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Extend Duration Modal -->
+    <div id="extendModal" class="modal-overlay">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2 class="modal-title">⏱️ Extend Duration</h2>
+                <button class="modal-close" onclick="closeExtendModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--text-secondary); margin-bottom: 15px;">
+                    Extend VIP for <strong id="extendUserName">-</strong>
+                </p>
+                <div class="form-group">
+                    <label>Add Duration</label>
+                    <div class="duration-grid">
+                        <button type="button" class="duration-btn" data-days="1" onclick="selectExtendDuration(1)">+1 Day</button>
+                        <button type="button" class="duration-btn" data-days="7" onclick="selectExtendDuration(7)">+7 Days</button>
+                        <button type="button" class="duration-btn active" data-days="30" onclick="selectExtendDuration(30)">+30 Days</button>
+                    </div>
+                    <input type="hidden" id="extendDuration" value="30">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeExtendModal()">Cancel</button>
+                <button class="btn btn-success" onclick="confirmExtend()">
+                    ⏱️ Extend
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // ═══════════════════════════════════════════════════════════════
         // CONFIGURATION
@@ -1094,7 +1368,9 @@
                             <td>${expiry}</td>
                             <td>
                                 <div class="action-btns">
+                                    <button class="action-btn" onclick="extendUser('${platform}', '${user.userId}')" title="Extend Duration">⏱️</button>
                                     <button class="action-btn" onclick="editUser('${platform}', '${user.userId}')" title="Edit">✏️</button>
+                                    <button class="action-btn" onclick="resetHwid('${platform}', '${user.userId}')" title="Reset HWID">🔄</button>
                                     <button class="action-btn danger" onclick="deleteUser('${platform}', '${user.userId}')" title="Delete">🗑️</button>
                                 </div>
                             </td>
@@ -1304,18 +1580,259 @@
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // USER MANAGEMENT (Placeholder)
+        // USER MANAGEMENT
         // ═══════════════════════════════════════════════════════════════
+        let modalMode = 'add'; // 'add' or 'edit'
+        let modalPlatform = 'pc';
+        let editingUserId = null;
+        let deleteTarget = { platform: '', userId: '', username: '' };
+        let extendTarget = { platform: '', userId: '', username: '' };
+
         function showAddUserModal(platform) {
-            showToast('Add user modal - Coming in Phase 2', 'info');
+            modalMode = 'add';
+            modalPlatform = platform;
+            editingUserId = null;
+            
+            document.getElementById('userModalTitle').textContent = `➕ Add ${platform.toUpperCase()} User`;
+            document.getElementById('userModalSubmit').textContent = '➕ Add User';
+            document.getElementById('modalUserId').value = '';
+            document.getElementById('modalUserId').disabled = false;
+            document.getElementById('modalUsername').value = '';
+            document.getElementById('modalNote').value = '';
+            document.getElementById('modalDuration').value = '30';
+            
+            // Reset duration buttons
+            document.querySelectorAll('#userModal .duration-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.days === '30') btn.classList.add('active');
+            });
+            
+            document.getElementById('userModal').classList.add('show');
         }
 
         function editUser(platform, userId) {
-            showToast('Edit user - Coming in Phase 2', 'info');
+            modalMode = 'edit';
+            modalPlatform = platform;
+            editingUserId = userId;
+            
+            const users = platform === 'pc' ? pcUsers : mobileUsers;
+            const user = users.find(u => u.userId === userId);
+            
+            if (!user) {
+                showToast('User not found', 'error');
+                return;
+            }
+            
+            document.getElementById('userModalTitle').textContent = `✏️ Edit ${platform.toUpperCase()} User`;
+            document.getElementById('userModalSubmit').textContent = '💾 Save Changes';
+            document.getElementById('modalUserId').value = user.userId;
+            document.getElementById('modalUserId').disabled = true;
+            document.getElementById('modalUsername').value = user.username || '';
+            document.getElementById('modalNote').value = user.note || '';
+            
+            document.getElementById('userModal').classList.add('show');
+        }
+
+        function closeUserModal() {
+            document.getElementById('userModal').classList.remove('show');
+        }
+
+        function selectDuration(days) {
+            document.getElementById('modalDuration').value = days;
+            document.querySelectorAll('#userModal .duration-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.days == days) btn.classList.add('active');
+            });
+        }
+
+        async function submitUserModal() {
+            const userId = document.getElementById('modalUserId').value.trim();
+            const username = document.getElementById('modalUsername').value.trim();
+            const duration = document.getElementById('modalDuration').value;
+            const note = document.getElementById('modalNote').value.trim();
+            
+            if (!userId || !username) {
+                showToast('Please fill in User ID and Username', 'error');
+                return;
+            }
+            
+            try {
+                const action = modalMode === 'add' ? 'add' : 'update';
+                const body = {
+                    action: action,
+                    platform: modalPlatform,
+                    userId: userId,
+                    username: username,
+                    duration: duration,
+                    note: note
+                };
+                
+                const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Secret': adminSecret
+                    },
+                    body: JSON.stringify(body)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`✅ User ${modalMode === 'add' ? 'added' : 'updated'} successfully!`, 'success');
+                    closeUserModal();
+                    loadUsers(modalPlatform);
+                    updateDashboardStats();
+                } else {
+                    throw new Error(data.error || 'Failed to save user');
+                }
+            } catch (error) {
+                showToast(`❌ Error: ${error.message}`, 'error');
+            }
         }
 
         function deleteUser(platform, userId) {
-            showToast('Delete user - Coming in Phase 2', 'info');
+            const users = platform === 'pc' ? pcUsers : mobileUsers;
+            const user = users.find(u => u.userId === userId);
+            
+            deleteTarget = {
+                platform: platform,
+                userId: userId,
+                username: user?.username || userId
+            };
+            
+            document.getElementById('deleteUserName').textContent = deleteTarget.username;
+            document.getElementById('deleteModal').classList.add('show');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.remove('show');
+        }
+
+        async function confirmDelete() {
+            try {
+                const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Secret': adminSecret
+                    },
+                    body: JSON.stringify({
+                        action: 'remove',
+                        platform: deleteTarget.platform,
+                        userId: deleteTarget.userId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`✅ User ${deleteTarget.username} deleted!`, 'success');
+                    closeDeleteModal();
+                    loadUsers(deleteTarget.platform);
+                    updateDashboardStats();
+                } else {
+                    throw new Error(data.error || 'Failed to delete user');
+                }
+            } catch (error) {
+                showToast(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        function extendUser(platform, userId) {
+            const users = platform === 'pc' ? pcUsers : mobileUsers;
+            const user = users.find(u => u.userId === userId);
+            
+            extendTarget = {
+                platform: platform,
+                userId: userId,
+                username: user?.username || userId
+            };
+            
+            document.getElementById('extendUserName').textContent = extendTarget.username;
+            document.getElementById('extendDuration').value = '30';
+            
+            // Reset duration buttons
+            document.querySelectorAll('#extendModal .duration-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.days === '30') btn.classList.add('active');
+            });
+            
+            document.getElementById('extendModal').classList.add('show');
+        }
+
+        function closeExtendModal() {
+            document.getElementById('extendModal').classList.remove('show');
+        }
+
+        function selectExtendDuration(days) {
+            document.getElementById('extendDuration').value = days;
+            document.querySelectorAll('#extendModal .duration-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.days == days) btn.classList.add('active');
+            });
+        }
+
+        async function confirmExtend() {
+            try {
+                const days = parseInt(document.getElementById('extendDuration').value);
+                
+                const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Secret': adminSecret
+                    },
+                    body: JSON.stringify({
+                        action: 'extend',
+                        platform: extendTarget.platform,
+                        userId: extendTarget.userId,
+                        days: days
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`✅ Extended ${extendTarget.username} by ${days} days!`, 'success');
+                    closeExtendModal();
+                    loadUsers(extendTarget.platform);
+                } else {
+                    throw new Error(data.error || 'Failed to extend');
+                }
+            } catch (error) {
+                showToast(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function resetHwid(platform, userId) {
+            if (!confirm('Reset HWID for this user? They will need to re-login.')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Secret': adminSecret
+                    },
+                    body: JSON.stringify({
+                        action: 'reset_hwid',
+                        platform: platform,
+                        userId: userId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('✅ HWID reset successfully!', 'success');
+                    loadUsers(platform);
+                } else {
+                    throw new Error(data.error || 'Failed to reset HWID');
+                }
+            } catch (error) {
+                showToast(`❌ Error: ${error.message}`, 'error');
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════
