@@ -920,6 +920,18 @@
                 <div id="usersList"></div>
                 <div id="pagination" class="pagination"></div>
             </div>
+
+            <!-- Maintenance Content (Hidden by default, shown when Maintenance tab clicked) -->
+            <div id="maintenanceContent" style="display: none;">
+                <div class="section-title">
+                    <h2>🔧 Maintenance History & Compensation</h2>
+                    <span class="badge" style="background: linear-gradient(135deg, #ff9800, #ff5722);">📜 History</span>
+                </div>
+                <div id="maintenanceLoading" style="text-align: center; padding: 40px; color: #888;">
+                    Loading maintenance history...
+                </div>
+                <div id="maintenanceData" style="display: none;"></div>
+            </div>
         </div>
 
         <script>
@@ -1992,8 +2004,17 @@
                     return;
                 }
                 
-                // Show loading
-                showNotification("Loading maintenance history...", "info");
+                // Hide user list sections, show maintenance content
+                document.querySelector('.users-list').style.display = 'none';
+                document.querySelector('.add-user-form').style.display = 'none';
+                document.getElementById('statsContainer').style.display = 'none';
+                document.getElementById('maintenanceContent').style.display = 'block';
+                document.getElementById('maintenanceLoading').style.display = 'block';
+                document.getElementById('maintenanceData').style.display = 'none';
+                
+                // Update tab styles
+                document.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
+                document.querySelector('.platform-tab.maintenance').classList.add('active');
                 
                 try {
                     const response = await fetch(`${API_BASE}/api/tags?action=maintenance_history`, {
@@ -2006,153 +2027,81 @@
                         throw new Error(data.error || "Failed to load history");
                     }
                     
-                    // Create modal
-                    showMaintenanceModal(data);
+                    renderMaintenanceContent(data);
                     
                 } catch (error) {
                     showNotification(`Error: ${error.message}`, "error");
+                    document.getElementById('maintenanceLoading').innerHTML = `<span style="color: #f44336;">Error: ${error.message}</span>`;
                 }
             }
             
-            function showMaintenanceModal(data) {
-                // Remove existing modal
-                const existing = document.getElementById("maintenanceModal");
-                if (existing) existing.remove();
-                
-                const modal = document.createElement("div");
-                modal.id = "maintenanceModal";
-                modal.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(0,0,0,0.8);
-                    z-index: 9999;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    padding: 20px;
-                `;
+            function renderMaintenanceContent(data) {
+                const container = document.getElementById('maintenanceData');
+                document.getElementById('maintenanceLoading').style.display = 'none';
+                container.style.display = 'block';
                 
                 const currentStatus = data.currentStatus || {};
                 const stats = data.statistics || {};
                 const history = data.history || [];
                 
-                modal.innerHTML = `
-                    <div style="background: white; border-radius: 20px; max-width: 900px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 30px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <h2 style="color: #333; margin: 0;">🔧 Maintenance History</h2>
-                            <button onclick="document.getElementById('maintenanceModal').remove()" style="background: #f44336; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold;">✕ Close</button>
+                let historyRows = history.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:40px;color:#888;">No history yet</td></tr>' : 
+                    history.map((e, i) => `
+                        <tr style="border-bottom:1px solid #333;">
+                            <td style="padding:12px;color:#fff;">${e.platform === 'pc' ? '💻' : '📱'} ${e.platform.toUpperCase()}</td>
+                            <td style="padding:12px;color:#aaa;font-size:12px;">${new Date(e.endAt).toLocaleString('id-ID')}</td>
+                            <td style="padding:12px;text-align:center;color:#ff9800;font-weight:bold;">${e.actualDurationText || 'N/A'}</td>
+                            <td style="padding:12px;text-align:center;color:#22c55e;font-weight:bold;">${e.compensationText || 'N/A'}</td>
+                            <td style="padding:12px;text-align:center;color:#3b82f6;">${e.usersCompensated || 0}</td>
+                            <td style="padding:12px;text-align:center;">${e.usersList?.length ? '<button onclick="toggleDetails('+i+')" style="background:#667eea;color:#fff;border:none;padding:6px 12px;border-radius:5px;cursor:pointer;font-size:11px;">👥 View</button>' : '-'}</td>
+                        </tr>
+                        ${e.usersList?.length ? '<tr id="det'+i+'" style="display:none;"><td colspan="6" style="padding:0;background:#0f0f1a;"><div style="padding:15px;"><table style="width:100%;font-size:12px;"><tr style="background:#1a1a2e;"><th style="padding:8px;text-align:left;color:#fff;">User</th><th style="padding:8px;text-align:center;color:#ff5722;">Before</th><th style="padding:8px;"></th><th style="padding:8px;text-align:center;color:#22c55e;">After</th></tr>'+e.usersList.map(u => '<tr style="border-bottom:1px solid #222;"><td style="padding:8px;color:#fff;"><strong>'+u.username+'</strong><br><span style="font-size:10px;color:#666;">'+u.userId+'</span></td><td style="padding:8px;text-align:center;color:#ff5722;">'+(u.expiryBefore ? new Date(u.expiryBefore).toLocaleDateString('id-ID')+' '+new Date(u.expiryBefore).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : 'N/A')+'</td><td style="padding:8px;text-align:center;color:#667eea;">➜</td><td style="padding:8px;text-align:center;color:#22c55e;font-weight:bold;">'+(u.expiryAfter ? new Date(u.expiryAfter).toLocaleDateString('id-ID')+' '+new Date(u.expiryAfter).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : 'N/A')+'</td></tr>').join('')+'</table></div></td></tr>' : ''}
+                    `).join('');
+                
+                container.innerHTML = `
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;">
+                        <div style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);padding:15px;border-radius:12px;color:#fff;">
+                            <div style="font-size:20px;margin-bottom:5px;">💻 PC</div>
+                            <div style="font-size:16px;font-weight:bold;">${currentStatus.pc?.inMaintenance ? '🟠 MAINTENANCE' : '🟢 ONLINE'}</div>
                         </div>
-                        
-                        <!-- Current Status -->
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
-                            <div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); padding: 20px; border-radius: 12px; color: white;">
-                                <div style="font-size: 24px; margin-bottom: 5px;">💻 PC</div>
-                                <div style="font-size: 16px; font-weight: bold; text-transform: uppercase;">
-                                    ${currentStatus.pc?.inMaintenance ? '🟠 MAINTENANCE' : '🟢 ' + (currentStatus.pc?.status || 'ONLINE').toUpperCase()}
-                                </div>
-                                ${currentStatus.pc?.inMaintenance ? `<div style="font-size: 12px; margin-top: 5px;">Duration: ${currentStatus.pc.runningDurationText || 'N/A'}</div>` : ''}
-                            </div>
-                            <div style="background: linear-gradient(135deg, #8b5cf6, #6366f1); padding: 20px; border-radius: 12px; color: white;">
-                                <div style="font-size: 24px; margin-bottom: 5px;">📱 Mobile</div>
-                                <div style="font-size: 16px; font-weight: bold; text-transform: uppercase;">
-                                    ${currentStatus.mobile?.inMaintenance ? '🟠 MAINTENANCE' : '🟢 ' + (currentStatus.mobile?.status || 'ONLINE').toUpperCase()}
-                                </div>
-                                ${currentStatus.mobile?.inMaintenance ? `<div style="font-size: 12px; margin-top: 5px;">Duration: ${currentStatus.mobile.runningDurationText || 'N/A'}</div>` : ''}
-                            </div>
-                        </div>
-                        
-                        <!-- Statistics -->
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 25px;">
-                            <div style="background: #f5f5f5; padding: 20px; border-radius: 12px; text-align: center;">
-                                <div style="font-size: 28px; font-weight: bold; color: #667eea;">${stats.totalMaintenance || 0}</div>
-                                <div style="font-size: 12px; color: #666;">Total Maintenance</div>
-                            </div>
-                            <div style="background: #f5f5f5; padding: 20px; border-radius: 12px; text-align: center;">
-                                <div style="font-size: 28px; font-weight: bold; color: #ff9800;">${stats.totalDowntimeText || '0h'}</div>
-                                <div style="font-size: 12px; color: #666;">Total Downtime</div>
-                            </div>
-                            <div style="background: #f5f5f5; padding: 20px; border-radius: 12px; text-align: center;">
-                                <div style="font-size: 28px; font-weight: bold; color: #22c55e;">${stats.totalCompensationText || '0h'}</div>
-                                <div style="font-size: 12px; color: #666;">Total Compensation</div>
-                            </div>
-                            <div style="background: #f5f5f5; padding: 20px; border-radius: 12px; text-align: center;">
-                                <div style="font-size: 28px; font-weight: bold; color: #3b82f6;">${stats.totalUsersCompensated || 0}</div>
-                                <div style="font-size: 12px; color: #666;">Users Compensated</div>
-                            </div>
-                        </div>
-                        
-                        <!-- History List -->
-                        <h3 style="margin-bottom: 15px; color: #333;">📜 History (${history.length} records)</h3>
-                        <div style="max-height: 400px; overflow-y: auto;">
-                            ${history.length === 0 ? '<p style="color: #666; text-align: center; padding: 40px;">No maintenance history yet.</p>' : 
-                            history.map(entry => `
-                                <div style="background: linear-gradient(135deg, #f5f7fa, #e4e8eb); padding: 20px; border-radius: 12px; margin-bottom: 15px; border-left: 4px solid ${entry.platform === 'pc' ? '#3b82f6' : '#8b5cf6'};">
-                                    <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
-                                        <div>
-                                            <span style="font-size: 20px;">${entry.platform === 'pc' ? '💻' : '📱'}</span>
-                                            <strong style="margin-left: 5px;">${entry.platform.toUpperCase()}</strong>
-                                        </div>
-                                        <div style="color: #666; font-size: 14px;">
-                                            ${new Date(entry.endAt).toLocaleString('id-ID')}
-                                        </div>
-                                    </div>
-                                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 15px;">
-                                        <div>
-                                            <div style="font-size: 12px; color: #666;">Duration</div>
-                                            <div style="font-weight: bold; color: #ff9800;">${entry.actualDurationText || 'N/A'}</div>
-                                        </div>
-                                        <div>
-                                            <div style="font-size: 12px; color: #666;">Compensation</div>
-                                            <div style="font-weight: bold; color: #22c55e;">${entry.compensationText || 'N/A'}</div>
-                                        </div>
-                                        <div>
-                                            <div style="font-size: 12px; color: #666;">Users</div>
-                                            <div style="font-weight: bold; color: #3b82f6;">${entry.usersCompensated || 0} users</div>
-                                        </div>
-                                    </div>
-                                    ${entry.usersList && entry.usersList.length > 0 ? `
-                                        <details style="margin-top: 15px;">
-                                            <summary style="cursor: pointer; color: #667eea; font-weight: bold;">👥 View Compensated Users (${entry.usersList.length})</summary>
-                                            <div style="margin-top: 10px; max-height: 200px; overflow-y: auto; background: white; padding: 10px; border-radius: 8px;">
-                                                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                                                    <thead>
-                                                        <tr style="background: #f0f0f0;">
-                                                            <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">User</th>
-                                                            <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">Before</th>
-                                                            <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;"></th>
-                                                            <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">After</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        ${entry.usersList.map(u => `
-                                                            <tr style="border-bottom: 1px solid #eee;">
-                                                                <td style="padding: 8px;"><strong>${u.username || 'Unknown'}</strong><br><span style="font-size: 11px; color: #888;">${u.userId}</span></td>
-                                                                <td style="padding: 8px; text-align: center; color: #ff5722; font-size: 12px;">${u.expiryBefore ? new Date(u.expiryBefore).toLocaleString('id-ID', {dateStyle: 'short', timeStyle: 'short'}) : 'N/A'}</td>
-                                                                <td style="padding: 8px; text-align: center; font-size: 16px;">➜</td>
-                                                                <td style="padding: 8px; text-align: center; color: #22c55e; font-weight: bold; font-size: 12px;">${u.expiryAfter ? new Date(u.expiryAfter).toLocaleString('id-ID', {dateStyle: 'short', timeStyle: 'short'}) : 'N/A'}</td>
-                                                            </tr>
-                                                        `).join('')}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </details>
-                                    ` : ''}
-                                </div>
-                            `).join('')}
+                        <div style="background:linear-gradient(135deg,#8b5cf6,#6366f1);padding:15px;border-radius:12px;color:#fff;">
+                            <div style="font-size:20px;margin-bottom:5px;">📱 Mobile</div>
+                            <div style="font-size:16px;font-weight:bold;">${currentStatus.mobile?.inMaintenance ? '🟠 MAINTENANCE' : '🟢 ONLINE'}</div>
                         </div>
                     </div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+                        <div style="background:#1a1a2e;padding:15px;border-radius:10px;text-align:center;border:1px solid #333;"><div style="font-size:24px;font-weight:bold;color:#667eea;">${stats.totalMaintenance || 0}</div><div style="font-size:11px;color:#888;">Maintenance</div></div>
+                        <div style="background:#1a1a2e;padding:15px;border-radius:10px;text-align:center;border:1px solid #333;"><div style="font-size:24px;font-weight:bold;color:#ff9800;">${stats.totalDowntimeText || '0'}</div><div style="font-size:11px;color:#888;">Downtime</div></div>
+                        <div style="background:#1a1a2e;padding:15px;border-radius:10px;text-align:center;border:1px solid #333;"><div style="font-size:24px;font-weight:bold;color:#22c55e;">${stats.totalCompensationText || '0'}</div><div style="font-size:11px;color:#888;">Compensation</div></div>
+                        <div style="background:#1a1a2e;padding:15px;border-radius:10px;text-align:center;border:1px solid #333;"><div style="font-size:24px;font-weight:bold;color:#3b82f6;">${stats.totalUsersCompensated || 0}</div><div style="font-size:11px;color:#888;">Users</div></div>
+                    </div>
+                    <h3 style="margin-bottom:12px;color:#fff;">📜 History (${history.length})</h3>
+                    <table style="width:100%;border-collapse:collapse;background:#1a1a2e;border-radius:10px;overflow:hidden;">
+                        <thead><tr style="background:#2d2d44;"><th style="padding:12px;text-align:left;color:#fff;">Platform</th><th style="padding:12px;text-align:left;color:#fff;">Date</th><th style="padding:12px;text-align:center;color:#fff;">Duration</th><th style="padding:12px;text-align:center;color:#fff;">Compensation</th><th style="padding:12px;text-align:center;color:#fff;">Users</th><th style="padding:12px;text-align:center;color:#fff;">Details</th></tr></thead>
+                        <tbody>${historyRows}</tbody>
+                    </table>
                 `;
-                
-                document.body.appendChild(modal);
-                
-                // Close on backdrop click
-                modal.addEventListener("click", (e) => {
-                    if (e.target === modal) modal.remove();
-                });
             }
+            
+            function toggleDetails(i) { const r = document.getElementById('det'+i); if(r) r.style.display = r.style.display === 'none' ? 'table-row' : 'none'; }
+            
+            // Handle switching back to PC/Mobile tabs
+            const origSwitchPlatform = typeof switchPlatform !== 'undefined' ? switchPlatform : null;
+            function switchPlatformNew(p) {
+                document.getElementById('maintenanceContent').style.display = 'none';
+                document.querySelector('.users-list').style.display = 'block';
+                document.querySelector('.add-user-form').style.display = 'block';
+                document.getElementById('statsContainer').style.display = 'flex';
+                document.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
+                document.querySelector('.platform-tab.' + p).classList.add('active');
+                if (typeof currentPlatform !== 'undefined') currentPlatform = p;
+                if (typeof loadUsers === 'function') loadUsers();
+            }
+            document.addEventListener('DOMContentLoaded', function() {
+                const pcTab = document.querySelector('.platform-tab.pc');
+                const mobileTab = document.querySelector('.platform-tab.mobile');
+                if (pcTab) pcTab.onclick = () => switchPlatformNew('pc');
+                if (mobileTab) mobileTab.onclick = () => switchPlatformNew('mobile');
+            });
         </script>
     </body>
 </html>
