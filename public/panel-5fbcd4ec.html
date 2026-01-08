@@ -832,7 +832,7 @@
             </div>
 
             <!-- Add User Form -->
-            <div class="auth-section">
+            <div class="auth-section" id="addUserForm">
                 <div class="section-title">
                     <h2>➕ <span data-i18n="add_new_vip">Tambah Pengguna VIP Baru</span></h2>
                     <span class="badge pc" id="addFormBadge">💻 PC</span>
@@ -2006,7 +2006,7 @@
                 
                 // Hide user list sections, show maintenance content
                 document.querySelector('.users-list').style.display = 'none';
-                document.querySelector('.add-user-form').style.display = 'none';
+                document.getElementById('addUserForm').style.display = 'none';
                 document.getElementById('statsContainer').style.display = 'none';
                 document.getElementById('maintenanceContent').style.display = 'block';
                 document.getElementById('maintenanceLoading').style.display = 'block';
@@ -2089,7 +2089,7 @@
             function switchPlatformNew(p) {
                 document.getElementById('maintenanceContent').style.display = 'none';
                 document.querySelector('.users-list').style.display = 'block';
-                document.querySelector('.add-user-form').style.display = 'block';
+                document.getElementById('addUserForm').style.display = 'block';
                 document.getElementById('statsContainer').style.display = 'flex';
                 document.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
                 document.querySelector('.platform-tab.' + p).classList.add('active');
