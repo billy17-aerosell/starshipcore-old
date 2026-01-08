@@ -59,6 +59,149 @@ local function base64Decode(data)
 end
 
 -- ══════════════════════════════════════════════════════════════════
+-- SECURITY v3.0: AES-256 Decryption + SERVER-SIDE Token Verification
+-- NO SECRET KEYS STORED ON CLIENT - Server validates tokens!
+-- ══════════════════════════════════════════════════════════════════
+
+-- Hex string to bytes
+local function hexToBytes(hex)
+	local bytes = {}
+	for i = 1, #hex, 2 do
+		local byte = tonumber(hex:sub(i, i + 1), 16)
+		if byte then
+			table.insert(bytes, byte)
+		end
+	end
+	return bytes
+end
+
+-- Bytes to string
+local function bytesToString(bytes)
+	local chars = {}
+	for i, b in ipairs(bytes) do
+		table.insert(chars, string.char(b))
+	end
+	return table.concat(chars)
+end
+
+-- AES-256-CBC Decryption (using executor's crypto if available)
+local function aesDecrypt(encryptedBase64, keyHex, ivHex)
+	-- Try using executor's built-in crypto
+	if syn and syn.crypt and syn.crypt.decrypt then
+		local keyBytes = bytesToString(hexToBytes(keyHex))
+		local ivBytes = bytesToString(hexToBytes(ivHex))
+		return syn.crypt.decrypt(base64Decode(encryptedBase64), keyBytes, ivBytes)
+	end
+
+	-- Try crypt library (Fluxus, Wave, etc)
+	if crypt and crypt.decrypt then
+		local keyBytes = bytesToString(hexToBytes(keyHex))
+		local ivBytes = bytesToString(hexToBytes(ivHex))
+		return crypt.decrypt(base64Decode(encryptedBase64), keyBytes, ivBytes)
+	end
+
+	-- Fallback: Base64 decode only (for testing - NOT SECURE)
+	warn("[StarshipCore] ⚠️ No AES library found. Using fallback decryption.")
+	return base64Decode(encryptedBase64)
+end
+
+-- SERVER-SIDE Token Verification
+-- Client sends token to server for validation - NO SECRET NEEDED!
+local function verifyTokenWithServer(userId, timestamp, nonce, token)
+	local verifyUrl = SERVER_URL
+		.. "/api/load?action=verify&userId="
+		.. userId
+		.. "&timestamp="
+		.. tostring(timestamp)
+		.. "&nonce="
+		.. HttpService:UrlEncode(nonce)
+		.. "&token="
+		.. HttpService:UrlEncode(token)
+
+	local success, response = pcall(function()
+		return game:HttpGet(verifyUrl)
+	end)
+
+	if not success then
+		return { valid = false, error = "VERIFY_CONNECTION_FAILED" }
+	end
+
+	local data = nil
+	pcall(function()
+		data = HttpService:JSONDecode(response)
+	end)
+
+	if data and data.valid then
+		return { valid = true, error = nil }
+	else
+		return { valid = false, error = data and data.error or "UNKNOWN_ERROR" }
+	end
+end
+
+-- Verify secure payload using SERVER-SIDE validation
+local function verifySecurePayload(signedData, userId)
+	-- Check if this is a v3 secure payload
+	if not signedData or signedData._v ~= 3 then
+		-- Legacy payload (v2 or earlier) - accept as-is for backward compatibility
+		return { valid = true, data = signedData, error = nil, legacy = true }
+	end
+
+	local payload = signedData.p
+	local verifyToken = signedData.vt
+
+	if not payload then
+		return { valid = false, data = nil, error = "MISSING_PAYLOAD" }
+	end
+
+	-- Check timestamp locally first (quick check)
+	local now = os.time() * 1000 -- Convert to milliseconds
+	if payload.t and payload.t > now + 5000 then
+		return { valid = false, data = nil, error = "FUTURE_TIMESTAMP" }
+	end
+	if payload.e and now > payload.e then
+		return { valid = false, data = nil, error = "EXPIRED" }
+	end
+
+	-- Verify token with SERVER (NO SECRET NEEDED ON CLIENT!)
+	if verifyToken and userId then
+		local verification = verifyTokenWithServer(userId, payload.t, payload.n, verifyToken)
+		if not verification.valid then
+			return { valid = false, data = nil, error = verification.error or "INVALID_TOKEN" }
+		end
+	end
+
+	return { valid = true, data = payload.d, error = nil, legacy = false }
+end
+
+-- Extract data from secure payload (with server-side verification)
+local function extractSecureData(response, userId)
+	local success, data = pcall(function()
+		return HttpService:JSONDecode(response)
+	end)
+
+	if not success then
+		return nil, "JSON_PARSE_ERROR"
+	end
+
+	-- Check for honeypot trap (someone is trying to bypass)
+	for key, _ in pairs(data) do
+		if key:find("__debug_") or key:find("__trap_") then
+			-- This is a trap field - it should be ignored, not used
+			-- If someone tries to use these keys, they're attempting bypass
+		end
+	end
+
+	-- Verify the payload with SERVER (no secrets on client!)
+	local verification = verifySecurePayload(data, userId)
+
+	if not verification.valid then
+		return nil, verification.error
+	end
+
+	return verification.data, nil
+end
+
+-- ══════════════════════════════════════════════════════════════════
 -- HWID DETECTION (Hardware ID for device binding)
 -- ══════════════════════════════════════════════════════════════════
 local function getDeviceHWID()
@@ -1299,17 +1442,24 @@ local function main()
 		return
 	end
 
-	-- 4. Handle Response
-	local data = nil
-	pcall(function()
-		data = HttpService:JSONDecode(response)
-	end)
+	-- 4. Handle Response with Secure Payload Verification
+	-- ═══════════════════════════════════════════════════════════════════
+	-- SECURITY v3.0: Verify token with SERVER (no secrets on client!)
+	-- ═══════════════════════════════════════════════════════════════════
+	local data, verifyError = extractSecureData(response, userId)
 
 	if not data then
 		if loaderGui then
 			loaderGui:Destroy()
 		end
-		showError("Server Error: Invalid Response")
+		-- Check if it's a security error
+		if verifyError == "INVALID_SIGNATURE" then
+			showError("Security Error: Data tampering detected")
+		elseif verifyError == "EXPIRED" then
+			showError("Security Error: Session expired. Please restart.")
+		else
+			showError("Server Error: " .. tostring(verifyError or "Invalid Response"))
+		end
 		return
 	end
 
@@ -1330,20 +1480,53 @@ local function main()
 	-- 5. Decrypt Dynamic Payload
 	updateStatus("Decrypting Secure Payload...", 0.8)
 
-	local dynamicKey = data.key
 	local encryptedBlob = data.blob
+	local decryptedCode = nil
 
-	if not dynamicKey or not encryptedBlob then
-		if loaderGui then
-			loaderGui:Destroy()
+	-- Check encryption type
+	if data.encType == "aes256" then
+		-- AES-256 Decryption (New v3.0 method)
+		local aesKey = data.key
+		local aesIV = data.iv
+
+		if not aesKey or not aesIV or not encryptedBlob then
+			if loaderGui then
+				loaderGui:Destroy()
+			end
+			showError("Security Error: Missing encryption parameters")
+			return
 		end
-		showError("Security Error: Missing Key/Blob")
-		return
-	end
 
-	-- Proses Dekripsi: Base64 -> XOR (pakai key dinamis dari server)
-	local encryptedString = base64Decode(encryptedBlob)
-	local decryptedCode = xorEncrypt(encryptedString, dynamicKey)
+		-- Decrypt using AES
+		local success, result = pcall(function()
+			return aesDecrypt(encryptedBlob, aesKey, aesIV)
+		end)
+
+		if not success or not result then
+			if loaderGui then
+				loaderGui:Destroy()
+			end
+			showError("Decryption Error: " .. tostring(result or "Failed"))
+			return
+		end
+
+		decryptedCode = result
+	else
+		-- Legacy XOR Decryption (Backward compatibility)
+		local dynamicKey = data.key
+
+		if not dynamicKey or not encryptedBlob then
+			if loaderGui then
+				loaderGui:Destroy()
+			end
+			showError("Security Error: Missing Key/Blob")
+			return
+		end
+
+		-- Proses Dekripsi: Base64 -> XOR (pakai key dinamis dari server)
+		local encryptedString = base64Decode(encryptedBlob)
+		decryptedCode = xorEncrypt(encryptedString, dynamicKey)
+	end
 
 	-- Hapus BOM character jika ada (U+feff) agar loadstring tidak error
 	if string.byte(decryptedCode, 1, 3) == "\239\187\191" then

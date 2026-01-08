@@ -1008,6 +1008,7 @@ local function CatmullRomVector3(v0, v1, v2, v3, t)
 end
 
 -- Smooth interpolation between two frames using Catmull-Rom (requires 4 frames context)
+-- OPTIMIZED: Uses pre-cached posVector/velVector from PreprocessFrames when available
 local function SmoothInterpolateFrames(frames, frameIdx, alpha)
 	local n = #frames
 	if n < 2 then
@@ -1023,13 +1024,21 @@ local function SmoothInterpolateFrames(frames, frameIdx, alpha)
 	local f0, f1, f2, f3 = frames[i0], frames[i1], frames[i2], frames[i3]
 
 	-- Interpolate position with Catmull-Rom
+	-- OPTIMIZATION: Use pre-cached posVector if available (from PreprocessFrames)
 	local smoothPos = nil
-	if f0.pos and f1.pos and f2.pos and f3.pos then
+	if f0.posVector and f1.posVector and f2.posVector and f3.posVector then
+		-- Use pre-cached Vector3 (faster path)
+		smoothPos = CatmullRomVector3(f0.posVector, f1.posVector, f2.posVector, f3.posVector, alpha)
+	elseif f0.pos and f1.pos and f2.pos and f3.pos then
+		-- Fallback: Create Vector3 from table (slower path for non-preprocessed data)
 		local p0 = Vector3.new(f0.pos.x, f0.pos.y, f0.pos.z)
 		local p1 = Vector3.new(f1.pos.x, f1.pos.y, f1.pos.z)
 		local p2 = Vector3.new(f2.pos.x, f2.pos.y, f2.pos.z)
 		local p3 = Vector3.new(f3.pos.x, f3.pos.y, f3.pos.z)
 		smoothPos = CatmullRomVector3(p0, p1, p2, p3, alpha)
+	elseif f1.posVector and f2.posVector then
+		-- Use pre-cached for linear lerp
+		smoothPos = f1.posVector:Lerp(f2.posVector, alpha)
 	elseif f1.pos and f2.pos then
 		-- Fallback to linear lerp
 		local p1 = Vector3.new(f1.pos.x, f1.pos.y, f1.pos.z)
@@ -1038,13 +1047,21 @@ local function SmoothInterpolateFrames(frames, frameIdx, alpha)
 	end
 
 	-- Interpolate velocity with Catmull-Rom (smoother acceleration)
+	-- OPTIMIZATION: Use pre-cached velVector if available
 	local smoothVel = nil
-	if f0.vel and f1.vel and f2.vel and f3.vel then
+	if f0.velVector and f1.velVector and f2.velVector and f3.velVector then
+		-- Use pre-cached Vector3 (faster path)
+		smoothVel = CatmullRomVector3(f0.velVector, f1.velVector, f2.velVector, f3.velVector, alpha)
+	elseif f0.vel and f1.vel and f2.vel and f3.vel then
+		-- Fallback: Create Vector3 from table
 		local v0 = Vector3.new(f0.vel.x, f0.vel.y, f0.vel.z)
 		local v1 = Vector3.new(f1.vel.x, f1.vel.y, f1.vel.z)
 		local v2 = Vector3.new(f2.vel.x, f2.vel.y, f2.vel.z)
 		local v3 = Vector3.new(f3.vel.x, f3.vel.y, f3.vel.z)
 		smoothVel = CatmullRomVector3(v0, v1, v2, v3, alpha)
+	elseif f1.velVector and f2.velVector then
+		-- Use pre-cached for linear lerp
+		smoothVel = f1.velVector:Lerp(f2.velVector, alpha)
 	elseif f1.vel and f2.vel then
 		-- Fallback to linear lerp
 		local v1 = Vector3.new(f1.vel.x, f1.vel.y, f1.vel.z)
@@ -3330,13 +3347,13 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 				-- 1. Apply Velocity / Position
 				-- Check current state
-				local isCurrentlyClimbing = false
-				local isCurrentlySwimming = false
-				if fA.st then
-					local stName = string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
-					isCurrentlyClimbing = (stName == "Climbing")
-					isCurrentlySwimming = (stName == "Swimming")
-				end
+				-- OPTIMIZATION: Use pre-cached stEnum if available, fallback to string.match
+				local cachedStateName = fA.stEnum or (fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)"))
+				local isCurrentlyClimbing = (cachedStateName == "Climbing")
+				local isCurrentlySwimming = (cachedStateName == "Swimming")
+
+				-- OPTIMIZATION: Calculate smoothPos/smoothVel ONCE at higher scope for reuse in drift correction
+				local smoothPos, smoothVel = SmoothInterpolateFrames(currentFrameData, frameIdx, alpha)
 
 				if isCurrentlyClimbing or isCurrentlySwimming then
 					-- Climbing/Swimming: Use recorded velocity and simulate input for natural animation
@@ -3424,13 +3441,11 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					local blendFactor = math.clamp(baseBlend * playbackSpeed, 0.5, 0.98) -- Higher minimum and cap
 
 					-- Check if in air state - use position-based for smooth jump like recording
-					local stName = fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
-					local isInAir = (stName == "Jumping" or stName == "Freefall")
-
-					-- IMPROVED: Use Catmull-Rom spline for ALL states (not just air)
-					local smoothPos, smoothVel = SmoothInterpolateFrames(currentFrameData, frameIdx, alpha)
+					-- OPTIMIZATION: Reuse cachedStateName from earlier in this frame iteration
+					local isInAir = (cachedStateName == "Jumping" or cachedStateName == "Freefall")
 
 					-- CROSS-RIG HEIGHT OFFSET CORRECTION: Apply height adjustment for cross-rig playback
+					-- Note: smoothPos is already calculated at higher scope
 					if cachedCrossRigHeightOffset ~= 0 and smoothPos then
 						-- Offset is (playback_height - recorded_height)
 						-- If positive (playback is taller), we need to ADD to Y to prevent character from sinking
@@ -3579,13 +3594,8 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				end
 
 				-- Check if currently climbing/swimming from recorded state
-				local isClimbingOrSwimming = false
-				if fA.st then
-					local stateName = string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
-					if stateName == "Climbing" or stateName == "Swimming" then
-						isClimbingOrSwimming = true
-					end
-				end
+				-- OPTIMIZATION: Reuse isCurrentlyClimbing/isCurrentlySwimming from earlier in this frame
+				local isClimbingOrSwimming = isCurrentlyClimbing or isCurrentlySwimming
 
 				-- PERFORMANCE: Use cached att instead of FindFirstChild every frame
 
@@ -3849,23 +3859,21 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				end
 
 				-- 5. IMPROVED Drift Correction (Smooth) - Skip during climbing/swimming/carrying
-				local skipDriftCorrection = false
-				if fA.st then
-					local stName = string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
-					skipDriftCorrection = (stName == "Climbing" or stName == "Swimming")
-				end
+				-- OPTIMIZATION: Reuse cachedStateName instead of string.match again
+				local skipDriftCorrection = isCurrentlyClimbing or isCurrentlySwimming
 				-- CARRY PRESERVATION: Skip drift correction to reduce jitter for carried player
 				if _G.StarshipForceCarryMode then
 					skipDriftCorrection = true
 				end
 
 				if not skipDriftCorrection then
-					-- Use Catmull-Rom interpolated position for smoother target
-					local smoothTargetPos, _ = SmoothInterpolateFrames(currentFrameData, frameIdx, alpha)
-					local targetPos = smoothTargetPos
+					-- OPTIMIZATION: Reuse smoothPos from earlier in this frame instead of calling SmoothInterpolateFrames again
+					local targetPos = smoothPos
 					if not targetPos and fA.pos and fB.pos then
-						targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
-							:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
+						-- Fallback: use pre-cached posVector or create new Vector3
+						local posA = fA.posVector or Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
+						local posB = fB.posVector or Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z)
+						targetPos = posA:Lerp(posB, alpha)
 					end
 
 					if targetPos then

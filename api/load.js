@@ -1,13 +1,14 @@
 // Unified Load API - Serves encrypted script after authentication
 // Supports both PC and Mobile platforms via ?platform=mobile query parameter
 // With Discord Webhook Logging Integration and cross-platform detection
-// v2.1.0 - Fixed event access for expired VIP users (2026-01-05)
+// v3.0.0 - Advanced Security: Signed Payloads + Timestamp + Nonce (2026-01-08)
 
 // Owner userId - bypasses cross-platform restrictions
 const OWNER_USER_ID = "9268011358";
 
 import fs from "fs";
 import path from "path";
+import { createSecurePayload, generateHoneypot, isHoneypotTriggered, generateAESKey, encryptAES, verifyTokenFromClient } from "../lib/crypto-utils.js";
 
 // Event Code System API (from environment variable for security)
 const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
@@ -512,6 +513,20 @@ export default async function handler(req, res) {
   const code = req.query.code;
   const username = req.query.username;
   const hwid = req.query.hwid || "";
+
+  // === SECURITY v3.0: VERIFY TOKEN (Server-Side Verification) ===
+  if (action === "verify") {
+    const { userId, timestamp, nonce, token } = req.query;
+    
+    if (!userId || !timestamp || !nonce || !token) {
+      return res.status(400).json({ valid: false, error: "MISSING_PARAMS" });
+    }
+
+    const ts = parseInt(timestamp, 10);
+    const result = verifyTokenFromClient(userId, ts, nonce, token);
+    
+    return res.status(200).json(result);
+  }
 
   // === ADMIN: RESET HWID (handled before userId check since it uses targetUserId) ===
   if (action === "reset_hwid") {
@@ -1338,7 +1353,8 @@ async function handleMobileSuccess(
     }
   }
 
-  return res.status(200).json({
+  // Create the response data
+  const responseData = {
     status: "success",
     platform: "mobile",
     role: mobileUser.type || config.defaultType,
@@ -1351,7 +1367,19 @@ async function handleMobileSuccess(
       ? Math.floor(new Date(mobileUser.addedAt).getTime() / 1000)
       : null,
     username: mobileUser.username,
-    announcement: announcement, // Include compensation announcement if any
+    announcement: announcement,
+  };
+
+  // Sign the payload to prevent tampering (userId bound)
+  const signedPayload = createSecurePayload(responseData, userId);
+  
+  // Add honeypot to catch crackers
+  const honeypot = generateHoneypot();
+  
+  return res.status(200).json({
+    ...signedPayload,
+    ...honeypot, // Trap for bypass attempts
+    _v: 3 // Indicates secure payload version
   });
 }
 
@@ -1389,28 +1417,16 @@ async function handlePCSuccess(
     scriptBuffer = scriptBuffer.subarray(3);
   }
 
-  // Generate Dynamic Key
-  const generateKey = (length) => {
-    const chars =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+";
-    let result = "";
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  };
-
-  const dynamicKey = generateKey(64);
-  const keyBuffer = Buffer.from(dynamicKey);
-
-  // XOR Encryption
-  const encryptedBuffer = Buffer.alloc(scriptBuffer.length);
-  for (let i = 0; i < scriptBuffer.length; i++) {
-    encryptedBuffer[i] = scriptBuffer[i] ^ keyBuffer[i % keyBuffer.length];
-  }
-
-  // Encode to Base64
-  const base64Blob = encryptedBuffer.toString("base64");
+  // ═══════════════════════════════════════════════════════════════════
+  // SECURITY UPGRADE: Using AES-256-CBC instead of XOR
+  // ═══════════════════════════════════════════════════════════════════
+  
+  // Generate AES-256 key (32 bytes = 256 bits)
+  const aesKey = generateAESKey();
+  
+  // Encrypt script with AES-256-CBC
+  const scriptContent = scriptBuffer.toString('utf8');
+  const { encrypted: encryptedScript, iv: encryptionIV } = encryptAES(scriptContent, aesKey);
 
   // Check for pending announcement (compensation, etc.)
   let announcement = null;
@@ -1436,7 +1452,8 @@ async function handlePCSuccess(
     }
   }
 
-  return res.status(200).json({
+  // Create response data
+  const responseData = {
     status: "success",
     role: vipUser.type || config.defaultType,
     duration: vipUser.expiresAt ? `${remainingDays} days` : "LIFETIME",
@@ -1447,9 +1464,24 @@ async function handlePCSuccess(
     activatedAt: vipUser.addedAt
       ? Math.floor(new Date(vipUser.addedAt).getTime() / 1000)
       : null,
-    key: dynamicKey,
-    blob: base64Blob,
-    announcement: announcement, // Include compensation announcement if any
+    // AES encrypted payload
+    key: aesKey,
+    iv: encryptionIV,
+    blob: encryptedScript,
+    encType: "aes256", // Indicates encryption type for client
+    announcement: announcement,
+  };
+
+  // Sign the payload to prevent tampering (userId bound)
+  const signedPayload = createSecurePayload(responseData, userId);
+  
+  // Add honeypot to catch crackers
+  const honeypot = generateHoneypot();
+  
+  return res.status(200).json({
+    ...signedPayload,
+    ...honeypot,
+    _v: 3 // Indicates secure payload version
   });
 }
 

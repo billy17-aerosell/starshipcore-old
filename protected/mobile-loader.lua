@@ -57,6 +57,106 @@ local function base64Decode(data)
 end
 
 -- ══════════════════════════════════════════════════════════════════
+-- SECURITY v3.0: SERVER-SIDE Token Verification
+-- NO SECRET KEYS STORED ON CLIENT - Server validates tokens!
+-- ══════════════════════════════════════════════════════════════════
+
+-- SERVER-SIDE Token Verification
+-- Client sends token to server for validation - NO SECRET NEEDED!
+local function verifyTokenWithServer(userId, timestamp, nonce, token)
+	local verifyUrl = SECURE_API_URL
+		.. "/api/load?action=verify&userId="
+		.. userId
+		.. "&timestamp="
+		.. tostring(timestamp)
+		.. "&nonce="
+		.. HttpService:UrlEncode(nonce)
+		.. "&token="
+		.. HttpService:UrlEncode(token)
+
+	local success, response = pcall(function()
+		return game:HttpGet(verifyUrl)
+	end)
+
+	if not success then
+		return { valid = false, error = "VERIFY_CONNECTION_FAILED" }
+	end
+
+	local data = nil
+	pcall(function()
+		data = HttpService:JSONDecode(response)
+	end)
+
+	if data and data.valid then
+		return { valid = true, error = nil }
+	else
+		return { valid = false, error = data and data.error or "UNKNOWN_ERROR" }
+	end
+end
+
+-- Verify secure payload using SERVER-SIDE validation
+local function verifySecurePayload(signedData, userId)
+	-- Check if this is a v3 secure payload
+	if not signedData or signedData._v ~= 3 then
+		-- Legacy payload (v2 or earlier) - accept as-is for backward compatibility
+		return { valid = true, data = signedData, error = nil, legacy = true }
+	end
+
+	local payload = signedData.p
+	local verifyToken = signedData.vt
+
+	if not payload then
+		return { valid = false, data = nil, error = "MISSING_PAYLOAD" }
+	end
+
+	-- Check timestamp locally first (quick check)
+	local now = os.time() * 1000 -- Convert to milliseconds
+	if payload.t and payload.t > now + 5000 then
+		return { valid = false, data = nil, error = "FUTURE_TIMESTAMP" }
+	end
+	if payload.e and now > payload.e then
+		return { valid = false, data = nil, error = "EXPIRED" }
+	end
+
+	-- Verify token with SERVER (NO SECRET NEEDED ON CLIENT!)
+	if verifyToken and userId then
+		local verification = verifyTokenWithServer(userId, payload.t, payload.n, verifyToken)
+		if not verification.valid then
+			return { valid = false, data = nil, error = verification.error or "INVALID_TOKEN" }
+		end
+	end
+
+	return { valid = true, data = payload.d, error = nil, legacy = false }
+end
+
+-- Extract data from secure payload (with server-side verification)
+local function extractSecureData(response, userId)
+	local success, data = pcall(function()
+		return HttpService:JSONDecode(response)
+	end)
+
+	if not success then
+		return nil, "JSON_PARSE_ERROR"
+	end
+
+	-- Check for honeypot trap
+	for key, _ in pairs(data) do
+		if key:find("__debug_") or key:find("__trap_") then
+			-- Trap detected (ignored by legitimate client)
+		end
+	end
+
+	-- Verify the payload with SERVER (no secrets on client!)
+	local verification = verifySecurePayload(data, userId)
+
+	if not verification.valid then
+		return nil, verification.error
+	end
+
+	return verification.data, nil
+end
+
+-- ══════════════════════════════════════════════════════════════════
 -- HWID DETECTION (Hardware ID for device binding)
 -- ══════════════════════════════════════════════════════════════════
 local function getDeviceHWID()
@@ -1528,17 +1628,24 @@ local function main()
 	updateStatus("Verifying mobile license...", 0.5)
 	task.wait(0.2)
 
-	-- Parse response
-	local data = nil
-	pcall(function()
-		data = HttpService:JSONDecode(authResponse)
-	end)
+	-- Parse response with Secure Payload Verification
+	-- ═══════════════════════════════════════════════════════════════════
+	-- SECURITY v3.0: Verify token with SERVER (no secrets on client!)
+	-- ═══════════════════════════════════════════════════════════════════
+	local data, verifyError = extractSecureData(authResponse, userId)
 
 	if not data then
 		if loaderGui then
 			loaderGui:Destroy()
 		end
-		showError("Server Error\nInvalid Response")
+		-- Check if it's a security error
+		if verifyError == "INVALID_SIGNATURE" then
+			showError("Security Error\nData tampering detected")
+		elseif verifyError == "EXPIRED" then
+			showError("Security Error\nSession expired. Please restart.")
+		else
+			showError("Server Error\n" .. tostring(verifyError or "Invalid Response"))
+		end
 		return
 	end
 

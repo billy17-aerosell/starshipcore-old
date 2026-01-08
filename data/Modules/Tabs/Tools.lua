@@ -1630,7 +1630,9 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 	-- Add to Connections to clean up later
 	table.insert(Connections, slKeyConnection)
 
-	-- SECURITY (Admin Detection)
+	-- ══════════════════════════════════════════════════════════════════
+	-- 🛡️ BYPASS ADMIN FEATURE (Enhanced - Same as Mobile)
+	-- ══════════════════════════════════════════════════════════════════
 	local CardSec = CreateCard(L("security"), 105, 3)
 
 	local BtnAntiAdmin, AntiAdminContainer = CreateFeatureButton(
@@ -1643,56 +1645,370 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 	)
 
 	local isAntiAdmin = false
-	local adminCon = nil
+	local adminConnections = {}
+	local AdminAlertGui = nil
 
-	local function CheckForAdmin(player)
-		if player == LocalPlayer then
-			return
+	-- Fungsi untuk menampilkan notifikasi admin
+	local function ShowAdminNotification(titleText, messageText)
+		if UI and UI.ShowToast then
+			UI.ShowToast(titleText, messageText, "warning", 5)
 		end
-		if not player.Parent then
+	end
+
+	-- Fungsi untuk menampilkan layar peringatan utama (Rejoin/Exit)
+	local function ShowAdminAlert(adminName, reason)
+		-- Hapus alert yang sudah ada
+		if AdminAlertGui then
+			pcall(function()
+				AdminAlertGui:Destroy()
+			end)
+		end
+
+		AdminAlertGui = Instance.new("ScreenGui")
+		AdminAlertGui.Name = "AdminAlertGui"
+		AdminAlertGui.ResetOnSpawn = false
+		AdminAlertGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+		-- Try to parent to CoreGui, fallback to PlayerGui
+		local success = pcall(function()
+			AdminAlertGui.Parent = CoreGui
+		end)
+		if not success then
+			AdminAlertGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+		end
+
+		-- Background Overlay (blur effect)
+		local Overlay = Instance.new("Frame")
+		Overlay.Name = "Overlay"
+		Overlay.Parent = AdminAlertGui
+		Overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		Overlay.BackgroundTransparency = 0.4
+		Overlay.Size = UDim2.new(1, 0, 1, 0)
+		Overlay.ZIndex = 10000
+
+		-- Main Card (WindUI style - glassmorphism)
+		local MainFrame = Instance.new("Frame")
+		MainFrame.Name = "AdminAlertCard"
+		MainFrame.Parent = AdminAlertGui
+		MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+		MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 45) -- Darker blue-gray
+		MainFrame.BackgroundTransparency = 0.15
+		MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+		MainFrame.Size = UDim2.new(0, 340, 0, 260)
+		MainFrame.ZIndex = 10001
+
+		local UICornerM = Instance.new("UICorner", MainFrame)
+		UICornerM.CornerRadius = UDim.new(0, 12)
+
+		-- Subtle gradient stroke (purple accent like WindUI)
+		local UIStrokeM = Instance.new("UIStroke", MainFrame)
+		UIStrokeM.Color = Color3.fromRGB(139, 92, 246) -- Purple accent
+		UIStrokeM.Thickness = 1.5
+		UIStrokeM.Transparency = 0.3
+
+		-- Header Area with gradient
+		local Header = Instance.new("Frame", MainFrame)
+		Header.Name = "Header"
+		Header.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
+		Header.BackgroundTransparency = 0.7
+		Header.Size = UDim2.new(1, 0, 0, 60)
+		Header.ZIndex = 10002
+		Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
+
+		-- Fix corner for header bottom
+		local HeaderFix = Instance.new("Frame", Header)
+		HeaderFix.BackgroundColor3 = Header.BackgroundColor3
+		HeaderFix.BackgroundTransparency = Header.BackgroundTransparency
+		HeaderFix.Position = UDim2.new(0, 0, 0.5, 0)
+		HeaderFix.Size = UDim2.new(1, 0, 0.5, 0)
+		HeaderFix.ZIndex = 10002
+		HeaderFix.BorderSizePixel = 0
+
+		-- Warning Icon
+		local Icon = Instance.new("TextLabel", Header)
+		Icon.BackgroundTransparency = 1
+		Icon.Position = UDim2.new(0, 15, 0, 0)
+		Icon.Size = UDim2.new(0, 40, 1, 0)
+		Icon.Font = Enum.Font.GothamBold
+		Icon.Text = "⚠️"
+		Icon.TextSize = 28
+		Icon.TextColor3 = Color3.fromRGB(251, 191, 36) -- Amber
+		Icon.ZIndex = 10003
+
+		-- Title
+		local Title = Instance.new("TextLabel", Header)
+		Title.BackgroundTransparency = 1
+		Title.Position = UDim2.new(0, 55, 0, 0)
+		Title.Size = UDim2.new(1, -70, 1, 0)
+		Title.Font = Enum.Font.GothamBold
+		Title.Text = "Admin Detected!"
+		Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+		Title.TextSize = 18
+		Title.TextXAlignment = Enum.TextXAlignment.Left
+		Title.ZIndex = 10003
+
+		-- Content Area
+		local Content = Instance.new("Frame", MainFrame)
+		Content.Name = "Content"
+		Content.BackgroundTransparency = 1
+		Content.Position = UDim2.new(0, 0, 0, 70)
+		Content.Size = UDim2.new(1, 0, 0, 80)
+		Content.ZIndex = 10002
+
+		-- Admin Name
+		local AdminLabel = Instance.new("TextLabel", Content)
+		AdminLabel.BackgroundTransparency = 1
+		AdminLabel.Position = UDim2.new(0, 20, 0, 5)
+		AdminLabel.Size = UDim2.new(1, -40, 0, 25)
+		AdminLabel.Font = Enum.Font.GothamMedium
+		AdminLabel.Text = "👤 " .. adminName
+		AdminLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		AdminLabel.TextSize = 15
+		AdminLabel.TextXAlignment = Enum.TextXAlignment.Left
+		AdminLabel.ZIndex = 10003
+
+		-- Reason
+		local ReasonLabel = Instance.new("TextLabel", Content)
+		ReasonLabel.BackgroundTransparency = 1
+		ReasonLabel.Position = UDim2.new(0, 20, 0, 32)
+		ReasonLabel.Size = UDim2.new(1, -40, 0, 40)
+		ReasonLabel.Font = Enum.Font.Gotham
+		ReasonLabel.Text = "📋 " .. reason
+		ReasonLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+		ReasonLabel.TextSize = 13
+		ReasonLabel.TextXAlignment = Enum.TextXAlignment.Left
+		ReasonLabel.TextWrapped = true
+		ReasonLabel.TextYAlignment = Enum.TextYAlignment.Top
+		ReasonLabel.ZIndex = 10003
+
+		-- Buttons Container
+		local ButtonsFrame = Instance.new("Frame", MainFrame)
+		ButtonsFrame.Name = "Buttons"
+		ButtonsFrame.BackgroundTransparency = 1
+		ButtonsFrame.Position = UDim2.new(0, 20, 0, 160)
+		ButtonsFrame.Size = UDim2.new(1, -40, 0, 50)
+		ButtonsFrame.ZIndex = 10002
+
+		-- Rejoin Button (Green/Teal style)
+		local RejoinBtn = Instance.new("TextButton", ButtonsFrame)
+		RejoinBtn.Name = "RejoinBtn"
+		RejoinBtn.BackgroundColor3 = Color3.fromRGB(16, 185, 129) -- Emerald
+		RejoinBtn.BackgroundTransparency = 0.1
+		RejoinBtn.Position = UDim2.new(0, 0, 0, 0)
+		RejoinBtn.Size = UDim2.new(0.48, 0, 1, 0)
+		RejoinBtn.Font = Enum.Font.GothamBold
+		RejoinBtn.Text = "🔄 Rejoin"
+		RejoinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		RejoinBtn.TextSize = 14
+		RejoinBtn.ZIndex = 10003
+		RejoinBtn.AutoButtonColor = false
+		Instance.new("UICorner", RejoinBtn).CornerRadius = UDim.new(0, 8)
+		local RejoinStroke = Instance.new("UIStroke", RejoinBtn)
+		RejoinStroke.Color = Color3.fromRGB(16, 185, 129)
+		RejoinStroke.Transparency = 0.5
+
+		-- Exit Button (Red style)
+		local ExitBtn = Instance.new("TextButton", ButtonsFrame)
+		ExitBtn.Name = "ExitBtn"
+		ExitBtn.BackgroundColor3 = Color3.fromRGB(239, 68, 68) -- Red
+		ExitBtn.BackgroundTransparency = 0.1
+		ExitBtn.Position = UDim2.new(0.52, 0, 0, 0)
+		ExitBtn.Size = UDim2.new(0.48, 0, 1, 0)
+		ExitBtn.Font = Enum.Font.GothamBold
+		ExitBtn.Text = "🚪 Leave"
+		ExitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		ExitBtn.TextSize = 14
+		ExitBtn.ZIndex = 10003
+		ExitBtn.AutoButtonColor = false
+		Instance.new("UICorner", ExitBtn).CornerRadius = UDim.new(0, 8)
+		local ExitStroke = Instance.new("UIStroke", ExitBtn)
+		ExitStroke.Color = Color3.fromRGB(239, 68, 68)
+		ExitStroke.Transparency = 0.5
+
+		-- Footer/Watermark
+		local Footer = Instance.new("TextLabel", MainFrame)
+		Footer.BackgroundTransparency = 1
+		Footer.Position = UDim2.new(0, 0, 1, -30)
+		Footer.Size = UDim2.new(1, 0, 0, 25)
+		Footer.Font = Enum.Font.Gotham
+		Footer.Text = "⚡ Starship Protection"
+		Footer.TextColor3 = Color3.fromRGB(100, 100, 120)
+		Footer.TextSize = 11
+		Footer.ZIndex = 10003
+
+		-- Hover Effects
+		RejoinBtn.MouseEnter:Connect(function()
+			TweenService:Create(RejoinBtn, TweenInfo.new(0.15), {
+				BackgroundTransparency = 0,
+				Size = UDim2.new(0.49, 0, 1.05, 0),
+			}):Play()
+		end)
+		RejoinBtn.MouseLeave:Connect(function()
+			TweenService:Create(RejoinBtn, TweenInfo.new(0.15), {
+				BackgroundTransparency = 0.1,
+				Size = UDim2.new(0.48, 0, 1, 0),
+			}):Play()
+		end)
+		ExitBtn.MouseEnter:Connect(function()
+			TweenService:Create(ExitBtn, TweenInfo.new(0.15), {
+				BackgroundTransparency = 0,
+				Size = UDim2.new(0.49, 0, 1.05, 0),
+			}):Play()
+		end)
+		ExitBtn.MouseLeave:Connect(function()
+			TweenService:Create(ExitBtn, TweenInfo.new(0.15), {
+				BackgroundTransparency = 0.1,
+				Size = UDim2.new(0.48, 0, 1, 0),
+			}):Play()
+		end)
+
+		-- Button Click Logic
+		RejoinBtn.MouseButton1Click:Connect(function()
+			RejoinBtn.Text = "⏳ Rejoining..."
+			RejoinBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			ExitBtn.Visible = false
+			task.wait(0.5)
+			local TeleportService = game:GetService("TeleportService")
+			TeleportService:Teleport(game.PlaceId, LocalPlayer)
+		end)
+
+		ExitBtn.MouseButton1Click:Connect(function()
+			ExitBtn.Text = "👋 Leaving..."
+			ExitBtn.BackgroundColor3 = Color3.fromRGB(100, 50, 50)
+			RejoinBtn.Visible = false
+			task.wait(0.3)
+			LocalPlayer:Kick("You chose to leave.\n\n- Stay safe! -")
+		end)
+
+		-- Entrance Animation (slide up + fade in)
+		Overlay.BackgroundTransparency = 1
+		MainFrame.Position = UDim2.new(0.5, 0, 0.6, 0)
+		MainFrame.BackgroundTransparency = 1
+
+		TweenService:Create(Overlay, TweenInfo.new(0.3), {
+			BackgroundTransparency = 0.4,
+		}):Play()
+
+		TweenService:Create(MainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Position = UDim2.new(0.5, 0, 0.5, 0),
+			BackgroundTransparency = 0.15,
+		}):Play()
+	end
+
+	-- Fungsi utama pengecekan admin
+	local function CheckForAdmin(player)
+		if player == LocalPlayer or not player.Parent then
 			return
 		end
 
 		local isAdmin = false
+		local reason = ""
 
-		-- 1. Check Game Owner
+		-- 1. Cek Game Creator
 		if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
 			isAdmin = true
-		elseif game.CreatorType == Enum.CreatorType.Group then
+			reason = "Game Owner"
+		end
+
+		-- 2. Cek Group Rank (untuk game grup)
+		if not isAdmin and game.CreatorType == Enum.CreatorType.Group then
 			local s, rank = pcall(function()
-				if not player.Parent then
-					return 0
-				end
 				return player:GetRankInGroup(game.CreatorId)
 			end)
-			if s and rank and rank >= 100 then -- Assume Rank 100+ is staff/admin
+			if s and rank and rank >= 100 then
 				isAdmin = true
+				reason = "Group Rank: " .. tostring(rank)
 			end
 
 			local s2, role = pcall(function()
-				if not player.Parent then
-					return ""
-				end
 				return player:GetRoleInGroup(game.CreatorId)
 			end)
 			if s2 and role then
-				local lowerRole = role:lower()
+				local lower = role:lower()
 				if
-					lowerRole:find("admin")
-					or lowerRole:find("mod")
-					or lowerRole:find("staff")
-					or lowerRole:find("dev")
-					or lowerRole:find("owner")
+					lower:find("admin")
+					or lower:find("mod")
+					or lower:find("staff")
+					or lower:find("dev")
+					or lower:find("owner")
 				then
 					isAdmin = true
+					reason = "Group Role: " .. role
 				end
 			end
 		end
 
+		-- 3. Cek via HTTP API (untuk semua grup player)
+		if not isAdmin then
+			task.spawn(function()
+				local success, roles = pcall(function()
+					local HttpService = game:GetService("HttpService")
+					local response =
+						game:HttpGet("https://groups.roblox.com/v1/users/" .. player.UserId .. "/groups/roles")
+					return HttpService:JSONDecode(response)
+				end)
+
+				if success and roles and roles.data then
+					for _, group in ipairs(roles.data) do
+						if group.role.rank >= 200 then -- Rank 200+ biasanya owner/admin
+							ShowAdminAlert(
+								player.Name,
+								"High Rank in Group: " .. group.group.name .. " (Rank " .. group.role.rank .. ")"
+							)
+							return
+						end
+					end
+				end
+			end)
+		end
+
+		-- 4. Cek Admin Tools di Backpack
+		if not isAdmin then
+			task.spawn(function()
+				task.wait(1) -- Tunggu character load
+				local backpack = player:FindFirstChild("Backpack")
+				if backpack then
+					for _, tool in ipairs(backpack:GetChildren()) do
+						if tool:IsA("Tool") then
+							local toolName = tool.Name:lower()
+							if
+								toolName:find("admin")
+								or toolName:find("ban")
+								or toolName:find("kick")
+								or toolName:find("mod")
+							then
+								ShowAdminAlert(player.Name, "Admin Tool: " .. tool.Name)
+								return
+							end
+						end
+					end
+				end
+			end)
+		end
+
+		-- 5. Monitor Chat untuk Command Admin
+		local chatConnection = player.Chatted:Connect(function(msg)
+			if not isAntiAdmin then
+				return
+			end
+			local lowMsg = msg:lower()
+			if
+				lowMsg:find(";jail")
+				or lowMsg:find(";kick")
+				or lowMsg:find(";ban")
+				or lowMsg:find(":kick")
+				or lowMsg:find(":ban")
+				or lowMsg:find("/e :")
+			then
+				ShowAdminNotification("ADMIN COMMAND", player.Name .. " used: " .. msg:sub(1, 30))
+				ShowAdminAlert(player.Name, "Admin Command: " .. msg:sub(1, 50))
+			end
+		end)
+		table.insert(adminConnections, chatConnection)
+
+		-- Jika sudah terdeteksi admin dari awal
 		if isAdmin then
-			LocalPlayer:Kick(
-				"⚠️ Safety Triggered: Admin (" .. player.Name .. ") detected. Exiting to protect your account."
-			)
+			ShowAdminAlert(player.Name, reason)
 		end
 	end
 
@@ -1710,15 +2026,33 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 		ShowFeatureToast("Bypass Admin", isAntiAdmin)
 
 		if isAntiAdmin then
+			-- Cek semua player yang sudah ada
 			for _, p in ipairs(Players:GetPlayers()) do
 				CheckForAdmin(p)
 			end
-			adminCon = Players.PlayerAdded:Connect(CheckForAdmin)
-			table.insert(Connections, adminCon)
+			-- Cek player baru yang masuk
+			local newPlayerConn = Players.PlayerAdded:Connect(function(p)
+				if isAntiAdmin then
+					CheckForAdmin(p)
+				end
+			end)
+			table.insert(adminConnections, newPlayerConn)
 		else
-			if adminCon then
-				adminCon:Disconnect()
-				adminCon = nil
+			-- Disconnect semua connection
+			for _, conn in ipairs(adminConnections) do
+				if conn then
+					pcall(function()
+						conn:Disconnect()
+					end)
+				end
+			end
+			adminConnections = {}
+			-- Hapus alert jika ada
+			if AdminAlertGui then
+				pcall(function()
+					AdminAlertGui:Destroy()
+				end)
+				AdminAlertGui = nil
 			end
 		end
 	end

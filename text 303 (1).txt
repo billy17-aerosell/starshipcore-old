@@ -1,0 +1,322 @@
+local Env = getfenv()
+local _ = (table and 14085382); -- 14085382
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+local LocalPlayer = Players.LocalPlayer
+local SimpleNotificationGui = Instance.new("ScreenGui")
+SimpleNotificationGui.Name = "SimpleNotificationGui"
+SimpleNotificationGui.Parent = CoreGui
+local Enum_ZIndexBehavior = Enum.ZIndexBehavior
+SimpleNotificationGui.ZIndexBehavior = Enum_ZIndexBehavior.Sibling
+Env.handleAdminDetection = function(p1_0, p2_0, p3_0, p4_0)
+end
+local Connection
+Connection = Players.PlayerAdded:Connect(function(Player, p2_0, p3_0, p4_0) -- args: Player_2
+    local _ = (Player ~= LocalPlayer)
+    -- true, eq id 3
+    local Chatted_2 = Player.Chatted
+    local _ = Chatted_2:Connect(function(p1_0, p2_0, p3_0, p4_0)
+        local var59 = string.lower(p1_0);
+        local var60 = string.find(var59, ";jail")
+        if not var60 then -- didnt run, expr id 17, has an else.
+        else
+            local UserId_14 = Player.UserId;
+        end
+        local UserId_15 = Player.UserId;
+    end)
+    task.wait(0.5)
+    -- false, eq id 4
+    local _ = ((Player == LocalPlayer) and 13103907)
+    local _ = pcall(function(...)
+        local UserId_8 = Player.UserId;
+        local var49 = UserId_8 .. "/groups/roles";
+        local var50 = "https://groups.roblox.com/v1/users/" .. var49;
+        local Http_2 = game:HttpGet(var50);
+        local JSONDecode_2 = HttpService:JSONDecode(Http_2);
+    end) -- true, JSONDecode_2
+    if not JSONDecode_2 then -- didnt run, expr id 9, has an else.
+    else
+    end
+    if JSONDecode_2.data then -- ran, expr id 10, has an else.
+        for i_5, v_5 in ipairs(JSONDecode_2.data) do
+    end
+        if i_5 then -- ran, expr id 11, has an else.
+            local _ = (v_5.role.rank >= 100); -- nil
+        end
+    end
+    -- false
+    local _ = (not Player.Character and 14318426)
+    local Backpack_2 = Player:FindFirstChild("Backpack")
+    if not Backpack_2 then -- didnt run, expr id 12, has an else.
+    else
+        for i_6, v_6 in ipairs(Backpack_2:GetChildren()) do
+    end
+        local _ = ((i_6 and 13994754); -- 13994754 or 15906016)
+        if v_6:IsA("Tool") then -- ran, expr id 13, has an else.
+        end
+        local var55 = string.find(string.lower(v_6.Name), "admin")
+        if not var55 then -- didnt run, expr id 14, has an else.
+        else
+            if not var55 then -- didnt run, expr id 15, has an else.
+            else
+            end
+        end
+    end
+end)
+local Connection_2
+Connection_2 = Players.PlayerRemoving:Connect(function(Player_3, p2_0, p3_0) -- args: Player_4
+end)
+local Connection_3
+Connection_3 = game:GetService("RunService").Heartbeat:Connect(function(DeltaTime, p2_0, p3_0, p4_0, p5_0) -- args: DeltaTime_2
+end)
+task.wait(1)
+local var3 = tick()
+-- 1767850232.481047
+local _ = (var3 - 0 < 0.5); -- false
+local NotificationBox_1 = Instance.new("Frame")
+NotificationBox_1.Name = "NotificationBox_1"
+NotificationBox_1.Parent = SimpleNotificationGui
+local Color3_FromRGB = Color3.fromRGB
+NotificationBox_1.BackgroundColor3 = Color3_FromRGB(45, 45, 55)
+NotificationBox_1.BorderSizePixel = 0
+local UDim2_New = UDim2.new
+NotificationBox_1.Position = UDim2_New(1, 320, 1, -80)
+NotificationBox_1.Size = UDim2_New(0, 300, 0, 70)
+NotificationBox_1.ZIndex = 1001
+local UICorner = Instance.new("UICorner")
+local UDim_New = UDim.new
+UICorner.CornerRadius = UDim_New(0, 8)
+UICorner.Parent = NotificationBox_1
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Parent = NotificationBox_1
+Title.BackgroundColor3 = Color3_FromRGB(255, 255, 255)
+Title.BackgroundTransparency = 1
+Title.Position = UDim2_New(0, 10, 0, 8)
+Title.Size = UDim2_New(1, -20, 0, 25)
+local Enum_Font = Enum.Font
+Title.Font = Enum_Font.GothamBold
+Title.Text = "âš¡ KICK PROTECTION"
+Title.TextColor3 = Color3_FromRGB(255, 255, 255)
+Title.TextSize = 16
+local Enum_TextXAlignment = Enum.TextXAlignment
+Title.TextXAlignment = Enum_TextXAlignment.Left
+Title.TextTruncate = Enum.TextTruncate.AtEnd
+Title.ZIndex = 1001
+local Message = Instance.new("TextLabel")
+Message.Name = "Message"
+Message.Parent = NotificationBox_1
+Message.BackgroundColor3 = Color3_FromRGB(255, 255, 255)
+Message.BackgroundTransparency = 1
+Message.Position = UDim2_New(0, 10, 0, 33)
+Message.Size = UDim2_New(1, -20, 0, 30)
+Message.Font = Enum_Font.Gotham
+Message.Text = "Auto kick aktif! (Command & Title)"
+Message.TextColor3 = Color3_FromRGB(200, 200, 200)
+Message.TextSize = 14
+Message.TextXAlignment = Enum_TextXAlignment.Left
+Message.TextWrapped = true
+local Enum_TextYAlignment = Enum.TextYAlignment
+Message.TextYAlignment = Enum_TextYAlignment.Top
+Message.ZIndex = 1001
+local str = game:GetService("TweenService"):Create(NotificationBox_1, Env.TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    Position = UDim2_New(1, -320, 1, -80),
+})
+str:Play()
+local _ = task.spawn(function(p1_0)
+    local Waited_For_4 = task.wait(2);
+    local var56 = (NotificationBox_1 and 13111653); -- 13111653
+    local Destroy = NotificationBox_1:Destroy();
+end)
+for i, v in ipairs(Players:GetPlayers()) do
+    local _ = (i and 12424746); -- 12424746
+    local _ = (v ~= LocalPlayer)
+    -- true, eq id 1
+    local Chatted = v.Chatted
+    local _ = Chatted:Connect(function(p1_0, p2_0, p3_0, p4_0)
+        local var57 = string.lower(p1_0);
+        local var58 = string.find(var57, ";jail")
+        if not var58 then -- didnt run, expr id 16, has an else.
+        else
+            local UserId_12 = v.UserId;
+        end
+        local UserId_13 = v.UserId;
+    end)
+end
+for i_2, v_2 in ipairs(Players:GetPlayers()) do
+    local _ = (i_2 and 14336209); -- 14336209
+    -- false, eq id 2
+    local _ = ((v_2 == LocalPlayer) and 13103907)
+    local _ = pcall(function(...)
+        local UserId_3 = v_2.UserId;
+        local var20 = UserId_3 .. "/groups/roles";
+        local var21 = "https://groups.roblox.com/v1/users/" .. var20;
+        local Http = game:HttpGet(var21);
+        local JSONDecode = HttpService:JSONDecode(Http);
+    end) -- true, JSONDecode
+    if not JSONDecode then -- didnt run, expr id 1, has an else.
+    else
+    end
+    if JSONDecode.data then -- ran, expr id 2, has an else.
+        for i_3, v_3 in ipairs(JSONDecode.data) do
+    end
+        if i_3 then -- ran, expr id 3, has an else.
+        end
+        local _ = (v_3.role.rank >= 100); -- nil
+    end
+    -- false
+    local _ = (not v_2.Character and 14318426)
+    local Backpack = v_2:FindFirstChild("Backpack")
+    if not Backpack then -- didnt run, expr id 4, has an else.
+    else
+        for i_4, v_4 in ipairs(Backpack:GetChildren()) do
+    end
+        local _ = ((i_4 and 13994754); -- 13994754 or 15906016)
+        if v_4:IsA("Tool") then -- ran, expr id 5, has an else.
+        end
+        local var26 = string.find(string.lower(v_4.Name), "admin")
+        if not var26 then -- didnt run, expr id 6, has an else.
+        else
+            if not var26 then -- didnt run, expr id 7, has an else.
+            else
+            end
+        end
+        local Name_4 = v_2.Name
+        if not Name_4 then -- didnt run, expr id 8, has an else.
+        else
+        end
+        -- 0.200654
+        local _ = (tick() - var3 < 0.5); -- true
+        -- 0.218749
+        local _ = (tick() - var3 < 0.5); -- true
+        task.wait(0.5)
+        local RejoinGui = Instance.new("ScreenGui")
+        RejoinGui.Name = "RejoinGui"
+        RejoinGui.Parent = CoreGui
+        RejoinGui.ZIndexBehavior = Enum_ZIndexBehavior.Sibling
+        RejoinGui.ResetOnSpawn = false
+        local MainFrame = Instance.new("Frame")
+        MainFrame.Name = "MainFrame"
+        MainFrame.Parent = RejoinGui
+        local Vector2_New = Vector2.new
+        MainFrame.AnchorPoint = Vector2_New(0.5, 0.5)
+        MainFrame.BackgroundColor3 = Color3_FromRGB(35, 35, 45)
+        MainFrame.BorderSizePixel = 0
+        MainFrame.Position = UDim2_New(0.5, 0, 0.5, 0)
+        MainFrame.Size = UDim2_New(0, 400, 0, 280)
+        MainFrame.ZIndex = 10001
+        local UICorner_2 = Instance.new("UICorner")
+        UICorner_2.CornerRadius = UDim_New(0, 12)
+        UICorner_2.Parent = MainFrame
+        local Icon = Instance.new("TextLabel")
+        Icon.Name = "Icon"
+        Icon.Parent = MainFrame
+        Icon.BackgroundTransparency = 1
+        Icon.Position = UDim2_New(0, 0, 0, 20)
+        Icon.Size = UDim2_New(1, 0, 0, 50)
+        Icon.Font = Enum_Font.GothamBold
+        Icon.Text = "âš ï¸"
+        Icon.TextColor3 = Color3_FromRGB(255, 200, 0)
+        Icon.TextSize = 48
+        Icon.ZIndex = 10002
+        local Title = Instance.new("TextLabel")
+        Title.Name = "Title"
+        Title.Parent = MainFrame
+        Title.BackgroundTransparency = 1
+        Title.Position = UDim2_New(0, 20, 0, 80)
+        Title.Size = UDim2_New(1, -40, 0, 30)
+        Title.Font = Enum_Font.GothamBold
+        Title.Text = "ADMIN TERDETEKSI!"
+        Title.TextColor3 = Color3_FromRGB(255, 255, 255)
+        Title.TextSize = 20
+        Title.ZIndex = 10002
+        local Message = Instance.new("TextLabel")
+        Message.Name = "Message"
+        Message.Parent = MainFrame
+        Message.BackgroundTransparency = 1
+        Message.Position = UDim2_New(0, 20, 0, 115)
+        Message.Size = UDim2_New(1, -40, 0, 50)
+        Message.Font = Enum_Font.Gotham
+        Message.Text = "Admin " .. Name_4 .. " bergabung ke server!\nKlik tombol untuk rejoin"
+        Message.TextColor3 = Color3_FromRGB(200, 200, 200)
+        Message.TextSize = 14
+        Message.TextWrapped = true
+        Message.TextYAlignment = Enum_TextYAlignment.Top
+        Message.ZIndex = 10002
+        local RejoinButton = Instance.new("TextButton")
+        RejoinButton.Name = "RejoinButton"
+        RejoinButton.Parent = MainFrame
+        RejoinButton.AnchorPoint = Vector2_New(0.5, 0)
+        RejoinButton.BackgroundColor3 = Color3_FromRGB(0, 170, 255)
+        RejoinButton.BorderSizePixel = 0
+        RejoinButton.Position = UDim2_New(0.3, 0, 0, 195)
+        RejoinButton.Size = UDim2_New(0, 140, 0, 45)
+        RejoinButton.Font = Enum_Font.GothamBold
+        RejoinButton.Text = "ðŸ”„ REJOIN"
+        RejoinButton.TextColor3 = Color3_FromRGB(255, 255, 255)
+        RejoinButton.TextSize = 16
+        RejoinButton.ZIndex = 10002
+        RejoinButton.AutoButtonColor = false
+        local UICorner_3 = Instance.new("UICorner")
+        UICorner_3.CornerRadius = UDim_New(0, 8)
+        UICorner_3.Parent = RejoinButton
+        local CancelButton = Instance.new("TextButton")
+        CancelButton.Name = "CancelButton"
+        CancelButton.Parent = MainFrame
+        CancelButton.AnchorPoint = Vector2_New(0.5, 0)
+        CancelButton.BackgroundColor3 = Color3_FromRGB(220, 50, 50)
+        CancelButton.BorderSizePixel = 0
+        CancelButton.Position = UDim2_New(0.7, 0, 0, 195)
+        CancelButton.Size = UDim2_New(0, 140, 0, 45)
+        CancelButton.Font = Enum_Font.GothamBold
+        CancelButton.Text = "ðŸš¨ KELUAR"
+        CancelButton.TextColor3 = Color3_FromRGB(255, 255, 255)
+        CancelButton.TextSize = 16
+        CancelButton.ZIndex = 10002
+        CancelButton.AutoButtonColor = false
+        local UICorner_4 = Instance.new("UICorner")
+        UICorner_4.CornerRadius = UDim_New(0, 8)
+        UICorner_4.Parent = CancelButton
+        local Connection_4
+        Connection_4 = RejoinButton.MouseEnter:Connect(function(X, Y, p3_0, p4_0) -- args: X_2, Y_2
+            RejoinButton.BackgroundColor3 = Color3_FromRGB(0, 150, 230)
+        end)
+        local Connection_5
+        Connection_5 = RejoinButton.MouseLeave:Connect(function(X_3, Y_3) -- args: X_4, Y_4
+            RejoinButton.BackgroundColor3 = Color3_FromRGB(0, 170, 255)
+        end)
+        local Connection_6
+        Connection_6 = CancelButton.MouseEnter:Connect(function() -- args: X_5, Y_5
+            CancelButton.BackgroundColor3 = Color3_FromRGB(200, 40, 40)
+        end)
+        local Connection_7
+        Connection_7 = CancelButton.MouseLeave:Connect(function() -- args: X_6, Y_6
+            CancelButton.BackgroundColor3 = Color3_FromRGB(220, 50, 50)
+        end)
+        local Connection_8
+        Connection_8 = RejoinButton.MouseButton1Click:Connect(function(p1_0)
+            RejoinButton.Text = "â³ REJOINING..."
+            RejoinButton.BackgroundColor3 = Color3_FromRGB(100, 100, 100)
+            CancelButton.Visible = false
+            task.wait(0.5)
+        end)
+        local Connection_9
+        Connection_9 = CancelButton.MouseButton1Click:Connect(function(p1_0, p2_0, p3_0, p4_0)
+            CancelButton.Text = "ðŸ‘‹ KELUAR..."
+            CancelButton.BackgroundColor3 = Color3_FromRGB(150, 30, 30)
+            RejoinButton.Visible = false
+            task.wait(0.3)
+            LocalPlayer:Kick("Anda memilih untuk keluar dari game.\n\n- Silahkan keluar dan ganti map yang lebih sepi... -")
+        end)
+        local Watermark = Instance.new("TextLabel")
+        Watermark.Name = "Watermark"
+        Watermark.Parent = MainFrame
+        Watermark.BackgroundTransparency = 1
+        Watermark.Position = UDim2_New(0, 0, 1, -30)
+        Watermark.Size = UDim2_New(1, 0, 0, 25)
+        Watermark.Font = Enum_Font.Gotham
+        Watermark.Text = "- Admin Detection -"
+        Watermark.TextColor3 = Color3_FromRGB(150, 150, 150)
+        Watermark.TextSize = 12
+        Watermark.ZIndex = 10002

@@ -10,7 +10,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
-local VERSION = "1.0.0-mobile"
+local VERSION = "1.1.0-mobile"
 local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 
 -- DEV_MODE detection (same as StarshipCore)
@@ -30,7 +30,7 @@ local Settings = {
 	AutoAntiAFK = false,
 	RememberPosition = false,
 	ShowNotifications = true,
-	Theme = "Midnight",
+	Theme = "Indigo", -- Default theme
 }
 
 local ConfigStatus = "Default"
@@ -95,6 +95,40 @@ end
 
 LoadSettings()
 
+-- Valid themes list (must match WindUI supported themes)
+local ValidThemes = {
+	"Dark",
+	"Light",
+	"Midnight",
+	"Rose",
+	"Emerald",
+	"Plant",
+	"Red",
+	"Indigo",
+	"Sky",
+	"Violet",
+	"Amber",
+	"Crimson",
+	"Monokai Pro",
+	"Cotton Candy",
+	"Rainbow",
+}
+
+-- Validate theme - fallback to Dark if invalid
+local function IsValidTheme(themeName)
+	for _, v in ipairs(ValidThemes) do
+		if v == themeName then
+			return true
+		end
+	end
+	return false
+end
+
+if not IsValidTheme(Settings.Theme) then
+	Settings.Theme = "Dark" -- Safe fallback
+	SaveSettings()
+end
+
 -- PATCH WINDUI NOTIFY TO RESPECT SETTINGS
 local OriginalNotify = WindUI.Notify
 WindUI.Notify = function(self, args)
@@ -124,49 +158,63 @@ end
 -- CREATE WINDOW
 -- ══════════════════════════════════════════════════════════════════
 local Window = WindUI:CreateWindow({
-	Title = "STARSHIP",
+	-- ═══ PREMIUM BRANDING ═══
+	Title = "✨ STARSHIP",
 	Icon = "rbxassetid://123840945153526", -- Logo next to title
-	IconSize = 28, -- Icon size at root level
-	Author = "By StarshipCore",
-	Size = UDim2.fromOffset(360, 520),
+	IconSize = 36, -- Larger icon for premium look
+	Author = "Premium Edition • StarshipCore",
+
+	-- ═══ WINDOW SIZING ═══
+	Size = UDim2.fromOffset(700, 600),
+	SideBarWidth = 180, -- Slightly wider sidebar
+
+	-- ═══ PREMIUM TRANSPARENCY & GLASSMORPHISM ═══
 	Transparent = true,
-	Theme = Settings.Theme,
-	SideBarWidth = 170,
-	BackgroundImageTransparency = 0.85, -- Logo transparency
+	BackgroundImageTransparency = 0.92, -- More subtle watermark
 	Background = "rbxassetid://123840945153526", -- Starship Logo as background
+
+	-- ═══ THEME ═══
+	Theme = Settings.Theme,
+
+	-- ═══ USER PROFILE ═══
 	User = {
 		Enabled = true,
 		Anonymous = true, -- Set to true to hide real username
 		Callback = function()
-			-- Optional: callback when profile is clicked
+			-- Premium profile notification
 			WindUI:Notify({
-				Title = "Profile",
-				Content = "Welcome, " .. Players.LocalPlayer.DisplayName .. "!",
+				Title = "👤 Profile",
+				Content = "Welcome back, " .. Players.LocalPlayer.DisplayName .. "!",
 				Duration = 3,
 			})
 			WindUI:Notify({
-				Title = "Config Status",
+				Title = "⚙️ Config Status",
 				Content = ConfigStatus,
 				Duration = 4,
 			})
 		end,
 	},
+
+	-- ═══ TOPBAR STYLING ═══
 	Topbar = {
-		Height = 60, -- Increased height for larger icon
-		ButtonsType = "Default", -- "Default" or "Mac" style buttons (minimize, close)
+		Height = 65, -- Taller for premium feel
+		ButtonsType = "Default",
 	},
+
+	-- ═══ FLOATING OPEN BUTTON (PREMIUM GRADIENT) ═══
 	OpenButton = {
-		Title = "STARSHIP-CORE",
+		Title = "⭐ STARSHIP",
 		Icon = "rbxassetid://91946746369709",
-		CornerRadius = UDim.new(1, 0), -- Fully rounded
+		CornerRadius = UDim.new(1, 0), -- Fully rounded (pill shape)
 		StrokeThickness = 2,
 		Enabled = true,
-		Draggable = true, -- Bisa di-drag ke posisi yang diinginkan
-		OnlyMobile = false, -- Muncul di PC dan Mobile
-		Color = ColorSequence.new(
-			Color3.fromHex("#6366f1"), -- Indigo
-			Color3.fromHex("#8b5cf6") -- Purple gradient
-		),
+		Draggable = true, -- Can be dragged to preferred position
+		OnlyMobile = false, -- Show on both PC and Mobile
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromHex("#667eea")), -- Blue-purple start
+			ColorSequenceKeypoint.new(0.5, Color3.fromHex("#764ba2")), -- Purple mid
+			ColorSequenceKeypoint.new(1, Color3.fromHex("#f093fb")), -- Pink end
+		}),
 	},
 })
 
@@ -1890,19 +1938,18 @@ ToolsTab:Slider({
 	end,
 })
 
--- Infinite Jump
-local infiniteJumpConnection = nil
-local isInfiniteJumpOn = false
+-- Infinite Jump (consolidated to reduce local vars)
+local InfiniteJumpState = { connection = nil, isOn = false }
 
 ToolsTab:Toggle({
 	Title = "Infinite Jump",
 	Desc = "Jump in mid-air",
 	Value = false,
 	Callback = function(state)
-		isInfiniteJumpOn = state
+		InfiniteJumpState.isOn = state
 
-		if isInfiniteJumpOn then
-			infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
+		if InfiniteJumpState.isOn then
+			InfiniteJumpState.connection = UserInputService.JumpRequest:Connect(function()
 				local hum = GetHumanoid()
 				if hum then
 					hum:ChangeState(Enum.HumanoidStateType.Jumping)
@@ -1915,9 +1962,9 @@ ToolsTab:Toggle({
 				Duration = 2,
 			})
 		else
-			if infiniteJumpConnection then
-				infiniteJumpConnection:Disconnect()
-				infiniteJumpConnection = nil
+			if InfiniteJumpState.connection then
+				InfiniteJumpState.connection:Disconnect()
+				InfiniteJumpState.connection = nil
 			end
 
 			WindUI:Notify({
@@ -1926,6 +1973,427 @@ ToolsTab:Toggle({
 				Duration = 2,
 			})
 		end
+	end,
+})
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🚀 FPS BOOSTER
+-- ══════════════════════════════════════════════════════════════════
+ToolsTab:Section({ Title = "🚀 FPS Booster", TextSize = 20 })
+
+-- FPS Booster State
+local FPSBooster = {
+	isEnabled = false,
+	originalSettings = {},
+	Ignore = {},
+	Settings = {
+		Players = {
+			["Ignore Me"] = true,
+			["Ignore Others"] = true,
+			["Ignore Tools"] = true,
+		},
+		Meshes = {
+			NoMesh = false,
+			NoTexture = false,
+			Destroy = false,
+		},
+		Images = {
+			Invisible = true,
+			Destroy = false,
+		},
+		Explosions = {
+			Smaller = true,
+			Invisible = false,
+			Destroy = false,
+		},
+		Particles = {
+			Invisible = true,
+			Destroy = false,
+		},
+		TextLabels = {
+			LowerQuality = true,
+			Invisible = false,
+			Destroy = false,
+		},
+		MeshParts = {
+			LowerQuality = true,
+			Invisible = false,
+			NoTexture = false,
+			NoMesh = false,
+			Destroy = false,
+		},
+		Other = {
+			["FPS Cap"] = 60,
+			["No Camera Effects"] = true,
+			["No Clothes"] = true,
+			["Low Water Graphics"] = true,
+			["No Shadows"] = true,
+			["Low Rendering"] = true,
+			["Low Quality Parts"] = true,
+			["Low Quality Models"] = true,
+			["Reset Materials"] = true,
+			["Lower Quality MeshParts"] = true,
+			ClearNilInstances = false,
+		},
+	},
+}
+
+local CanBeEnabled = { "ParticleEmitter", "Trail", "Smoke", "Fire", "Sparkles" }
+local fpsBoosterDescendantConnection = nil
+local fpsBoosterValueBuffer = {}
+
+local function PartOfCharacter(Inst)
+	for i, v in pairs(Players:GetPlayers()) do
+		if v ~= LocalPlayer and v.Character and Inst:IsDescendantOf(v.Character) then
+			return true
+		end
+	end
+	return false
+end
+
+local function DescendantOfIgnore(Inst)
+	for i, v in pairs(FPSBooster.Ignore) do
+		if Inst:IsDescendantOf(v) then
+			return true
+		end
+	end
+	return false
+end
+
+local function CheckIfBadForFPS(Inst)
+	if
+		not Inst:IsDescendantOf(Players)
+		and (FPSBooster.Settings.Players["Ignore Others"] and not PartOfCharacter(Inst) or not FPSBooster.Settings.Players["Ignore Others"])
+		and (FPSBooster.Settings.Players["Ignore Me"] and LocalPlayer.Character and not Inst:IsDescendantOf(
+			LocalPlayer.Character
+		) or not FPSBooster.Settings.Players["Ignore Me"])
+		and (FPSBooster.Settings.Players["Ignore Tools"] and not Inst:IsA("BackpackItem") and not Inst:FindFirstAncestorWhichIsA(
+			"BackpackItem"
+		) or not FPSBooster.Settings.Players["Ignore Tools"])
+		and (
+			FPSBooster.Ignore and not table.find(FPSBooster.Ignore, Inst) and not DescendantOfIgnore(Inst)
+			or (not FPSBooster.Ignore or type(FPSBooster.Ignore) ~= "table" or #FPSBooster.Ignore <= 0)
+		)
+	then
+		if Inst:IsA("DataModelMesh") then
+			if Inst:IsA("SpecialMesh") then
+				if FPSBooster.Settings.Meshes.NoMesh then
+					Inst.MeshId = ""
+				end
+				if FPSBooster.Settings.Meshes.NoTexture then
+					Inst.TextureId = ""
+				end
+			end
+			if FPSBooster.Settings.Meshes.Destroy then
+				Inst:Destroy()
+			end
+		elseif Inst:IsA("FaceInstance") then
+			if FPSBooster.Settings.Images.Invisible then
+				Inst.Transparency = 1
+				Inst.Shiny = 1
+			end
+			if FPSBooster.Settings.Images.Destroy then
+				Inst:Destroy()
+			end
+		elseif Inst:IsA("ShirtGraphic") then
+			if FPSBooster.Settings.Images.Invisible then
+				Inst.Graphic = ""
+			end
+			if FPSBooster.Settings.Images.Destroy then
+				Inst:Destroy()
+			end
+		elseif table.find(CanBeEnabled, Inst.ClassName) then
+			if FPSBooster.Settings.Particles and FPSBooster.Settings.Particles.Invisible then
+				Inst.Enabled = false
+			end
+			if FPSBooster.Settings.Particles and FPSBooster.Settings.Particles.Destroy then
+				Inst:Destroy()
+			end
+		elseif
+			Inst:IsA("PostEffect")
+			and FPSBooster.Settings.Other
+			and FPSBooster.Settings.Other["No Camera Effects"]
+		then
+			Inst.Enabled = false
+		elseif Inst:IsA("Explosion") then
+			if FPSBooster.Settings.Explosions and FPSBooster.Settings.Explosions.Smaller then
+				Inst.BlastPressure = 1
+				Inst.BlastRadius = 1
+			end
+			if FPSBooster.Settings.Explosions and FPSBooster.Settings.Explosions.Invisible then
+				Inst.BlastPressure = 1
+				Inst.BlastRadius = 1
+				Inst.Visible = false
+			end
+			if FPSBooster.Settings.Explosions and FPSBooster.Settings.Explosions.Destroy then
+				Inst:Destroy()
+			end
+		elseif Inst:IsA("Clothing") or Inst:IsA("SurfaceAppearance") or Inst:IsA("BaseWrap") then
+			if FPSBooster.Settings.Other and FPSBooster.Settings.Other["No Clothes"] then
+				Inst:Destroy()
+			end
+		elseif Inst:IsA("BasePart") and not Inst:IsA("MeshPart") then
+			if FPSBooster.Settings.Other and FPSBooster.Settings.Other["Low Quality Parts"] then
+				Inst.Material = Enum.Material.Plastic
+				Inst.Reflectance = 0
+			end
+		elseif Inst:IsA("TextLabel") and Inst:IsDescendantOf(workspace) then
+			if FPSBooster.Settings.TextLabels and FPSBooster.Settings.TextLabels.LowerQuality then
+				Inst.Font = Enum.Font.SourceSans
+				Inst.TextScaled = false
+				Inst.RichText = false
+				Inst.TextSize = 14
+			end
+			if FPSBooster.Settings.TextLabels and FPSBooster.Settings.TextLabels.Invisible then
+				Inst.Visible = false
+			end
+			if FPSBooster.Settings.TextLabels and FPSBooster.Settings.TextLabels.Destroy then
+				Inst:Destroy()
+			end
+		elseif Inst:IsA("Model") then
+			if FPSBooster.Settings.Other and FPSBooster.Settings.Other["Low Quality Models"] then
+				Inst.LevelOfDetail = Enum.ModelLevelOfDetail.StreamingMesh
+			end
+		elseif Inst:IsA("MeshPart") then
+			if FPSBooster.Settings.MeshParts and FPSBooster.Settings.MeshParts.LowerQuality then
+				Inst.RenderFidelity = Enum.RenderFidelity.Performance
+				Inst.Reflectance = 0
+				Inst.Material = Enum.Material.Plastic
+			end
+			if FPSBooster.Settings.MeshParts and FPSBooster.Settings.MeshParts.Invisible then
+				Inst.Transparency = 1
+				Inst.RenderFidelity = Enum.RenderFidelity.Performance
+				Inst.Reflectance = 0
+				Inst.Material = Enum.Material.Plastic
+			end
+			if FPSBooster.Settings.MeshParts and FPSBooster.Settings.MeshParts.NoTexture then
+				Inst.TextureID = ""
+			end
+			if FPSBooster.Settings.MeshParts and FPSBooster.Settings.MeshParts.NoMesh then
+				Inst.MeshId = ""
+			end
+			if FPSBooster.Settings.MeshParts and FPSBooster.Settings.MeshParts.Destroy then
+				Inst:Destroy()
+			end
+		end
+	end
+end
+
+local function EnableFPSBooster()
+	if FPSBooster.isEnabled then
+		return
+	end
+	FPSBooster.isEnabled = true
+
+	-- Store original settings for reset
+	pcall(function()
+		local Lighting = game:GetService("Lighting")
+		FPSBooster.originalSettings.GlobalShadows = Lighting.GlobalShadows
+		FPSBooster.originalSettings.FogEnd = Lighting.FogEnd
+		FPSBooster.originalSettings.ShadowSoftness = Lighting.ShadowSoftness
+	end)
+
+	pcall(function()
+		FPSBooster.originalSettings.QualityLevel = settings().Rendering.QualityLevel
+	end)
+
+	-- Low Water Graphics
+	coroutine.wrap(pcall)(function()
+		if FPSBooster.Settings.Other and FPSBooster.Settings.Other["Low Water Graphics"] then
+			local terrain = workspace:FindFirstChildOfClass("Terrain")
+			if terrain then
+				FPSBooster.originalSettings.WaterWaveSize = terrain.WaterWaveSize
+				FPSBooster.originalSettings.WaterWaveSpeed = terrain.WaterWaveSpeed
+				FPSBooster.originalSettings.WaterReflectance = terrain.WaterReflectance
+				FPSBooster.originalSettings.WaterTransparency = terrain.WaterTransparency
+
+				terrain.WaterWaveSize = 0
+				terrain.WaterWaveSpeed = 0
+				terrain.WaterReflectance = 0
+				terrain.WaterTransparency = 0
+				if sethiddenproperty then
+					sethiddenproperty(terrain, "Decoration", false)
+				end
+			end
+		end
+	end)
+
+	-- No Shadows
+	coroutine.wrap(pcall)(function()
+		if FPSBooster.Settings.Other and FPSBooster.Settings.Other["No Shadows"] then
+			local Lighting = game:GetService("Lighting")
+			Lighting.GlobalShadows = false
+			Lighting.FogEnd = 9e9
+			Lighting.ShadowSoftness = 0
+			if sethiddenproperty then
+				sethiddenproperty(Lighting, "Technology", 2)
+			end
+		end
+	end)
+
+	-- Low Rendering
+	coroutine.wrap(pcall)(function()
+		if FPSBooster.Settings.Other and FPSBooster.Settings.Other["Low Rendering"] then
+			settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+			settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level04
+		end
+	end)
+
+	-- Reset Materials
+	coroutine.wrap(pcall)(function()
+		if FPSBooster.Settings.Other and FPSBooster.Settings.Other["Reset Materials"] then
+			local MaterialService = game:GetService("MaterialService")
+			for i, v in pairs(MaterialService:GetChildren()) do
+				v:Destroy()
+			end
+			MaterialService.Use2022Materials = false
+		end
+	end)
+
+	-- FPS Cap
+	coroutine.wrap(pcall)(function()
+		if FPSBooster.Settings.Other and FPSBooster.Settings.Other["FPS Cap"] then
+			if setfpscap then
+				local fpsCap = FPSBooster.Settings.Other["FPS Cap"]
+				if type(fpsCap) == "number" then
+					setfpscap(fpsCap)
+				elseif fpsCap == true then
+					setfpscap(1000000)
+				end
+			end
+		end
+	end)
+
+	-- Clear Nil Instances
+	coroutine.wrap(pcall)(function()
+		if FPSBooster.Settings.Other and FPSBooster.Settings.Other["ClearNilInstances"] then
+			if getnilinstances then
+				for _, v in pairs(getnilinstances()) do
+					pcall(v.Destroy, v)
+				end
+			end
+		end
+	end)
+
+	-- Process all existing descendants
+	local Descendants = game:GetDescendants()
+	for i, v in pairs(Descendants) do
+		pcall(CheckIfBadForFPS, v)
+	end
+
+	-- Process new descendants
+	fpsBoosterDescendantConnection = game.DescendantAdded:Connect(function(value)
+		table.insert(fpsBoosterValueBuffer, value)
+	end)
+
+	-- Background processor for new descendants
+	task.spawn(function()
+		while FPSBooster.isEnabled do
+			for i, value in pairs(fpsBoosterValueBuffer) do
+				if value then
+					pcall(CheckIfBadForFPS, value)
+				end
+			end
+			table.clear(fpsBoosterValueBuffer)
+			task.wait(20)
+		end
+	end)
+end
+
+local function DisableFPSBooster()
+	if not FPSBooster.isEnabled then
+		return
+	end
+	FPSBooster.isEnabled = false
+
+	-- Disconnect listener
+	if fpsBoosterDescendantConnection then
+		fpsBoosterDescendantConnection:Disconnect()
+		fpsBoosterDescendantConnection = nil
+	end
+
+	-- Clear buffer
+	table.clear(fpsBoosterValueBuffer)
+
+	-- Restore original settings
+	pcall(function()
+		local Lighting = game:GetService("Lighting")
+		if FPSBooster.originalSettings.GlobalShadows ~= nil then
+			Lighting.GlobalShadows = FPSBooster.originalSettings.GlobalShadows
+		end
+		if FPSBooster.originalSettings.FogEnd ~= nil then
+			Lighting.FogEnd = FPSBooster.originalSettings.FogEnd
+		end
+		if FPSBooster.originalSettings.ShadowSoftness ~= nil then
+			Lighting.ShadowSoftness = FPSBooster.originalSettings.ShadowSoftness
+		end
+	end)
+
+	pcall(function()
+		if FPSBooster.originalSettings.QualityLevel ~= nil then
+			settings().Rendering.QualityLevel = FPSBooster.originalSettings.QualityLevel
+		end
+	end)
+
+	pcall(function()
+		local terrain = workspace:FindFirstChildOfClass("Terrain")
+		if terrain then
+			if FPSBooster.originalSettings.WaterWaveSize ~= nil then
+				terrain.WaterWaveSize = FPSBooster.originalSettings.WaterWaveSize
+			end
+			if FPSBooster.originalSettings.WaterWaveSpeed ~= nil then
+				terrain.WaterWaveSpeed = FPSBooster.originalSettings.WaterWaveSpeed
+			end
+			if FPSBooster.originalSettings.WaterReflectance ~= nil then
+				terrain.WaterReflectance = FPSBooster.originalSettings.WaterReflectance
+			end
+			if FPSBooster.originalSettings.WaterTransparency ~= nil then
+				terrain.WaterTransparency = FPSBooster.originalSettings.WaterTransparency
+			end
+		end
+	end)
+
+	-- Reset FPS cap to unlimited
+	pcall(function()
+		if setfpscap then
+			setfpscap(1000000)
+		end
+	end)
+end
+
+ToolsTab:Toggle({
+	Title = "⚡ FPS Booster",
+	Desc = "Optimize graphics for better FPS",
+	Value = false,
+	Callback = function(state)
+		if state then
+			EnableFPSBooster()
+			WindUI:Notify({
+				Title = "🚀 FPS Booster",
+				Content = "FPS Booster enabled! Graphics optimized.",
+				Duration = 3,
+			})
+		else
+			DisableFPSBooster()
+			WindUI:Notify({
+				Title = "🚀 FPS Booster",
+				Content = "FPS Booster disabled. Settings restored.",
+				Duration = 3,
+			})
+		end
+	end,
+})
+
+ToolsTab:Button({
+	Title = "🔄 Reset to Default",
+	Desc = "Restore all graphics settings to default",
+	Callback = function()
+		DisableFPSBooster()
+		WindUI:Notify({
+			Title = "✅ Reset Complete",
+			Content = "All graphics settings have been restored to default!",
+			Duration = 3,
+		})
 	end,
 })
 
@@ -1974,93 +2442,379 @@ ToolsTab:Button({
 
 ToolsTab:Divider()
 
--- ✈️ FLY
+-- ══════════════════════════════════════════════════════════════════
+-- ✈️ FLY SYSTEM (Matched with PC Version + Mobile Controls)
+-- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "✈️ Flight Mode", TextSize = 20 })
 
-local isFlying = false
-local flyConnection = nil
-local flySpeed = 50
+-- Consolidated fly state to reduce local variable count (Lua 200 limit)
+local FlyState = {
+	isFlying = false,
+	connection = nil,
+	speed = 50,
+	controlGui = nil,
+	upPressed = false,
+	downPressed = false,
+	toggleRef = nil,
+}
 
-ToolsTab:Toggle({
-	Title = "Enable Fly",
-	Desc = "Toggle flight",
-	Value = false,
-	Callback = function(state)
-		isFlying = state
-		local hrp = GetHRP()
+-- Create Mobile Fly Control Buttons
+local function CreateFlyControls()
+	if FlyState.controlGui then
+		FlyState.controlGui:Destroy()
+	end
 
-		if state then
-			if hrp then
-				local bodyVel = Instance.new("BodyVelocity")
-				bodyVel.Name = "StarshipFly"
-				bodyVel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-				bodyVel.Velocity = Vector3.new(0, 0, 0)
-				bodyVel.Parent = hrp
+	-- Create GUI
+	local parent
+	local success, cGui = pcall(function()
+		return game:GetService("CoreGui")
+	end)
+	if success and cGui then
+		parent = cGui
+	else
+		parent = LocalPlayer:WaitForChild("PlayerGui")
+	end
 
-				local bodyGyro = Instance.new("BodyGyro")
-				bodyGyro.Name = "StarshipGyro"
-				bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-				bodyGyro.P = 9000
-				bodyGyro.Parent = hrp
+	FlyState.controlGui = Instance.new("ScreenGui")
+	FlyState.controlGui.Name = "StarshipFlyControls"
+	FlyState.controlGui.ResetOnSpawn = false
+	FlyState.controlGui.DisplayOrder = 999999
+	FlyState.controlGui.IgnoreGuiInset = true
+	FlyState.controlGui.Parent = parent
 
-				flyConnection = RunService.Heartbeat:Connect(function()
-					if isFlying and hrp and hrp:FindFirstChild("StarshipFly") then
-						local vel = Vector3.new(0, 0, 0)
-						local cam = workspace.CurrentCamera
-						local look = cam.CFrame.LookVector
-						local right = cam.CFrame.RightVector
+	-- Container for buttons (left side of screen)
+	local container = Instance.new("Frame")
+	container.Name = "FlyControlContainer"
+	container.Size = UDim2.fromOffset(80, 180)
+	container.Position = UDim2.new(0, 20, 0.5, -90)
+	container.BackgroundTransparency = 1
+	container.Parent = FlyState.controlGui
 
-						if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-							vel = vel + look
-						end
-						if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-							vel = vel - look
-						end
-						if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-							vel = vel - right
-						end
-						if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-							vel = vel + right
-						end
-						if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-							vel = vel + Vector3.new(0, 1, 0)
-						end
-						if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-							vel = vel - Vector3.new(0, 1, 0)
-						end
+	-- UP Button
+	local upBtn = Instance.new("TextButton")
+	upBtn.Name = "FlyUp"
+	upBtn.Size = UDim2.fromOffset(70, 70)
+	upBtn.Position = UDim2.new(0.5, -35, 0, 0)
+	upBtn.BackgroundColor3 = Color3.fromRGB(99, 102, 241)
+	upBtn.BackgroundTransparency = 0.3
+	upBtn.Text = "⬆️"
+	upBtn.TextSize = 30
+	upBtn.Font = Enum.Font.GothamBold
+	upBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	upBtn.AutoButtonColor = false
+	upBtn.Parent = container
+	Instance.new("UICorner", upBtn).CornerRadius = UDim.new(0, 15)
+	local upStroke = Instance.new("UIStroke", upBtn)
+	upStroke.Color = Color3.fromRGB(139, 92, 246)
+	upStroke.Thickness = 2
 
-						if vel.Magnitude > 0 then
-							vel = vel.Unit * flySpeed
-						end
+	-- UP Label
+	local upLabel = Instance.new("TextLabel")
+	upLabel.Size = UDim2.new(1, 0, 0, 20)
+	upLabel.Position = UDim2.new(0, 0, 1, 2)
+	upLabel.BackgroundTransparency = 1
+	upLabel.Text = "UP"
+	upLabel.TextSize = 12
+	upLabel.Font = Enum.Font.GothamBold
+	upLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+	upLabel.Parent = upBtn
 
-						hrp.StarshipFly.Velocity = vel
-						hrp.StarshipGyro.CFrame = cam.CFrame
-					end
-				end)
-			end
-		else
-			if flyConnection then
-				flyConnection:Disconnect()
-				flyConnection = nil
-			end
-			if hrp then
-				for _, c in pairs(hrp:GetChildren()) do
-					if c.Name == "StarshipFly" or c.Name == "StarshipGyro" then
-						c:Destroy()
-					end
+	-- DOWN Button
+	local downBtn = Instance.new("TextButton")
+	downBtn.Name = "FlyDown"
+	downBtn.Size = UDim2.fromOffset(70, 70)
+	downBtn.Position = UDim2.new(0.5, -35, 1, -70)
+	downBtn.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
+	downBtn.BackgroundTransparency = 0.3
+	downBtn.Text = "⬇️"
+	downBtn.TextSize = 30
+	downBtn.Font = Enum.Font.GothamBold
+	downBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	downBtn.AutoButtonColor = false
+	downBtn.Parent = container
+	Instance.new("UICorner", downBtn).CornerRadius = UDim.new(0, 15)
+	local downStroke = Instance.new("UIStroke", downBtn)
+	downStroke.Color = Color3.fromRGB(248, 113, 113)
+	downStroke.Thickness = 2
+
+	-- DOWN Label
+	local downLabel = Instance.new("TextLabel")
+	downLabel.Size = UDim2.new(1, 0, 0, 20)
+	downLabel.Position = UDim2.new(0, 0, 1, 2)
+	downLabel.BackgroundTransparency = 1
+	downLabel.Text = "DOWN"
+	downLabel.TextSize = 12
+	downLabel.Font = Enum.Font.GothamBold
+	downLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+	downLabel.Parent = downBtn
+
+	-- Button press handlers (hold to fly up/down)
+	upBtn.InputBegan:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.Touch
+			or input.UserInputType == Enum.UserInputType.MouseButton1
+		then
+			FlyState.upPressed = true
+			upBtn.BackgroundTransparency = 0
+			upBtn.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
+		end
+	end)
+	upBtn.InputEnded:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.Touch
+			or input.UserInputType == Enum.UserInputType.MouseButton1
+		then
+			FlyState.upPressed = false
+			upBtn.BackgroundTransparency = 0.3
+			upBtn.BackgroundColor3 = Color3.fromRGB(99, 102, 241)
+		end
+	end)
+
+	downBtn.InputBegan:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.Touch
+			or input.UserInputType == Enum.UserInputType.MouseButton1
+		then
+			FlyState.downPressed = true
+			downBtn.BackgroundTransparency = 0
+			downBtn.BackgroundColor3 = Color3.fromRGB(248, 113, 113)
+		end
+	end)
+	downBtn.InputEnded:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.Touch
+			or input.UserInputType == Enum.UserInputType.MouseButton1
+		then
+			FlyState.downPressed = false
+			downBtn.BackgroundTransparency = 0.3
+			downBtn.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
+		end
+	end)
+end
+
+-- Destroy Fly Controls
+local function DestroyFlyControls()
+	FlyState.upPressed = false
+	FlyState.downPressed = false
+	if FlyState.controlGui then
+		FlyState.controlGui:Destroy()
+		FlyState.controlGui = nil
+	end
+end
+
+-- Stop Fly Function (cleanup)
+local function StopFly()
+	FlyState.isFlying = false
+	DestroyFlyControls()
+	local char = LocalPlayer.Character
+	if char then
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			for _, x in pairs(hrp:GetChildren()) do
+				if x.Name == "StarshipFlyVel" or x.Name == "StarshipFlyGyro" then
+					x:Destroy()
 				end
 			end
+		end
+		local hum = char:FindFirstChild("Humanoid")
+		if hum then
+			hum.PlatformStand = false
+		end
+	end
+	if FlyState.connection then
+		FlyState.connection:Disconnect()
+		FlyState.connection = nil
+	end
+end
+
+-- Start Fly Function
+local function StartFly()
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChild("Humanoid")
+	if not char or not hrp or not hum then
+		return false
+	end
+
+	FlyState.isFlying = true
+	hum.PlatformStand = true
+
+	-- Create mobile fly controls (only on touch devices)
+	if UserInputService.TouchEnabled then
+		CreateFlyControls()
+	end
+
+	-- Create BodyVelocity
+	local bv = Instance.new("BodyVelocity", hrp)
+	bv.Name = "StarshipFlyVel"
+	bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+	bv.Velocity = Vector3.new(0, 0, 0)
+
+	-- Create BodyGyro with improved settings (matching PC)
+	local bg = Instance.new("BodyGyro", hrp)
+	bg.Name = "StarshipFlyGyro"
+	bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+	bg.P = 10000
+	bg.D = 1000
+
+	-- Use RenderStepped for smoother movement (matching PC)
+	FlyState.connection = RunService.RenderStepped:Connect(function()
+		if not FlyState.isFlying or not char.Parent then
+			StopFly()
+			return
+		end
+
+		local cam = workspace.CurrentCamera
+		local moveDir = Vector3.new(0, 0, 0)
+
+		-- Get all pressed keys (matching PC method)
+		local keysPressed = UserInputService:GetKeysPressed()
+		local W, A, S, D, Space, Shift = false, false, false, false, false, false
+
+		for _, key in pairs(keysPressed) do
+			if key.KeyCode == Enum.KeyCode.W then
+				W = true
+			elseif key.KeyCode == Enum.KeyCode.A then
+				A = true
+			elseif key.KeyCode == Enum.KeyCode.S then
+				S = true
+			elseif key.KeyCode == Enum.KeyCode.D then
+				D = true
+			elseif key.KeyCode == Enum.KeyCode.Space then
+				Space = true
+			elseif key.KeyCode == Enum.KeyCode.LeftShift or key.KeyCode == Enum.KeyCode.LeftControl then
+				Shift = true
+			end
+		end
+
+		-- Also check for touch/mobile input via Humanoid MoveDirection
+		if hum and hum.MoveDirection.Magnitude > 0.1 then
+			-- Mobile joystick is being used
+			-- Use camera direction for vertical movement based on camera pitch
+			local camLook = cam.CFrame.LookVector
+			local camRight = cam.CFrame.RightVector
+			local mDir = hum.MoveDirection
+
+			-- Get joystick input direction relative to camera
+			-- MoveDirection is in world space, we need to check if player is pushing forward
+			local camFlat = Vector3.new(camLook.X, 0, camLook.Z).Unit
+			local rightFlat = Vector3.new(camRight.X, 0, camRight.Z).Unit
+
+			-- Determine how much the player is pushing forward vs sideways
+			local forwardAmount = mDir:Dot(camFlat) -- Positive = forward, Negative = back
+			local rightAmount = mDir:Dot(rightFlat) -- Positive = right, Negative = left
+
+			-- Apply full 3D camera direction for forward/back (includes Y for pitch)
+			local forwardMovement = camLook * forwardAmount
+			-- Strafe uses only horizontal movement
+			local strafeMovement = camRight * rightAmount
+
+			-- Combine movements
+			moveDir = moveDir + forwardMovement + strafeMovement
+		else
+			-- Keyboard input
+			if W then
+				moveDir = moveDir + cam.CFrame.LookVector
+			end
+			if S then
+				moveDir = moveDir - cam.CFrame.LookVector
+			end
+			if A then
+				moveDir = moveDir - cam.CFrame.RightVector
+			end
+			if D then
+				moveDir = moveDir + cam.CFrame.RightVector
+			end
+		end
+
+		-- Vertical movement (keyboard)
+		if Space then
+			moveDir = moveDir + Vector3.new(0, 1, 0)
+		end
+		if Shift then
+			moveDir = moveDir - Vector3.new(0, 1, 0)
+		end
+
+		-- Vertical movement (mobile buttons) - still available as additional control
+		if FlyState.upPressed then
+			moveDir = moveDir + Vector3.new(0, 1, 0)
+		end
+		if FlyState.downPressed then
+			moveDir = moveDir - Vector3.new(0, 1, 0)
+		end
+
+		-- Also check for jump button on mobile (alternative up boost)
+		if UserInputService.TouchEnabled then
+			if hum and hum.Jump then
+				moveDir = moveDir + Vector3.new(0, 0.5, 0)
+			end
+		end
+
+		-- Apply velocity
+		bg.CFrame = cam.CFrame
+		bv.Velocity = moveDir * FlyState.speed
+	end)
+
+	return true
+end
+
+FlyState.toggleRef = ToolsTab:Toggle({
+	Title = "Enable Fly",
+	Desc = "Toggle flight mode (works with keyboard & mobile joystick)",
+	Value = false,
+	Callback = function(state)
+		if state then
+			local success = StartFly()
+			if success then
+				WindUI:Notify({
+					Title = "✈️ Fly Mode",
+					Content = UserInputService.TouchEnabled and "Fly enabled! Look up/down + move to fly vertically"
+						or "Fly enabled! Use WASD to move, Space/Shift for up/down",
+					Duration = 3,
+				})
+			else
+				WindUI:Notify({
+					Title = "❌ Error",
+					Content = "Failed to enable fly. Make sure your character is loaded.",
+					Duration = 2,
+				})
+				-- Reset toggle if failed
+				if FlyState.toggleRef and FlyState.toggleRef.SetValue then
+					pcall(function()
+						FlyState.toggleRef:SetValue(false)
+					end)
+				end
+			end
+		else
+			StopFly()
+			WindUI:Notify({
+				Title = "✈️ Fly Mode",
+				Content = "Fly disabled.",
+				Duration = 2,
+			})
 		end
 	end,
 })
 
+-- Auto-stop fly on character death/respawn
+LocalPlayer.CharacterAdded:Connect(function()
+	if FlyState.isFlying then
+		StopFly()
+		if FlyState.toggleRef and FlyState.toggleRef.SetValue then
+			pcall(function()
+				FlyState.toggleRef:SetValue(false)
+			end)
+		end
+	end
+end)
+
 ToolsTab:Slider({
 	Title = "Fly Speed",
-	Desc = "Speed (Default: 50)",
+	Desc = "Adjust flight speed (Default: 50)",
 	Step = 5,
 	Value = { Min = 10, Max = 300, Default = 50 },
 	Callback = function(v)
-		flySpeed = v
+		FlyState.speed = v
 	end,
 })
 
@@ -2083,13 +2837,16 @@ ToolsTab:Divider()
 -- ══════════════════════════════════════════════════════════════════
 ToolsTab:Section({ Title = "📊 Speed Checker", TextSize = 20 })
 
-local speedDisplayGui = nil
-local speedDisplayConnection = nil
-local isSpeedDisplayOn = false
+-- Consolidated speed display state (Lua 200 local var limit)
+local SpeedDisplayState = {
+	gui = nil,
+	connection = nil,
+	isOn = false,
+}
 
 local function CreateSpeedDisplayMobile()
-	if speedDisplayGui then
-		speedDisplayGui:Destroy()
+	if SpeedDisplayState.gui then
+		SpeedDisplayState.gui:Destroy()
 	end
 
 	local parent
@@ -2168,17 +2925,17 @@ ToolsTab:Toggle({
 	Desc = "Show current walkspeed on screen",
 	Value = false,
 	Callback = function(state)
-		isSpeedDisplayOn = state
+		SpeedDisplayState.isOn = state
 
-		if isSpeedDisplayOn then
+		if SpeedDisplayState.isOn then
 			local screen, frame = CreateSpeedDisplayMobile()
-			speedDisplayGui = screen
+			SpeedDisplayState.gui = screen
 
-			speedDisplayConnection = RunService.Heartbeat:Connect(function()
+			SpeedDisplayState.connection = RunService.Heartbeat:Connect(function()
 				local hum = GetHumanoid()
-				if hum and speedDisplayGui then
+				if hum and SpeedDisplayState.gui then
 					local speed = hum.WalkSpeed
-					local speedLbl = speedDisplayGui:FindFirstChild("SpeedFrame")
+					local speedLbl = SpeedDisplayState.gui:FindFirstChild("SpeedFrame")
 					if speedLbl then
 						speedLbl = speedLbl:FindFirstChild("SpeedValue")
 					end
@@ -2203,13 +2960,13 @@ ToolsTab:Toggle({
 				Duration = 2,
 			})
 		else
-			if speedDisplayConnection then
-				speedDisplayConnection:Disconnect()
-				speedDisplayConnection = nil
+			if SpeedDisplayState.connection then
+				SpeedDisplayState.connection:Disconnect()
+				SpeedDisplayState.connection = nil
 			end
-			if speedDisplayGui then
-				speedDisplayGui:Destroy()
-				speedDisplayGui = nil
+			if SpeedDisplayState.gui then
+				SpeedDisplayState.gui:Destroy()
+				SpeedDisplayState.gui = nil
 			end
 
 			WindUI:Notify({
@@ -2803,7 +3560,44 @@ local function CatmullRomVector3(v0, v1, v2, v3, t)
 	)
 end
 
+-- PERFORMANCE OPTIMIZATION: Pre-calculate expensive operations (same as PC)
+local function PreprocessFrames(frames)
+	if not frames or #frames == 0 then
+		return frames
+	end
+
+	for i, frame in ipairs(frames) do
+		-- Pre-calculate Vector3 for positions
+		if frame.pos then
+			frame.posVector = Vector3.new(frame.pos.x, frame.pos.y, frame.pos.z)
+		end
+
+		-- Pre-calculate Vector3 for velocities
+		if frame.vel then
+			frame.velVector = Vector3.new(frame.vel.x, frame.vel.y, frame.vel.z)
+		end
+
+		-- Pre-calculate Vector3 for move direction
+		if frame.md then
+			frame.mdVector = Vector3.new(frame.md.x, frame.md.y, frame.md.z)
+		end
+
+		-- Pre-parse state enum (expensive string.match)
+		if frame.st then
+			frame.stEnum = string.match(frame.st, "Enum%.HumanoidStateType%.(%w+)")
+		end
+
+		-- Yield every 500 frames to prevent freeze on large files (mobile optimization)
+		if i % 500 == 0 then
+			task.wait()
+		end
+	end
+
+	return frames
+end
+
 -- Smooth interpolation between frames using Catmull-Rom (requires 4 frames context)
+-- OPTIMIZED: Uses pre-cached posVector/velVector from PreprocessFrames when available
 local function SmoothInterpolateFrames(frames, frameIdx, alpha)
 	local n = #frames
 	if n < 2 then
@@ -2819,13 +3613,21 @@ local function SmoothInterpolateFrames(frames, frameIdx, alpha)
 	local f0, f1, f2, f3 = frames[i0], frames[i1], frames[i2], frames[i3]
 
 	-- Interpolate position with Catmull-Rom
+	-- OPTIMIZATION: Use pre-cached posVector if available (from PreprocessFrames)
 	local smoothPos = nil
-	if f0.pos and f1.pos and f2.pos and f3.pos then
+	if f0.posVector and f1.posVector and f2.posVector and f3.posVector then
+		-- Use pre-cached Vector3 (faster path)
+		smoothPos = CatmullRomVector3(f0.posVector, f1.posVector, f2.posVector, f3.posVector, alpha)
+	elseif f0.pos and f1.pos and f2.pos and f3.pos then
+		-- Fallback: Create Vector3 from table (slower path for non-preprocessed data)
 		local p0 = Vector3.new(f0.pos.x, f0.pos.y, f0.pos.z)
 		local p1 = Vector3.new(f1.pos.x, f1.pos.y, f1.pos.z)
 		local p2 = Vector3.new(f2.pos.x, f2.pos.y, f2.pos.z)
 		local p3 = Vector3.new(f3.pos.x, f3.pos.y, f3.pos.z)
 		smoothPos = CatmullRomVector3(p0, p1, p2, p3, alpha)
+	elseif f1.posVector and f2.posVector then
+		-- Use pre-cached for linear lerp
+		smoothPos = f1.posVector:Lerp(f2.posVector, alpha)
 	elseif f1.pos and f2.pos then
 		-- Fallback to linear lerp
 		local p1 = Vector3.new(f1.pos.x, f1.pos.y, f1.pos.z)
@@ -2834,13 +3636,21 @@ local function SmoothInterpolateFrames(frames, frameIdx, alpha)
 	end
 
 	-- Interpolate velocity with Catmull-Rom (smoother acceleration)
+	-- OPTIMIZATION: Use pre-cached velVector if available
 	local smoothVel = nil
-	if f0.vel and f1.vel and f2.vel and f3.vel then
+	if f0.velVector and f1.velVector and f2.velVector and f3.velVector then
+		-- Use pre-cached Vector3 (faster path)
+		smoothVel = CatmullRomVector3(f0.velVector, f1.velVector, f2.velVector, f3.velVector, alpha)
+	elseif f0.vel and f1.vel and f2.vel and f3.vel then
+		-- Fallback: Create Vector3 from table
 		local v0 = Vector3.new(f0.vel.x, f0.vel.y, f0.vel.z)
 		local v1 = Vector3.new(f1.vel.x, f1.vel.y, f1.vel.z)
 		local v2 = Vector3.new(f2.vel.x, f2.vel.y, f2.vel.z)
 		local v3 = Vector3.new(f3.vel.x, f3.vel.y, f3.vel.z)
 		smoothVel = CatmullRomVector3(v0, v1, v2, v3, alpha)
+	elseif f1.velVector and f2.velVector then
+		-- Use pre-cached for linear lerp
+		smoothVel = f1.velVector:Lerp(f2.velVector, alpha)
 	elseif f1.vel and f2.vel then
 		-- Fallback to linear lerp
 		local v1 = Vector3.new(f1.vel.x, f1.vel.y, f1.vel.z)
@@ -3678,6 +4488,9 @@ local function PlayRecording(fileName, force)
 			framesToPlay = GetSmoothedFrames(framesToPlay, SMOOTH_SETTINGS.LiveSmoothingStrength, isFlexible)
 		end
 
+		-- PERFORMANCE OPTIMIZATION: Pre-process frames to cache Vector3 and state values
+		framesToPlay = PreprocessFrames(framesToPlay)
+
 		-- CROSS-RIG SUPPORT: Preserve metadata from recording alongside frames
 		PlaybackState.frameData = framesToPlay
 		PlaybackState.frameData.Mode = data.Mode
@@ -4144,14 +4957,13 @@ local function PlayRecording(fileName, force)
 				UpdateTool(GetCharacter(), fA.tool, fA.toolTip, fA.toolColor, fA.toolConfig)
 
 				-- 1. Check current state for special handling
-				local isCurrentlyClimbing = false
-				local isCurrentlySwimming = false
-				local stateName = nil
-				if fA.st then
-					stateName = string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
-					isCurrentlyClimbing = (stateName == "Climbing")
-					isCurrentlySwimming = (stateName == "Swimming")
-				end
+				-- OPTIMIZATION: Use pre-cached stEnum if available, fallback to string.match
+				local stateName = fA.stEnum or (fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)"))
+				local isCurrentlyClimbing = (stateName == "Climbing")
+				local isCurrentlySwimming = (stateName == "Swimming")
+
+				-- OPTIMIZATION: Calculate smoothPos/smoothVel ONCE at higher scope for reuse in drift correction
+				local smoothPos, smoothVel = SmoothInterpolateFrames(PlaybackState.frameData, frameIdx, alpha)
 
 				if isCurrentlyClimbing or isCurrentlySwimming then
 					-- CLIMBING/SWIMMING: Use recorded velocity and simulate input for natural animation
@@ -4237,10 +5049,8 @@ local function PlayRecording(fileName, force)
 						-- Check if in air state - use position-based for smooth jump like recording
 						local isInAir = (stateName == "Jumping" or stateName == "Freefall")
 
-						-- IMPROVED: Use Catmull-Rom spline for smoother interpolation
-						local smoothPos, smoothVel = SmoothInterpolateFrames(PlaybackState.frameData, frameIdx, alpha)
-
 						-- CROSS-RIG HEIGHT OFFSET CORRECTION: Apply height adjustment for cross-rig playback
+						-- Note: smoothPos is already calculated at higher scope
 						if crossRigHeightOffset ~= 0 and smoothPos then
 							smoothPos = Vector3.new(smoothPos.X, smoothPos.Y + crossRigHeightOffset, smoothPos.Z)
 						end
@@ -4536,12 +5346,13 @@ local function PlayRecording(fileName, force)
 
 					-- IMPROVED: Smooth Drift Correction (same as PC)
 					if not skipDriftCorrection then
-						-- Use Catmull-Rom interpolated position for smoother target
-						local smoothTargetPos, _ = SmoothInterpolateFrames(PlaybackState.frameData, frameIdx, alpha)
-						local targetPos = smoothTargetPos
+						-- OPTIMIZATION: Reuse smoothPos from earlier in this frame instead of calling SmoothInterpolateFrames again
+						local targetPos = smoothPos
 						if not targetPos and fA.pos and fB.pos then
-							targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
-								:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
+							-- Fallback: use pre-cached posVector or create new Vector3
+							local posA = fA.posVector or Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
+							local posB = fB.posVector or Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z)
+							targetPos = posA:Lerp(posB, alpha)
 						end
 
 						if targetPos then
@@ -5357,7 +6168,7 @@ local function ToggleMiniPlayer(state)
 		screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 		screen.Parent = parent
 
-		-- ═══════════════════════════════════════════════════════════
+		-- ════════════════════════════════����════���══════════════���══════
 		-- MAIN CONTAINER - Compact Design
 		-- ═══════════════════════════════════════════════════════════
 		local mainFrame = Instance.new("Frame")
@@ -5422,7 +6233,7 @@ local function ToggleMiniPlayer(state)
 		bgGradient.Rotation = 45
 		bgGradient.Parent = mainFrame
 
-		-- ═══════════════════════════════════════════════════════════
+		-- ════════��══════════════���═════════════════════════════���═════
 		-- HEADER - Drag indicator + Close button
 		-- ═══════════════════════════════════════════════════════════
 		local header = Instance.new("Frame")
@@ -5779,24 +6590,279 @@ function CreatePlaybackControls()
 		end,
 	})
 
-	-- Bypass Admin Feature
+	-- ══════════════════════════════════════════════════════════════════
+	-- 🛡️ BYPASS ADMIN FEATURE (Enhanced)
+	-- ══════════════════════════════════════════════════════════════════
 	local isBypassAdminOn = false
-	local bypassAdminConnection = nil
+	local bypassAdminConnections = {}
+	local AdminAlertGui = nil
 
+	-- Fungsi untuk menampilkan notifikasi admin
+	local function ShowAdminNotification(titleText, messageText)
+		WindUI:Notify({
+			Title = "🛡️ " .. titleText,
+			Content = messageText,
+			Duration = 5,
+		})
+	end
+
+	-- Fungsi untuk menampilkan layar peringatan utama (Rejoin/Exit)
+	local function ShowAdminAlert(adminName, reason)
+		-- Hapus alert yang sudah ada
+		if AdminAlertGui then
+			pcall(function()
+				AdminAlertGui:Destroy()
+			end)
+		end
+
+		local CoreGui = game:GetService("CoreGui")
+		AdminAlertGui = Instance.new("ScreenGui")
+		AdminAlertGui.Name = "AdminAlertGui"
+		AdminAlertGui.Parent = CoreGui
+		AdminAlertGui.ResetOnSpawn = false
+		AdminAlertGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+		-- Background Overlay (blur effect)
+		local Overlay = Instance.new("Frame")
+		Overlay.Name = "Overlay"
+		Overlay.Parent = AdminAlertGui
+		Overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		Overlay.BackgroundTransparency = 0.4
+		Overlay.Size = UDim2.new(1, 0, 1, 0)
+		Overlay.ZIndex = 10000
+
+		-- Main Card (WindUI style - glassmorphism)
+		local MainFrame = Instance.new("Frame")
+		MainFrame.Name = "AdminAlertCard"
+		MainFrame.Parent = AdminAlertGui
+		MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+		MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 45) -- Darker blue-gray
+		MainFrame.BackgroundTransparency = 0.15
+		MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+		MainFrame.Size = UDim2.new(0, 340, 0, 260)
+		MainFrame.ZIndex = 10001
+
+		local UICorner = Instance.new("UICorner", MainFrame)
+		UICorner.CornerRadius = UDim.new(0, 12)
+
+		-- Subtle gradient stroke (purple accent like WindUI)
+		local UIStroke = Instance.new("UIStroke", MainFrame)
+		UIStroke.Color = Color3.fromRGB(139, 92, 246) -- Purple accent
+		UIStroke.Thickness = 1.5
+		UIStroke.Transparency = 0.3
+
+		-- Header Area with gradient
+		local Header = Instance.new("Frame", MainFrame)
+		Header.Name = "Header"
+		Header.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
+		Header.BackgroundTransparency = 0.7
+		Header.Size = UDim2.new(1, 0, 0, 60)
+		Header.ZIndex = 10002
+		Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
+
+		-- Fix corner for header bottom
+		local HeaderFix = Instance.new("Frame", Header)
+		HeaderFix.BackgroundColor3 = Header.BackgroundColor3
+		HeaderFix.BackgroundTransparency = Header.BackgroundTransparency
+		HeaderFix.Position = UDim2.new(0, 0, 0.5, 0)
+		HeaderFix.Size = UDim2.new(1, 0, 0.5, 0)
+		HeaderFix.ZIndex = 10002
+		HeaderFix.BorderSizePixel = 0
+
+		-- Warning Icon
+		local Icon = Instance.new("TextLabel", Header)
+		Icon.BackgroundTransparency = 1
+		Icon.Position = UDim2.new(0, 15, 0, 0)
+		Icon.Size = UDim2.new(0, 40, 1, 0)
+		Icon.Font = Enum.Font.GothamBold
+		Icon.Text = "⚠️"
+		Icon.TextSize = 28
+		Icon.TextColor3 = Color3.fromRGB(251, 191, 36) -- Amber
+		Icon.ZIndex = 10003
+
+		-- Title
+		local Title = Instance.new("TextLabel", Header)
+		Title.BackgroundTransparency = 1
+		Title.Position = UDim2.new(0, 55, 0, 0)
+		Title.Size = UDim2.new(1, -70, 1, 0)
+		Title.Font = Enum.Font.GothamBold
+		Title.Text = "Admin Detected!"
+		Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+		Title.TextSize = 18
+		Title.TextXAlignment = Enum.TextXAlignment.Left
+		Title.ZIndex = 10003
+
+		-- Content Area
+		local Content = Instance.new("Frame", MainFrame)
+		Content.Name = "Content"
+		Content.BackgroundTransparency = 1
+		Content.Position = UDim2.new(0, 0, 0, 70)
+		Content.Size = UDim2.new(1, 0, 0, 80)
+		Content.ZIndex = 10002
+
+		-- Admin Name
+		local AdminLabel = Instance.new("TextLabel", Content)
+		AdminLabel.BackgroundTransparency = 1
+		AdminLabel.Position = UDim2.new(0, 20, 0, 5)
+		AdminLabel.Size = UDim2.new(1, -40, 0, 25)
+		AdminLabel.Font = Enum.Font.GothamMedium
+		AdminLabel.Text = "👤 " .. adminName
+		AdminLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		AdminLabel.TextSize = 15
+		AdminLabel.TextXAlignment = Enum.TextXAlignment.Left
+		AdminLabel.ZIndex = 10003
+
+		-- Reason
+		local ReasonLabel = Instance.new("TextLabel", Content)
+		ReasonLabel.BackgroundTransparency = 1
+		ReasonLabel.Position = UDim2.new(0, 20, 0, 32)
+		ReasonLabel.Size = UDim2.new(1, -40, 0, 40)
+		ReasonLabel.Font = Enum.Font.Gotham
+		ReasonLabel.Text = "📋 " .. reason
+		ReasonLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+		ReasonLabel.TextSize = 13
+		ReasonLabel.TextXAlignment = Enum.TextXAlignment.Left
+		ReasonLabel.TextWrapped = true
+		ReasonLabel.TextYAlignment = Enum.TextYAlignment.Top
+		ReasonLabel.ZIndex = 10003
+
+		-- Buttons Container
+		local ButtonsFrame = Instance.new("Frame", MainFrame)
+		ButtonsFrame.Name = "Buttons"
+		ButtonsFrame.BackgroundTransparency = 1
+		ButtonsFrame.Position = UDim2.new(0, 20, 0, 160)
+		ButtonsFrame.Size = UDim2.new(1, -40, 0, 50)
+		ButtonsFrame.ZIndex = 10002
+
+		-- Rejoin Button (Green/Teal style)
+		local RejoinBtn = Instance.new("TextButton", ButtonsFrame)
+		RejoinBtn.Name = "RejoinBtn"
+		RejoinBtn.BackgroundColor3 = Color3.fromRGB(16, 185, 129) -- Emerald
+		RejoinBtn.BackgroundTransparency = 0.1
+		RejoinBtn.Position = UDim2.new(0, 0, 0, 0)
+		RejoinBtn.Size = UDim2.new(0.48, 0, 1, 0)
+		RejoinBtn.Font = Enum.Font.GothamBold
+		RejoinBtn.Text = "🔄 Rejoin"
+		RejoinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		RejoinBtn.TextSize = 14
+		RejoinBtn.ZIndex = 10003
+		RejoinBtn.AutoButtonColor = false
+		Instance.new("UICorner", RejoinBtn).CornerRadius = UDim.new(0, 8)
+		local RejoinStroke = Instance.new("UIStroke", RejoinBtn)
+		RejoinStroke.Color = Color3.fromRGB(16, 185, 129)
+		RejoinStroke.Transparency = 0.5
+
+		-- Exit Button (Red style)
+		local ExitBtn = Instance.new("TextButton", ButtonsFrame)
+		ExitBtn.Name = "ExitBtn"
+		ExitBtn.BackgroundColor3 = Color3.fromRGB(239, 68, 68) -- Red
+		ExitBtn.BackgroundTransparency = 0.1
+		ExitBtn.Position = UDim2.new(0.52, 0, 0, 0)
+		ExitBtn.Size = UDim2.new(0.48, 0, 1, 0)
+		ExitBtn.Font = Enum.Font.GothamBold
+		ExitBtn.Text = "🚪 Leave"
+		ExitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		ExitBtn.TextSize = 14
+		ExitBtn.ZIndex = 10003
+		ExitBtn.AutoButtonColor = false
+		Instance.new("UICorner", ExitBtn).CornerRadius = UDim.new(0, 8)
+		local ExitStroke = Instance.new("UIStroke", ExitBtn)
+		ExitStroke.Color = Color3.fromRGB(239, 68, 68)
+		ExitStroke.Transparency = 0.5
+
+		-- Footer/Watermark
+		local Footer = Instance.new("TextLabel", MainFrame)
+		Footer.BackgroundTransparency = 1
+		Footer.Position = UDim2.new(0, 0, 1, -30)
+		Footer.Size = UDim2.new(1, 0, 0, 25)
+		Footer.Font = Enum.Font.Gotham
+		Footer.Text = "⚡ Starship Protection"
+		Footer.TextColor3 = Color3.fromRGB(100, 100, 120)
+		Footer.TextSize = 11
+		Footer.ZIndex = 10003
+
+		-- Hover Effects (WindUI style - subtle scale + color)
+		RejoinBtn.MouseEnter:Connect(function()
+			TweenService:Create(RejoinBtn, TweenInfo.new(0.15), {
+				BackgroundTransparency = 0,
+				Size = UDim2.new(0.49, 0, 1.05, 0),
+			}):Play()
+		end)
+		RejoinBtn.MouseLeave:Connect(function()
+			TweenService:Create(RejoinBtn, TweenInfo.new(0.15), {
+				BackgroundTransparency = 0.1,
+				Size = UDim2.new(0.48, 0, 1, 0),
+			}):Play()
+		end)
+		ExitBtn.MouseEnter:Connect(function()
+			TweenService:Create(ExitBtn, TweenInfo.new(0.15), {
+				BackgroundTransparency = 0,
+				Size = UDim2.new(0.49, 0, 1.05, 0),
+			}):Play()
+		end)
+		ExitBtn.MouseLeave:Connect(function()
+			TweenService:Create(ExitBtn, TweenInfo.new(0.15), {
+				BackgroundTransparency = 0.1,
+				Size = UDim2.new(0.48, 0, 1, 0),
+			}):Play()
+		end)
+
+		-- Button Click Logic
+		RejoinBtn.MouseButton1Click:Connect(function()
+			RejoinBtn.Text = "⏳ Rejoining..."
+			RejoinBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			ExitBtn.Visible = false
+			task.wait(0.5)
+			local TeleportService = game:GetService("TeleportService")
+			TeleportService:Teleport(game.PlaceId, LocalPlayer)
+		end)
+
+		ExitBtn.MouseButton1Click:Connect(function()
+			ExitBtn.Text = "👋 Leaving..."
+			ExitBtn.BackgroundColor3 = Color3.fromRGB(100, 50, 50)
+			RejoinBtn.Visible = false
+			task.wait(0.3)
+			LocalPlayer:Kick("You chose to leave.\n\n- Stay safe! -")
+		end)
+
+		-- Entrance Animation (slide up + fade in)
+		Overlay.BackgroundTransparency = 1
+		MainFrame.Position = UDim2.new(0.5, 0, 0.6, 0)
+		MainFrame.BackgroundTransparency = 1
+
+		TweenService:Create(Overlay, TweenInfo.new(0.3), {
+			BackgroundTransparency = 0.4,
+		}):Play()
+
+		TweenService:Create(MainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Position = UDim2.new(0.5, 0, 0.5, 0),
+			BackgroundTransparency = 0.15,
+		}):Play()
+	end
+
+	-- Fungsi utama pengecekan admin
 	local function CheckForAdmin(player)
 		if player == LocalPlayer or not player.Parent then
 			return
 		end
 
 		local isAdmin = false
+		local reason = ""
+
+		-- 1. Cek Game Creator
 		if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
 			isAdmin = true
-		elseif game.CreatorType == Enum.CreatorType.Group then
+			reason = "Game Owner"
+		end
+
+		-- 2. Cek Group Rank (untuk game grup)
+		if not isAdmin and game.CreatorType == Enum.CreatorType.Group then
 			local s, rank = pcall(function()
 				return player:GetRankInGroup(game.CreatorId)
 			end)
 			if s and rank and rank >= 100 then
 				isAdmin = true
+				reason = "Group Rank: " .. tostring(rank)
 			end
 
 			local s2, role = pcall(function()
@@ -5812,33 +6878,122 @@ function CreatePlaybackControls()
 					or lower:find("owner")
 				then
 					isAdmin = true
+					reason = "Group Role: " .. role
 				end
 			end
 		end
 
+		-- 3. Cek via HTTP API (untuk semua grup player)
+		if not isAdmin then
+			task.spawn(function()
+				local success, roles = pcall(function()
+					local HttpService = game:GetService("HttpService")
+					local response =
+						game:HttpGet("https://groups.roblox.com/v1/users/" .. player.UserId .. "/groups/roles")
+					return HttpService:JSONDecode(response)
+				end)
+
+				if success and roles and roles.data then
+					for _, group in ipairs(roles.data) do
+						if group.role.rank >= 200 then -- Rank 200+ biasanya owner/admin
+							ShowAdminAlert(
+								player.Name,
+								"High Rank in Group: " .. group.group.name .. " (Rank " .. group.role.rank .. ")"
+							)
+							return
+						end
+					end
+				end
+			end)
+		end
+
+		-- 4. Cek Admin Tools di Backpack
+		if not isAdmin then
+			task.spawn(function()
+				task.wait(1) -- Tunggu character load
+				local backpack = player:FindFirstChild("Backpack")
+				if backpack then
+					for _, tool in ipairs(backpack:GetChildren()) do
+						if tool:IsA("Tool") then
+							local toolName = tool.Name:lower()
+							if
+								toolName:find("admin")
+								or toolName:find("ban")
+								or toolName:find("kick")
+								or toolName:find("mod")
+							then
+								ShowAdminAlert(player.Name, "Admin Tool: " .. tool.Name)
+								return
+							end
+						end
+					end
+				end
+			end)
+		end
+
+		-- 5. Monitor Chat untuk Command Admin
+		local chatConnection = player.Chatted:Connect(function(msg)
+			if not isBypassAdminOn then
+				return
+			end
+			local lowMsg = msg:lower()
+			if
+				lowMsg:find(";jail")
+				or lowMsg:find(";kick")
+				or lowMsg:find(";ban")
+				or lowMsg:find(":kick")
+				or lowMsg:find(":ban")
+				or lowMsg:find("/e :")
+			then
+				ShowAdminNotification("ADMIN COMMAND", player.Name .. " used: " .. msg:sub(1, 30))
+				ShowAdminAlert(player.Name, "Admin Command: " .. msg:sub(1, 50))
+			end
+		end)
+		table.insert(bypassAdminConnections, chatConnection)
+
+		-- Jika sudah terdeteksi admin dari awal
 		if isAdmin then
-			LocalPlayer:Kick("⚠️ Safety Triggered: Admin (" .. player.Name .. ") detected.")
+			ShowAdminAlert(player.Name, reason)
 		end
 	end
 
 	PlaybackSection:Toggle({
-		Title = "Bypass Admin",
-		Desc = "Auto-kick when admin/mod joins the server",
+		Title = "🛡️ Bypass Admin",
+		Desc = "Deteksi admin via rank, role, tools & chat commands",
 		Value = false,
 		Callback = function(state)
 			isBypassAdminOn = state
 			if isBypassAdminOn then
+				-- Cek semua player yang sudah ada
 				for _, p in ipairs(Players:GetPlayers()) do
 					CheckForAdmin(p)
 				end
-				bypassAdminConnection = Players.PlayerAdded:Connect(CheckForAdmin)
-				WindUI:Notify({ Title = "Bypass Admin", Content = "Admin detection enabled!", Duration = 2 })
+				-- Cek player baru yang masuk
+				local newPlayerConn = Players.PlayerAdded:Connect(function(p)
+					if isBypassAdminOn then
+						CheckForAdmin(p)
+					end
+				end)
+				table.insert(bypassAdminConnections, newPlayerConn)
+				WindUI:Notify({ Title = "🛡️ Bypass Admin", Content = "Admin detection ACTIVE!", Duration = 3 })
 			else
-				if bypassAdminConnection then
-					bypassAdminConnection:Disconnect()
-					bypassAdminConnection = nil
+				-- Disconnect semua connection
+				for _, conn in ipairs(bypassAdminConnections) do
+					if conn then
+						pcall(function()
+							conn:Disconnect()
+						end)
+					end
 				end
-				WindUI:Notify({ Title = "Bypass Admin", Content = "Admin detection disabled.", Duration = 2 })
+				bypassAdminConnections = {}
+				-- Hapus alert jika ada
+				if AdminAlertGui then
+					pcall(function()
+						AdminAlertGui:Destroy()
+					end)
+					AdminAlertGui = nil
+				end
+				WindUI:Notify({ Title = "🛡️ Bypass Admin", Content = "Admin detection disabled.", Duration = 2 })
 			end
 		end,
 	})
@@ -5934,119 +7089,156 @@ FunTab:Divider()
 -- ══════════════════════════════════════════════════════════════════
 FunTab:Section({ Title = "💥 Touch Fling", TextSize = 20 })
 
-local isFlingOn = false
-local flingLoop = nil
-local isHitboxExpanded = false
-local hitboxParts = {}
+-- Touch Fling State
+local TouchFlingState = {
+	isEnabled = false,
+	movel = 0.1,
+	hitboxExpanded = false,
+	hitboxParts = {},
+}
 
-FunTab:Toggle({
-	Title = "Expand Hitbox",
-	Desc = "Bigger hitbox = easier fling",
-	Value = false,
-	Callback = function(state)
-		isHitboxExpanded = state
+-- Create detection marker in ReplicatedStorage (for anti-detection compatibility)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+if not ReplicatedStorage:FindFirstChild("juisdfj0i32i0eidsuf0iok") then
+	local detection = Instance.new("Decal")
+	detection.Name = "juisdfj0i32i0eidsuf0iok"
+	detection.Parent = ReplicatedStorage
+end
 
-		local char = GetCharacter()
-		if not char then
-			return
+-- Function to create/destroy hitbox expanders
+local function UpdateHitboxExpander(expand)
+	local char = GetCharacter()
+	if not char then
+		return
+	end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then
+		return
+	end
+
+	-- Clean existing hitbox parts
+	for _, part in pairs(TouchFlingState.hitboxParts) do
+		if part and part.Parent then
+			part:Destroy()
 		end
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		if not hrp then
-			return
+	end
+	TouchFlingState.hitboxParts = {}
+
+	if expand then
+		-- Create 6 invisible collidable parts around character (box formation)
+		local offsets = {
+			CFrame.new(0, 0, -4), -- Front
+			CFrame.new(0, 0, 4), -- Back
+			CFrame.new(-4, 0, 0), -- Left
+			CFrame.new(4, 0, 0), -- Right
+			CFrame.new(0, 3, 0), -- Top
+			CFrame.new(0, -2, 0), -- Bottom
+		}
+
+		for i, offset in ipairs(offsets) do
+			local part = Instance.new("Part")
+			part.Name = "FlingHitbox_" .. i
+			part.Size = Vector3.new(5, 5, 0.5)
+			part.Transparency = 1
+			part.CanCollide = true
+			part.Massless = true
+			part.Anchored = false
+			part.Parent = char
+
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = hrp
+			weld.Part1 = part
+			weld.Parent = part
+
+			part.CFrame = hrp.CFrame * offset
+
+			table.insert(TouchFlingState.hitboxParts, part)
 		end
+	end
+end
 
-		if isHitboxExpanded then
-			for i = 1, 4 do
-				local part = Instance.new("Part")
-				part.Name = "HitboxExpander"
-				part.Size = Vector3.new(4, 4, 0.5)
-				part.Transparency = 1
-				part.CanCollide = true
-				part.Massless = true
-				part.Parent = char
+-- Touch Fling Loop (runs in background)
+task.spawn(function()
+	local hrp, c, vel = nil, nil, nil
+	local lp = LocalPlayer
 
-				local weld = Instance.new("WeldConstraint")
-				weld.Part0 = hrp
-				weld.Part1 = part
-				weld.Parent = part
-
-				table.insert(hitboxParts, part)
+	while true do
+		RunService.Heartbeat:Wait()
+		if TouchFlingState.isEnabled then
+			-- Wait for valid character and HumanoidRootPart
+			while TouchFlingState.isEnabled and not (c and c.Parent and hrp and hrp.Parent) do
+				RunService.Heartbeat:Wait()
+				c = lp.Character
+				hrp = c and c:FindFirstChild("HumanoidRootPart")
 			end
 
-			if hitboxParts[1] then
-				hitboxParts[1].CFrame = hrp.CFrame * CFrame.new(0, 0, -3)
-			end
-			if hitboxParts[2] then
-				hitboxParts[2].CFrame = hrp.CFrame * CFrame.new(0, 0, 3)
-			end
-			if hitboxParts[3] then
-				hitboxParts[3].CFrame = hrp.CFrame * CFrame.new(-3, 0, 0)
-			end
-			if hitboxParts[4] then
-				hitboxParts[4].CFrame = hrp.CFrame * CFrame.new(3, 0, 0)
-			end
+			if TouchFlingState.isEnabled then
+				vel = hrp.Velocity
+				hrp.Velocity = vel * 10000 + Vector3.new(0, 10000, 0)
 
-			WindUI:Notify({ Title = "Hitbox", Content = "Hitbox expanded!", Duration = 2 })
-		else
-			for _, part in pairs(hitboxParts) do
-				if part and part.Parent then
-					part:Destroy()
-				end
-			end
-			hitboxParts = {}
-			WindUI:Notify({ Title = "Hitbox", Content = "Hitbox reset.", Duration = 2 })
-		end
-	end,
-})
-
-FunTab:Toggle({
-	Title = "Touch Fling",
-	Desc = "Fling players on touch",
-	Value = false,
-	Callback = function(state)
-		isFlingOn = state
-
-		if isFlingOn then
-			flingLoop = RunService.Heartbeat:Connect(function()
-				local char = GetCharacter()
-				if not char then
-					return
-				end
-				local hrp = char:FindFirstChild("HumanoidRootPart")
-				if not hrp then
-					return
-				end
-
-				local currentVel = hrp.Velocity
-				hrp.Velocity = currentVel * 10000 + Vector3.new(0, 10000, 0)
-
-				if isHitboxExpanded then
-					for _, part in pairs(hitboxParts) do
+				-- Also apply velocity to hitbox parts for better fling
+				if TouchFlingState.hitboxExpanded then
+					for _, part in pairs(TouchFlingState.hitboxParts) do
 						if part and part.Parent then
-							part.Velocity = hrp.Velocity
+							pcall(function()
+								part.Velocity = hrp.Velocity
+							end)
 						end
 					end
 				end
 
 				RunService.RenderStepped:Wait()
-
-				if char and char.Parent and hrp and hrp.Parent then
-					hrp.Velocity = currentVel
+				if c and c.Parent and hrp and hrp.Parent then
+					hrp.Velocity = vel
 				end
-
 				RunService.Stepped:Wait()
-				if char and char.Parent and hrp and hrp.Parent then
-					hrp.Velocity = currentVel + Vector3.new(0, 0.1, 0)
+				if c and c.Parent and hrp and hrp.Parent then
+					hrp.Velocity = vel + Vector3.new(0, TouchFlingState.movel, 0)
+					TouchFlingState.movel = TouchFlingState.movel * -1
 				end
-			end)
-
-			WindUI:Notify({ Title = "Touch Fling", Content = "Fling enabled!", Duration = 2 })
-		else
-			if flingLoop then
-				flingLoop:Disconnect()
-				flingLoop = nil
 			end
+		end
+	end
+end)
 
+-- Hitbox Expander Toggle (for games where bodies pass through)
+FunTab:Toggle({
+	Title = "🔲 Expand Hitbox",
+	Desc = "Enable if bodies pass through (no collision)",
+	Value = false,
+	Callback = function(state)
+		TouchFlingState.hitboxExpanded = state
+		UpdateHitboxExpander(state)
+
+		if state then
+			WindUI:Notify({
+				Title = "Hitbox",
+				Content = "Hitbox expanded! Better collision for fling.",
+				Duration = 2,
+			})
+		else
+			WindUI:Notify({ Title = "Hitbox", Content = "Hitbox reset to normal.", Duration = 2 })
+		end
+	end,
+})
+
+FunTab:Toggle({
+	Title = "💥 Touch Fling",
+	Desc = "Fling players on touch (new method)",
+	Value = false,
+	Callback = function(state)
+		TouchFlingState.isEnabled = state
+
+		if state then
+			local tip = TouchFlingState.hitboxExpanded and "Walk into players to fling them!"
+				or "Walk into players. Enable Hitbox if not working."
+			WindUI:Notify({
+				Title = "Touch Fling",
+				Content = "Fling enabled! " .. tip,
+				Duration = 3,
+			})
+		else
+			-- Reset velocity when disabled
 			local char = GetCharacter()
 			if char then
 				local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -6055,7 +7247,6 @@ FunTab:Toggle({
 					hrp.RotVelocity = Vector3.new(0, 0, 0)
 				end
 			end
-
 			WindUI:Notify({ Title = "Touch Fling", Content = "Fling disabled.", Duration = 2 })
 		end
 	end,
@@ -6138,7 +7329,7 @@ FunTab:Divider()
 
 -- ══════════════════════════════════════════════════════════════════
 -- 👁️ SPECTATE PLAYER
--- ══════════════════════════════════════════════════════════════════
+-- ═════════════════════════════════════════════════════════════���════
 FunTab:Section({ Title = "👁️ Spectate Player", TextSize = 20 })
 
 local spectateTarget = nil
@@ -6482,7 +7673,7 @@ SocialTab:Section({ Title = "📢 About", TextSize = 16 })
 
 SocialTab:Paragraph({
 	Title = "Starship Mobile",
-	Desc = "Version 1.0 • Made with 💜\n\nThank you for using Starship Mobile!\nJoin our Discord for updates and support.",
+	Desc = "Version 1.1 • Made with 💜\n\nThank you for using Starship Mobile!\nJoin our Discord for updates and support.",
 })
 
 -- ═══════���════════════════════════════════════��═════════════════════
@@ -6509,9 +7700,28 @@ local ShowNotificationsToggle = SettingsTab:Toggle({
 })
 
 local ThemeDropdown = SettingsTab:Dropdown({
-	Title = "Theme",
-	Desc = "Choose UI color theme",
-	Values = { "Dark", "Light", "Midnight", "Aqua" },
+	Title = "🎨 Theme",
+	Desc = "Choose UI color theme (15 themes)",
+	Values = {
+		-- Classic Themes
+		"Dark",
+		"Light",
+		"Midnight",
+		-- Color Themes
+		"Rose",
+		"Emerald",
+		"Plant",
+		"Red",
+		"Indigo",
+		"Sky",
+		"Violet",
+		"Amber",
+		"Crimson",
+		-- Special Themes
+		"Monokai Pro",
+		"Cotton Candy",
+		"Rainbow",
+	},
 	Value = Settings.Theme,
 	Callback = function(selected)
 		Settings.Theme = selected
@@ -6519,7 +7729,11 @@ local ThemeDropdown = SettingsTab:Dropdown({
 		pcall(function()
 			WindUI:SetTheme(selected)
 		end)
-		WindUI:Notify({ Title = "Theme", Content = "Theme changed to " .. selected, Duration = 2 })
+		WindUI:Notify({
+			Title = "🎨 Theme",
+			Content = "Theme changed to " .. selected,
+			Duration = 2,
+		})
 	end,
 })
 
