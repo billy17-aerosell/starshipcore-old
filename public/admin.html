@@ -1354,6 +1354,10 @@
                     const added = user.addedAt ? new Date(user.addedAt).toLocaleDateString('id-ID') : '-';
                     const expiry = user.expiresAt ? new Date(user.expiresAt).toLocaleDateString('id-ID') : 'Lifetime';
                     const initial = (user.username || 'U')[0].toUpperCase();
+                    const isSuspended = user.status === 'suspended';
+                    const suspendBtn = isSuspended 
+                        ? `<button class="action-btn" onclick="reactivateUser('${platform}', '${user.userId}')" title="Reactivate" style="background: var(--success); color: white; border-color: var(--success);">▶️</button>`
+                        : `<button class="action-btn" onclick="suspendUser('${platform}', '${user.userId}')" title="Suspend" style="background: var(--warning); color: white; border-color: var(--warning);">⏸️</button>`;
                     
                     return `
                         <tr>
@@ -1374,6 +1378,7 @@
                                 <div class="action-btns">
                                     <button class="action-btn" onclick="extendUser('${platform}', '${user.userId}')" title="Extend Duration">⏱️</button>
                                     <button class="action-btn" onclick="editUser('${platform}', '${user.userId}')" title="Edit">✏️</button>
+                                    ${suspendBtn}
                                     <button class="action-btn" onclick="resetHwid('${platform}', '${user.userId}')" title="Reset HWID">🔄</button>
                                     <button class="action-btn danger" onclick="deleteUser('${platform}', '${user.userId}')" title="Delete">🗑️</button>
                                 </div>
@@ -1833,6 +1838,72 @@
                     loadUsers(platform);
                 } else {
                     throw new Error(data.error || 'Failed to reset HWID');
+                }
+            } catch (error) {
+                showToast(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function suspendUser(platform, userId) {
+            const users = platform === 'pc' ? pcUsers : mobileUsers;
+            const user = users.find(u => u.userId === userId);
+            const username = user?.username || userId;
+            
+            if (!confirm(`Suspend user ${username}? They will not be able to access the script.`)) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Secret': adminSecret
+                    },
+                    body: JSON.stringify({
+                        action: 'suspend',
+                        platform: platform,
+                        userId: userId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`⏸️ User ${username} suspended!`, 'success');
+                    loadUsers(platform);
+                } else {
+                    throw new Error(data.error || 'Failed to suspend');
+                }
+            } catch (error) {
+                showToast(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function reactivateUser(platform, userId) {
+            const users = platform === 'pc' ? pcUsers : mobileUsers;
+            const user = users.find(u => u.userId === userId);
+            const username = user?.username || userId;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Secret': adminSecret
+                    },
+                    body: JSON.stringify({
+                        action: 'reactivate',
+                        platform: platform,
+                        userId: userId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`▶️ User ${username} reactivated!`, 'success');
+                    loadUsers(platform);
+                } else {
+                    throw new Error(data.error || 'Failed to reactivate');
                 }
             } catch (error) {
                 showToast(`❌ Error: ${error.message}`, 'error');
