@@ -599,7 +599,13 @@ export default async function handler(req, res) {
                                         date: endTime.toISOString()
                                     }
                                 };
-                                compensatedUsers.push({ userId, username: user.username || 'Unknown', added: compensationDuration });
+                                compensatedUsers.push({ 
+                                    userId, 
+                                    username: user.username || 'Unknown', 
+                                    added: compensationDuration,
+                                    expiryBefore: expiryDate.toISOString(),
+                                    expiryAfter: newExpiryDate.toISOString()
+                                });
                             }
                             
                             await redisClient.set(config.whitelistKey, JSON.stringify(whitelist));
