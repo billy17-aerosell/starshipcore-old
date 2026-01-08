@@ -516,6 +516,133 @@ local function showError(message)
 end
 
 -- ══════════════════════════════════════════════════════════════════
+-- COMPENSATION TOAST NOTIFICATION
+-- ══════════════════════════════════════════════════════════════════
+
+local function showCompensationToast(announcement)
+	if not announcement then
+		return
+	end
+
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "StarshipCompensationToast"
+	screenGui.ResetOnSpawn = false
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = 999
+
+	pcall(function()
+		screenGui.Parent = game:GetService("CoreGui")
+	end)
+	if not screenGui.Parent then
+		screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	-- Toast Container
+	local container = Instance.new("Frame")
+	container.Name = "ToastContainer"
+	container.Size = UDim2.new(0, 320, 0, 160)
+	container.Position = UDim2.new(0.5, 0, 0, -200) -- Start off screen
+	container.AnchorPoint = Vector2.new(0.5, 0)
+	container.BackgroundColor3 = Color3.fromHex("#1a1a2e")
+	container.BorderSizePixel = 0
+	container.Parent = screenGui
+
+	local containerCorner = Instance.new("UICorner")
+	containerCorner.CornerRadius = UDim.new(0, 16)
+	containerCorner.Parent = container
+
+	local containerStroke = Instance.new("UIStroke")
+	containerStroke.Color = Color3.fromHex("#22c55e") -- Green for success
+	containerStroke.Thickness = 2
+	containerStroke.Transparency = 0.3
+	containerStroke.Parent = container
+
+	-- Shadow
+	local shadow = Instance.new("ImageLabel")
+	shadow.Name = "Shadow"
+	shadow.Size = UDim2.new(1, 30, 1, 30)
+	shadow.Position = UDim2.new(0.5, 0, 0.5, 0)
+	shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+	shadow.BackgroundTransparency = 1
+	shadow.Image = "rbxassetid://6015897843"
+	shadow.ImageColor3 = Color3.new(0, 0, 0)
+	shadow.ImageTransparency = 0.5
+	shadow.ScaleType = Enum.ScaleType.Slice
+	shadow.SliceCenter = Rect.new(49, 49, 450, 450)
+	shadow.ZIndex = -1
+	shadow.Parent = container
+
+	-- Icon
+	local icon = Instance.new("TextLabel")
+	icon.Size = UDim2.new(1, 0, 0, 40)
+	icon.Position = UDim2.new(0.5, 0, 0, 15)
+	icon.AnchorPoint = Vector2.new(0.5, 0)
+	icon.BackgroundTransparency = 1
+	icon.Text = "🎁"
+	icon.TextSize = 32
+	icon.Font = Enum.Font.GothamBold
+	icon.Parent = container
+
+	-- Title
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -30, 0, 25)
+	title.Position = UDim2.new(0.5, 0, 0, 55)
+	title.AnchorPoint = Vector2.new(0.5, 0)
+	title.BackgroundTransparency = 1
+	title.Text = announcement.title or "🎁 Kompensasi Maintenance"
+	title.TextColor3 = Color3.fromHex("#22c55e")
+	title.TextSize = 16
+	title.Font = Enum.Font.GothamBold
+	title.Parent = container
+
+	-- Message
+	local message = Instance.new("TextLabel")
+	message.Size = UDim2.new(1, -30, 0, 40)
+	message.Position = UDim2.new(0.5, 0, 0, 85)
+	message.AnchorPoint = Vector2.new(0.5, 0)
+	message.BackgroundTransparency = 1
+	message.Text = announcement.message or "VIP Anda telah diperpanjang!"
+	message.TextColor3 = Color3.fromHex("#ffffff")
+	message.TextSize = 14
+	message.Font = Enum.Font.Gotham
+	message.TextWrapped = true
+	message.Parent = container
+
+	-- Thanks message
+	local thanks = Instance.new("TextLabel")
+	thanks.Size = UDim2.new(1, -30, 0, 20)
+	thanks.Position = UDim2.new(0.5, 0, 1, -25)
+	thanks.AnchorPoint = Vector2.new(0.5, 0)
+	thanks.BackgroundTransparency = 1
+	thanks.Text = "Terima kasih atas kesabarannya! 💜"
+	thanks.TextColor3 = Color3.fromHex("#a1a1aa")
+	thanks.TextSize = 11
+	thanks.Font = Enum.Font.Gotham
+	thanks.Parent = container
+
+	-- Animate in (slide down)
+	TweenService:Create(container, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0, 80),
+	}):Play()
+
+	-- Auto close after 8 seconds
+	task.delay(8, function()
+		if screenGui and screenGui.Parent then
+			-- Animate out (slide up)
+			TweenService:Create(container, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				Position = UDim2.new(0.5, 0, 0, -200),
+			}):Play()
+
+			task.wait(0.5)
+			if screenGui and screenGui.Parent then
+				screenGui:Destroy()
+			end
+		end
+	end)
+end
+
+-- ══════════════════════════════════════════════════════════════════
 -- EVENT CODE SYSTEM UI
 -- ══════════════════════════════════════════════════════════════════
 
@@ -1471,7 +1598,16 @@ local function main()
 		MaxDevices = data.maxDevices,
 		Username = data.username,
 		IsEventAccess = false,
+		Announcement = data.announcement, -- Compensation announcement if any
 	}
+
+	-- Show compensation announcement if present
+	if data.announcement and data.announcement.type == "compensation" then
+		task.spawn(function()
+			task.wait(3) -- Wait for UI to load first
+			showCompensationToast(data.announcement)
+		end)
+	end
 
 	loadMobileUI(sessionData, loaderGui, updateStatus)
 end

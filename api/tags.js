@@ -27,9 +27,45 @@ async function getRedis() {
 }
 
 const PLATFORM_CONFIG = {
-    pc: { whitelistKey: 'starship:whitelist' },
-    mobile: { whitelistKey: 'starship:mobile_whitelist' }
+    pc: { 
+        whitelistKey: 'starship:whitelist',
+        statusKey: 'starship:status:pc',
+        maintenanceKey: 'maintenance:pc:start',
+        historyKey: 'maintenance:history:pc',
+        label: '💻 PC'
+    },
+    mobile: { 
+        whitelistKey: 'starship:mobile_whitelist',
+        statusKey: 'starship:status:mobile',
+        maintenanceKey: 'maintenance:mobile:start',
+        historyKey: 'maintenance:history:mobile',
+        label: '📱 Mobile'
+    }
 };
+
+// Maintenance Compensation Config
+const COMPENSATION_CONFIG = {
+    MINIMUM_DURATION_SECONDS: 3600, // 1 hour minimum
+    MULTIPLIER: 1,
+    MAX_HISTORY_ENTRIES: 50
+};
+
+function formatDuration(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours} jam`;
+    return `${minutes} menit`;
+}
+
+function formatDateWIB(isoString) {
+    const date = new Date(isoString);
+    return date.toLocaleString('id-ID', { 
+        timeZone: 'Asia/Jakarta',
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+    }) + ' WIB';
+}
 
 // ============ STATUS SYSTEM ============
 const STATUS_TYPES = {
@@ -434,16 +470,133 @@ export default async function handler(req, res) {
             });
         }
 
-        // Webhook embed disabled - using channel rename only
-        // const discordWebhookUrl = process.env.DISCORD_STATUS_WEBHOOK_URL;
-        // let discordMessageId = null;
-        // if (discordWebhookUrl) {
-        //     discordMessageId = await sendDiscordStatusUpdate(status, message, discordWebhookUrl);
-        // }
-
         // Get platform from request body (pc, mobile, or all/null)
         const platform = req.body.platform;
         const effectivePlatform = platform === 'all' ? null : platform;
+        const platformsToProcess = effectivePlatform ? [effectivePlatform] : ['pc', 'mobile'];
+
+        // ═══════════════════════════════════════════════════════════════
+        // MAINTENANCE COMPENSATION INTEGRATION
+        // ═══════════════════════════════════════════════════════════════
+        let compensationResults = [];
+        const redisClient = await getRedis();
+        
+        for (const plat of platformsToProcess) {
+            const maintenanceKey = `maintenance:${plat}:start`;
+            
+            if (status === 'maintenance') {
+                // Starting maintenance - record start time if not already in maintenance
+                if (redisClient) {
+                    const existingStart = await redisClient.get(maintenanceKey);
+                    if (!existingStart) {
+                        await redisClient.set(maintenanceKey, new Date().toISOString());
+                        console.log(`[Maintenance] ✅ ${plat.toUpperCase()} maintenance started`);
+                    }
+                }
+            } else if (status === 'online') {
+                // Ending maintenance - check if we were in maintenance and need to compensate
+                if (redisClient) {
+                    const startTimeStr = await redisClient.get(maintenanceKey);
+                    if (startTimeStr) {
+                        // We were in maintenance, need to compensate!
+                        console.log(`[Maintenance] 📋 ${plat.toUpperCase()} maintenance ending, processing compensation...`);
+                        
+                        try {
+                            const config = PLATFORM_CONFIG[plat];
+                            const startTime = new Date(startTimeStr);
+                            const endTime = new Date();
+                            const actualDuration = Math.floor((endTime - startTime) / 1000);
+                            const compensationDuration = Math.max(actualDuration * COMPENSATION_CONFIG.MULTIPLIER, COMPENSATION_CONFIG.MINIMUM_DURATION_SECONDS);
+                            
+                            // Get whitelist and compensate
+                            const whitelistData = await redisClient.get(config.whitelistKey);
+                            let whitelist = whitelistData ? JSON.parse(whitelistData) : {};
+                            const compensatedUsers = [];
+                            const now = new Date();
+                            
+                            for (const [userId, user] of Object.entries(whitelist)) {
+                                if (user.status !== 'active') continue;
+                                if (!user.expiresAt) continue; // Skip lifetime
+                                const expiryDate = new Date(user.expiresAt);
+                                if (expiryDate < now) continue; // Skip expired
+                                
+                                const newExpiryDate = new Date(expiryDate.getTime() + (compensationDuration * 1000));
+                                whitelist[userId] = {
+                                    ...user,
+                                    expiresAt: newExpiryDate.toISOString(),
+                                    pendingAnnouncement: {
+                                        type: 'compensation',
+                                        title: '🎁 Kompensasi Maintenance',
+                                        message: `VIP Anda diperpanjang +${formatDuration(compensationDuration)}`,
+                                        duration: compensationDuration,
+                                        date: endTime.toISOString()
+                                    }
+                                };
+                                compensatedUsers.push({ userId, username: user.username || 'Unknown', added: compensationDuration });
+                            }
+                            
+                            await redisClient.set(config.whitelistKey, JSON.stringify(whitelist));
+                            
+                            // Save history
+                            const historyEntry = {
+                                id: `maint_${plat}_${Date.now()}`,
+                                platform: plat,
+                                startAt: startTimeStr,
+                                endAt: endTime.toISOString(),
+                                actualDuration,
+                                actualDurationText: formatDuration(actualDuration),
+                                compensationGiven: compensationDuration,
+                                compensationText: `+${formatDuration(compensationDuration)}`,
+                                usersCompensated: compensatedUsers.length,
+                                usersList: compensatedUsers.slice(0, 50)
+                            };
+                            
+                            const historyData = await redisClient.get(config.historyKey);
+                            let history = historyData ? JSON.parse(historyData) : [];
+                            history.unshift(historyEntry);
+                            history = history.slice(0, COMPENSATION_CONFIG.MAX_HISTORY_ENTRIES);
+                            await redisClient.set(config.historyKey, JSON.stringify(history));
+                            
+                            // Clear maintenance start
+                            await redisClient.del(config.maintenanceKey);
+                            
+                            // Discord webhook
+                            const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+                            if (webhookUrl) {
+                                try {
+                                    await fetch(webhookUrl, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            embeds: [{
+                                                title: '✅ MAINTENANCE COMPLETED',
+                                                color: 0x00E676,
+                                                fields: [
+                                                    { name: '📍 Platform', value: config.label, inline: true },
+                                                    { name: '⏱️ Duration', value: formatDuration(actualDuration), inline: true },
+                                                    { name: '🎁 Compensation', value: `+${formatDuration(compensationDuration)}`, inline: true },
+                                                    { name: '👥 Users', value: `${compensatedUsers.length} users`, inline: true }
+                                                ],
+                                                timestamp: new Date().toISOString()
+                                            }]
+                                        })
+                                    });
+                                } catch (e) { console.error('[Discord] Webhook error:', e.message); }
+                            }
+                            
+                            compensationResults.push({
+                                platform: plat,
+                                usersCompensated: compensatedUsers.length,
+                                compensation: `+${formatDuration(compensationDuration)}`
+                            });
+                            console.log(`[Maintenance] ✅ ${plat.toUpperCase()} compensation complete: ${compensatedUsers.length} users`);
+                        } catch (e) {
+                            console.error(`[Maintenance] Error processing compensation for ${plat}:`, e.message);
+                        }
+                    }
+                }
+            }
+        }
 
         // Update Discord channel name (per platform)
         const channelUpdated = await updateDiscordChannelName(status, effectivePlatform);
@@ -466,7 +619,8 @@ export default async function handler(req, res) {
             message: newStatus.message,
             lastUpdated: newStatus.lastUpdated,
             discordChannelUpdated: channelUpdated,
-            channelName: STATUS_CHANNEL_NAMES[status]
+            channelName: STATUS_CHANNEL_NAMES[status],
+            compensationResults: compensationResults.length > 0 ? compensationResults : undefined
         });
     }
 
@@ -604,6 +758,195 @@ export default async function handler(req, res) {
         return res.status(200).json({
             status: 'success',
             tags: results
+        });
+    }
+
+    // ============ MAINTENANCE HISTORY (ADMIN) ============
+    if (req.method === 'GET' && action === 'maintenance_history') {
+        const adminSecret = req.headers['x-admin-secret'];
+        if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: 'Unauthorized' });
+        }
+
+        const redisClient = await getRedis();
+        if (!redisClient) {
+            return res.status(500).json({ success: false, error: 'Database unavailable' });
+        }
+
+        // Get current status
+        const currentStatusResult = { pc: { status: 'online' }, mobile: { status: 'online' } };
+        for (const [plat, config] of Object.entries(PLATFORM_CONFIG)) {
+            const startTime = await redisClient.get(config.maintenanceKey);
+            if (startTime) {
+                const duration = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
+                currentStatusResult[plat] = {
+                    status: 'maintenance',
+                    inMaintenance: true,
+                    startedAt: startTime,
+                    runningDurationText: formatDuration(duration)
+                };
+            } else {
+                const statusData = await redisClient.get(config.statusKey);
+                if (statusData) {
+                    const parsed = JSON.parse(statusData);
+                    currentStatusResult[plat] = {
+                        status: parsed.status || 'online',
+                        inMaintenance: false
+                    };
+                }
+            }
+        }
+
+        // Get history
+        let history = [];
+        let statistics = { totalMaintenance: 0, totalDowntime: 0, totalCompensation: 0, totalUsersCompensated: 0 };
+
+        for (const [plat, config] of Object.entries(PLATFORM_CONFIG)) {
+            const historyData = await redisClient.get(config.historyKey);
+            const platHistory = historyData ? JSON.parse(historyData) : [];
+            history = history.concat(platHistory);
+
+            for (const entry of platHistory) {
+                statistics.totalMaintenance++;
+                statistics.totalDowntime += entry.actualDuration || 0;
+                statistics.totalCompensation += entry.compensationGiven || 0;
+                statistics.totalUsersCompensated += entry.usersCompensated || 0;
+            }
+        }
+
+        history.sort((a, b) => new Date(b.endAt) - new Date(a.endAt));
+
+        return res.status(200).json({
+            success: true,
+            currentStatus: currentStatusResult,
+            history,
+            statistics: {
+                ...statistics,
+                totalDowntimeText: formatDuration(statistics.totalDowntime),
+                totalCompensationText: formatDuration(statistics.totalCompensation)
+            }
+        });
+    }
+
+    // ============ END MAINTENANCE & COMPENSATE (ADMIN) ============
+    if (req.method === 'POST' && action === 'end_maintenance') {
+        const adminSecret = req.headers['x-admin-secret'];
+        if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: 'Unauthorized' });
+        }
+
+        const platform = req.body.platform;
+        if (!platform || !PLATFORM_CONFIG[platform]) {
+            return res.status(400).json({ success: false, error: 'Invalid platform' });
+        }
+
+        const redisClient = await getRedis();
+        if (!redisClient) {
+            return res.status(500).json({ success: false, error: 'Database unavailable' });
+        }
+
+        const config = PLATFORM_CONFIG[platform];
+        const startTimeStr = await redisClient.get(config.maintenanceKey);
+
+        if (!startTimeStr) {
+            return res.status(400).json({ success: false, error: 'No active maintenance', message: 'Platform was not in maintenance mode' });
+        }
+
+        const startTime = new Date(startTimeStr);
+        const endTime = new Date();
+        const actualDuration = Math.floor((endTime - startTime) / 1000);
+        const compensationDuration = Math.max(actualDuration * COMPENSATION_CONFIG.MULTIPLIER, COMPENSATION_CONFIG.MINIMUM_DURATION_SECONDS);
+
+        // Get whitelist and compensate
+        const whitelistData = await redisClient.get(config.whitelistKey);
+        let whitelist = whitelistData ? JSON.parse(whitelistData) : {};
+        const compensatedUsers = [];
+        const now = new Date();
+
+        for (const [userId, user] of Object.entries(whitelist)) {
+            if (user.status !== 'active') continue;
+            if (!user.expiresAt) continue; // Skip lifetime
+            const expiryDate = new Date(user.expiresAt);
+            if (expiryDate < now) continue; // Skip expired
+
+            const newExpiryDate = new Date(expiryDate.getTime() + (compensationDuration * 1000));
+            whitelist[userId] = {
+                ...user,
+                expiresAt: newExpiryDate.toISOString(),
+                pendingAnnouncement: {
+                    type: 'compensation',
+                    title: '🎁 Kompensasi Maintenance',
+                    message: `VIP Anda diperpanjang +${formatDuration(compensationDuration)}`,
+                    duration: compensationDuration,
+                    date: endTime.toISOString()
+                }
+            };
+            compensatedUsers.push({ userId, username: user.username || 'Unknown', added: compensationDuration });
+        }
+
+        await redisClient.set(config.whitelistKey, JSON.stringify(whitelist));
+
+        // Save history
+        const historyEntry = {
+            id: `maint_${platform}_${Date.now()}`,
+            platform,
+            startAt: startTimeStr,
+            endAt: endTime.toISOString(),
+            actualDuration,
+            actualDurationText: formatDuration(actualDuration),
+            compensationGiven: compensationDuration,
+            compensationText: `+${formatDuration(compensationDuration)}`,
+            usersCompensated: compensatedUsers.length,
+            usersList: compensatedUsers.slice(0, 50)
+        };
+
+        const historyData = await redisClient.get(config.historyKey);
+        let history = historyData ? JSON.parse(historyData) : [];
+        history.unshift(historyEntry);
+        history = history.slice(0, COMPENSATION_CONFIG.MAX_HISTORY_ENTRIES);
+        await redisClient.set(config.historyKey, JSON.stringify(history));
+
+        // Clear maintenance start
+        await redisClient.del(config.maintenanceKey);
+
+        // Set status to online
+        await redisClient.set(config.statusKey, JSON.stringify({ status: 'online', message: 'All systems operational', lastUpdated: endTime.toISOString() }));
+
+        // Send Discord webhook
+        const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+        if (webhookUrl) {
+            try {
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        embeds: [{
+                            title: '✅ MAINTENANCE COMPLETED',
+                            color: 0x00E676,
+                            fields: [
+                                { name: '📍 Platform', value: config.label, inline: true },
+                                { name: '⏱️ Duration', value: formatDuration(actualDuration), inline: true },
+                                { name: '🎁 Compensation', value: `+${formatDuration(compensationDuration)}`, inline: true },
+                                { name: '👥 Users', value: `${compensatedUsers.length} users`, inline: true }
+                            ],
+                            timestamp: new Date().toISOString()
+                        }]
+                    })
+                });
+            } catch (e) { console.error('[Discord] Webhook error:', e.message); }
+        }
+
+        console.log(`[Maintenance] ✅ ${platform.toUpperCase()} ended. ${compensatedUsers.length} users compensated`);
+
+        return res.status(200).json({
+            success: true,
+            platform,
+            actualDuration,
+            actualDurationText: formatDuration(actualDuration),
+            compensationGiven: compensationDuration,
+            compensationText: `+${formatDuration(compensationDuration)}`,
+            usersCompensated: compensatedUsers.length,
+            message: `Maintenance ended. ${compensatedUsers.length} users received +${formatDuration(compensationDuration)}`
         });
     }
 

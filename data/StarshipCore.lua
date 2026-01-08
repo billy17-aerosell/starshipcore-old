@@ -2129,21 +2129,56 @@ do
 		Connections.Checkpoint = stat.Changed:Connect(function(newValue)
 			-- Detailed console logging for debugging
 			local oldValue = S.lastCheckpointStage or 0
-			local numNew = tonumber(newValue) or 0
-			local numOld = tonumber(oldValue) or 0
+
+			-- Smart number extraction for string-based checkpoints
+			-- Handles: "CP1" -> 1, "Stage5" -> 5, "Start" -> 0, "Summit" -> 9999, plain numbers
+			local function ExtractStageNumber(val)
+				if val == nil then
+					return 0
+				end
+
+				-- Direct number
+				local num = tonumber(val)
+				if num then
+					return num
+				end
+
+				-- String processing
+				local strVal = tostring(val):lower()
+
+				-- Special keywords
+				if strVal == "start" or strVal == "spawn" or strVal == "lobby" or strVal == "base" then
+					return 0
+				end
+				if strVal == "summit" or strVal == "finish" or strVal == "end" or strVal == "goal" then
+					return 99999 -- Very high number for "end" stages
+				end
+
+				-- Extract number from string like "CP1", "Stage5", "Level10", "Checkpoint3"
+				local extractedNum = tostring(val):match("(%d+)")
+				if extractedNum then
+					return tonumber(extractedNum) or 0
+				end
+
+				return 0
+			end
+
+			local numNew = ExtractStageNumber(newValue)
+			local numOld = ExtractStageNumber(oldValue)
 
 			print(
 				"═══════════════════════════════════════════════════════"
 			)
 			print("[Checkpoint] STAGE CHANGE DETECTED")
-			print("  └─ Old Stage:", oldValue, "(type:", type(oldValue), ")")
-			print("  └─ New Stage:", newValue, "(type:", type(newValue), ")")
+			print("  └─ Old Stage:", oldValue, "(type:", type(oldValue), ") -> extracted:", numOld)
+			print("  └─ New Stage:", newValue, "(type:", type(newValue), ") -> extracted:", numNew)
 			print("  └─ isRecording:", isRecording)
 			print("  └─ isPaused:", isPaused)
 			print("  └─ Auto-Stop Enabled:", S.isAutoStopOnCheckpoint)
 			print(
 				"  └─ Direction:",
-				numNew > numOld and "INCREASE ↑" or (numNew < numOld and "DECREASE ↓" or "SAME")
+				numNew > numOld and "INCREASE ↑"
+					or (numNew < numOld and "DECREASE ↓" or "CHANGED (same extracted num)")
 			)
 			print(
 				"═══════════════════════════════════════════════════════"
@@ -2161,14 +2196,18 @@ do
 			DevLog("[Checkpoint] Stage changed:", oldValue, "->", newValue)
 
 			-- Determine if stage increased or decreased
+			-- For string checkpoints where we can't determine direction, treat as increase (save immediately)
 			local isStageIncrease = numNew > numOld
+			local isLoopBack = numNew == 0 and numOld > 0 -- Only loop detection when going back to "Start"/0
 
-			if isStageIncrease then
-				-- Stage INCREASED: Normal checkpoint, save immediately
+			if isStageIncrease or (numNew == numOld and newValue ~= oldValue) then
+				-- Stage INCREASED or changed with same extracted number (e.g., "Area1" -> "Zone1")
+				-- Save immediately
+				print("✅ [CHECKPOINT] Stage increased or changed - saving immediately")
 				UIHandlers.SaveCheckpointSnapshot(newValue, true)
-			else
-				-- Stage DECREASED: Start waiting for teleport back to start position
-				print("⏳ [LOOP DETECTION] Stage decreased - waiting for teleport to start position")
+			elseif isLoopBack then
+				-- Only trigger loop detection when returning to start (0)
+				print("⏳ [LOOP DETECTION] Returned to start - waiting for teleport")
 				print("  └─ Will save when player teleports back to recording start")
 
 				-- Store this for later when we detect teleport
@@ -2182,6 +2221,11 @@ do
 				S.waitingForTeleport = true
 
 				ShowToast("🔄 " .. L("loop_detected"), L("waiting_for_teleport"), "info", 3)
+			else
+				-- Stage decreased but not to start (rare case like CP5 -> CP3)
+				-- Still save to not miss any checkpoint
+				print("⚠️ [CHECKPOINT] Stage decreased (not to start) - saving anyway")
+				UIHandlers.SaveCheckpointSnapshot(newValue, false) -- false = don't auto-stop
 			end
 		end)
 
@@ -6134,7 +6178,7 @@ do
 		el.Text = "⏸  " .. L("pause")
 	end)
 	RegisterDynamicUI(BtnStop, function(el)
-		el.Text = "⏹  " .. L("stop")
+		el.Text = "��  " .. L("stop")
 	end)
 
 	BtnStart.MouseButton1Click:Connect(function()
@@ -6345,6 +6389,12 @@ do
 			if stat then
 				S.detectedLeaderstat = statName
 				ShowToast(L("auto_checkpoint_enabled"), L("checkpoint_detected", statName), "success", 2)
+
+				-- IMPORTANT: Setup checkpoint monitor immediately if recording is active
+				-- This fixes the bug where enabling auto-checkpoint during recording doesn't work
+				if isRecording and UIHandlers.SetupCheckpointMonitor then
+					UIHandlers.SetupCheckpointMonitor()
+				end
 			else
 				ShowToast("Auto-Checkpoint", L("checkpoint_no_leaderstat"), "warning", 3)
 			end

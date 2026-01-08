@@ -1265,6 +1265,30 @@ async function handleMobileSuccess(
       } catch (e) {}
     }
   }
+  // Check for pending announcement (compensation, etc.)
+  let announcement = null;
+  if (mobileUser.pendingAnnouncement) {
+    announcement = mobileUser.pendingAnnouncement;
+    
+    // Clear the announcement after sending (async, don't wait)
+    try {
+      const redisClient = await getRedis();
+      if (redisClient) {
+        const whitelistData = await redisClient.get(config.whitelistKey);
+        if (whitelistData) {
+          const whitelist = JSON.parse(whitelistData);
+          if (whitelist[userId]) {
+            delete whitelist[userId].pendingAnnouncement;
+            await redisClient.set(config.whitelistKey, JSON.stringify(whitelist));
+            console.log(`[${timestamp}] 📢 Announcement delivered and cleared for ${userId}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[Announcement] Error clearing:', e.message);
+    }
+  }
+
   return res.status(200).json({
     status: "success",
     platform: "mobile",
@@ -1278,6 +1302,7 @@ async function handleMobileSuccess(
       ? Math.floor(new Date(mobileUser.addedAt).getTime() / 1000)
       : null,
     username: mobileUser.username,
+    announcement: announcement, // Include compensation announcement if any
   });
 }
 
@@ -1338,6 +1363,30 @@ async function handlePCSuccess(
   // Encode to Base64
   const base64Blob = encryptedBuffer.toString("base64");
 
+  // Check for pending announcement (compensation, etc.)
+  let announcement = null;
+  if (vipUser.pendingAnnouncement) {
+    announcement = vipUser.pendingAnnouncement;
+    
+    // Clear the announcement after sending
+    try {
+      const redisClient = await getRedis();
+      if (redisClient) {
+        const whitelistData = await redisClient.get(config.whitelistKey);
+        if (whitelistData) {
+          const whitelist = JSON.parse(whitelistData);
+          if (whitelist[userId]) {
+            delete whitelist[userId].pendingAnnouncement;
+            await redisClient.set(config.whitelistKey, JSON.stringify(whitelist));
+            console.log(`[${timestamp}] 📢 Announcement delivered and cleared for PC ${userId}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[Announcement] Error clearing:', e.message);
+    }
+  }
+
   return res.status(200).json({
     status: "success",
     role: vipUser.type || config.defaultType,
@@ -1351,6 +1400,7 @@ async function handlePCSuccess(
       : null,
     key: dynamicKey,
     blob: base64Blob,
+    announcement: announcement, // Include compensation announcement if any
   });
 }
 
