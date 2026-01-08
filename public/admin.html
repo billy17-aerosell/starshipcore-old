@@ -1013,13 +1013,14 @@
                                     <th>User</th>
                                     <th>Type</th>
                                     <th>Status</th>
+                                    <th>Added</th>
                                     <th>Expires</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="pcUsersTable">
                                 <tr>
-                                    <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                                    <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
                                         Loading...
                                     </td>
                                 </tr>
@@ -1052,13 +1053,14 @@
                                     <th>User</th>
                                     <th>Type</th>
                                     <th>Status</th>
+                                    <th>Added</th>
                                     <th>Expires</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="mobileUsersTable">
                                 <tr>
-                                    <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                                    <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
                                         Loading...
                                     </td>
                                 </tr>
@@ -1345,10 +1347,11 @@
             
             // Render table
             if (pageUsers.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">No users found</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">No users found</td></tr>`;
             } else {
                 tableBody.innerHTML = pageUsers.map(user => {
                     const status = getStatus(user);
+                    const added = user.addedAt ? new Date(user.addedAt).toLocaleDateString('id-ID') : '-';
                     const expiry = user.expiresAt ? new Date(user.expiresAt).toLocaleDateString('id-ID') : 'Lifetime';
                     const initial = (user.username || 'U')[0].toUpperCase();
                     
@@ -1365,6 +1368,7 @@
                             </td>
                             <td><span style="color: var(--secondary);">👑 VIP</span></td>
                             <td><span class="status-badge ${status.class}">${status.text}</span></td>
+                            <td style="color: var(--text-muted); font-size: 13px;">${added}</td>
                             <td>${expiry}</td>
                             <td>
                                 <div class="action-btns">
