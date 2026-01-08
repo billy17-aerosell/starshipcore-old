@@ -539,6 +539,55 @@ export default async function handler(req, res) {
     }
   }
 
+  // === CHECK ANNOUNCEMENT (for compensation toast on PC) ===
+  if (action === "check_announcement") {
+    const checkUserId = req.query.userId;
+    const checkPlatform = req.query.platform || "pc";
+    
+    if (!checkUserId) {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+
+    try {
+      const redisClient = await getRedis();
+      if (!redisClient) {
+        return res.status(200).json({ success: true, announcement: null });
+      }
+
+      const checkConfig = PLATFORM_CONFIG[checkPlatform];
+      const whitelistData = await redisClient.get(checkConfig.whitelistKey);
+      
+      if (!whitelistData) {
+        return res.status(200).json({ success: true, announcement: null });
+      }
+
+      const whitelist = JSON.parse(whitelistData);
+      const user = whitelist[checkUserId];
+
+      if (!user || !user.pendingAnnouncement) {
+        return res.status(200).json({ success: true, announcement: null });
+      }
+
+      // Get the announcement
+      const announcement = user.pendingAnnouncement;
+
+      // Clear the announcement after retrieving it
+      delete whitelist[checkUserId].pendingAnnouncement;
+      await redisClient.set(checkConfig.whitelistKey, JSON.stringify(whitelist));
+      
+      console.log(`[${timestamp}] 📢 Announcement delivered and cleared for PC ${checkUserId}`);
+
+      return res.status(200).json({
+        success: true,
+        announcement: announcement
+      });
+
+    } catch (error) {
+      console.error("[Check Announcement] Error:", error.message);
+      return res.status(200).json({ success: true, announcement: null });
+    }
+  }
+
   // Get user ID (different param names for PC vs Mobile)
   const userId = req.query.user || req.query.userId;
 
