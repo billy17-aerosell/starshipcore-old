@@ -1363,7 +1363,11 @@
                         <tr>
                             <td>
                                 <div class="user-cell">
-                                    <div class="avatar">${initial}</div>
+                                    <img class="avatar roblox-avatar" data-userid="${user.userId}" data-initial="${initial}"
+                                         src="https://www.roblox.com/headshot-thumbnail/image?userId=${user.userId}&width=48&height=48&format=png"
+                                         onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                         style="width: 36px; height: 36px; border-radius: 8px; object-fit: cover;">
+                                    <div class="avatar" style="display: none;">${initial}</div>
                                     <div class="info">
                                         <div class="name">${user.username || 'Unknown'}</div>
                                         <div class="id">${user.userId}</div>
