@@ -1429,8 +1429,10 @@
             if (userIds.length === 0) return;
             
             try {
-                // Fetch via our proxy to bypass CORS
-                const response = await fetch(`${API_BASE}/api/roblox-avatar?userIds=${userIds.join(',')}`);
+                // Fetch via whitelist-manager to bypass CORS
+                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=avatars&userIds=${userIds.join(',')}`, {
+                    headers: { 'X-Admin-Secret': adminSecret }
+                });
                 const data = await response.json();
                 
                 if (data.success && data.avatars) {
