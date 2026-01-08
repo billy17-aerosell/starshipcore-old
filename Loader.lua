@@ -86,18 +86,37 @@ end
 
 -- AES-256-CBC Decryption (using executor's crypto if available)
 local function aesDecrypt(encryptedBase64, keyHex, ivHex)
-	-- Try using executor's built-in crypto
+	local keyBytes = bytesToString(hexToBytes(keyHex))
+	local ivBytes = bytesToString(hexToBytes(ivHex))
+	local encryptedData = base64Decode(encryptedBase64)
+
+	-- Try using executor's built-in crypto (Synapse X style - 3 args)
 	if syn and syn.crypt and syn.crypt.decrypt then
-		local keyBytes = bytesToString(hexToBytes(keyHex))
-		local ivBytes = bytesToString(hexToBytes(ivHex))
-		return syn.crypt.decrypt(base64Decode(encryptedBase64), keyBytes, ivBytes)
+		local success, result = pcall(function()
+			return syn.crypt.decrypt(encryptedData, keyBytes, ivBytes)
+		end)
+		if success and result then
+			return result
+		end
 	end
 
-	-- Try crypt library (Fluxus, Wave, etc)
+	-- Try crypt library with algorithm parameter (Fluxus, Delta, Wave style - 4 args)
 	if crypt and crypt.decrypt then
-		local keyBytes = bytesToString(hexToBytes(keyHex))
-		local ivBytes = bytesToString(hexToBytes(ivHex))
-		return crypt.decrypt(base64Decode(encryptedBase64), keyBytes, ivBytes)
+		-- Try with 4 arguments first (algorithm required)
+		local success, result = pcall(function()
+			return crypt.decrypt(encryptedData, keyBytes, ivBytes, "aes-cbc")
+		end)
+		if success and result then
+			return result
+		end
+
+		-- Fallback to 3 arguments if 4 args failed
+		success, result = pcall(function()
+			return crypt.decrypt(encryptedData, keyBytes, ivBytes)
+		end)
+		if success and result then
+			return result
+		end
 	end
 
 	-- Fallback: Base64 decode only (for testing - NOT SECURE)
