@@ -307,6 +307,101 @@ export default async function handler(req, res) {
     }
   }
 
+  // ==== EXTEND ====
+  if (action === "extend" && method === "POST") {
+    const { userId, days } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    if (!days || isNaN(parseInt(days))) {
+      return res.status(400).json({ error: "days required (number)" });
+    }
+
+    try {
+      const whitelist = await getWhitelistFromRedis(platform);
+      if (!whitelist[userId]) {
+        return res.status(404).json({ error: "User not found", platform });
+      }
+
+      const user = whitelist[userId];
+      const daysToExtend = parseInt(days);
+      const msToAdd = daysToExtend * 24 * 60 * 60 * 1000;
+
+      // Calculate new expiry
+      let currentExpiry;
+      if (user.expiresAt) {
+        currentExpiry = new Date(user.expiresAt);
+        // If already expired, extend from now
+        if (currentExpiry < new Date()) {
+          currentExpiry = new Date();
+        }
+      } else {
+        // Lifetime user - convert to timed
+        currentExpiry = new Date();
+      }
+
+      const newExpiry = new Date(currentExpiry.getTime() + msToAdd);
+      user.expiresAt = newExpiry.toISOString();
+      user.updatedAt = new Date().toISOString();
+      user.lastExtendedAt = new Date().toISOString();
+      user.lastExtendedDays = daysToExtend;
+
+      whitelist[userId] = user;
+      await saveWhitelistToRedis(platform, whitelist);
+
+      return res.status(200).json({
+        success: true,
+        message: `Extended ${user.username || userId} by ${daysToExtend} days`,
+        platform,
+        newExpiresAt: user.expiresAt,
+        data: user,
+      });
+    } catch (error) {
+      return res
+        .status(500)
+        .json({ error: "Failed to extend user", message: error.message });
+    }
+  }
+
+  // ==== RESET HWID ====
+  if (action === "reset_hwid" && method === "POST") {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId required" });
+
+    try {
+      const whitelist = await getWhitelistFromRedis(platform);
+      if (!whitelist[userId]) {
+        return res.status(404).json({ error: "User not found", platform });
+      }
+
+      const user = whitelist[userId];
+      
+      // Clear HWID data
+      user.hwid = null;
+      user.hwidHistory = user.hwidHistory || [];
+      if (user.hwid) {
+        user.hwidHistory.push({
+          hwid: user.hwid,
+          resetAt: new Date().toISOString(),
+        });
+      }
+      user.lastHwidReset = new Date().toISOString();
+      user.updatedAt = new Date().toISOString();
+
+      whitelist[userId] = user;
+      await saveWhitelistToRedis(platform, whitelist);
+
+      return res.status(200).json({
+        success: true,
+        message: `HWID reset for ${user.username || userId}`,
+        platform,
+        data: user,
+      });
+    } catch (error) {
+      return res
+        .status(500)
+        .json({ error: "Failed to reset HWID", message: error.message });
+    }
+  }
+
   return res.status(400).json({
     error: "Invalid action",
     platform,
@@ -319,6 +414,8 @@ export default async function handler(req, res) {
       "suspend",
       "reactivate",
       "stats",
+      "extend",
+      "reset_hwid",
     ],
   });
 }
