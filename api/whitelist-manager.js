@@ -134,7 +134,8 @@ export default async function handler(req, res) {
   const config = PLATFORM_CONFIG[platform];
   const platformLabel = platform === "mobile" ? "📱 Mobile" : "💻 PC";
 
-  const { action } = req.query;
+  // Read action from query OR body (for admin panel compatibility)
+  const action = req.query.action || req.body?.action;
   const { method } = req;
 
   console.log(
