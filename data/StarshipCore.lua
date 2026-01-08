@@ -773,6 +773,7 @@ local isReversing, isZoomPunch, lastAirState, isRespawnOnEnd =
 	S.isReversing, S.isZoomPunch, S.lastAirState, S.isRespawnOnEnd
 local isFlexibleRecording, isStrictRetarget, isNativeAnim, isWarpLoop =
 	S.isFlexibleRecording, S.isStrictRetarget, S.isNativeAnim, S.isWarpLoop
+local isPositionBasedPlayback = S.isPositionBasedPlayback
 -- isAutoCloudSync accessed via S.isAutoCloudSync to save local registers
 local recordedData = { FPS = 60, Frames = {} }
 local startTime = S.startTime
@@ -789,6 +790,7 @@ local currentPlaybackFile, currentPlaybackTime, currentTotalDuration, currentFra
 	Playback.file, Playback.time, Playback.totalDuration, Playback.frameData
 local lastPlaybackTime = Playback.lastTime
 local lastFrameIndex = Playback.lastFrameIdx
+local cameraProxy = nil
 
 -- Binary search for frame index (O(log n) instead of O(n))
 local function FindFrameIndex(frames, targetTime, hint)
@@ -833,7 +835,7 @@ end
 local currentWorkspace, currentMergerWorkspace = S.currentWorkspace, S.currentMergerWorkspace
 local GlobalKeyDuration, isBinding = S.GlobalKeyDuration, S.isBinding
 local isLiveSmoothing, liveSmoothingStrength = S.isLiveSmoothing, S.liveSmoothingStrength
-local isPositionBasedPlayback = S.isPositionBasedPlayback
+-- isPositionBasedPlayback already declared above (line 777)
 
 -- --- HELPER: DEEP COPY & SMOOTH ---
 local function DeepCopy(orig)
@@ -3357,8 +3359,9 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 				if isCurrentlyClimbing or isCurrentlySwimming then
 					-- Climbing/Swimming: Use recorded velocity and simulate input for natural animation
-					local vel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
-						:Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
+					local vel = (fA.velVector and fB.velVector) and fA.velVector:Lerp(fB.velVector, alpha)
+						or Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
+							:Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
 
 					-- Scale velocity by playback speed for proper animation timing
 					vel = vel * playbackSpeed
@@ -3367,8 +3370,8 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					end
 
 					-- CRITICAL FIX: Control climbing animation speed directly via AnimationTrack
-					if fA.md then
-						local moveDir = Vector3.new(fA.md.x, fA.md.y, fA.md.z)
+					if fA.mdVector or fA.md then
+						local moveDir = fA.mdVector or Vector3.new(fA.md.x, fA.md.y, fA.md.z)
 						if isReversing then
 							moveDir = -moveDir
 						end
@@ -3408,8 +3411,9 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					r.AssemblyLinearVelocity = vel
 
 					-- Position correction with smooth blending
-					local targetPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
-						:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
+					local targetPos = (fA.posVector and fB.posVector) and fA.posVector:Lerp(fB.posVector, alpha)
+						or Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z)
+							:Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
 					local targetYaw = fA.rot
 
 					-- Light position correction to stay on path while allowing natural movement
@@ -3425,10 +3429,11 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 					-- Ensure climbing state
 					h:ChangeState(Enum.HumanoidStateType.Climbing)
-				elseif fA.vel and fB.vel then
+				elseif (fA.velVector and fB.velVector) or (fA.vel and fB.vel) then
 					-- Normal: Interpolate velocity and scale by playback speed
-					local vel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
-						:Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
+					local vel = (fA.velVector and fB.velVector) and fA.velVector:Lerp(fB.velVector, alpha)
+						or Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
+							:Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
 					vel = vel * playbackSpeed -- Scale velocity by playback speed
 					-- Invert velocity when reversing for smooth backward motion
 					if isReversing then
@@ -3468,7 +3473,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 							r.CFrame = CFrame.new(newPos) * r.CFrame.Rotation
 
 							-- Use RECORDED velocity for animation (not calculated)
-							local recordedVelY = fA.vel and fA.vel.y or 0
+							local recordedVelY = fA.velVector and fA.velVector.Y or (fA.vel and fA.vel.y or 0)
 							local horizVel = (targetPos - currentPos) * 10 * playbackSpeed
 							r.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY * playbackSpeed, horizVel.Z)
 						end
@@ -3516,8 +3521,8 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 								-- CRITICAL: Trigger walk/run animation using h:Move()
 								-- Use recorded MoveDirection for accurate animation
-								if fA.md then
-									local moveDir = Vector3.new(fA.md.x, fA.md.y, fA.md.z)
+								if fA.mdVector or fA.md then
+									local moveDir = fA.mdVector or Vector3.new(fA.md.x, fA.md.y, fA.md.z)
 									if moveDir.Magnitude > 0.01 then
 										h:Move(moveDir, false) -- false = relative to world, not camera
 									else
@@ -3631,26 +3636,27 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					local lookDir = Vector3.new(0, 0, -1) -- Default
 
 					-- SHIFTLOCK / CHARACTER LOOK DIRECTION PLAYBACK
-					if fA.charLook and fB.charLook then
+					if fA.charLookVector and fB.charLookVector then
 						-- Use recorded character facing direction (interpolated)
-						local lookA = Vector3.new(fA.charLook.x, 0, fA.charLook.z)
-						local lookB = Vector3.new(fB.charLook.x, 0, fB.charLook.z)
+						local lookA = fA.charLookVector
+						local lookB = fB.charLookVector
 						if lookA.Magnitude > 0.01 and lookB.Magnitude > 0.01 then
 							lookDir = lookA.Unit:Lerp(lookB.Unit, alpha)
 						elseif lookA.Magnitude > 0.01 then
 							lookDir = lookA.Unit
 						end
-					elseif fA.charLook then
+					elseif fA.charLookVector or fA.charLook then
 						-- Single frame charLook
-						local look = Vector3.new(fA.charLook.x, 0, fA.charLook.z)
+						local look = fA.charLookVector or Vector3.new(fA.charLook.x, 0, fA.charLook.z)
 						if look.Magnitude > 0.01 then
 							lookDir = look.Unit
 						end
 					else
 						-- Fallback: Calculate Look Direction from Velocity
-						if fA.vel and fB.vel then
-							local v = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
-								:Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
+						if (fA.velVector and fB.velVector) or (fA.vel and fB.vel) then
+							local v = (fA.velVector and fB.velVector) and fA.velVector:Lerp(fB.velVector, alpha)
+								or Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
+									:Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
 							if v.Magnitude > 0.1 then
 								lookDir = Vector3.new(v.X, 0, v.Z)
 								if lookDir.Magnitude > 0.01 then
@@ -3677,10 +3683,8 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					cachedAO.CFrame = CFrame.lookAt(Vector3.zero, lookDir)
 
 					-- Trigger Animation based on velocity (inverted for reverse = backward walking)
-					local velDir = Vector3.new(0, 0, 0)
-					if fA.vel then
-						velDir = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
-					end
+					local velDir = fA.velVector
+						or (fA.vel and Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z) or Vector3.new(0, 0, 0))
 					if velDir.Magnitude > 0.1 then
 						-- For reverse: move direction opposite to look = backward walk animation
 						if isReversing then
@@ -3697,9 +3701,9 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					h.Jump = true
 				end
 
-				if fA.st then
+				if fA.stEnum or fA.st then
 					-- Extract state name from string "Enum.HumanoidStateType.Running" -> "Running"
-					local stateName = string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
+					local stateName = fA.stEnum or string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
 
 					-- ZOOM EFFECT: Zoom out saat loncat, zoom in saat jatuh
 					if isZoomPunch and stateName then
@@ -3727,7 +3731,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 							if isInAir then
 								-- Use velocity Y to determine animation (INVERTED for reverse)
-								local velY = fA.vel and fA.vel.y or 0
+								local velY = fA.velVector and fA.velVector.Y or (fA.vel and fA.vel.y or 0)
 								-- Invert logic: positive velY in recording = freefall in reverse, negative = jump
 								local targetState = velY > 0 and "fall" or "jump"
 
@@ -3756,9 +3760,10 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 								if currentState ~= Enum.HumanoidStateType.Climbing then
 									h:ChangeState(Enum.HumanoidStateType.Climbing)
 								end
-								if fA.vel then
+								if fA.velVector or fA.vel then
 									-- Invert climbing velocity for reverse, only scale if playback speed changed
-									local climbVel = Vector3.new(-fA.vel.x, -fA.vel.y, -fA.vel.z)
+									local baseVel = fA.velVector or Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
+									local climbVel = -baseVel
 									if playbackSpeed ~= 1.0 then
 										climbVel = climbVel * playbackSpeed
 									end
@@ -3787,7 +3792,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 								local targetState = isJumpState and "jump" or "fall"
 
 								-- FALLBACK: Use velocity only if state seems wrong (velY > 15 but state says fall)
-								local velY = fA.vel and fA.vel.y or 0
+								local velY = fA.velVector and fA.velVector.Y or (fA.vel and fA.vel.y or 0)
 								if velY > 15 and not isJumpState then
 									targetState = "jump" -- Override to jump if velocity is strongly upward
 								end
@@ -8909,11 +8914,11 @@ function UIHandlers.SetupListMapUI()
 		Row3.ZIndex = 301
 
 		local Grid3 = Instance.new("UIGridLayout", Row3)
-		Grid3.CellSize = UDim2.new(0.32, 0, 1, 0) -- 3 buttons per row
+		Grid3.CellSize = UDim2.new(0.48, 0, 1, 0) -- 2 buttons per row
 		Grid3.CellPadding = UDim2.new(0.02, 0, 0, 0)
 		Grid3.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-		BtnSpinbot = CreateToggle(Row3, "SPIN", "💫", "spin") -- SPIN restored
+		BtnSpinbot = CreateToggle(Row3, "SPIN", "💫", "spin")
 		BtnRespawn = CreateToggle(Row3, "RESPAWN", "💀", "respawn")
 
 		-- Respawn click handler
@@ -9076,7 +9081,6 @@ function UIHandlers.SetupListMapUI()
 		isMoonwalk = false
 		isRespawnOnEnd = false
 		isZoomPunch = false
-		isPathEnabled = false
 		ClearPath()
 
 		-- Reset toggle visuals
@@ -9088,6 +9092,21 @@ function UIHandlers.SetupListMapUI()
 		UpdateToggleVisual("path", false)
 		UpdateToggleVisual("spin", false)
 		UpdateToggleVisual("god", false)
+
+		if cameraProxy then
+			cameraProxy.Parent = nil
+		end
+		-- Reset Camera
+		local cam = workspace.CurrentCamera
+		if cam then
+			cam.CameraType = Enum.CameraType.Custom
+			local c = LocalPlayer.Character
+			local h = c and c:FindFirstChild("Humanoid")
+			cam.CameraSubject = h or c
+			cam.FieldOfView = 70
+			LocalPlayer.CameraMaxZoomDistance = 400
+			LocalPlayer.CameraMinZoomDistance = 0.5
+		end
 
 		-- Reset God Mode
 		if isGodMode then
