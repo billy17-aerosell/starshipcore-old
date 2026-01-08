@@ -8,6 +8,7 @@ const OWNER_USER_ID = "9268011358";
 
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { createSecurePayload, generateHoneypot, isHoneypotTriggered, generateAESKey, encryptAES, verifyTokenFromClient } from "../lib/crypto-utils.js";
 
 // Event Code System API (from environment variable for security)
