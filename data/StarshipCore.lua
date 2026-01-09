@@ -792,6 +792,72 @@ local lastPlaybackTime = Playback.lastTime
 local lastFrameIndex = Playback.lastFrameIdx
 local cameraProxy = nil
 
+-- ============================================
+-- ADAPTIVE PLAYBACK FPS SYSTEM
+-- Auto-adjusts playback rate based on device performance
+-- Supports high refresh rate monitors (120Hz+)
+-- ============================================
+local DevicePerformance = {
+	frameCount = 0,
+	lastCheck = tick(),
+	currentFPS = 60,
+	targetPlaybackFPS = 60,
+	lastPlaybackUpdate = 0,
+	modeName = "Standard", -- For UI display
+}
+
+local FPS_CHECK_INTERVAL = 2 -- Check every 2 seconds for stability
+
+-- Update device FPS detection and adjust target playback FPS
+local function UpdateDevicePerformance()
+	local now = tick()
+	local elapsed = now - DevicePerformance.lastCheck
+	
+	if elapsed >= FPS_CHECK_INTERVAL then
+		DevicePerformance.currentFPS = DevicePerformance.frameCount / elapsed
+		DevicePerformance.frameCount = 0
+		DevicePerformance.lastCheck = now
+		
+		local fps = DevicePerformance.currentFPS
+		
+		-- Adaptive FPS tiers with high refresh rate support
+		if fps >= 170 then
+			DevicePerformance.targetPlaybackFPS = 180
+			DevicePerformance.modeName = "Extreme (180Hz)"
+		elseif fps >= 135 then
+			DevicePerformance.targetPlaybackFPS = 144
+			DevicePerformance.modeName = "Ultra+ (144Hz)"
+		elseif fps >= 110 then
+			DevicePerformance.targetPlaybackFPS = 120
+			DevicePerformance.modeName = "Ultra (120Hz)"
+		elseif fps >= 80 then
+			DevicePerformance.targetPlaybackFPS = 90
+			DevicePerformance.modeName = "High (90Hz)"
+		elseif fps >= 55 then
+			DevicePerformance.targetPlaybackFPS = 60
+			DevicePerformance.modeName = "Standard (60Hz)"
+		elseif fps >= 40 then
+			DevicePerformance.targetPlaybackFPS = 45
+			DevicePerformance.modeName = "Medium (45Hz)"
+		elseif fps >= 25 then
+			DevicePerformance.targetPlaybackFPS = 30
+			DevicePerformance.modeName = "Low (30Hz)"
+		else
+			DevicePerformance.targetPlaybackFPS = 20
+			DevicePerformance.modeName = "Minimal (20Hz)"
+		end
+		
+		if DEV_MODE then
+			warn(string.format("[Starship] Device FPS: %.1f | Playback Mode: %s", fps, DevicePerformance.modeName))
+		end
+	end
+	
+	DevicePerformance.frameCount = DevicePerformance.frameCount + 1
+end
+
+-- Expose for UI access
+_G.StarshipDevicePerformance = DevicePerformance
+
 -- Binary search for frame index (O(log n) instead of O(n))
 local function FindFrameIndex(frames, targetTime, hint)
 	local n = #frames
@@ -1779,7 +1845,14 @@ do
 		"Chkpt",
 		"chkpt",
 		"CHKPT",
-		-- Summit (mountain obbies)
+		-- Position (some mountain obbies use this - prioritize before Summit)
+		"Position",
+		"position",
+		"POSITION",
+		"Pos",
+		"pos",
+		"POS",
+		-- Summit (mountain obbies - usually static end goal)
 		"Summit",
 		"summit",
 		"SUMMIT",
@@ -1928,7 +2001,7 @@ do
 		end
 
 		for _, child in pairs(leaderstats:GetChildren()) do
-			if child:IsA("IntValue") or child:IsA("NumberValue") then
+			if child:IsA("IntValue") or child:IsA("NumberValue") or child:IsA("StringValue") then
 				return child, child.Name
 			end
 		end
@@ -2697,6 +2770,9 @@ local function StopPlayback()
 	if Connections.Playback then
 		Connections.Playback:Disconnect()
 	end
+	if UIModule and UIModule.UpdatePerformance then
+		UIModule.UpdatePerformance(false)
+	end
 	currentPlaybackTime = 0
 	lastPlaybackTime = 0
 	-- Do NOT clear currentPlaybackFile here, as it breaks replayability from the UI
@@ -2735,6 +2811,9 @@ local function PausePlayback()
 		isPlaying = false
 		if Connections.Playback then
 			Connections.Playback:Disconnect()
+		end
+		if UIModule and UIModule.UpdatePerformance then
+			UIModule.UpdatePerformance(false)
 		end
 		local c = LocalPlayer.Character
 		if c then
@@ -3257,16 +3336,31 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		local lastKeyCheck = 0
 		local KEY_CHECK_INTERVAL = 0.1 -- Check keys every 0.1s instead of every 2 frames
 
-		-- Use Stepped for Physics Manipulation (smoother for velocity)
-		Connections.Playback = RunService.Stepped:Connect(function(_, dt)
+		-- Use Heartbeat for physics-synced playback (prevents vibration)
+		-- Still supports high refresh rates (120Hz+) in modern Roblox
+		Connections.Playback = RunService.Heartbeat:Connect(function(dt)
+			-- Update device performance detection
+			UpdateDevicePerformance()
+			
+			-- Update Performance UI
+			if UIModule and UIModule.UpdatePerformance then
+				UIModule.UpdatePerformance(true, DevicePerformance.currentFPS, DevicePerformance.modeName)
+			end
+			
 			frameCounter = frameCounter + 1
 			if not isPlaying or isPlayPaused then
+				if UIModule and UIModule.UpdatePerformance then
+					UIModule.UpdatePerformance(false)
+				end
 				return
 			end
+			
+			-- Use actual delta time for smooth movement every frame
+			local updateDt = dt
 
 			-- REVERSE PLAYBACK SUPPORT
 			if isReversing then
-				currentPlaybackTime = currentPlaybackTime - (dt * playbackSpeed)
+				currentPlaybackTime = currentPlaybackTime - (updateDt * playbackSpeed)
 				if currentPlaybackTime <= 0 then
 					if isRespawnOnEnd then
 						local savedFile = currentPlaybackFile
@@ -3297,7 +3391,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					end
 				end
 			else
-				currentPlaybackTime = currentPlaybackTime + (dt * playbackSpeed)
+				currentPlaybackTime = currentPlaybackTime + (updateDt * playbackSpeed)
 				if currentPlaybackTime >= currentTotalDuration then
 					if isRespawnOnEnd then
 						local savedFile = currentPlaybackFile
@@ -3330,7 +3424,7 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 			end
 
 			-- DETECT TIME JUMP (slider seeking) - skip blending if user jumped to different time
-			local expectedDelta = dt * playbackSpeed
+			local expectedDelta = updateDt * playbackSpeed
 			local actualDelta = math.abs(currentPlaybackTime - lastPlaybackTime)
 			local isTimeJump = actualDelta > (expectedDelta * 3 + 0.1) -- Threshold: 3x expected + 0.1s buffer
 			lastPlaybackTime = currentPlaybackTime
@@ -3354,8 +3448,25 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				local isCurrentlyClimbing = (cachedStateName == "Climbing")
 				local isCurrentlySwimming = (cachedStateName == "Swimming")
 
-				-- OPTIMIZATION: Calculate smoothPos/smoothVel ONCE at higher scope for reuse in drift correction
-				local smoothPos, smoothVel = SmoothInterpolateFrames(currentFrameData, frameIdx, alpha)
+				-- OPTIMIZATION: Use high-quality Catmull-Rom only on capable devices
+				local smoothPos, smoothVel
+				if DevicePerformance.targetPlaybackFPS >= 45 then
+					-- High-end: Full Catmull-Rom spline (smooth but heavy)
+					smoothPos, smoothVel = SmoothInterpolateFrames(currentFrameData, frameIdx, alpha)
+				else
+					-- Low-end: Simple linear lerp (lightweight)
+					if fA.posVector and fB.posVector then
+						smoothPos = fA.posVector:Lerp(fB.posVector, alpha)
+					elseif fA.pos and fB.pos then
+						smoothPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z):Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
+					end
+					
+					if fA.velVector and fB.velVector then
+						smoothVel = fA.velVector:Lerp(fB.velVector, alpha)
+					elseif fA.vel and fB.vel then
+						smoothVel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z):Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
+					end
+				end
 
 				if isCurrentlyClimbing or isCurrentlySwimming then
 					-- Climbing/Swimming: Use recorded velocity and simulate input for natural animation
@@ -3981,6 +4092,8 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		local cachedGroundY = nil -- Cache ground Y position
 		local cachedLastStrictState = nil -- Cache humanoid state
 		local cachedIsNearGround = false -- Cache ground proximity for Native Anim
+		local wasInAir = false -- Track if player was in air (for landing detection)
+		local landingFrameCount = 0 -- Frames since landing (for faster snap)
 
 		Connections.Playback = RunService.Stepped:Connect(function(_, dt)
 			strictFrameCounter = strictFrameCounter + 1
@@ -4078,13 +4191,39 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					ap.RigidityEnabled = false
 					ap.MaxForce = math.huge
 
-					-- Adaptive Responsiveness
-					-- Lower responsiveness allows smoother interpolation, reducing the "floating/stuttering" look
+					-- Adaptive Responsiveness with Landing Detection
+					-- Faster snap when landing, smoother for other movements
 					local isMovingVertically = math.abs(TblToCF(fB.r).Y - TblToCF(fA.r).Y) > 0.1
-					if isMovingVertically then
-						ap.Responsiveness = 25 -- Very smooth for jumps/slopes (lowered from 40)
+					local currentHState = h:GetState()
+					local isCurrentlyInAir = (currentHState == Enum.HumanoidStateType.Freefall or currentHState == Enum.HumanoidStateType.Jumping)
+					
+					-- PRE-DETECTION: Use recorded state to predict landing BEFORE it happens
+					local recordedStateA = fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
+					local recordedStateB = fB.st and string.match(fB.st, "Enum%.HumanoidStateType%.(%w+)")
+					local wasRecordedInAir = (recordedStateA == "Freefall" or recordedStateA == "Jumping")
+					local willLandSoon = wasRecordedInAir and (recordedStateB == "Running" or recordedStateB == "Landed")
+					
+					-- VELOCITY-BASED EARLY LANDING: If falling fast and near ground, start landing early
+					local recordedVelY = (TblToCF(fB.r).Y - TblToCF(fA.r).Y) / math.max(deltaT, 0.001)
+					local isFallingFast = recordedVelY < -8 -- Falling at > 8 studs/sec
+					
+					-- Detect landing (was in air, now on ground) OR predicted from recording
+					if (wasInAir and not isCurrentlyInAir) or willLandSoon then
+						landingFrameCount = 6 -- Reduced from 10, more intense
+					elseif isFallingFast and cachedIsNearGround then
+						-- Early landing detection: falling fast + near ground = start snap
+						landingFrameCount = math.max(landingFrameCount, 4)
+					end
+					wasInAir = isCurrentlyInAir
+					
+					if landingFrameCount > 0 then
+						-- LANDING: Maximum responsiveness for instant ground snap
+						ap.Responsiveness = 200 -- Increased from 120 for near-instant response
+						landingFrameCount = landingFrameCount - 1
+					elseif isMovingVertically then
+						ap.Responsiveness = 40 -- Smooth for jumps/slopes
 					else
-						ap.Responsiveness = 60 -- Snappier for flat ground (lowered from 80)
+						ap.Responsiveness = 80 -- Snappier for flat ground
 					end
 
 					ao.RigidityEnabled = false
@@ -4106,9 +4245,10 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						finalPosition =
 							Vector3.new(finalPosition.X, finalPosition.Y + groundSnapOffset, finalPosition.Z)
 					else
-						-- PERFORMANCE: Use cached RayParams and throttle raycast to every 5 frames
+						-- PERFORMANCE: Use cached RayParams and throttle raycast (faster during landing)
 						local groundY = cachedGroundY
-						if strictFrameCounter % 5 == 0 or not cachedGroundY then
+						local rayThrottle = (landingFrameCount > 0) and 1 or 2 -- Every frame during landing, every 2 otherwise
+						if strictFrameCounter % rayThrottle == 0 or not cachedGroundY then
 							local rayStart = r.Position + Vector3.new(0, 3, 0)
 							local footRay = workspace:Raycast(rayStart, Vector3.new(0, -20, 0), cachedRayParams)
 							if footRay then
@@ -4165,7 +4305,9 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 								local fVelocityY = (nextY - prevY) / deltaT
 
 								if math.abs(fVelocityY) < 10.0 then
-									local snapAlpha = 0.3
+									-- Faster snap during landing for instant ground contact
+									-- Use near-instant snap (0.9) during landing
+									local snapAlpha = (landingFrameCount > 0) and 0.9 or 0.5
 									local snappedY = finalPosition.Y + (expectedY - finalPosition.Y) * snapAlpha
 									finalPosition = Vector3.new(finalPosition.X, snappedY, finalPosition.Z)
 								end
@@ -4202,9 +4344,10 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 							isJumping = vertVel > 5 -- Lowered threshold for better jump detection
 						end
 
-						-- Smooth interpolation to ground instead of instant snap (reduces jitter)
+						-- Smooth interpolation to ground - faster during landing
 						if not isJumping then
-							local smoothFactor = 0.3 -- Blend towards expected Y
+							-- Use near-instant smoothFactor during landing
+							local smoothFactor = (landingFrameCount > 0) and 0.85 or 0.5
 							local smoothedY = finalPosition.Y + (expectedY - finalPosition.Y) * smoothFactor
 							finalPosition = Vector3.new(finalPosition.X, smoothedY, finalPosition.Z)
 						end
@@ -4252,8 +4395,9 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 					-- GROUND CHECK (Raycast)
 					-- Crucial for distinguishing Slopes vs Jumps
-					-- PERFORMANCE: Throttle ground check to every 3 frames, use cached result otherwise
-					if strictFrameCounter % 3 == 0 then
+					-- PERFORMANCE: Throttle ground check - faster during landing for responsive ground contact
+					local groundCheckThrottle = (landingFrameCount > 0) and 1 or 2
+					if strictFrameCounter % groundCheckThrottle == 0 then
 						-- Increased length to 12 studs to account for steep slopes/micro-floating
 						local rayResult = workspace:Raycast(r.Position, Vector3.new(0, -12, 0), cachedRayParams)
 
@@ -8116,6 +8260,74 @@ function UIHandlers.InitMergerUI()
 								end
 								if trimTime >= frames[#frames].t then
 									trimTime = 0
+								end
+							end
+
+							-- 3. CREATE TRANSITION FRAMES (Smooth blend between recordings)
+							-- This eliminates the "blink" effect when segments join
+							if #finalFrames > 0 then
+								local lastFrame = finalFrames[#finalFrames]
+								local firstNewFrame = nil
+								
+								-- Find the first frame after trimTime
+								for j, f in ipairs(frames) do
+									if f.t >= trimTime then
+										firstNewFrame = f
+										break
+									end
+								end
+								
+								if firstNewFrame then
+									-- Get positions
+									local lastPos = lastFrame.pos and Vector3.new(lastFrame.pos.x, lastFrame.pos.y, lastFrame.pos.z)
+									local nextPos = firstNewFrame.pos and Vector3.new(firstNewFrame.pos.x, firstNewFrame.pos.y, firstNewFrame.pos.z)
+									
+									-- Get rotations
+									local lastRot = lastFrame.rot or 0
+									local nextRot = firstNewFrame.rot or 0
+									
+									-- Get velocities
+									local lastVel = lastFrame.vel and Vector3.new(lastFrame.vel.x, lastFrame.vel.y, lastFrame.vel.z) or Vector3.zero
+									local nextVel = firstNewFrame.vel and Vector3.new(firstNewFrame.vel.x, firstNewFrame.vel.y, firstNewFrame.vel.z) or Vector3.zero
+									
+									-- Create interpolation frames (6 frames over 0.1 seconds)
+									local TRANSITION_FRAMES = 6
+									local TRANSITION_DURATION = 0.1
+									
+									if lastPos and nextPos and (lastPos - nextPos).Magnitude > 0.5 then
+										for ti = 1, TRANSITION_FRAMES do
+											local alpha = ti / (TRANSITION_FRAMES + 1)
+											local interpTime = timeOffset + (TRANSITION_DURATION * alpha)
+											
+											local interpPos = lastPos:Lerp(nextPos, alpha)
+											local interpVel = lastVel:Lerp(nextVel, alpha)
+											
+											-- Smooth rotation interpolation (handle wrap-around)
+											local rotDiff = nextRot - lastRot
+											if rotDiff > 180 then rotDiff = rotDiff - 360 end
+											if rotDiff < -180 then rotDiff = rotDiff + 360 end
+											local interpRot = lastRot + (rotDiff * alpha)
+											
+											local transitionFrame = {
+												t = interpTime,
+												pos = { x = interpPos.X, y = interpPos.Y, z = interpPos.Z },
+												rot = interpRot,
+												vel = { x = interpVel.X, y = interpVel.Y, z = interpVel.Z },
+												md = lastFrame.md or firstNewFrame.md,
+												st = "Running", -- Use running state for transition
+												jmp = false,
+												hh = lastFrame.hh or firstNewFrame.hh,
+												camLook = lastFrame.camLook or firstNewFrame.camLook,
+												shiftlock = lastFrame.shiftlock or firstNewFrame.shiftlock,
+												charLook = lastFrame.charLook or firstNewFrame.charLook,
+												tool = firstNewFrame.tool, -- Use next file's tool state
+											}
+											table.insert(finalFrames, transitionFrame)
+										end
+										
+										-- Update timeOffset to account for transition
+										timeOffset = timeOffset + TRANSITION_DURATION
+									end
 								end
 							end
 

@@ -908,7 +908,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 	-- Technique: Press L2/R2 or A/D in air to get vertical boost
 	-- BUG JUMP: Press A/D + W together for 1.5x boost (works with Shift Lock ON/OFF)
 	do
-		local CardBoost = CreateCard("QUICK BOOST", 180, 5)
+		local CardBoost = CreateCard("QUICK BOOST", 230, 5)
 
 		local BtnQuickBoost, QuickBoostContainer = CreateFeatureButton(
 			CardBoost,
@@ -1056,6 +1056,39 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 				end
 			end
 		end)
+
+		-- Auto Rotate + Jump Toggle (Combined feature when Quick Boost is ON)
+		local BtnAutoRotateJump = Instance.new("TextButton", CardBoost)
+		BtnAutoRotateJump.Text = "🔄 AUTO SPIN+JUMP: OFF"
+		BtnAutoRotateJump.Size = UDim2.new(0.94, 0, 0, 30)
+		BtnAutoRotateJump.Position = UDim2.new(0.03, 0, 0, 180)
+		BtnAutoRotateJump.BackgroundColor3 = C_SIDE
+		BtnAutoRotateJump.TextColor3 = C_TEXT_DIM
+		BtnAutoRotateJump.Font = Enum.Font.GothamBold
+		BtnAutoRotateJump.TextSize = 11
+		Instance.new("UICorner", BtnAutoRotateJump).CornerRadius = UDim.new(0, 6)
+		local autoRotateJumpStroke = Instance.new("UIStroke", BtnAutoRotateJump)
+		autoRotateJumpStroke.Color = C_TEXT_DIM
+		autoRotateJumpStroke.Transparency = 0.7
+
+		RegisterTheme(BtnAutoRotateJump, "BackgroundColor3", "Side")
+
+		-- Auto Rotate + Jump State (activated on R2/L2 or A/D press like Quick Boost)
+		local isAutoRotateJump = false
+		local ROTATE_AMOUNT = 180 -- Degrees per trigger press
+
+		local function ToggleAutoRotateJump()
+			isAutoRotateJump = not isAutoRotateJump
+			BtnAutoRotateJump.Text = "🔄 AUTO SPIN+JUMP: " .. (isAutoRotateJump and "ON" or "OFF")
+			BtnAutoRotateJump.TextColor3 = isAutoRotateJump and C_YELLOW or C_TEXT_DIM
+			autoRotateJumpStroke.Color = isAutoRotateJump and C_YELLOW or C_TEXT_DIM
+			ShowFeatureToast("Auto Spin+Jump", isAutoRotateJump)
+		end
+
+		BtnAutoRotateJump.MouseButton1Click:Connect(function()
+			ToggleAutoRotateJump()
+		end)
+		UIHandlers.ToggleAutoRotateJump = ToggleAutoRotateJump
 
 		-- Quick Boost State - L2/R2 or A/D control + Bug Jump
 		local isQuickBoost, quickBoostLoop = false, nil
@@ -1223,6 +1256,15 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 									r.AssemblyLinearVelocity = Vector3.new(forwardVelX, newYVel, forwardVelZ)
 
 									boostCount = boostCount + 1
+
+								-- AUTO SPIN+JUMP: If toggle is ON, rotate player and jump
+								if isAutoRotateJump then
+									local rotateRad = math.rad(ROTATE_AMOUNT)
+									r.CFrame = r.CFrame * CFrame.Angles(0, rotateRad, 0)
+									if h.FloorMaterial ~= Enum.Material.Air then
+										h:ChangeState(Enum.HumanoidStateType.Jumping)
+									end
+								end
 									lastBoostTime = currentTime
 
 									-- Mark as boosted if we've used all boosts

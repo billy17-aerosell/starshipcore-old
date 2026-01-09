@@ -206,22 +206,22 @@ export default async function handler(req, res) {
   // ==== AVATARS (Roblox profile pictures) ====
   if (action === "avatars" && method === "GET") {
     const { userIds } = req.query;
-    
+
     if (!userIds) {
       return res.status(400).json({ error: 'userIds parameter required' });
     }
-    
+
     try {
       const response = await fetch(
         `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userIds}&size=48x48&format=Png&isCircular=false`
       );
-      
+
       if (!response.ok) {
         throw new Error(`Roblox API returned ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       // Transform the response to a simpler format
       const avatars = {};
       if (data.data) {
@@ -231,9 +231,9 @@ export default async function handler(req, res) {
           }
         });
       }
-      
+
       return res.status(200).json({ success: true, avatars });
-      
+
     } catch (error) {
       console.error('Roblox avatar fetch error:', error);
       return res.status(500).json({ error: error.message });
@@ -414,9 +414,8 @@ export default async function handler(req, res) {
       }
 
       const user = whitelist[userId];
-      
-      // Clear HWID data
-      user.hwid = null;
+
+      // Save current HWID to history before clearing
       user.hwidHistory = user.hwidHistory || [];
       if (user.hwid) {
         user.hwidHistory.push({
@@ -424,6 +423,9 @@ export default async function handler(req, res) {
           resetAt: new Date().toISOString(),
         });
       }
+
+      // Clear HWID data
+      user.hwid = null;
       user.lastHwidReset = new Date().toISOString();
       user.updatedAt = new Date().toISOString();
 

@@ -241,4 +241,56 @@ function UI.ShowLoadingModal(visible, text, progress)
 	end
 end
 
+local PerformanceGui = nil
+local PerformanceLabel = nil
+
+function UI.UpdatePerformance(visible, fps, mode)
+	if not visible then
+		if PerformanceGui then
+			PerformanceGui:Destroy()
+			PerformanceGui = nil
+			PerformanceLabel = nil
+		end
+		return
+	end
+
+	if not PerformanceGui then
+		PerformanceGui = Instance.new("ScreenGui")
+		PerformanceGui.Name = "StarshipPerformance"
+		PerformanceGui.Parent = CoreGui
+		PerformanceGui.IgnoreGuiInset = true
+		PerformanceGui.DisplayOrder = 10002
+
+		local frame = Instance.new("Frame", PerformanceGui)
+		frame.Size = UDim2.new(0, 180, 0, 40)
+		frame.Position = UDim2.new(1, -190, 1, -110) -- Above loading modal
+		frame.BackgroundColor3 = C_MAIN()
+		frame.BackgroundTransparency = 0.2
+		Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+		local stroke = Instance.new("UIStroke", frame)
+		stroke.Color = C_ACCENT()
+		stroke.Transparency = 0.5
+
+		PerformanceLabel = Instance.new("TextLabel", frame)
+		PerformanceLabel.Size = UDim2.new(1, -20, 1, 0)
+		PerformanceLabel.Position = UDim2.new(0, 10, 0, 0)
+		PerformanceLabel.BackgroundTransparency = 1
+		PerformanceLabel.TextColor3 = C_TEXT()
+		PerformanceLabel.Font = Enum.Font.GothamMedium
+		PerformanceLabel.TextSize = 11
+		PerformanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+		PerformanceLabel.RichText = true
+	end
+
+	if PerformanceLabel then
+		PerformanceLabel.Text = string.format(
+			"<font color='#%s'>FPS:</font> %.1f  |  <font color='#%s'>Mode:</font> %s",
+			C_ACCENT():ToHex(),
+			fps or 0,
+			C_ACCENT():ToHex(),
+			mode or "Standard"
+		)
+	end
+end
+
 return UI

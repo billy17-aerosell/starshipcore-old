@@ -3392,6 +3392,7 @@ local PlaybackState = {
 	isRespawnOnEnd = false,
 	isSpinning = false,
 	isMoonwalk = false,
+	isLiteMode = false, -- NEW: Lite Mode - skip state changes & complex interpolation for better FPS
 	jointMap = {},
 }
 
@@ -4770,6 +4771,8 @@ local function PlayRecording(fileName, force)
 	-- Variables for state tracking (same as PC)
 	local lastAirState = nil
 	local frameCounter = 0
+	local wasInAir = false -- Track if player was in air (for landing detection)
+	local landingFrameCount = 0 -- Frames since landing (for faster snap)
 
 	-- Create attachment for AlignOrientation (same as PC)
 	local cachedAtt = hrp:FindFirstChild("PlaybackAtt") or Instance.new("Attachment", hrp)
@@ -4959,8 +4962,35 @@ local function PlayRecording(fileName, force)
 				-- 1. Check current state for special handling
 				-- OPTIMIZATION: Use pre-cached stEnum if available, fallback to string.match
 				local stateName = fA.stEnum or (fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)"))
+				local stateNameB = fB.stEnum or (fB.st and string.match(fB.st, "Enum%.HumanoidStateType%.(%w+)"))
 				local isCurrentlyClimbing = (stateName == "Climbing")
 				local isCurrentlySwimming = (stateName == "Swimming")
+
+				-- ═══════════════════════════════════════════════════════════════════
+				-- LANDING DETECTION SYSTEM (Same as PC StarshipCore.lua)
+				-- Pre-detect landing from recorded state for faster ground snap
+				-- ═══════════════════════════════════════════════════════════════════
+				local isCurrentlyInAir = (stateName == "Jumping" or stateName == "Freefall")
+				local wasRecordedInAir = (stateName == "Freefall" or stateName == "Jumping")
+				local willLandSoon = wasRecordedInAir and (stateNameB == "Running" or stateNameB == "Landed")
+				
+				-- VELOCITY-BASED EARLY LANDING: If falling fast and will land soon
+				local recordedVelY = fA.vel and fA.vel.y or 0
+				local isFallingFast = recordedVelY < -8 -- Falling at > 8 studs/sec
+				
+				-- Detect landing (was in air, now on ground) OR predicted from recording
+				if (wasInAir and not isCurrentlyInAir) or willLandSoon then
+					landingFrameCount = 6 -- Fast snap for next 6 frames after landing
+				elseif isFallingFast and stateNameB and (stateNameB == "Running" or stateNameB == "Landed") then
+					-- Early landing detection: falling fast + next frame is ground = start snap
+					landingFrameCount = math.max(landingFrameCount, 4)
+				end
+				wasInAir = isCurrentlyInAir
+				
+				-- Decrement landing frame count
+				if landingFrameCount > 0 then
+					landingFrameCount = landingFrameCount - 1
+				end
 
 				-- OPTIMIZATION: Calculate smoothPos/smoothVel ONCE at higher scope for reuse in drift correction
 				local smoothPos, smoothVel = SmoothInterpolateFrames(PlaybackState.frameData, frameIdx, alpha)
@@ -5084,7 +5114,9 @@ local function PlayRecording(fileName, force)
 								local distance = posDiff.Magnitude
 
 								-- Calculate target velocity that will move us toward the path
-								local correctionStrength = math.clamp(distance * 8, 0, 50)
+								-- LANDING OPTIMIZATION: Increase correction strength during landing
+								local baseCorrection = (landingFrameCount > 0) and 15 or 8
+								local correctionStrength = math.clamp(distance * baseCorrection, 0, 80)
 								local correctionVel = distance > 0.01 and (posDiff.Unit * correctionStrength)
 									or Vector3.new(0, 0, 0)
 
@@ -5093,11 +5125,16 @@ local function PlayRecording(fileName, force)
 								local finalVel = targetVel + correctionVel
 
 								-- Apply velocity (allows physics and animations to work properly)
-								hrp.AssemblyLinearVelocity = currentVel:Lerp(finalVel, 0.85)
+								-- LANDING OPTIMIZATION: Use higher blend factor during landing for instant snap
+								local velBlendFactor = (landingFrameCount > 0) and 0.95 or 0.85
+								hrp.AssemblyLinearVelocity = currentVel:Lerp(finalVel, velBlendFactor)
 
 								-- Only snap position if WAY off (fallback safety)
-								if distance > 8 then
-									local snapPos = currentPos:Lerp(smoothPos, 0.5)
+								-- LANDING OPTIMIZATION: Lower snap threshold during landing
+								local snapThreshold = (landingFrameCount > 0) and 3 or 8
+								if distance > snapThreshold then
+									local snapBlend = (landingFrameCount > 0) and 0.8 or 0.5
+									local snapPos = currentPos:Lerp(smoothPos, snapBlend)
 									hrp.CFrame = CFrame.new(snapPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
 								end
 
@@ -5133,9 +5170,11 @@ local function PlayRecording(fileName, force)
 									hrp.AssemblyLinearVelocity = currentVel:Lerp(targetVel, blendFactor)
 
 									-- Subtle position correction to prevent drift
+									-- LANDING OPTIMIZATION: Stronger correction during landing
 									if smoothPos then
 										local posDiff = (smoothPos - hrp.Position)
-										local posCorrection = posDiff * 0.2
+										local correctionMult = (landingFrameCount > 0) and 0.5 or 0.2
+										local posCorrection = posDiff * correctionMult
 										hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity + posCorrection
 									end
 
