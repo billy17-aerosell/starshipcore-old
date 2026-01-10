@@ -1,7 +1,28 @@
 {
-  "currentVersion": "1.4.0",
-  "lastUpdated": "2026-01-04",
+  "currentVersion": "1.5.1",
+  "lastUpdated": "2026-01-10",
   "updates": [
+    {
+      "version": "1.5.1",
+      "date": "2026-01-10",
+      "title": "🎭 Morph Avatar",
+      "changes": [
+        "Added Morph Avatar feature to Fun tab",
+        "Added live avatar preview before morphing",
+        "Added Reset Avatar button"
+      ]
+    },
+    {
+      "version": "1.5.0",
+      "date": "2026-01-10",
+      "title": "Pathfinding & Visuals Update",
+      "changes": [
+        "🚶 Smart Resume: Character now walks to resume point instead of teleporting",
+        "✨ High Precision Path: Smoother and more accurate path visualization",
+        "🔧 Fixed pathfinding timeout and stuck issues",
+        "⚡ Optimized waypoint navigation"
+      ]
+    },
     {
       "version": "1.4.0",
       "date": "2026-01-04",

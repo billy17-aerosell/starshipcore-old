@@ -3301,9 +3301,11 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 	StyleBtn(BtnOpenClone, C_ACCENT)
 
 	-- Create Clone Player Window
-	local CloneWindow, CloneContent = CreateWindow("CLONE PLAYER", 320)
-	CloneContent.ScrollBarThickness = 0
-	CloneContent.ScrollingEnabled = false
+	local CloneWindow, CloneContent = CreateWindow("CLONE PLAYER", 460)
+	CloneContent.ScrollBarThickness = 2
+	CloneContent.ScrollingEnabled = true
+	CloneContent.CanvasSize = UDim2.new(0, 0, 0, 0) -- Reset to allow auto-sizing
+	CloneContent.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
 	local cloneTarget = nil
 	local originalAppearance = nil -- Store original appearance for restore
@@ -3352,6 +3354,15 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 	CloneSelectedDisplay.ZIndex = 205
 	Instance.new("UICorner", CloneSelectedDisplay).CornerRadius = UDim.new(0, 6)
 
+	-- Avatar Preview Image
+	local ClonePreviewImage = Instance.new("ImageLabel", CloneContent)
+	ClonePreviewImage.Size = UDim2.new(0, 100, 0, 100)
+	ClonePreviewImage.Position = UDim2.new(0.5, -50, 0, 0) -- Will be positioned by Layout
+	ClonePreviewImage.BackgroundTransparency = 1
+	ClonePreviewImage.Image = "rbxassetid://10734950309" -- Default placeholder
+	ClonePreviewImage.ZIndex = 205
+	Instance.new("UICorner", ClonePreviewImage).CornerRadius = UDim.new(0, 12)
+
 	-- Function to update player list
 	local function UpdateClonePlayerList()
 		for _, child in pairs(ClonePlayerListScroll:GetChildren()) do
@@ -3377,6 +3388,12 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 					cloneTarget = player
 					CloneSelectedDisplay.Text = "Target: " .. player.DisplayName
 					CloneSelectedDisplay.TextColor3 = C_GREEN
+					
+					-- Update Preview
+					local userId = player.UserId
+					local thumbUrl = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(userId) .. "&w=150&h=150"
+					ClonePreviewImage.Image = thumbUrl
+					
 					UpdateClonePlayerList()
 				end)
 
@@ -3397,427 +3414,51 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		end
 	end
 
-	-- Function to clone player appearance using HumanoidDescription (BEST METHOD)
+	-- Function to clone player appearance using HumanoidDescription
 	local function ClonePlayerAppearance()
-		if not cloneTarget or not cloneTarget.Character then
-			return false, "No valid target"
+		if not cloneTarget then
+			return false, "No target selected"
 		end
 
 		local myChar = LocalPlayer.Character
-		local targetChar = cloneTarget.Character
-		if not myChar then
-			return false, "No character"
-		end
-
-		local myHum = myChar:FindFirstChildOfClass("Humanoid")
-		local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
-		if not myHum or not targetHum then
+		local myHum = myChar and myChar:FindFirstChild("Humanoid")
+		if not myHum then
 			return false, "No humanoid"
 		end
 
-		-- Method 1: Try using HumanoidDescription from UserId (BEST - copies everything)
-		local success1 = pcall(function()
-			local targetDescription = Players:GetHumanoidDescriptionFromUserId(cloneTarget.UserId)
-			myHum:ApplyDescription(targetDescription)
+		-- Load Description
+		local success, desc = pcall(function()
+			return Players:GetHumanoidDescriptionFromUserId(cloneTarget.UserId)
 		end)
 
-		if success1 then
-			return true, "Cloned!"
+		if not success or not desc then
+			return false, "Failed to load avatar"
 		end
 
-		-- Method 2: Try getting description from current character
-		local success2 = pcall(function()
-			local targetDescription = targetHum:GetAppliedDescription()
-			if targetDescription then
-				myHum:ApplyDescription(targetDescription)
-			end
-		end)
-
-		if success2 then
-			return true, "Cloned!"
-		end
-
-		-- Method 3: Manual fallback continues below...
-
-		-- Store original appearance for restore (only first time)
-		if not originalAppearance then
-			originalAppearance = {
-				bodyColors = {},
-				accessories = {},
-				clothing = {},
-				face = nil,
-			}
-
-			-- Store body colors
-			local myBodyColors = myChar:FindFirstChildOfClass("BodyColors")
-			if myBodyColors then
-				originalAppearance.bodyColors = {
-					HeadColor3 = myBodyColors.HeadColor3,
-					TorsoColor3 = myBodyColors.TorsoColor3,
-					LeftArmColor3 = myBodyColors.LeftArmColor3,
-					RightArmColor3 = myBodyColors.RightArmColor3,
-					LeftLegColor3 = myBodyColors.LeftLegColor3,
-					RightLegColor3 = myBodyColors.RightLegColor3,
-				}
+		-- Clear existing accessories first for clean morph
+		for _, obj in ipairs(myChar:GetChildren()) do
+			if obj:IsA("Accessory") or obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") or obj:IsA("BodyColors") then
+				obj:Destroy()
 			end
 		end
-
-		-- Clone Body Colors (BodyColors object for R6)
-		local targetBodyColors = targetChar:FindFirstChildOfClass("BodyColors")
-		local myBodyColors = myChar:FindFirstChildOfClass("BodyColors")
-		if targetBodyColors and myBodyColors then
-			pcall(function()
-				myBodyColors.HeadColor3 = targetBodyColors.HeadColor3
-				myBodyColors.TorsoColor3 = targetBodyColors.TorsoColor3
-				myBodyColors.LeftArmColor3 = targetBodyColors.LeftArmColor3
-				myBodyColors.RightArmColor3 = targetBodyColors.RightArmColor3
-				myBodyColors.LeftLegColor3 = targetBodyColors.LeftLegColor3
-				myBodyColors.RightLegColor3 = targetBodyColors.RightLegColor3
-			end)
-		end
-
-		-- Clone Body Part Colors for R15 (part colors directly on MeshParts)
-		local r15Parts = {
-			"Head",
-			"UpperTorso",
-			"LowerTorso",
-			"LeftUpperArm",
-			"LeftLowerArm",
-			"LeftHand",
-			"RightUpperArm",
-			"RightLowerArm",
-			"RightHand",
-			"LeftUpperLeg",
-			"LeftLowerLeg",
-			"LeftFoot",
-			"RightUpperLeg",
-			"RightLowerLeg",
-			"RightFoot",
-		}
-
-		for _, partName in ipairs(r15Parts) do
-			local targetPart = targetChar:FindFirstChild(partName)
-			local myPart = myChar:FindFirstChild(partName)
-			if targetPart and myPart then
-				pcall(function()
-					myPart.Color = targetPart.Color
-					myPart.BrickColor = targetPart.BrickColor
-				end)
-			end
-		end
-
-		-- Clone CharacterMesh (for R6 body packages)
-		for _, child in pairs(myChar:GetChildren()) do
-			if child:IsA("CharacterMesh") then
-				child:Destroy()
-			end
-		end
-		for _, child in pairs(targetChar:GetChildren()) do
-			if child:IsA("CharacterMesh") then
-				pcall(function()
-					local cloned = child:Clone()
-					cloned.Parent = myChar
-				end)
-			end
-		end
-
-		-- Remove my current accessories
-		for _, child in pairs(myChar:GetChildren()) do
-			if child:IsA("Accessory") or child:IsA("Hat") then
-				child:Destroy()
-			end
-		end
-
-		-- Clone Accessories (Hats, Hair, etc) - Manual method (most reliable for exploits)
-		local accessoryCount = 0
-
-		-- Accessories to skip (can cause visual glitches)
-		local skipAccessoryTypes = {
-			["FaceFrontAttachment"] = true, -- Face accessories often cause issues
-			["FaceCenterAttachment"] = true,
-		}
-
-		for _, accessory in pairs(targetChar:GetChildren()) do
-			if accessory:IsA("Accessory") or accessory:IsA("Hat") then
-				local cloneSuccess = pcall(function()
-					local clonedAccessory = accessory:Clone()
-					local handle = clonedAccessory:FindFirstChild("Handle")
-
-					if not handle then
-						clonedAccessory:Destroy()
-						return
-					end
-
-					-- Check if this is a face accessory we should skip
-					local handleAttachmentCheck = handle:FindFirstChildOfClass("Attachment")
-					if handleAttachmentCheck and skipAccessoryTypes[handleAttachmentCheck.Name] then
-						clonedAccessory:Destroy()
-						return -- Skip this accessory
-					end
-
-					-- Remove any existing welds/constraints
-					for _, child in pairs(handle:GetChildren()) do
-						if
-							child:IsA("Weld")
-							or child:IsA("Motor6D")
-							or child:IsA("WeldConstraint")
-							or child:IsA("RigidConstraint")
-						then
-							child:Destroy()
-						end
-					end
-
-					-- Set handle properties
-					handle.Anchored = false
-					handle.CanCollide = false
-					handle.Massless = true
-
-					-- Parent accessory to character first
-					clonedAccessory.Parent = myChar
-
-					-- Find the attachment point on handle
-					local handleAttachment = handle:FindFirstChildOfClass("Attachment")
-					local attachName = handleAttachment and handleAttachment.Name or "HatAttachment"
-
-					-- Common attachment names -> body part mapping
-					local attachmentToPartMap = {
-						["HatAttachment"] = "Head",
-						["HairAttachment"] = "Head",
-						["FaceFrontAttachment"] = "Head",
-						["FaceCenterAttachment"] = "Head",
-						["NeckAttachment"] = "Head",
-						["LeftShoulderAttachment"] = "LeftUpperArm",
-						["RightShoulderAttachment"] = "RightUpperArm",
-						["BodyFrontAttachment"] = "UpperTorso",
-						["BodyBackAttachment"] = "UpperTorso",
-						["WaistFrontAttachment"] = "LowerTorso",
-						["WaistBackAttachment"] = "LowerTorso",
-						["WaistCenterAttachment"] = "LowerTorso",
-						["LeftGripAttachment"] = "LeftHand",
-						["RightGripAttachment"] = "RightHand",
-					}
-
-					-- Find matching attachment on our character
-					local targetAttachment = nil
-					local targetPart = nil
-
-					for _, part in pairs(myChar:GetDescendants()) do
-						if part:IsA("Attachment") and part.Name == attachName then
-							targetAttachment = part
-							targetPart = part.Parent
-							break
-						end
-					end
-
-					-- If no matching attachment found, try using the mapping
-					if not targetAttachment then
-						local partName = attachmentToPartMap[attachName] or "Head"
-						targetPart = myChar:FindFirstChild(partName) or myChar:FindFirstChild("Head")
-					end
-
-					if targetPart then
-						-- Position handle at the correct location
-						if targetAttachment and handleAttachment then
-							-- Calculate correct position using attachment offsets
-							handle.CFrame = targetPart.CFrame
-								* targetAttachment.CFrame
-								* handleAttachment.CFrame:Inverse()
-						else
-							-- Default: position on top of head
-							if targetPart.Name == "Head" then
-								handle.CFrame = targetPart.CFrame * CFrame.new(0, targetPart.Size.Y / 2 + 0.1, 0)
-							else
-								handle.CFrame = targetPart.CFrame
-							end
-						end
-
-						-- Create weld
-						local weld = Instance.new("Weld")
-						weld.Name = "AccessoryWeld"
-						weld.Part0 = targetPart
-						weld.Part1 = handle
-						weld.C0 = targetPart.CFrame:ToObjectSpace(handle.CFrame)
-						weld.C1 = CFrame.new()
-						weld.Parent = handle
-					end
-
-					accessoryCount = accessoryCount + 1
-				end)
-
-				if not cloneSuccess then
-					-- Silent fail, continue to next accessory
-				end
-			end
-		end
-
-		-- Clone Shirt
-		local myShirt = myChar:FindFirstChildOfClass("Shirt")
-		local targetShirt = targetChar:FindFirstChildOfClass("Shirt")
-		if targetShirt then
-			if not myShirt then
-				myShirt = Instance.new("Shirt", myChar)
-			end
-			pcall(function()
-				myShirt.ShirtTemplate = targetShirt.ShirtTemplate
-			end)
-		elseif myShirt then
-			myShirt:Destroy()
-		end
-
-		-- Clone Pants
-		local myPants = myChar:FindFirstChildOfClass("Pants")
-		local targetPants = targetChar:FindFirstChildOfClass("Pants")
-		if targetPants then
-			if not myPants then
-				myPants = Instance.new("Pants", myChar)
-			end
-			pcall(function()
-				myPants.PantsTemplate = targetPants.PantsTemplate
-			end)
-		elseif myPants then
-			myPants:Destroy()
-		end
-
-		-- Clone Face (comprehensive - handles all face types)
-		local myHead = myChar:FindFirstChild("Head")
-		local targetHead = targetChar:FindFirstChild("Head")
-		local faceCloned = false
-		if myHead and targetHead then
-			-- Check if head types are compatible (same type = can copy face)
-			local function getHeadType(head)
-				if head:IsA("MeshPart") then
-					return "MeshPart", head.MeshId or ""
-				else
-					local mesh = head:FindFirstChildOfClass("SpecialMesh")
-					if mesh then
-						return "SpecialMesh", mesh.MeshId or ""
-					else
-						return "Part", ""
-					end
-				end
-			end
-
-			local myHeadType, myMeshId = getHeadType(myHead)
-			local targetHeadType, targetMeshId = getHeadType(targetHead)
-
-			-- Only clone face if head types are similar
-			local headTypesMatch = (myHeadType == targetHeadType)
-			local meshIdsMatch = (myMeshId == targetMeshId) or (myMeshId == "" and targetMeshId == "")
-
-			if not headTypesMatch then
-				-- Different head types - skip face cloning, keep original
-				-- Just copy head color
-				pcall(function()
-					myHead.Color = targetHead.Color
-					myHead.BrickColor = targetHead.BrickColor
-				end)
+		
+		-- Apply Description
+		local applySuccess = pcall(function()
+			if myHum.ApplyDescriptionClientServer then
+				myHum:ApplyDescriptionClientServer(desc)
 			else
-				-- Same head type - can safely copy face
-				faceCloned = true
-
-				-- 1. Remove ALL existing face-related things from our head
-				for _, child in pairs(myHead:GetChildren()) do
-					if child:IsA("Decal") or child:IsA("Texture") or child:IsA("SurfaceAppearance") then
-						child:Destroy()
-					end
-				end
-
-				-- 2. Copy all Decals from target head
-				for _, child in pairs(targetHead:GetChildren()) do
-					if child:IsA("Decal") then
-						pcall(function()
-							local newDecal = child:Clone()
-							newDecal.Parent = myHead
-						end)
-					end
-				end
-
-				-- 3. Copy all Textures from target head
-				for _, child in pairs(targetHead:GetChildren()) do
-					if child:IsA("Texture") then
-						pcall(function()
-							local newTexture = child:Clone()
-							newTexture.Parent = myHead
-						end)
-					end
-				end
-
-				-- 4. Copy SurfaceAppearance (for modern PBR textures)
-				local targetSA = targetHead:FindFirstChildOfClass("SurfaceAppearance")
-				if targetSA then
-					pcall(function()
-						local newSA = targetSA:Clone()
-						newSA.Parent = myHead
-					end)
-				end
-
-				-- 5. Try to copy MeshPart texture (if head is MeshPart)
-				if myHead:IsA("MeshPart") and targetHead:IsA("MeshPart") then
-					pcall(function()
-						myHead.TextureID = targetHead.TextureID
-					end)
-				end
-
-				-- 6. Try to copy SpecialMesh properties (classic heads)
-				pcall(function()
-					local targetMesh = targetHead:FindFirstChildOfClass("SpecialMesh")
-					local myMesh = myHead:FindFirstChildOfClass("SpecialMesh")
-					if targetMesh then
-						if not myMesh then
-							myMesh = Instance.new("SpecialMesh", myHead)
-						end
-						myMesh.MeshId = targetMesh.MeshId
-						myMesh.TextureId = targetMesh.TextureId
-						myMesh.Scale = targetMesh.Scale
-						myMesh.Offset = targetMesh.Offset
-						myMesh.MeshType = targetMesh.MeshType
-					end
-				end)
-
-				-- 7. Copy head color
-				pcall(function()
-					myHead.Color = targetHead.Color
-					myHead.BrickColor = targetHead.BrickColor
-					if myHead:IsA("MeshPart") and targetHead:IsA("MeshPart") then
-						myHead.Material = targetHead.Material
-					end
-				end)
-
-				-- 8. Copy FaceControls (for dynamic/animated heads)
-				local targetFaceControls = targetHead:FindFirstChild("FaceControls")
-				if targetFaceControls then
-					local myFaceControls = myHead:FindFirstChild("FaceControls")
-					if myFaceControls then
-						pcall(function()
-							-- Copy facial expression properties
-							for _, prop in pairs({ "MouthOpen", "LeftBrowLower", "RightBrowLower" }) do
-								if targetFaceControls[prop] then
-									myFaceControls[prop] = targetFaceControls[prop]
-								end
-							end
-						end)
-					end
-				end
-			end -- end of else (same head type)
-		end
-
-		-- Clone T-Shirt
-		local myTShirt = myChar:FindFirstChildOfClass("ShirtGraphic")
-		local targetTShirt = targetChar:FindFirstChildOfClass("ShirtGraphic")
-		if targetTShirt then
-			if not myTShirt then
-				myTShirt = Instance.new("ShirtGraphic", myChar)
+				myHum:ApplyDescription(desc)
 			end
-			pcall(function()
-				myTShirt.Graphic = targetTShirt.Graphic
-			end)
-		elseif myTShirt then
-			myTShirt:Destroy()
-		end
+		end)
 
-		local faceStatus = faceCloned and "face: ✓" or "face: kept original"
-		return true, "Cloned! (" .. accessoryCount .. " acc, " .. faceStatus .. ")"
+		if applySuccess then
+			return true, "Cloned!"
+		else
+			return false, "Apply failed"
+		end
 	end
+	
+
 
 	-- Clone Button
 	local BtnClone = Instance.new("TextButton", CloneContent)
@@ -3833,6 +3474,56 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 	local cloneStroke = Instance.new("UIStroke", BtnClone)
 	cloneStroke.Color = C_GREEN
 	cloneStroke.Thickness = 1
+
+	-- Reset Button
+	local BtnReset = Instance.new("TextButton", CloneContent)
+	BtnReset.Text = "↺ RESET AVATAR"
+	BtnReset.Size = UDim2.new(0.94, 0, 0, 35)
+	BtnReset.BackgroundColor3 = C_RED
+	BtnReset.TextColor3 = C_TEXT
+	BtnReset.Font = Enum.Font.GothamBold
+	BtnReset.TextSize = 12
+	BtnReset.BorderSizePixel = 0
+	BtnReset.ZIndex = 205
+	Instance.new("UICorner", BtnReset).CornerRadius = UDim.new(0, 6)
+	local resetStroke = Instance.new("UIStroke", BtnReset)
+	resetStroke.Color = C_RED
+	resetStroke.Thickness = 1
+	
+	BtnReset.MouseButton1Click:Connect(function()
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChild("Humanoid")
+		if hum then
+			-- Load own description
+			local success, desc = pcall(function()
+				return Players:GetHumanoidDescriptionFromUserId(LocalPlayer.UserId)
+			end)
+			
+			if success and desc then
+				-- Clear existing accessories
+				for _, obj in ipairs(char:GetChildren()) do
+					if obj:IsA("Accessory") or obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") or obj:IsA("BodyColors") then
+						obj:Destroy()
+					end
+				end
+				
+				-- Apply own description
+				pcall(function()
+					if hum.ApplyDescriptionClientServer then
+						hum:ApplyDescriptionClientServer(desc)
+					else
+						hum:ApplyDescription(desc)
+					end
+				end)
+				
+				CloneStatus.Text = "Avatar Reset!"
+				CloneStatus.TextColor3 = C_GREEN
+			else
+				CloneStatus.Text = "Failed to load original avatar"
+				CloneStatus.TextColor3 = C_RED
+			end
+		end
+	end)
 
 	-- Status Label
 	local CloneStatus = Instance.new("TextLabel", CloneContent)

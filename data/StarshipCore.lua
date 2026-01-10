@@ -10,6 +10,7 @@
 -- SERVER-BASED LOADING MODE
 -- Automatically detects environment and loads modules from appropriate server
 -- No manual configuration needed!
+local VERSION = "1.5.1"
 
 -- Auto-detect: Check if URL was injected by bootstrap/dev-script
 if _G.StarshipServerMode == nil then
@@ -1774,7 +1775,8 @@ local function GeneratePlaybackPath(frames)
 	end
 	task.spawn(function()
 		local totalFrames = #frames
-		local MAX_PATH_POINTS = 500 -- Limit untuk prevent lag
+		-- INCREASED PRECISION: Allow up to 5000 points for smoother curves
+		local MAX_PATH_POINTS = 5000 
 
 		-- Calculate adaptive step size based on file size
 		local step = math.max(1, math.floor(totalFrames / MAX_PATH_POINTS))
@@ -1787,7 +1789,9 @@ local function GeneratePlaybackPath(frames)
 		end
 
 		local pointsCreated = 0
-		local MIN_DISTANCE = step > 5 and 3.0 or 1.0 -- Larger min distance for big files
+		-- HIGH PRECISION: Always use small distance threshold (0.2 studs)
+		-- This ensures even small movements are captured in the path
+		local MIN_DISTANCE = 0.2 
 
 		for i = step, totalFrames, step do
 			if not isPlaying and not isPlayPaused then
@@ -3055,6 +3059,9 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 		local bestT, minDst = currentPlaybackTime, math.huge
 		local rPos = r.Position
+		
+		-- Store best ground frame separately (prefer ground over air)
+		local bestGroundT, minGroundDst = currentPlaybackTime, math.huge
 
 		-- Check frames to find closest point
 		-- Optimization: Step by 5 to save performance on huge files
@@ -3073,6 +3080,15 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 					minDst = dst
 					bestT = f.t
 				end
+				
+				-- Check if this is a ground frame (not jumping/freefalling)
+				local stateName = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+				local isGroundFrame = (stateName == nil) or (stateName == "Running") or (stateName == "Landed") or (stateName == "Climbing")
+				
+				if isGroundFrame and dst < minGroundDst then
+					minGroundDst = dst
+					bestGroundT = f.t
+				end
 			end
 		end
 
@@ -3086,6 +3102,13 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				minDst = dst
 				bestT = lastF.t
 			end
+		end
+		
+		-- PRIORITIZE GROUND FRAMES: If we found a close ground frame, use it instead
+		-- This prevents walking/teleporting to mid-air positions
+		if minGroundDst < minDst + 20 then -- Allow 20 studs tolerance
+			bestT = bestGroundT
+			minDst = minGroundDst
 		end
 
 		-- If we are starting from 0 (not resuming), only jump if we are close enough to the path
@@ -3108,12 +3131,19 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 				currentPlaybackTime = 0
 			elseif minDst < 500 then -- Increased threshold for Smart Start
 				currentPlaybackTime = bestT
+				ShowToast(L("smart_start") or "Smart Start", 
+					string.format("Found nearest point at %.1fs (%.0f studs)", bestT, minDst), 
+					"info", 2)
 			end
 		else
 			-- If resuming from pause, always jump to closest (existing logic)
 			currentPlaybackTime = bestT
+			ShowToast(L("smart_resume") or "Smart Resume", 
+				string.format("Resuming from %.1fs (%.0f studs away)", bestT, minDst), 
+				"info", 2)
 		end
 	end
+
 
 	isPlaying = true
 	isPlayPaused = false
@@ -3134,14 +3164,52 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		or (startFrame.r and TblToCF(startFrame.r).Position)
 
 	if currentPlaybackTime > 0 then
+		-- Find the target frame, but PREFER a ground frame nearby
+		local targetIdx = 1
 		for i = 1, #currentFrameData do
 			if currentFrameData[i].t >= currentPlaybackTime then
-				local f = currentFrameData[i]
-				targetPos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
+				targetIdx = i
 				break
 			end
 		end
+		
+		-- Search nearby frames for a ground frame (within 30 frames = ~0.5 seconds at 60fps)
+		local searchRange = 30
+		local bestGroundIdx = nil
+		
+		for offset = 0, searchRange do
+			-- Check forward
+			local fwdIdx = targetIdx + offset
+			if fwdIdx <= #currentFrameData then
+				local f = currentFrameData[fwdIdx]
+				local stateName = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+				if (stateName == nil) or (stateName == "Running") or (stateName == "Landed") or (stateName == "Climbing") then
+					bestGroundIdx = fwdIdx
+					break
+				end
+			end
+			
+			-- Check backward
+			local bwdIdx = targetIdx - offset
+			if bwdIdx >= 1 then
+				local f = currentFrameData[bwdIdx]
+				local stateName = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+				if (stateName == nil) or (stateName == "Running") or (stateName == "Landed") or (stateName == "Climbing") then
+					bestGroundIdx = bwdIdx
+					break
+				end
+			end
+		end
+		
+		-- Use ground frame if found, otherwise use original
+		local finalIdx = bestGroundIdx or targetIdx
+		local f = currentFrameData[finalIdx]
+		targetPos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
+		
+		-- Update currentPlaybackTime to match the ground frame
+		currentPlaybackTime = f.t
 	end
+
 
 	ShowLoadingModal(false)
 
@@ -3160,40 +3228,169 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 			if a then
 				a.Disabled = false
 			end
-			h:MoveTo(targetPos)
-
-			-- Timeout safety
-			local moveStart = os.clock()
-
-			while isPlaying do
-				local currFlat = r.Position * Vector3.new(1, 0, 1)
-				local d = (currFlat - flatTarget).Magnitude
-
-				if d <= 2 then
-					break
+			h.AutoRotate = true
+			
+			-- FOLLOW RECORDED PATH: Walk along the exact recorded frames
+			-- First, find the nearest frame index to current player position
+			local nearestFrameIdx = 1
+			local nearestDist = math.huge
+			for i = 1, #currentFrameData do
+				local f = currentFrameData[i]
+				local fPos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
+				if fPos then
+					local d = (r.Position - fPos).Magnitude
+					if d < nearestDist then
+						nearestDist = d
+						nearestFrameIdx = i
+					end
 				end
-
-				-- If stuck for 5 seconds but close (within 10 studs), just snap
-				if os.clock() - moveStart > 5 and d < 10 then
-					r.CFrame = CFrame.new(targetPos) * r.CFrame.Rotation
-					break
-				end
-
-				if not isPlaying then
-					h:MoveTo(r.Position)
-					return
-				end
-
-				-- Refresh MoveTo every second
-				if (os.clock() - moveStart) % 1 < 0.1 then
-					h:MoveTo(targetPos)
-				end
-
-				task.wait(0.1)
 			end
-			h:MoveTo(r.Position)
+			
+			-- Find the target frame index (where currentPlaybackTime is)
+			local targetFrameIdx = 1
+			for i = 1, #currentFrameData do
+				if currentFrameData[i].t >= currentPlaybackTime then
+					targetFrameIdx = i
+					break
+				end
+			end
+			
+			-- Determine direction: walk forward or backward through frames
+			local frameStep = (targetFrameIdx > nearestFrameIdx) and 1 or -1
+			local framesCount = math.abs(targetFrameIdx - nearestFrameIdx)
+			
+			-- Show toast
+			ShowToast(L("traveling") or "Following Path", 
+				string.format("Walking to resume point (%.0f studs)...", dist), 
+				"info", 3)
+			
+			-- Walk through frames based on DISTANCE, not just frame count
+			-- This ensures we follow curves and don't walk through walls
+			local currentIdx = nearestFrameIdx
+			local travelStart = os.clock()
+			local maxTravelTime = math.max(30, framesCount * 0.3) -- More generous timeout (min 30s)
+			
+			local lastStuckCheck = os.clock()
+			local lastStuckPos = r.Position
+			
+			while isPlaying and currentIdx ~= targetFrameIdx do
+				-- Find next waypoint that is at least 10 studs away but not more than 25
+				local nextIdx = targetFrameIdx -- Default to target
+				
+				-- Search for a good waypoint
+				local foundWaypoint = false
+				local searchLimit = math.min(math.abs(targetFrameIdx - currentIdx), 500) -- Limit search to 500 frames ahead
+				
+				for offset = 1, searchLimit do
+					local searchIdx = currentIdx + (frameStep * offset)
+					if searchIdx < 1 or searchIdx > #currentFrameData then break end
+					
+					local f = currentFrameData[searchIdx]
+					local fPos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
+					
+					if fPos then
+						local fDist = (r.Position - fPos).Magnitude
+						if fDist > 10 then
+							nextIdx = searchIdx
+							foundWaypoint = true
+							-- If we found a point ~20 studs away, that's a good waypoint
+							if fDist > 20 then
+								break
+							end
+						end
+					end
+				end
+				
+				-- If we are very close to target frame (or didn't find a far enough point), just go to target
+				if not foundWaypoint or math.abs(nextIdx - targetFrameIdx) < 20 then
+					nextIdx = targetFrameIdx
+				end
+				
+				local f = currentFrameData[nextIdx]
+				local waypointPos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
+				
+				if waypointPos then
+					-- Move to waypoint
+					h:MoveTo(waypointPos)
+					
+					-- Wait until reached or timeout
+					local wpStart = os.clock()
+					local startDist = (r.Position * Vector3.new(1,0,1) - waypointPos * Vector3.new(1,0,1)).Magnitude
+					local expectedTime = math.max(3, startDist / 8) -- Expect 8 studs/sec minimum (generous)
+					
+					while isPlaying do
+						local currPos = r.Position
+						local flatCurr = currPos * Vector3.new(1, 0, 1)
+						local flatWP = waypointPos * Vector3.new(1, 0, 1)
+						local wpDist = (flatCurr - flatWP).Magnitude
+						
+						-- Close enough
+						if wpDist <= 5 then
+							break
+						end
+						
+						-- Timeout for this waypoint
+						if os.clock() - wpStart > expectedTime then
+							-- If we timed out but made progress, just continue to next waypoint
+							break
+						end
+						
+						-- STUCK DETECTION
+						if os.clock() - lastStuckCheck > 1.5 then
+							local moveDist = (currPos - lastStuckPos).Magnitude
+							if moveDist < 1.0 then
+								-- Stuck! Try jumping
+								h.Jump = true
+								-- If really stuck (tried jumping and still stuck), teleport slightly towards waypoint
+								if os.clock() - lastStuckCheck > 3.0 then
+									local dir = (waypointPos - currPos).Unit
+									-- Teleport 5 studs forward and slightly up
+									r.CFrame = r.CFrame + (dir * 5) + Vector3.new(0, 3, 0)
+									lastStuckCheck = os.clock() -- Reset check
+								end
+							else
+								-- Moving fine, reset stuck check
+								lastStuckCheck = os.clock()
+								lastStuckPos = currPos
+							end
+						end
+						
+						if not isPlaying then 
+							h:MoveTo(r.Position)
+							return 
+						end
+						task.wait(0.1)
+					end
+				end
+				
+				currentIdx = nextIdx
+				
+				-- Total timeout check
+				if os.clock() - travelStart > maxTravelTime then
+					ShowToast(L("teleported") or "Teleported", "Pathfinding timed out", "warning", 2)
+					break -- Will teleport at end
+				end
+			end
+			
+			-- Final move/teleport to exact target position
+			if isPlaying then
+				h:MoveTo(targetPos)
+				-- Give a moment to settle
+				local finalStart = os.clock()
+				while isPlaying do
+					local d = ((r.Position * Vector3.new(1, 0, 1)) - flatTarget).Magnitude
+					if d <= 3 or os.clock() - finalStart > 2 then
+						break
+					end
+					task.wait(0.1)
+				end
+				h:MoveTo(r.Position) -- Stop moving
+			end
 		end
 	end
+
+
+
 
 	if not isPlaying then
 		return
@@ -11007,4 +11204,26 @@ task.spawn(function()
 
 		StartLoader()
 	end)
+end)
+
+-- Check for updates
+task.spawn(function()
+	local success, result = pcall(function()
+		return game:HttpGet(_G.StarshipServerURL .. "/changelog.json")
+	end)
+	
+	if success then
+		local data = game:GetService("HttpService"):JSONDecode(result)
+		if data and data.currentVersion and data.currentVersion ~= VERSION then
+			task.wait(5) -- Wait for other notifications
+			pcall(function()
+				game:GetService("StarterGui"):SetCore("SendNotification", {
+					Title = "Update Available",
+					Text = "New version " .. data.currentVersion .. " is available!\nRe-execute script to update.",
+					Duration = 10,
+					Icon = "rbxassetid://6031225816" -- Download icon
+				})
+			end)
+		end
+	end
 end)

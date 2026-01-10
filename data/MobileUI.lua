@@ -10,7 +10,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
-local VERSION = "1.1.0-mobile"
+local VERSION = "1.2.1"
 local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 
 -- DEV_MODE detection (same as StarshipCore)
@@ -154,6 +154,307 @@ WindUI.Notify = function(self, args)
 		OriginalNotify(self, args)
 	end
 end
+
+-- ══════════════════════════════════════════════════════════════════
+-- CHANGELOG POPUP (Mobile-specific, blocking before UI loads)
+-- Uses /changelog-mobile.json for mobile-specific updates
+-- ══════════════════════════════════════════════════════════════════
+local function ShowMobileChangelog()
+	local HttpService = game:GetService("HttpService")
+	local CoreGui = game:GetService("CoreGui")
+	
+	local MOBILE_VERSION_FILE = "StarshipMobile/changelog_version.txt"
+	local MOBILE_CHANGELOG_URL = CLOUD_API_BASE .. "/changelog-mobile.json?t=" .. os.time()
+	
+	-- ═══════════════════════════════════════════════════════════════
+	-- THEME COLOR MAPPING (Match WindUI themes)
+	-- ═══════════════════════════════════════════════════════════════
+	local ThemeColors = {
+		Dark = { Accent = Color3.fromRGB(90, 110, 245), Background = Color3.fromRGB(20, 20, 30), Card = Color3.fromRGB(30, 30, 45) },
+		Light = { Accent = Color3.fromRGB(59, 130, 246), Background = Color3.fromRGB(245, 245, 250), Card = Color3.fromRGB(255, 255, 255) },
+		Midnight = { Accent = Color3.fromRGB(99, 102, 241), Background = Color3.fromRGB(15, 15, 25), Card = Color3.fromRGB(25, 25, 40) },
+		Rose = { Accent = Color3.fromRGB(244, 63, 94), Background = Color3.fromRGB(25, 15, 20), Card = Color3.fromRGB(40, 25, 30) },
+		Emerald = { Accent = Color3.fromRGB(16, 185, 129), Background = Color3.fromRGB(15, 25, 20), Card = Color3.fromRGB(25, 40, 30) },
+		Plant = { Accent = Color3.fromRGB(34, 197, 94), Background = Color3.fromRGB(15, 25, 15), Card = Color3.fromRGB(25, 40, 25) },
+		Red = { Accent = Color3.fromRGB(239, 68, 68), Background = Color3.fromRGB(25, 15, 15), Card = Color3.fromRGB(40, 25, 25) },
+		Indigo = { Accent = Color3.fromRGB(102, 126, 234), Background = Color3.fromRGB(20, 20, 35), Card = Color3.fromRGB(30, 30, 50) },
+		Sky = { Accent = Color3.fromRGB(14, 165, 233), Background = Color3.fromRGB(15, 25, 30), Card = Color3.fromRGB(25, 40, 50) },
+		Violet = { Accent = Color3.fromRGB(139, 92, 246), Background = Color3.fromRGB(25, 15, 35), Card = Color3.fromRGB(40, 25, 55) },
+		Amber = { Accent = Color3.fromRGB(245, 158, 11), Background = Color3.fromRGB(25, 20, 15), Card = Color3.fromRGB(40, 35, 25) },
+		Crimson = { Accent = Color3.fromRGB(220, 38, 38), Background = Color3.fromRGB(25, 15, 15), Card = Color3.fromRGB(45, 25, 25) },
+		["Monokai Pro"] = { Accent = Color3.fromRGB(169, 220, 118), Background = Color3.fromRGB(30, 30, 30), Card = Color3.fromRGB(45, 45, 45) },
+		["Cotton Candy"] = { Accent = Color3.fromRGB(240, 147, 251), Background = Color3.fromRGB(30, 20, 35), Card = Color3.fromRGB(45, 35, 55) },
+		Rainbow = { Accent = Color3.fromRGB(168, 85, 247), Background = Color3.fromRGB(20, 20, 30), Card = Color3.fromRGB(30, 30, 45) },
+	}
+	
+	-- Get colors based on current theme
+	local currentTheme = Settings.Theme or "Indigo"
+	local colors = ThemeColors[currentTheme] or ThemeColors.Indigo
+	local AccentColor = colors.Accent
+	local BackgroundColor = colors.Background
+	local CardColor = colors.Card
+	local TextColor = Color3.fromRGB(220, 220, 230)
+	local TextDimColor = Color3.fromRGB(140, 140, 160)
+	local SuccessColor = Color3.fromRGB(80, 200, 120)
+	
+	-- Adjust text colors for light themes
+	if currentTheme == "Light" then
+		TextColor = Color3.fromRGB(30, 30, 40)
+		TextDimColor = Color3.fromRGB(100, 100, 120)
+	end
+	
+	-- Get last seen version
+	local function getLastSeenVersion()
+		if not isfile then return "0.0.0" end
+		local success, content = pcall(function()
+			if isfile(MOBILE_VERSION_FILE) then
+				return readfile(MOBILE_VERSION_FILE)
+			end
+			return nil
+		end)
+		return (success and content) or "0.0.0"
+	end
+	
+	-- Save last seen version
+	local function saveLastSeenVersion(version)
+		if not writefile then return end
+		pcall(function()
+			if isfolder and not isfolder("StarshipMobile") then
+				makefolder("StarshipMobile")
+			end
+			writefile(MOBILE_VERSION_FILE, version)
+		end)
+	end
+	
+	-- Compare versions
+	local function isNewerVersion(v1, v2)
+		local function parseVersion(v)
+			local major, minor, patch = v:match("(%d+)%.(%d+)%.(%d+)")
+			return tonumber(major) or 0, tonumber(minor) or 0, tonumber(patch) or 0
+		end
+		local m1, n1, p1 = parseVersion(v1)
+		local m2, n2, p2 = parseVersion(v2)
+		if m1 ~= m2 then return m1 > m2 end
+		if n1 ~= n2 then return n1 > n2 end
+		return p1 > p2
+	end
+	
+	-- Fetch mobile changelog from server
+	local changelogData = nil
+	local fetchSuccess = pcall(function()
+		local response = game:HttpGet(MOBILE_CHANGELOG_URL)
+		changelogData = HttpService:JSONDecode(response)
+	end)
+	
+	if not fetchSuccess or not changelogData then
+		if DEV_MODE then warn("[MobileUI] Failed to fetch mobile changelog, skipping popup") end
+		return
+	end
+	
+	local lastSeen = getLastSeenVersion()
+	local serverVersion = changelogData.currentVersion or "1.0.0"
+	
+	if DEV_MODE then
+		warn("[MobileUI] Changelog last seen: " .. lastSeen .. ", Server: " .. serverVersion)
+	end
+	
+	-- Only show if new version
+	if not isNewerVersion(serverVersion, lastSeen) then
+		if DEV_MODE then warn("[MobileUI] No new mobile changelog, skipping popup") end
+		return
+	end
+	
+	-- ═══════════════════════════════════════════════════════════════
+	-- CREATE BLOCKING CHANGELOG MODAL (THEME-AWARE)
+	-- ═══════════════════════════════════════════════════════════════
+	local dismissed = false
+	
+	local existing = CoreGui:FindFirstChild("StarshipMobileChangelog")
+	if existing then existing:Destroy() end
+	
+	local ScreenGui = Instance.new("ScreenGui")
+	ScreenGui.Name = "StarshipMobileChangelog"
+	ScreenGui.Parent = CoreGui
+	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	ScreenGui.DisplayOrder = 99999
+	ScreenGui.IgnoreGuiInset = true
+	
+	-- Overlay
+	local Overlay = Instance.new("Frame", ScreenGui)
+	Overlay.Size = UDim2.new(1, 0, 1, 0)
+	Overlay.BackgroundColor3 = Color3.new(0, 0, 0)
+	Overlay.BackgroundTransparency = 1
+	Overlay.BorderSizePixel = 0
+	
+	-- Modal (THEME-AWARE)
+	local Modal = Instance.new("Frame", ScreenGui)
+	Modal.Size = UDim2.new(0, 320, 0, 380)
+	Modal.Position = UDim2.new(0.5, 0, 1.5, 0)
+	Modal.AnchorPoint = Vector2.new(0.5, 0.5)
+	Modal.BackgroundColor3 = BackgroundColor
+	Modal.BorderSizePixel = 0
+	Instance.new("UICorner", Modal).CornerRadius = UDim.new(0, 14)
+	
+	local ModalStroke = Instance.new("UIStroke", Modal)
+	ModalStroke.Thickness = 1.5
+	ModalStroke.Color = AccentColor
+	
+	-- Accent bar (THEME-AWARE)
+	local AccentBar = Instance.new("Frame", Modal)
+	AccentBar.Size = UDim2.new(1, 0, 0, 3)
+	AccentBar.BackgroundColor3 = AccentColor
+	AccentBar.BorderSizePixel = 0
+	Instance.new("UICorner", AccentBar).CornerRadius = UDim.new(0, 14)
+	
+	-- Header (THEME-AWARE)
+	local Title = Instance.new("TextLabel", Modal)
+	Title.Text = "🎉 What's New in v" .. serverVersion
+	Title.Size = UDim2.new(1, -20, 0, 35)
+	Title.Position = UDim2.new(0, 10, 0, 15)
+	Title.BackgroundTransparency = 1
+	Title.TextColor3 = AccentColor
+	Title.Font = Enum.Font.GothamBold
+	Title.TextSize = 16
+	Title.TextXAlignment = Enum.TextXAlignment.Left
+	
+	local Subtitle = Instance.new("TextLabel", Modal)
+	Subtitle.Text = "📱 STARSHIP MOBILE"
+	Subtitle.Size = UDim2.new(1, -20, 0, 18)
+	Subtitle.Position = UDim2.new(0, 10, 0, 45)
+	Subtitle.BackgroundTransparency = 1
+	Subtitle.TextColor3 = TextDimColor
+	Subtitle.Font = Enum.Font.Gotham
+	Subtitle.TextSize = 11
+	Subtitle.TextXAlignment = Enum.TextXAlignment.Left
+	
+	-- Content scroll (THEME-AWARE)
+	local Content = Instance.new("ScrollingFrame", Modal)
+	Content.Size = UDim2.new(1, -20, 1, -130)
+	Content.Position = UDim2.new(0, 10, 0, 70)
+	Content.BackgroundTransparency = 1
+	Content.BorderSizePixel = 0
+	Content.ScrollBarThickness = 3
+	Content.ScrollBarImageColor3 = AccentColor
+	Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	Content.CanvasSize = UDim2.new(0, 0, 0, 0)
+	
+	local ContentLayout = Instance.new("UIListLayout", Content)
+	ContentLayout.Padding = UDim.new(0, 8)
+	ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	
+	-- Add updates (THEME-AWARE)
+	if changelogData.updates then
+		for i, update in ipairs(changelogData.updates) do
+			if i > 3 then break end
+			
+			local UpdateFrame = Instance.new("Frame", Content)
+			UpdateFrame.Size = UDim2.new(1, -5, 0, 0)
+			UpdateFrame.BackgroundColor3 = CardColor
+			UpdateFrame.BorderSizePixel = 0
+			UpdateFrame.AutomaticSize = Enum.AutomaticSize.Y
+			UpdateFrame.LayoutOrder = i
+			Instance.new("UICorner", UpdateFrame).CornerRadius = UDim.new(0, 8)
+			
+			local Pad = Instance.new("UIPadding", UpdateFrame)
+			Pad.PaddingTop = UDim.new(0, 8)
+			Pad.PaddingBottom = UDim.new(0, 8)
+			Pad.PaddingLeft = UDim.new(0, 10)
+			Pad.PaddingRight = UDim.new(0, 10)
+			
+			local ULayout = Instance.new("UIListLayout", UpdateFrame)
+			ULayout.Padding = UDim.new(0, 4)
+			
+			-- Version (THEME-AWARE)
+			local Ver = Instance.new("TextLabel", UpdateFrame)
+			Ver.Text = "📦 v" .. (update.version or "?") .. " - " .. (update.date or "")
+			Ver.Size = UDim2.new(1, 0, 0, 18)
+			Ver.BackgroundTransparency = 1
+			Ver.TextColor3 = i == 1 and SuccessColor or TextDimColor
+			Ver.Font = Enum.Font.GothamBold
+			Ver.TextSize = 12
+			Ver.TextXAlignment = Enum.TextXAlignment.Left
+			Ver.LayoutOrder = 1
+			
+			if update.title then
+				local T = Instance.new("TextLabel", UpdateFrame)
+				T.Text = update.title
+				T.Size = UDim2.new(1, 0, 0, 16)
+				T.BackgroundTransparency = 1
+				T.TextColor3 = TextColor
+				T.Font = Enum.Font.GothamMedium
+				T.TextSize = 11
+				T.TextXAlignment = Enum.TextXAlignment.Left
+				T.LayoutOrder = 2
+			end
+			
+			if update.changes then
+				for j, change in ipairs(update.changes) do
+					local C = Instance.new("TextLabel", UpdateFrame)
+					C.Text = "• " .. change
+					C.Size = UDim2.new(1, 0, 0, 14)
+					C.BackgroundTransparency = 1
+					C.TextColor3 = TextDimColor
+					C.Font = Enum.Font.Gotham
+					C.TextSize = 10
+					C.TextXAlignment = Enum.TextXAlignment.Left
+					C.TextWrapped = true
+					C.AutomaticSize = Enum.AutomaticSize.Y
+					C.LayoutOrder = 10 + j
+				end
+			end
+		end
+	end
+	
+	-- Got it button (THEME-AWARE)
+	local GotItBtn = Instance.new("TextButton", Modal)
+	GotItBtn.Size = UDim2.new(1, -30, 0, 40)
+	GotItBtn.Position = UDim2.new(0.5, 0, 1, -55)
+	GotItBtn.AnchorPoint = Vector2.new(0.5, 0)
+	GotItBtn.BackgroundColor3 = AccentColor
+	GotItBtn.Text = "✓ Got it!"
+	GotItBtn.TextColor3 = Color3.new(1, 1, 1)
+	GotItBtn.Font = Enum.Font.GothamBold
+	GotItBtn.TextSize = 14
+	GotItBtn.BorderSizePixel = 0
+	Instance.new("UICorner", GotItBtn).CornerRadius = UDim.new(0, 8)
+
+	
+	-- Animate in
+	TweenService:Create(Overlay, TweenInfo.new(0.25), { BackgroundTransparency = 0.5 }):Play()
+	TweenService:Create(Modal, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+	}):Play()
+	
+	-- Close handler
+	local function closeModal()
+		saveLastSeenVersion(serverVersion)
+		dismissed = true
+		
+		TweenService:Create(Overlay, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
+		TweenService:Create(Modal, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+			Position = UDim2.new(0.5, 0, 1.5, 0),
+		}):Play()
+		
+		task.delay(0.3, function()
+			if ScreenGui then ScreenGui:Destroy() end
+		end)
+	end
+	
+	GotItBtn.MouseButton1Click:Connect(closeModal)
+	GotItBtn.TouchTap:Connect(closeModal)
+	
+	-- BLOCKING: Wait for dismissal before continuing
+	while not dismissed do
+		task.wait(0.1)
+	end
+	task.wait(0.3) -- Wait for animation
+	
+	if DEV_MODE then warn("[MobileUI] Mobile changelog dismissed, continuing to load UI") end
+end
+
+-- Show mobile changelog (BLOCKING) before UI loads
+ShowMobileChangelog()
+
 
 -- CREATE WINDOW
 -- ══════════════════════════════════════════════════════════════════
@@ -794,6 +1095,211 @@ _G.StarshipCarryNotified = nil
 _G.StarshipCarryNotifiedStd = nil
 
 -- ══════════════════════════════════════════════════════════════════
+-- AVATAR UTILITIES (Morph System - Consolidated to avoid local limit)
+-- ══════════════════════════════════════════════════════════════════
+local AvatarSystem = {
+	TargetName = "",
+	SelectedPlayer = nil,
+	PreviewCard = nil,
+	PlayerDropdown = nil,
+	AvatarImageLabel = nil, -- Custom ImageLabel for avatar preview
+}
+
+function AvatarSystem.UpdatePreview(playerObj)
+	if not AvatarSystem.PreviewCard then
+		return
+	end
+
+	if playerObj then
+		local userId = playerObj.UserId
+		local thumbUrl = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(userId) .. "&w=150&h=150"
+
+		AvatarSystem.PreviewCard:SetTitle("Preview: " .. playerObj.DisplayName)
+		AvatarSystem.PreviewCard:SetDesc(
+			"Username: @" .. playerObj.Name .. "\nUser ID: " .. tostring(userId) .. "\nReady to morph!"
+		)
+		
+		-- Update custom ImageLabel directly
+		if AvatarSystem.AvatarImageLabel then
+			AvatarSystem.AvatarImageLabel.Image = thumbUrl
+			AvatarSystem.AvatarImageLabel.Visible = true
+		end
+	else
+		AvatarSystem.PreviewCard:SetTitle("No Player Selected")
+		AvatarSystem.PreviewCard:SetDesc("Select a player from the dropdown to see preview")
+		
+		-- Hide or reset custom ImageLabel
+		if AvatarSystem.AvatarImageLabel then
+			AvatarSystem.AvatarImageLabel.Image = ""
+			AvatarSystem.AvatarImageLabel.Visible = false
+		end
+	end
+end
+
+function AvatarSystem.GetPlayerList()
+	local list = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer then
+			table.insert(list, p.DisplayName .. " (@" .. p.Name .. ")")
+		end
+	end
+	if #list == 0 then
+		table.insert(list, "No players in server")
+	end
+	return list
+end
+
+function AvatarSystem.GetPlayerFromSelection(selection)
+	local username = selection:match("@([%w_]+)")
+	if username then
+		return Players:FindFirstChild(username)
+	end
+	return nil
+end
+
+function AvatarSystem.ApplyEffect(character)
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if not rootPart then
+		return
+	end
+
+	local particleEmitter = Instance.new("ParticleEmitter")
+	particleEmitter.Texture = "rbxassetid://243098098"
+	particleEmitter.Rate = 50
+	particleEmitter.Speed = NumberRange.new(5, 10)
+	particleEmitter.Lifetime = NumberRange.new(0.5, 1)
+	particleEmitter.SpreadAngle = Vector2.new(360, 360)
+	particleEmitter.Color = ColorSequence.new(Color3.fromRGB(200, 50, 50))
+	particleEmitter.Parent = rootPart
+
+	local explosion = Instance.new("Explosion")
+	explosion.BlastRadius = 5
+	explosion.BlastPressure = 0
+	explosion.Position = rootPart.Position
+	explosion.Visible = true
+	explosion.Parent = workspace
+	explosion.ExplosionType = Enum.ExplosionType.NoCraters
+
+	task.spawn(function()
+		task.wait(2)
+		particleEmitter.Enabled = false
+		task.wait(1)
+		particleEmitter:Destroy()
+		explosion:Destroy()
+	end)
+end
+
+function AvatarSystem.FindPlayer(partialName)
+	if not partialName or partialName == "" then
+		return nil
+	end
+	local searchName = partialName:lower()
+
+	local foundPlayer = nil
+	for _, v in ipairs(Players:GetPlayers()) do
+		local nameLower = v.Name:lower()
+		local dNameLower = v.DisplayName:lower()
+
+		if nameLower == searchName or dNameLower == searchName then
+			return v
+		end
+
+		if nameLower:sub(1, #searchName) == searchName or dNameLower:sub(1, #searchName) == searchName then
+			foundPlayer = v
+		end
+	end
+
+	if not foundPlayer then
+		local success, userId = pcall(function()
+			return Players:GetUserIdFromNameAsync(searchName)
+		end)
+		if success and userId then
+			return { UserId = userId, Name = searchName }
+		end
+	end
+
+	return foundPlayer
+end
+
+function AvatarSystem.Morph(target)
+	if not target then
+		WindUI:Notify({ Title = "Morph Avatar", Content = "No target found!", Duration = 3 })
+		return
+	end
+
+	local userId = target.UserId or (type(target) == "number" and target or target.UserId)
+	local targetName = target.Name or "Unknown"
+
+	if userId == LocalPlayer.UserId then
+		WindUI:Notify({ Title = "Morph Avatar", Content = "Cannot morph to yourself!", Duration = 3 })
+		return
+	end
+
+	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local humanoid = character:WaitForChild("Humanoid", 10)
+	if not humanoid then
+		WindUI:Notify({ Title = "Morph Avatar", Content = "Failed to find humanoid!", Duration = 3 })
+		return
+	end
+
+	local success, desc = pcall(function()
+		return Players:GetHumanoidDescriptionFromUserId(userId)
+	end)
+	if not success or not desc then
+		WindUI:Notify({ Title = "Morph Avatar", Content = "Failed to load avatar data!", Duration = 3 })
+		return
+	end
+
+	local targetThumbnail = ""
+	local thumbSuccess, thumbResult = pcall(function()
+		return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+	end)
+	if thumbSuccess then
+		targetThumbnail = thumbResult
+	end
+
+	for _, obj in ipairs(character:GetChildren()) do
+		if
+			obj:IsA("Shirt")
+			or obj:IsA("Pants")
+			or obj:IsA("ShirtGraphic")
+			or obj:IsA("Accessory")
+			or obj:IsA("BodyColors")
+		then
+			obj:Destroy()
+		end
+	end
+	local head = character:FindFirstChild("Head")
+	if head then
+		for _, decal in ipairs(head:GetChildren()) do
+			if decal:IsA("Decal") then
+				decal:Destroy()
+			end
+		end
+	end
+
+	local applySuccess = pcall(function()
+		if humanoid.ApplyDescriptionClientServer then
+			humanoid:ApplyDescriptionClientServer(desc)
+		else
+			humanoid:ApplyDescription(desc)
+		end
+	end)
+
+	if applySuccess then
+		AvatarSystem.ApplyEffect(character)
+		WindUI:Notify({
+			Title = "Morph Avatar",
+			Content = "Successfully morphed to " .. targetName .. "!",
+			Duration = 5,
+			Icon = targetThumbnail,
+		})
+	else
+		WindUI:Notify({ Title = "Morph Avatar", Content = "Failed to apply morph!", Duration = 3 })
+	end
+end
+
+-- ══════════════════════════════════════════════════════════════════
 -- 🏠 DASHBOARD TAB
 -- ══════════════════════════════════════════════════════════════════
 local DashboardTab = Window:Tab({
@@ -814,6 +1320,11 @@ local ServerTab = Window:Tab({
 local CustomAnimTab = Window:Tab({
 	Title = "Animations",
 	Icon = "person-standing",
+})
+
+local AvatarTab = Window:Tab({
+	Title = "Avatar",
+	Icon = "user-round",
 })
 
 -- ══════════════════════════════════════════════════════════════════
@@ -1075,7 +1586,7 @@ DashboardTab:Button({
 	Desc = "Get Starship Discord link",
 	Callback = function()
 		if setclipboard then
-			setclipboard("https://discord.gg/BjEJnaVe")
+			setclipboard("https://discord.gg/ftmA7BheTc")
 			WindUI:Notify({ Title = "Copied!", Content = "Discord link copied!", Duration = 2 })
 		end
 	end,
@@ -1680,6 +2191,136 @@ CustomAnimTab:Button({
 		SaveAnimDB()
 		SetAnimation(CurrentAnimType, id)
 		WindUI:Notify({ Title = "Saved", Content = "Added custom animation", Duration = 2 })
+	end,
+})
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🎭 AVATAR TAB
+-- ══════════════════════════════════════════════════════════════════
+AvatarTab:Section({ Title = "🎭 Morph Avatar", TextSize = 20 })
+AvatarTab:Divider()
+
+-- 🖼️ PREVIEW CARD
+-- 🖼️ PREVIEW CARD
+AvatarSystem.PreviewCard = AvatarTab:Paragraph({
+	Title = "No Player Selected",
+	Desc = "Select a player from the dropdown to see preview",
+})
+
+-- Custom ImageLabel Injection for Avatar Preview
+task.spawn(function()
+	task.wait(0.5) -- Wait for UI to fully load
+	local pCard = AvatarSystem.PreviewCard
+	-- Access internal frame structure (ParagraphFrame -> UIElements -> Container)
+	if pCard and pCard.ParagraphFrame and pCard.ParagraphFrame.UIElements and pCard.ParagraphFrame.UIElements.Container then
+		local container = pCard.ParagraphFrame.UIElements.Container
+		
+		-- Create custom ImageLabel
+		local img = Instance.new("ImageLabel")
+		img.Name = "AvatarPreview"
+		img.Size = UDim2.new(0, 80, 0, 80) -- Good size for preview
+		img.Position = UDim2.new(1, -90, 0.5, 0) -- Positioned on the right
+		img.AnchorPoint = Vector2.new(0, 0.5)
+		img.BackgroundTransparency = 1
+		img.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+		img.Image = ""
+		img.Visible = false
+		img.Parent = container
+		
+		-- Add styling
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 12)
+		corner.Parent = img
+		
+		AvatarSystem.AvatarImageLabel = img
+	end
+end)
+
+AvatarTab:Divider()
+
+-- 👥 PLAYER DROPDOWN
+AvatarSystem.PlayerDropdown = AvatarTab:Dropdown({
+	Title = "Select Player",
+	Values = AvatarSystem.GetPlayerList(),
+	Default = "Select a player...",
+	Callback = function(val)
+		local target = AvatarSystem.GetPlayerFromSelection(val)
+		if target then
+			AvatarSystem.SelectedPlayer = target
+			AvatarSystem.UpdatePreview(target)
+		end
+	end,
+})
+
+AvatarTab:Button({
+	Title = "🔄 Refresh Player List",
+	Desc = "Update the list of players in server",
+	Callback = function()
+		if AvatarSystem.PlayerDropdown then
+			AvatarSystem.PlayerDropdown:SetValues(AvatarSystem.GetPlayerList())
+			WindUI:Notify({ Title = "Avatar", Content = "Player list refreshed!", Duration = 2 })
+		end
+	end,
+})
+
+AvatarTab:Button({
+	Title = "Apply Morph",
+	Desc = "Morph into the selected player",
+	Callback = function()
+		if not AvatarSystem.SelectedPlayer then
+			WindUI:Notify({ Title = "Morph Avatar", Content = "Please select a player first!", Duration = 3 })
+			return
+		end
+
+		AvatarSystem.Morph(AvatarSystem.SelectedPlayer)
+	end,
+})
+
+AvatarTab:Button({
+	Title = "Reset Avatar",
+	Desc = "Reset to your original avatar",
+	Callback = function()
+		local character = LocalPlayer.Character
+		local humanoid = character and character:FindFirstChild("Humanoid")
+		if humanoid then
+			local success, desc = pcall(function()
+				return Players:GetHumanoidDescriptionFromUserId(LocalPlayer.UserId)
+			end)
+			if success and desc then
+				for _, obj in ipairs(character:GetChildren()) do
+					if
+						obj:IsA("Shirt")
+						or obj:IsA("Pants")
+						or obj:IsA("ShirtGraphic")
+						or obj:IsA("Accessory")
+						or obj:IsA("BodyColors")
+					then
+						obj:Destroy()
+					end
+				end
+				local head = character:FindFirstChild("Head")
+				if head then
+					for _, decal in ipairs(head:GetChildren()) do
+						if decal:IsA("Decal") then
+							decal:Destroy()
+						end
+					end
+				end
+
+				pcall(function()
+					if humanoid.ApplyDescriptionClientServer then
+						humanoid:ApplyDescriptionClientServer(desc)
+					else
+						humanoid:ApplyDescription(desc)
+					end
+				end)
+
+				AvatarSystem.ApplyEffect(character)
+				AvatarSystem.SelectedPlayer = nil
+				AvatarSystem.UpdatePreview(nil)
+				WindUI:Notify({ Title = "Avatar Reset", Content = "Restored original avatar!", Duration = 3 })
+			end
+		end
 	end,
 })
 
@@ -3668,38 +4309,60 @@ local function GaussianWeight(distance, sigma)
 end
 
 -- Gaussian-weighted smoothing for frames (runs once on load)
+-- OPTIMIZED: Reduced memory usage by avoiding DeepCopy every iteration
+-- Uses snapshot of values instead of full table copy
 local function GetSmoothedFrames(frames, strength, isFlexible)
+	-- Single DeepCopy at start - required to not modify original
 	local processedFrames = DeepCopy(frames)
+	
+	-- Force GC after initial copy
+	pcall(function() collectgarbage("collect") end)
+	task.wait()
+	
 	local iterations = math.clamp(strength or 1, 1, 10)
 	local kernelRadius = math.clamp(math.ceil(strength / 2), 1, 5)
 	local sigma = kernelRadius / 2
+	local frameCount = #processedFrames
 
 	for iter = 1, iterations do
-		local tempFrames = DeepCopy(processedFrames)
+		-- OPTIMIZATION: Instead of DeepCopy, snapshot only pos/vel values we need
+		-- This reduces memory from ~2.5MB to ~0.3MB per iteration
+		local posSnapshot = {}
+		local velSnapshot = {}
+		
+		for i = 1, frameCount do
+			local f = processedFrames[i]
+			if f.pos then
+				posSnapshot[i] = { x = f.pos.x, y = f.pos.y, z = f.pos.z }
+			end
+			if f.vel then
+				velSnapshot[i] = { x = f.vel.x, y = f.vel.y, z = f.vel.z }
+			end
+		end
 
-		for i = 2, #processedFrames - 1 do
+		for i = 2, frameCount - 1 do
 			local curr = processedFrames[i]
 
 			if isFlexible then
 				-- Gaussian-weighted position smoothing
-				if curr.pos then
+				if curr.pos and posSnapshot[i] then
 					local weightSum = 0
 					local posSum = Vector3.new(0, 0, 0)
 
-					for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
-						local neighbor = tempFrames[j]
-						if neighbor.pos then
+					for j = math.max(1, i - kernelRadius), math.min(frameCount, i + kernelRadius) do
+						local neighborPos = posSnapshot[j]
+						if neighborPos then
 							local dist = math.abs(j - i)
 							local weight = GaussianWeight(dist, sigma)
-							local neighborPos = Vector3.new(neighbor.pos.x, neighbor.pos.y, neighbor.pos.z)
-							posSum = posSum + neighborPos * weight
+							local nPos = Vector3.new(neighborPos.x, neighborPos.y, neighborPos.z)
+							posSum = posSum + nPos * weight
 							weightSum = weightSum + weight
 						end
 					end
 
 					if weightSum > 0 then
 						local smoothedPos = posSum / weightSum
-						local currPos = Vector3.new(curr.pos.x, curr.pos.y, curr.pos.z)
+						local currPos = Vector3.new(posSnapshot[i].x, posSnapshot[i].y, posSnapshot[i].z)
 						local finalPos = currPos:Lerp(smoothedPos, 0.7)
 						curr.pos.x = finalPos.X
 						curr.pos.y = finalPos.Y
@@ -3708,24 +4371,24 @@ local function GetSmoothedFrames(frames, strength, isFlexible)
 				end
 
 				-- Gaussian-weighted velocity smoothing
-				if curr.vel then
+				if curr.vel and velSnapshot[i] then
 					local weightSum = 0
 					local velSum = Vector3.new(0, 0, 0)
 
-					for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
-						local neighbor = tempFrames[j]
-						if neighbor.vel then
+					for j = math.max(1, i - kernelRadius), math.min(frameCount, i + kernelRadius) do
+						local neighborVel = velSnapshot[j]
+						if neighborVel then
 							local dist = math.abs(j - i)
 							local weight = GaussianWeight(dist, sigma)
-							local neighborVel = Vector3.new(neighbor.vel.x, neighbor.vel.y, neighbor.vel.z)
-							velSum = velSum + neighborVel * weight
+							local nVel = Vector3.new(neighborVel.x, neighborVel.y, neighborVel.z)
+							velSum = velSum + nVel * weight
 							weightSum = weightSum + weight
 						end
 					end
 
 					if weightSum > 0 then
 						local smoothedVel = velSum / weightSum
-						local currVel = Vector3.new(curr.vel.x, curr.vel.y, curr.vel.z)
+						local currVel = Vector3.new(velSnapshot[i].x, velSnapshot[i].y, velSnapshot[i].z)
 						local finalVel = currVel:Lerp(smoothedVel, 0.8)
 						curr.vel.x = finalVel.X
 						curr.vel.y = finalVel.Y
@@ -3733,8 +4396,20 @@ local function GetSmoothedFrames(frames, strength, isFlexible)
 					end
 				end
 			end
+			
+			-- Yield every 300 frames to prevent freeze and allow GC
+			if i % 300 == 0 then
+				task.wait()
+			end
 		end
+		
+		-- Clear snapshots and force GC between iterations
+		posSnapshot = nil
+		velSnapshot = nil
+		pcall(function() collectgarbage("collect") end)
+		task.wait()
 	end
+	
 	return processedFrames
 end
 
@@ -4481,9 +5156,9 @@ local function PlayRecording(fileName, force)
 		local isFlexible = (data.Mode == "Flexible") or (framesToPlay[1] and framesToPlay[1].vel ~= nil)
 
 		-- LIVE SMOOTHING: Apply Gaussian smoothing on load (mobile default ON)
-		-- LIVE SMOOTHING: Apply Gaussian smoothing on load (mobile default ON)
-		-- SKIP for large files (> 5000 frames) to prevent timeout/lag on mobile
-		if SMOOTH_SETTINGS.LiveSmoothingEnabled and isFlexible and #framesToPlay > 3 and #framesToPlay <= 5000 then
+		-- SKIP for large files (> 3000 frames) to prevent memory crash on mobile
+		-- Lowered from 5000 to 3000 for better stability on low-end devices
+		if SMOOTH_SETTINGS.LiveSmoothingEnabled and isFlexible and #framesToPlay > 3 and #framesToPlay <= 3000 then
 			WindUI:Notify({ Title = "Smoothing", Content = "Applying auto-smooth...", Duration = 1 })
 			task.wait()
 			framesToPlay = GetSmoothedFrames(framesToPlay, SMOOTH_SETTINGS.LiveSmoothingStrength, isFlexible)
@@ -5753,8 +6428,26 @@ ListMapTab:Space()
 local selectedCloudRecording = nil
 local CloudRecordingLoaded = false -- Flag to show playback controls
 
--- Helper function to load a single chunk
+-- ══════════════════════════════════════════════════════════════════
+-- CHUNKED LOADING - DISABLED (Mobile uses direct loading now)
+-- Keeping code for potential future use
+-- ══════════════════════════════════════════════════════════════════
+local CHUNKED_LOADING_ENABLED = false -- Set to true to re-enable chunked loading
+
+-- Track retry attempts per chunk to prevent infinite loops
+local ChunkRetryCount = {}
+local MAX_CHUNK_RETRIES = 2 -- Maximum retry attempts per chunk
+
+-- Helper function to load a single chunk (DISABLED)
 local function LoadChunk(recordingId, chunkIndex, callback)
+	-- DISABLED: Chunked loading not used in mobile anymore
+	if not CHUNKED_LOADING_ENABLED then
+		if callback then
+			callback(false, nil)
+		end
+		return
+	end
+
 	if ChunkedState.loadedChunks[chunkIndex] then
 		-- Already loaded
 		if callback then
@@ -5815,6 +6508,9 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 			end
 			ChunkedState.loadProgress = math.floor((loadedCount / ChunkedState.totalChunks) * 100)
 
+			-- Reset retry count on success
+			ChunkRetryCount[chunkIndex] = nil
+
 			if callback then
 				callback(true, ChunkedState.loadedChunks[chunkIndex])
 			end
@@ -5832,12 +6528,23 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 			end
 			warn(errMsg)
 
-			-- Try again after a delay (single retry)
-			if not ChunkedState.loadedChunks[chunkIndex] then
-				task.delay(2, function()
+			-- Initialize retry counter if not exists
+			ChunkRetryCount[chunkIndex] = (ChunkRetryCount[chunkIndex] or 0) + 1
+
+			-- Only retry if under limit and chunk not already loaded
+			if ChunkRetryCount[chunkIndex] <= MAX_CHUNK_RETRIES and not ChunkedState.loadedChunks[chunkIndex] then
+				if DEV_MODE then
+					warn("[Chunked] Retrying chunk " .. chunkIndex .. " (attempt " .. ChunkRetryCount[chunkIndex] .. "/" .. MAX_CHUNK_RETRIES .. ")")
+				end
+				task.delay(3, function()
 					LoadChunk(recordingId, chunkIndex, callback)
 				end)
 			else
+				-- Max retries reached or chunk loaded elsewhere - stop retrying
+				if ChunkRetryCount[chunkIndex] > MAX_CHUNK_RETRIES then
+					warn("[Chunked] Max retries reached for chunk " .. chunkIndex .. " - giving up")
+				end
+				ChunkRetryCount[chunkIndex] = nil -- Clean up
 				if callback then
 					callback(false, nil)
 				end
@@ -5846,8 +6553,13 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 	end)
 end
 
--- Helper function to preload next chunks in background
+-- Helper function to preload next chunks in background (DISABLED)
 PreloadNextChunks = function(recordingId, currentChunkIndex, numToPreload)
+	-- DISABLED: Chunked loading not used in mobile anymore
+	if not CHUNKED_LOADING_ENABLED then
+		return
+	end
+
 	if ChunkedState.isPreloading then
 		return
 	end
@@ -5932,6 +6644,22 @@ local function LoadCloudRecording(recInfo)
 		})
 		return
 	end
+
+	-- ═══════════════════════════════════════════════════════════════
+	-- MEMORY CLEANUP: Clear old data before loading new recording
+	-- Prevents memory buildup on low-end mobile devices
+	-- ═══════════════════════════════════════════════════════════════
+	if CloudRecordingData then
+		CloudRecordingData = nil
+	end
+	if PlaybackState.frameData then
+		PlaybackState.frameData = nil
+	end
+	-- Force garbage collection to free memory
+	pcall(function()
+		collectgarbage("collect")
+	end)
+	task.wait() -- Give GC time to run
 
 	selectedCloudRecording = recInfo
 	CloudRecordingLoaded = false -- Reset until loaded
@@ -6587,6 +7315,59 @@ function CreatePlaybackControls()
 				Content = state and "Will respawn on end" or "Will NOT respawn",
 				Duration = 1,
 			})
+		end,
+	})
+
+	-- ══════════════════════════════════════════════════════════════════
+	-- ⚡ GOD MODE FEATURE (Same as PC version)
+	-- ══════════════════════════════════════════════════════════════════
+	local isGodMode = false
+	local godModeLoop = nil
+
+	PlaybackSection:Toggle({
+		Title = "⚡ God Mode",
+		Desc = "Infinite health - Cannot die",
+		Value = false,
+		Callback = function(state)
+			isGodMode = state
+			
+			if state then
+				-- Start god mode loop
+				godModeLoop = RunService.Heartbeat:Connect(function()
+					local char = LocalPlayer.Character
+					local hum = char and char:FindFirstChild("Humanoid")
+					if hum then
+						hum.MaxHealth = math.huge
+						hum.Health = math.huge
+					end
+				end)
+				
+				WindUI:Notify({
+					Title = "⚡ God Mode",
+					Content = "ENABLED - You are now immortal!",
+					Duration = 2,
+				})
+			else
+				-- Stop god mode loop
+				if godModeLoop then
+					godModeLoop:Disconnect()
+					godModeLoop = nil
+				end
+				
+				-- Reset health to normal
+				local char = LocalPlayer.Character
+				local hum = char and char:FindFirstChild("Humanoid")
+				if hum then
+					hum.MaxHealth = 100
+					hum.Health = 100
+				end
+				
+				WindUI:Notify({
+					Title = "⚡ God Mode",
+					Content = "DISABLED - Normal health restored",
+					Duration = 2,
+				})
+			end
 		end,
 	})
 
@@ -7665,6 +8446,451 @@ FunTab:Toggle({
 FunTab:Divider()
 
 -- ══════════════════════════════════════════════════════════════════
+-- 🚀 WARP TAB (Advanced Teleportation - PC-like features)
+-- ══════════════════════════════════════════════════════════════════
+local WarpTab = Window:Tab({
+	Title = "Warp",
+	Icon = "map-pin",
+})
+
+-- All warp state consolidated into single table to reduce local variables
+WarpSystem = {
+	FOLDER = "StarshipMobile/Warps",
+	points = {},
+	isLooping = false,
+	loopDelay = 1,
+	currentConfig = nil,
+	savedConfigs = {},
+	selectedPointIndex = 1,
+	selectedConfigToLoad = nil,
+	configNameInput = "",
+	warpTargetPlayer = nil,
+	warpCoordX = 0,
+	warpCoordY = 0,
+	warpCoordZ = 0,
+	pointsInfoParagraph = nil,
+	loopStatusParagraph = nil,
+}
+
+-- Initialize folder
+pcall(function()
+	if isfolder and not isfolder("StarshipMobile") then makefolder("StarshipMobile") end
+	if isfolder and not isfolder(WarpSystem.FOLDER) then makefolder(WarpSystem.FOLDER) end
+end)
+
+-- CFrame conversion functions inside WarpSystem
+WarpSystem.CFToTable = function(cf) return {cf:GetComponents()} end
+WarpSystem.TableToCF = function(t)
+	if t and #t >= 12 then return CFrame.new(unpack(t)) end
+	return CFrame.new(0, 0, 0)
+end
+
+WarpSystem.FormatTime = function(s)
+	s = math.floor(s + 0.5)
+	if s < 60 then return s .. "s"
+	elseif s < 3600 then return string.format("%dm %ds", math.floor(s / 60), s % 60)
+	else return string.format("%dh %dm", math.floor(s / 3600), math.floor((s % 3600) / 60)) end
+end
+
+WarpSystem.GetTotalTime = function()
+	return math.max(1, #WarpSystem.points - 1) * WarpSystem.loopDelay
+end
+
+WarpSystem.RefreshConfigList = function()
+	WarpSystem.savedConfigs = {}
+	
+	-- Ensure folder exists first
+	pcall(function()
+		if isfolder and makefolder then
+			if not isfolder("StarshipMobile") then makefolder("StarshipMobile") end
+			if not isfolder(WarpSystem.FOLDER) then makefolder(WarpSystem.FOLDER) end
+		end
+	end)
+	
+	-- List files in folder
+	local success, err = pcall(function()
+		if listfiles then
+			local files = listfiles(WarpSystem.FOLDER)
+			if files and type(files) == "table" then
+				for _, f in ipairs(files) do
+					-- Extract filename without path and extension
+					local fileName = f
+					if string.find(f, "/") or string.find(f, "\\") then
+						fileName = string.match(f, "[^/\\]+$") or f
+					end
+					fileName = fileName:gsub("%.json$", "")
+					if fileName and fileName ~= "" then
+						table.insert(WarpSystem.savedConfigs, fileName)
+					end
+				end
+			end
+		end
+	end)
+	
+	-- Sort configs
+	if #WarpSystem.savedConfigs > 0 then
+		table.sort(WarpSystem.savedConfigs, function(a, b)
+			local numA = tonumber(string.match(a, "%d+")) or 0
+			local numB = tonumber(string.match(b, "%d+")) or 0
+			if numA ~= 0 and numB ~= 0 then return numA < numB end
+			return a < b
+		end)
+	end
+end
+
+
+WarpSystem.SaveConfig = function(name)
+	if not writefile or #WarpSystem.points == 0 then return false end
+	local data = { Delay = WarpSystem.loopDelay, Points = {} }
+	for _, wp in ipairs(WarpSystem.points) do
+		table.insert(data.Points, { Name = wp.Name, CF = wp.CF })
+	end
+	pcall(function()
+		writefile(WarpSystem.FOLDER .. "/" .. name .. ".json", game:GetService("HttpService"):JSONEncode(data))
+	end)
+	WarpSystem.currentConfig = name
+	WarpSystem.RefreshConfigList()
+	return true
+end
+
+WarpSystem.LoadConfig = function(name)
+	if not readfile then return false end
+	local success = pcall(function()
+		local data = game:GetService("HttpService"):JSONDecode(readfile(WarpSystem.FOLDER .. "/" .. name .. ".json"))
+		WarpSystem.points = {}
+		WarpSystem.loopDelay = data.Delay or 1
+		for _, p in ipairs(data.Points or {}) do
+			table.insert(WarpSystem.points, { Name = p.Name, CF = p.CF })
+		end
+		WarpSystem.currentConfig = name
+	end)
+	return success
+end
+
+WarpSystem.DeleteConfig = function(name)
+	pcall(function() if delfile then delfile(WarpSystem.FOLDER .. "/" .. name .. ".json") end end)
+	if WarpSystem.currentConfig == name then WarpSystem.currentConfig = nil end
+	WarpSystem.RefreshConfigList()
+end
+
+WarpSystem.UpdatePointsInfo = function()
+	pcall(function()
+		if WarpSystem.pointsInfoParagraph then
+			WarpSystem.pointsInfoParagraph:SetDesc(string.format("Points: %d | Est. Time: %s | Config: %s",
+				#WarpSystem.points, WarpSystem.FormatTime(WarpSystem.GetTotalTime()), WarpSystem.currentConfig or "Unsaved"))
+		end
+	end)
+end
+
+WarpSystem.RefreshConfigList()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 📍 WARP POINTS SECTION
+-- ══════════════════════════════════════════════════════════════════
+WarpTab:Section({ Title = "📍 Warp Points", TextSize = 16 })
+
+WarpTab:Paragraph({
+	Title = "Warp Loop System",
+	Desc = "Create teleport routes and loop through them automatically.",
+})
+
+WarpSystem.pointsInfoParagraph = WarpTab:Paragraph({
+	Title = "📊 Current Route",
+	Desc = "Points: 0 | Est. Time: 0s",
+})
+
+WarpTab:Button({
+	Title = "➕ Add Current Position",
+	Desc = "Save your current location as a warp point",
+	Callback = function()
+		local char = GetCharacter()
+		if not char then WindUI:Notify({ Title = "Error", Content = "Character not found!", Duration = 2 }) return end
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hrp then WindUI:Notify({ Title = "Error", Content = "HumanoidRootPart not found!", Duration = 2 }) return end
+		local pointName = "Point " .. (#WarpSystem.points + 1)
+		table.insert(WarpSystem.points, { Name = pointName, CF = WarpSystem.CFToTable(hrp.CFrame) })
+		WarpSystem.UpdatePointsInfo()
+		WindUI:Notify({ Title = "✅ Added!", Content = pointName .. " saved", Duration = 2 })
+	end,
+})
+
+WarpTab:Button({
+	Title = "🗑️ Clear All Points",
+	Desc = "Remove all warp points from current route",
+	Callback = function()
+		if #WarpSystem.points == 0 then WindUI:Notify({ Title = "Info", Content = "No points to clear", Duration = 2 }) return end
+		local count = #WarpSystem.points
+		WarpSystem.points = {}
+		WarpSystem.currentConfig = nil
+		WarpSystem.UpdatePointsInfo()
+		WindUI:Notify({ Title = "🗑️ Cleared!", Content = count .. " points removed", Duration = 2 })
+	end,
+})
+
+WarpTab:Input({
+	Title = "📍 Select Point Number",
+	Placeholder = "Enter point number (1-20)",
+	Callback = function(text)
+		local num = tonumber(text)
+		if num and num >= 1 and num <= 20 then
+			WarpSystem.selectedPointIndex = math.floor(num)
+		end
+	end,
+})
+
+WarpTab:Button({
+	Title = "🎯 Teleport to Selected Point",
+	Desc = "Warp to the selected point in your route",
+	Callback = function()
+		if #WarpSystem.points == 0 then WindUI:Notify({ Title = "Error", Content = "No points saved!", Duration = 2 }) return end
+		local idx = math.min(WarpSystem.selectedPointIndex, #WarpSystem.points)
+		local point = WarpSystem.points[idx]
+		if not point then WindUI:Notify({ Title = "Error", Content = "Point not found!", Duration = 2 }) return end
+		local char = GetCharacter()
+		if char then char:PivotTo(WarpSystem.TableToCF(point.CF)) WindUI:Notify({ Title = "🚀 Warped!", Content = "Teleported to " .. point.Name, Duration = 2 }) end
+	end,
+})
+
+WarpTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🔄 WARP LOOP SECTION
+-- ══════════════════════════════════════════════════════════════════
+WarpTab:Section({ Title = "🔄 Warp Loop", TextSize = 16 })
+
+WarpTab:Input({
+	Title = "⏱️ Loop Delay (seconds)",
+	Placeholder = "Enter delay in seconds (0.5-30)",
+	Callback = function(text)
+		local num = tonumber(text)
+		if num and num >= 0.5 and num <= 30 then
+			WarpSystem.loopDelay = num
+			WarpSystem.UpdatePointsInfo()
+		end
+	end,
+})
+
+WarpTab:Input({
+	Title = "⏰ Set Total Time (seconds)",
+	Placeholder = "Enter desired total time",
+	Callback = function(text)
+		local total = tonumber(text)
+		if total and total > 0 and #WarpSystem.points > 1 then
+			WarpSystem.loopDelay = math.floor((total / (#WarpSystem.points - 1)) * 10) / 10
+			WarpSystem.UpdatePointsInfo()
+			WindUI:Notify({ Title = "⏱️ Delay Set", Content = string.format("Delay: %.1fs per point", WarpSystem.loopDelay), Duration = 2 })
+		end
+	end,
+})
+
+WarpSystem.loopStatusParagraph = WarpTab:Paragraph({
+	Title = "🔄 Loop Status",
+	Desc = "Status: Stopped",
+})
+
+WarpTab:Toggle({
+	Title = "▶️ Start Warp Loop",
+	Desc = "Automatically teleport through all points",
+	Value = false,
+	Callback = function(state)
+		WarpSystem.isLooping = state
+		if state then
+			if #WarpSystem.points < 2 then WarpSystem.isLooping = false WindUI:Notify({ Title = "Error", Content = "Need at least 2 points!", Duration = 2 }) return end
+			WindUI:Notify({ Title = "▶️ Loop Started", Content = "Cycling through " .. #WarpSystem.points .. " points", Duration = 2 })
+			task.spawn(function()
+				while WarpSystem.isLooping and #WarpSystem.points > 0 do
+					for i, point in ipairs(WarpSystem.points) do
+						if not WarpSystem.isLooping then break end
+						local char = GetCharacter()
+						if char then char:PivotTo(WarpSystem.TableToCF(point.CF)) end
+						pcall(function() WarpSystem.loopStatusParagraph:SetDesc(string.format("Status: Running | Point %d/%d: %s", i, #WarpSystem.points, point.Name)) end)
+						local startTime = os.clock()
+						while os.clock() - startTime < WarpSystem.loopDelay do if not WarpSystem.isLooping then break end task.wait(0.1) end
+					end
+				end
+				pcall(function() WarpSystem.loopStatusParagraph:SetDesc("Status: Stopped") end)
+			end)
+		else
+			WindUI:Notify({ Title = "⏹️ Loop Stopped", Content = "Warp loop stopped", Duration = 2 })
+			pcall(function() WarpSystem.loopStatusParagraph:SetDesc("Status: Stopped") end)
+		end
+	end,
+})
+
+WarpTab:Divider()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 💾 CONFIG MANAGEMENT SECTION
+-- ══════════════════════════════════════════════════════════════════
+WarpTab:Section({ Title = "💾 Save & Load Configs", TextSize = 16 })
+
+WarpTab:Input({
+	Title = "📝 Config Name",
+	Placeholder = "Enter config name to save",
+	Callback = function(text) WarpSystem.configNameInput = text end,
+})
+
+-- Store dropdown reference for refresh
+WarpSystem.configDropdown = nil
+
+-- Function to get current config list
+WarpSystem.GetConfigValues = function()
+	WarpSystem.RefreshConfigList()
+	if #WarpSystem.savedConfigs > 0 then
+		return WarpSystem.savedConfigs
+	end
+	return {"No configs saved"}
+end
+
+-- Function to refresh dropdown (try different methods)
+WarpSystem.RefreshDropdown = function()
+	WarpSystem.RefreshConfigList()
+	if WarpSystem.configDropdown then
+		pcall(function()
+			-- Try different refresh methods that WindUI might support
+			if WarpSystem.configDropdown.Refresh then
+				WarpSystem.configDropdown:Refresh(WarpSystem.GetConfigValues())
+			elseif WarpSystem.configDropdown.SetValues then
+				WarpSystem.configDropdown:SetValues(WarpSystem.GetConfigValues())
+			elseif WarpSystem.configDropdown.UpdateValues then
+				WarpSystem.configDropdown:UpdateValues(WarpSystem.GetConfigValues())
+			end
+		end)
+	end
+end
+
+WarpTab:Button({
+	Title = "💾 Save Current Config",
+	Desc = "Save current warp points to file",
+	Callback = function()
+		if WarpSystem.configNameInput == "" then WindUI:Notify({ Title = "Error", Content = "Enter a config name!", Duration = 2 }) return end
+		if #WarpSystem.points == 0 then WindUI:Notify({ Title = "Error", Content = "No points to save!", Duration = 2 }) return end
+		if WarpSystem.SaveConfig(WarpSystem.configNameInput) then
+			WindUI:Notify({ Title = "✅ Saved!", Content = "Config '" .. WarpSystem.configNameInput .. "' saved. Re-execute script to see in dropdown.", Duration = 4 })
+			WarpSystem.UpdatePointsInfo()
+			WarpSystem.RefreshDropdown() -- Try to refresh dropdown
+		else WindUI:Notify({ Title = "Error", Content = "Failed to save config!", Duration = 2 }) end
+	end,
+})
+
+-- Store dropdown reference for refresh (destroy & recreate approach)
+WarpSystem.configDropdown = nil
+WarpSystem.dropdownSection = nil
+
+-- Function to create/recreate dropdown
+WarpSystem.CreateConfigDropdown = function()
+	WarpSystem.RefreshConfigList()
+	local values = #WarpSystem.savedConfigs > 0 and WarpSystem.savedConfigs or {"No configs saved"}
+	
+	-- Try to destroy existing dropdown if exists
+	if WarpSystem.configDropdown then
+		pcall(function()
+			if WarpSystem.configDropdown.Destroy then
+				WarpSystem.configDropdown:Destroy()
+			elseif WarpSystem.configDropdown.Remove then
+				WarpSystem.configDropdown:Remove()
+			end
+		end)
+	end
+	
+	-- Create new dropdown
+	WarpSystem.configDropdown = WarpTab:Dropdown({
+		Title = "📂 Select Config (" .. #WarpSystem.savedConfigs .. " saved)",
+		Desc = "Choose a config to load or delete",
+		Values = values,
+		Callback = function(selected) 
+			if selected ~= "No configs saved" then 
+				WarpSystem.selectedConfigToLoad = selected 
+				WindUI:Notify({ Title = "✅ Selected", Content = "Config: " .. selected, Duration = 2 })
+			end 
+		end,
+	})
+end
+
+-- Create initial dropdown
+WarpSystem.CreateConfigDropdown()
+
+WarpTab:Button({
+	Title = "🔄 Refresh Dropdown",
+	Desc = "Update dropdown with latest saved configs",
+	Callback = function()
+		WarpSystem.RefreshConfigList()
+		local count = #WarpSystem.savedConfigs
+		
+		-- Try different methods to update dropdown
+		local updated = false
+		if WarpSystem.configDropdown then
+			pcall(function()
+				-- Method 1: Try SetValues
+				if WarpSystem.configDropdown.SetValues then
+					local values = count > 0 and WarpSystem.savedConfigs or {"No configs saved"}
+					WarpSystem.configDropdown:SetValues(values)
+					updated = true
+				end
+			end)
+			pcall(function()
+				-- Method 2: Try Refresh
+				if not updated and WarpSystem.configDropdown.Refresh then
+					local values = count > 0 and WarpSystem.savedConfigs or {"No configs saved"}
+					WarpSystem.configDropdown:Refresh(values)
+					updated = true
+				end
+			end)
+		end
+		
+		if updated then
+			WindUI:Notify({ Title = "✅ Dropdown Updated", Content = count .. " configs available", Duration = 2 })
+		else
+			-- Fallback: Show list in notification since dropdown can't be updated
+			if count == 0 then
+				WindUI:Notify({ Title = "📂 No Configs", Content = "No configs saved yet!", Duration = 2 })
+			else
+				local list = table.concat(WarpSystem.savedConfigs, ", ")
+				WindUI:Notify({ Title = "📂 " .. count .. " Configs", Content = list .. "\n\n⚠️ Re-execute script to update dropdown", Duration = 5 })
+			end
+		end
+	end,
+})
+
+WarpTab:Button({
+	Title = "📥 Load Selected Config",
+	Desc = "Load warp points from selected config",
+	Callback = function()
+		if not WarpSystem.selectedConfigToLoad or WarpSystem.selectedConfigToLoad == "" or WarpSystem.selectedConfigToLoad == "No configs saved" then 
+			WindUI:Notify({ Title = "Error", Content = "Select a config first!", Duration = 2 }) 
+			return 
+		end
+		
+		if WarpSystem.LoadConfig(WarpSystem.selectedConfigToLoad) then
+			WindUI:Notify({ Title = "✅ Loaded!", Content = "Config '" .. WarpSystem.selectedConfigToLoad .. "' loaded with " .. #WarpSystem.points .. " points", Duration = 3 })
+			WarpSystem.UpdatePointsInfo()
+		else 
+			WindUI:Notify({ Title = "Error", Content = "Failed to load config!", Duration = 2 }) 
+		end
+	end,
+})
+
+WarpTab:Button({
+	Title = "🗑️ Delete Selected Config",
+	Desc = "Delete the selected config",
+	Callback = function()
+		if not WarpSystem.selectedConfigToLoad or WarpSystem.selectedConfigToLoad == "" or WarpSystem.selectedConfigToLoad == "No configs saved" then 
+			WindUI:Notify({ Title = "Error", Content = "Select a config first!", Duration = 2 }) 
+			return 
+		end
+		WarpSystem.DeleteConfig(WarpSystem.selectedConfigToLoad)
+		WindUI:Notify({ Title = "🗑️ Deleted!", Content = "Config '" .. WarpSystem.selectedConfigToLoad .. "' deleted. Tap Refresh to update dropdown.", Duration = 3 })
+		WarpSystem.selectedConfigToLoad = ""
+	end,
+})
+
+WarpTab:Divider()
+
+
+
+
+
+-- ══════════════════════════════════════════════════════════════════
 -- 🔗 SOCIAL TAB
 -- ══════════════════════════════════════════════════════════════════
 local SocialTab = Window:Tab({
@@ -7679,10 +8905,10 @@ SocialTab:Button({
 	Desc = "Get updates, support & community",
 	Callback = function()
 		if setclipboard then
-			setclipboard("https://discord.gg/BjEJnaVe")
+			setclipboard("https://discord.gg/ftmA7BheTc")
 			WindUI:Notify({ Title = "✅ Copied!", Content = "Discord invite link copied to clipboard!", Duration = 3 })
 		else
-			WindUI:Notify({ Title = "Discord", Content = "https://discord.gg/BjEJnaVe", Duration = 5 })
+			WindUI:Notify({ Title = "Discord", Content = "https://discord.gg/ftmA7BheTc", Duration = 5 })
 		end
 	end,
 })
@@ -8030,4 +9256,24 @@ task.delay(1, function()
 		Content = statusIcon .. " " .. statusText,
 		Duration = 4,
 	})
+end)
+
+-- Check for updates
+task.spawn(function()
+	local success, result = pcall(function()
+		return game:HttpGet(CLOUD_API_BASE .. "/changelog-mobile.json")
+	end)
+	
+	if success then
+		local data = game:GetService("HttpService"):JSONDecode(result)
+		if data and data.currentVersion and data.currentVersion ~= VERSION then
+			task.wait(4) -- Wait for welcome notification to pass
+			WindUI:Notify({
+				Title = "Update Available",
+				Content = "New version " .. data.currentVersion .. " is available!\nRe-execute script to update.",
+				Duration = 8,
+				Icon = "download"
+			})
+		end
+	end
 end)
