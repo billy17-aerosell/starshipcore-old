@@ -8,9 +8,11 @@
             "title": "📱 Mobile Core Update",
             "changes": [
                 "🎭 Morph Avatar: Morph into any player with live preview",
+                "🌀 Warp: New teleport waypoint system",
                 "🚶 Smart Resume: Smoother playback resumption",
                 "✨ Enhanced path visualization precision",
-                "🔧 Core system optimizations"
+                "🔧 Core system optimizations",
+                "🏔️ Updated Track: MT Yayakin and MT Velora"
             ]
         },
         {

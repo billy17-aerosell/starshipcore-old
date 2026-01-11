@@ -10,7 +10,7 @@
 -- SERVER-BASED LOADING MODE
 -- Automatically detects environment and loads modules from appropriate server
 -- No manual configuration needed!
-local VERSION = "1.5.1"
+local VERSION = "1.5.2"
 
 -- Auto-detect: Check if URL was injected by bootstrap/dev-script
 if _G.StarshipServerMode == nil then
@@ -2932,9 +2932,9 @@ local function PreprocessFrames(frames)
 	return frames
 end
 
-local function PlayRecording(fn, force, skipDistanceCheck)
+local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 	ShowToast(L("loading_playback"), L("preparing", fn), "info", 1.5)
-	task.wait(0.1) -- Allow UI to render
+	task.wait() -- Allow UI to render
 
 	local p = GetWorkspacePath() .. "/" .. fn
 	if not isfile(p) then
@@ -3111,36 +3111,23 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 			minDst = minGroundDst
 		end
 
-		-- If we are starting from 0 (not resuming), only jump if we are close enough to the path
-		if not isResuming then
-			-- Check distance to FIRST frame specifically
-			local firstFrame = currentFrameData[1]
-			local firstPos = (firstFrame.pos and Vector3.new(firstFrame.pos.x, firstFrame.pos.y, firstFrame.pos.z))
-				or (firstFrame.r and TblToCF(firstFrame.r).Position)
-			local distToFirst = firstPos and (rPos - firstPos).Magnitude or math.huge
-
-			-- PRIORITY: If player is close to first frame, ALWAYS start from 0
-			-- This ensures merged recordings start from beginning when player is at start position
-			if distToFirst < 30 then
-				currentPlaybackTime = 0
-			-- If the nearest point is within the last 2 seconds, force restart from 0
-			elseif bestT >= (currentTotalDuration - 2.0) then
-				currentPlaybackTime = 0
-				-- Snap to Start: If nearest point is within first 1 second, start from 0
-			elseif bestT < 1.0 then
-				currentPlaybackTime = 0
-			elseif minDst < 500 then -- Increased threshold for Smart Start
-				currentPlaybackTime = bestT
-				ShowToast(L("smart_start") or "Smart Start", 
-					string.format("Found nearest point at %.1fs (%.0f studs)", bestT, minDst), 
-					"info", 2)
-			end
-		else
-			-- If resuming from pause, always jump to closest (existing logic)
+		-- Smart position logic (SAME AS MOBILE)
+		if forceFromStart then
+			currentPlaybackTime = 0
+		-- If the nearest point is within the last 2 seconds, force restart from 0
+		elseif bestT >= (currentTotalDuration - 2.0) then
+			currentPlaybackTime = 0
+		-- Snap to Start: If nearest point is within first 1 second, start from 0
+		elseif bestT < 1.0 then
+			currentPlaybackTime = 0
+		-- Otherwise, jump to nearest point if close enough to path
+		elseif minDst < 500 then
 			currentPlaybackTime = bestT
-			ShowToast(L("smart_resume") or "Smart Resume", 
-				string.format("Resuming from %.1fs (%.0f studs away)", bestT, minDst), 
+			ShowToast(L("smart_start") or "Smart Start", 
+				string.format("Found nearest point at %.1fs (%.0f studs)", bestT, minDst), 
 				"info", 2)
+		else
+			currentPlaybackTime = 0
 		end
 	end
 
@@ -3208,11 +3195,16 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		
 		-- Update currentPlaybackTime to match the ground frame
 		currentPlaybackTime = f.t
+	else
+		-- FORCE START FROM 0: Explicitly target the first frame
+		local f = currentFrameData[1]
+		targetPos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
 	end
 
 
 	ShowLoadingModal(false)
 
+	-- Travel to target if far away (SAME AS MOBILE - Simple direct walk)
 	if targetPos then
 		if startFrame.r then
 			CreateStartBaseplate(targetPos)
@@ -3224,168 +3216,64 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 		local dist = (flatPos - flatTarget).Magnitude
 
 		if dist > 3 then
+			-- Enable animate for walking
 			r.Anchored = false
 			if a then
 				a.Disabled = false
 			end
 			h.AutoRotate = true
-			
-			-- FOLLOW RECORDED PATH: Walk along the exact recorded frames
-			-- First, find the nearest frame index to current player position
-			local nearestFrameIdx = 1
-			local nearestDist = math.huge
-			for i = 1, #currentFrameData do
-				local f = currentFrameData[i]
-				local fPos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
-				if fPos then
-					local d = (r.Position - fPos).Magnitude
-					if d < nearestDist then
-						nearestDist = d
-						nearestFrameIdx = i
-					end
-				end
+
+			ShowToast(L("traveling") or "Traveling", 
+				string.format("Walking to path (%.0f studs)...", dist), 
+				"info", 3)
+
+			-- DYNAMIC SPEED: Calculate speed from recorded data + playback multiplier
+			local recSpeed = 16
+			local f = startFrame
+			if f.velVector then
+				recSpeed = Vector3.new(f.velVector.X, 0, f.velVector.Z).Magnitude
+			elseif f.vel then
+				recSpeed = Vector3.new(f.vel.x, 0, f.vel.z).Magnitude
 			end
 			
-			-- Find the target frame index (where currentPlaybackTime is)
-			local targetFrameIdx = 1
-			for i = 1, #currentFrameData do
-				if currentFrameData[i].t >= currentPlaybackTime then
-					targetFrameIdx = i
+			-- Apply playback speed multiplier
+			local finalSpeed = recSpeed * playbackSpeed
+			if finalSpeed < 16 then finalSpeed = 16 end
+			
+			h.WalkSpeed = finalSpeed
+			h:MoveTo(targetPos)
+
+			-- Timeout safety (Dynamic based on distance, min 30s)
+			local moveStart = os.clock()
+			local maxTravelTime = math.max(30, dist * 0.5) -- Allow 0.5s per stud, min 30s
+
+			while isPlaying do
+				local currFlat = r.Position * Vector3.new(1, 0, 1)
+				local d = (currFlat - flatTarget).Magnitude
+
+				-- Close enough, start playback
+				if d <= 2 then
 					break
 				end
+
+				-- Timeout
+				if os.clock() - moveStart > maxTravelTime then
+					r.CFrame = CFrame.new(targetPos) * r.CFrame.Rotation
+					ShowToast(L("teleported") or "Timeout", "Teleported to path", "warning", 2)
+					break
+				end
+
+				-- Refresh MoveTo every second
+				if math.floor(os.clock() - moveStart) % 1 < 0.1 then
+					h.WalkSpeed = finalSpeed -- Ensure speed is maintained
+					h:MoveTo(targetPos)
+				end
+
+				task.wait(0.1)
 			end
-			
-			-- Determine direction: walk forward or backward through frames
-			local frameStep = (targetFrameIdx > nearestFrameIdx) and 1 or -1
-			local framesCount = math.abs(targetFrameIdx - nearestFrameIdx)
-			
-			-- Show toast
-			ShowToast(L("traveling") or "Following Path", 
-				string.format("Walking to resume point (%.0f studs)...", dist), 
-				"info", 3)
-			
-			-- Walk through frames based on DISTANCE, not just frame count
-			-- This ensures we follow curves and don't walk through walls
-			local currentIdx = nearestFrameIdx
-			local travelStart = os.clock()
-			local maxTravelTime = math.max(30, framesCount * 0.3) -- More generous timeout (min 30s)
-			
-			local lastStuckCheck = os.clock()
-			local lastStuckPos = r.Position
-			
-			while isPlaying and currentIdx ~= targetFrameIdx do
-				-- Find next waypoint that is at least 10 studs away but not more than 25
-				local nextIdx = targetFrameIdx -- Default to target
-				
-				-- Search for a good waypoint
-				local foundWaypoint = false
-				local searchLimit = math.min(math.abs(targetFrameIdx - currentIdx), 500) -- Limit search to 500 frames ahead
-				
-				for offset = 1, searchLimit do
-					local searchIdx = currentIdx + (frameStep * offset)
-					if searchIdx < 1 or searchIdx > #currentFrameData then break end
-					
-					local f = currentFrameData[searchIdx]
-					local fPos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
-					
-					if fPos then
-						local fDist = (r.Position - fPos).Magnitude
-						if fDist > 10 then
-							nextIdx = searchIdx
-							foundWaypoint = true
-							-- If we found a point ~20 studs away, that's a good waypoint
-							if fDist > 20 then
-								break
-							end
-						end
-					end
-				end
-				
-				-- If we are very close to target frame (or didn't find a far enough point), just go to target
-				if not foundWaypoint or math.abs(nextIdx - targetFrameIdx) < 20 then
-					nextIdx = targetFrameIdx
-				end
-				
-				local f = currentFrameData[nextIdx]
-				local waypointPos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
-				
-				if waypointPos then
-					-- Move to waypoint
-					h:MoveTo(waypointPos)
-					
-					-- Wait until reached or timeout
-					local wpStart = os.clock()
-					local startDist = (r.Position * Vector3.new(1,0,1) - waypointPos * Vector3.new(1,0,1)).Magnitude
-					local expectedTime = math.max(3, startDist / 8) -- Expect 8 studs/sec minimum (generous)
-					
-					while isPlaying do
-						local currPos = r.Position
-						local flatCurr = currPos * Vector3.new(1, 0, 1)
-						local flatWP = waypointPos * Vector3.new(1, 0, 1)
-						local wpDist = (flatCurr - flatWP).Magnitude
-						
-						-- Close enough
-						if wpDist <= 5 then
-							break
-						end
-						
-						-- Timeout for this waypoint
-						if os.clock() - wpStart > expectedTime then
-							-- If we timed out but made progress, just continue to next waypoint
-							break
-						end
-						
-						-- STUCK DETECTION
-						if os.clock() - lastStuckCheck > 1.5 then
-							local moveDist = (currPos - lastStuckPos).Magnitude
-							if moveDist < 1.0 then
-								-- Stuck! Try jumping
-								h.Jump = true
-								-- If really stuck (tried jumping and still stuck), teleport slightly towards waypoint
-								if os.clock() - lastStuckCheck > 3.0 then
-									local dir = (waypointPos - currPos).Unit
-									-- Teleport 5 studs forward and slightly up
-									r.CFrame = r.CFrame + (dir * 5) + Vector3.new(0, 3, 0)
-									lastStuckCheck = os.clock() -- Reset check
-								end
-							else
-								-- Moving fine, reset stuck check
-								lastStuckCheck = os.clock()
-								lastStuckPos = currPos
-							end
-						end
-						
-						if not isPlaying then 
-							h:MoveTo(r.Position)
-							return 
-						end
-						task.wait(0.1)
-					end
-				end
-				
-				currentIdx = nextIdx
-				
-				-- Total timeout check
-				if os.clock() - travelStart > maxTravelTime then
-					ShowToast(L("teleported") or "Teleported", "Pathfinding timed out", "warning", 2)
-					break -- Will teleport at end
-				end
-			end
-			
-			-- Final move/teleport to exact target position
-			if isPlaying then
-				h:MoveTo(targetPos)
-				-- Give a moment to settle
-				local finalStart = os.clock()
-				while isPlaying do
-					local d = ((r.Position * Vector3.new(1, 0, 1)) - flatTarget).Magnitude
-					if d <= 3 or os.clock() - finalStart > 2 then
-						break
-					end
-					task.wait(0.1)
-				end
-				h:MoveTo(r.Position) -- Stop moving
-			end
+
+			-- Stop walking
+			h:MoveTo(r.Position)
 		end
 	end
 
@@ -3535,6 +3423,9 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 
 		-- Use Heartbeat for physics-synced playback (prevents vibration)
 		-- Still supports high refresh rates (120Hz+) in modern Roblox
+		if Connections.Playback then
+			Connections.Playback:Disconnect()
+		end
 		Connections.Playback = RunService.Heartbeat:Connect(function(dt)
 			-- Update device performance detection
 			UpdateDevicePerformance()
@@ -3581,7 +3472,16 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						end
 						return
 					elseif isLooping then
-						currentPlaybackTime = currentTotalDuration
+						-- LOOPING REVERSE: Restart playback properly to trigger Travel Phase
+						local savedFile = currentPlaybackFile
+						isPlaying = false -- Prevent callback from running again
+						if savedFile and UIHandlers.PlayMergerRecording then
+							task.spawn(function()
+								task.wait()
+								UIHandlers.PlayMergerRecording(savedFile, true, false, false) -- Go to end
+							end)
+						end
+						return
 					else
 						StopPlayback()
 						return
@@ -3612,7 +3512,16 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						end
 						return
 					elseif isLooping then
-						currentPlaybackTime = 0
+						-- LOOPING: Restart playback properly to trigger Travel Phase (SAME AS MOBILE)
+						local savedFile = currentPlaybackFile
+						isPlaying = false -- Prevent callback from running again
+						if savedFile and UIHandlers.PlayMergerRecording then
+							task.spawn(function()
+								task.wait()
+								UIHandlers.PlayMergerRecording(savedFile, true, false, true) -- forceFromStart = true
+							end)
+						end
+						return -- Exit current loop
 					else
 						StopPlayback()
 						return
@@ -4324,7 +4233,16 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						end
 						return
 					elseif isLooping then
-						currentPlaybackTime = currentTotalDuration
+						-- LOOPING REVERSE: Restart playback properly to trigger Travel Phase
+						local savedFile = currentPlaybackFile
+						isPlaying = false -- Prevent callback from running again
+						if savedFile and UIHandlers.PlayMergerRecording then
+							task.spawn(function()
+								task.wait()
+								UIHandlers.PlayMergerRecording(savedFile, true, false, false) -- Go to end
+							end)
+						end
+						return
 					else
 						StopPlayback()
 						return
@@ -4355,7 +4273,16 @@ local function PlayRecording(fn, force, skipDistanceCheck)
 						end
 						return
 					elseif isLooping then
-						currentPlaybackTime = 0
+						-- LOOPING: Restart playback properly to trigger Travel Phase (SAME AS MOBILE)
+						local savedFile = currentPlaybackFile
+						isPlaying = false -- Prevent callback from running again
+						if savedFile and UIHandlers.PlayMergerRecording then
+							task.spawn(function()
+								task.wait()
+								UIHandlers.PlayMergerRecording(savedFile, true, false, true) -- forceFromStart = true
+							end)
+						end
+						return -- Exit current loop
 					else
 						StopPlayback()
 						return
@@ -8450,7 +8377,7 @@ function UIHandlers.InitMergerUI()
 
 									local currPos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z))
 										or (f.r and TblToCF(f.r).Position)
-									if startPos and currPos and (currPos - startPos).Magnitude > 0.5 then
+									if startPos and currPos and (currPos - startPos).Magnitude > 0.01 then
 										trimTime = f.t
 										break
 									end
@@ -8487,9 +8414,9 @@ function UIHandlers.InitMergerUI()
 									local lastVel = lastFrame.vel and Vector3.new(lastFrame.vel.x, lastFrame.vel.y, lastFrame.vel.z) or Vector3.zero
 									local nextVel = firstNewFrame.vel and Vector3.new(firstNewFrame.vel.x, firstNewFrame.vel.y, firstNewFrame.vel.z) or Vector3.zero
 									
-									-- Create interpolation frames (6 frames over 0.1 seconds)
-									local TRANSITION_FRAMES = 6
-									local TRANSITION_DURATION = 0.1
+									-- Create interpolation frames (0 frames for instant transition)
+									local TRANSITION_FRAMES = 0
+									local TRANSITION_DURATION = 0
 									
 									if lastPos and nextPos and (lastPos - nextPos).Magnitude > 0.5 then
 										for ti = 1, TRANSITION_FRAMES do
@@ -10738,6 +10665,11 @@ UIHandlers.ToggleIndicator = function()
 	UIHandlers.CinemaMode.lastF9Press = now
 	return false
 end
+
+	-- Play Merger Recording Handler
+	UIHandlers.PlayMergerRecording = function(fn, force, skipDistanceCheck, forceFromStart)
+		PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
+	end
 
 -- GLOBAL KEYBIND LISTENER (Recording & Playback)
 Connections.MainKeybind = UserInputService.InputBegan:Connect(function(input, gameProcessed)

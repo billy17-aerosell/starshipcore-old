@@ -1,7 +1,19 @@
 {
-  "currentVersion": "1.5.1",
-  "lastUpdated": "2026-01-10",
+  "currentVersion": "1.5.2",
+  "lastUpdated": "2026-01-11",
   "updates": [
+    {
+      "version": "1.5.2",
+      "date": "2026-01-11",
+      "title": "🔁 Loop Playback Fix",
+      "changes": [
+        "Fixed loop playback not working properly",
+        "Fixed travel phase not walking to start position",
+        "Simplified travel phase (same as Mobile)",
+        "Fixed race condition when loop is enabled",
+        "Improved Smart Start logic consistency"
+      ]
+    },
     {
       "version": "1.5.1",
       "date": "2026-01-10",

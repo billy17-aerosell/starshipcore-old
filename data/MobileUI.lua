@@ -5091,7 +5091,7 @@ local function DrawPath(frames)
 end
 
 -- Play recording (main function)
-local function PlayRecording(fileName, force)
+local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 	if not fileName or fileName == "No files found" then
 		WindUI:Notify({ Title = "Error", Content = "No file selected!", Duration = 2 })
 		return
@@ -5322,8 +5322,10 @@ local function PlayRecording(fileName, force)
 	end
 
 	-- Smart position logic (SAME AS PC)
+	if forceFromStart then
+		PlaybackState.currentTime = 0
 	-- If the nearest point is within the last 2 seconds, force restart from 0
-	if bestT >= (PlaybackState.totalDuration - 2.0) then
+	elseif bestT >= (PlaybackState.totalDuration - 2.0) then
 		PlaybackState.currentTime = 0
 		-- Snap to Start: If nearest point is within first 1 second, start from 0
 	elseif bestT < 1.0 then
@@ -5395,11 +5397,26 @@ local function PlayRecording(fileName, force)
 				Duration = 3,
 			})
 
+			-- DYNAMIC SPEED: Calculate speed from recorded data + playback multiplier
+			local recSpeed = 16
+			-- Find the frame we are traveling to (startFrame usually)
+			local f = startFrame
+			if f.vel then
+				recSpeed = Vector3.new(f.vel.x, 0, f.vel.z).Magnitude
+			end
+			
+			-- Apply playback speed multiplier
+			local pSpeed = tonumber(PlaybackState.speed) or 1
+			local finalSpeed = recSpeed * pSpeed
+			if finalSpeed < 16 then finalSpeed = 16 end
+			
+			hum.WalkSpeed = finalSpeed
 			hum:MoveTo(targetPos)
 
-			-- Timeout safety
+			-- Timeout safety (Dynamic based on distance, min 30s)
 			local moveStart = os.clock()
 			local isWalking = true
+			local maxTravelTime = math.max(30, dist * 0.5) -- Allow 0.5s per stud, min 30s
 
 			while isWalking do
 				local currFlat = hrp.Position * Vector3.new(1, 0, 1)
@@ -5410,14 +5427,8 @@ local function PlayRecording(fileName, force)
 					break
 				end
 
-				-- If stuck for 5 seconds but close (within 10 studs), just snap
-				if os.clock() - moveStart > 5 and d < 10 then
-					hrp.CFrame = CFrame.new(targetPos) * hrp.CFrame.Rotation
-					break
-				end
-
-				-- Timeout after 10 seconds - snap anyway
-				if os.clock() - moveStart > 10 then
+				-- Timeout
+				if os.clock() - moveStart > maxTravelTime then
 					hrp.CFrame = CFrame.new(targetPos) * hrp.CFrame.Rotation
 					WindUI:Notify({ Title = "Timeout", Content = "Teleported to path", Duration = 2 })
 					break
@@ -5425,6 +5436,7 @@ local function PlayRecording(fileName, force)
 
 				-- Refresh MoveTo every second
 				if math.floor(os.clock() - moveStart) % 1 < 0.1 then
+					hum.WalkSpeed = finalSpeed -- Ensure speed is maintained
 					hum:MoveTo(targetPos)
 				end
 
@@ -6168,7 +6180,14 @@ local function PlayRecording(fileName, force)
 					end
 					return
 				elseif PlaybackState.isLooping then
-					PlaybackState.currentTime = 0
+					-- LOOPING: Restart playback properly to trigger Travel Phase
+					task.spawn(function()
+						task.wait()
+						if PlaybackState.currentFile then
+							PlayRecording(PlaybackState.currentFile, true, false, true)
+						end
+					end)
+					return -- Exit current loop
 				else
 					StopPlayback()
 					WindUI:Notify({ Title = "Finished", Content = "Playback completed!", Duration = 2 })
