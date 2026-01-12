@@ -908,7 +908,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 	-- Technique: Press L2/R2 or A/D in air to get vertical boost
 	-- BUG JUMP: Press A/D + W together for 1.5x boost (works with Shift Lock ON/OFF)
 	do
-		local CardBoost = CreateCard("QUICK BOOST", 230, 5)
+		local CardBoost = CreateCard("QUICK BOOST", 260, 5)
 
 		local BtnQuickBoost, QuickBoostContainer = CreateFeatureButton(
 			CardBoost,
@@ -1060,7 +1060,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		-- Auto Rotate + Jump Toggle (Combined feature when Quick Boost is ON)
 		local BtnAutoRotateJump = Instance.new("TextButton", CardBoost)
 		BtnAutoRotateJump.Text = "🔄 AUTO SPIN+JUMP: OFF"
-		BtnAutoRotateJump.Size = UDim2.new(0.94, 0, 0, 30)
+		BtnAutoRotateJump.Size = UDim2.new(0.55, 0, 0, 30)
 		BtnAutoRotateJump.Position = UDim2.new(0.03, 0, 0, 180)
 		BtnAutoRotateJump.BackgroundColor3 = C_SIDE
 		BtnAutoRotateJump.TextColor3 = C_TEXT_DIM
@@ -1073,9 +1073,148 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 		RegisterTheme(BtnAutoRotateJump, "BackgroundColor3", "Side")
 
+		-- Spin Degree Selector
+		local SPIN_OPTIONS = {45, 90, 180, 360}
+		local currentSpinIndex = 3 -- Default 180°
+		local ROTATE_AMOUNT = SPIN_OPTIONS[currentSpinIndex]
+		local SPIN_DURATION = 0.25 -- Default spin duration (smooth)
+		local isSpinning = false -- Prevent multiple spins at once
+
+		local BtnSpinDegree = Instance.new("TextButton", CardBoost)
+		BtnSpinDegree.Text = "🎯 " .. ROTATE_AMOUNT .. "°"
+		BtnSpinDegree.Size = UDim2.new(0.35, 0, 0, 30)
+		BtnSpinDegree.Position = UDim2.new(0.62, 0, 0, 180)
+		BtnSpinDegree.BackgroundColor3 = C_SIDE
+		BtnSpinDegree.TextColor3 = C_ACCENT
+		BtnSpinDegree.Font = Enum.Font.GothamBlack
+		BtnSpinDegree.TextSize = 12
+		Instance.new("UICorner", BtnSpinDegree).CornerRadius = UDim.new(0, 6)
+		local spinDegreeStroke = Instance.new("UIStroke", BtnSpinDegree)
+		spinDegreeStroke.Color = C_ACCENT
+		spinDegreeStroke.Transparency = 0.6
+
+		RegisterTheme(BtnSpinDegree, "BackgroundColor3", "Side")
+		RegisterTheme(BtnSpinDegree, "TextColor3", "Accent")
+		RegisterTheme(spinDegreeStroke, "Color", "Accent")
+
+		-- Cycle through spin degrees on click
+		BtnSpinDegree.MouseButton1Click:Connect(function()
+			currentSpinIndex = currentSpinIndex + 1
+			if currentSpinIndex > #SPIN_OPTIONS then
+				currentSpinIndex = 1
+			end
+			ROTATE_AMOUNT = SPIN_OPTIONS[currentSpinIndex]
+			BtnSpinDegree.Text = "🎯 " .. ROTATE_AMOUNT .. "°"
+			
+			-- Flash effect
+			local originalColor = BtnSpinDegree.TextColor3
+			BtnSpinDegree.TextColor3 = C_GREEN
+			task.delay(0.15, function()
+				if BtnSpinDegree then
+					BtnSpinDegree.TextColor3 = C_ACCENT
+				end
+			end)
+		end)
+
+		-- Spin Speed Slider Row
+		local SliderRowSpin = Instance.new("Frame", CardBoost)
+		SliderRowSpin.Size = UDim2.new(0.94, 0, 0, 25)
+		SliderRowSpin.Position = UDim2.new(0.03, 0, 0, 215)
+		SliderRowSpin.BackgroundTransparency = 1
+
+		local LblSpinSpeed = Instance.new("TextLabel", SliderRowSpin)
+		LblSpinSpeed.Text = "🌀 SPIN: " .. string.format("%.2fs", SPIN_DURATION)
+		LblSpinSpeed.Size = UDim2.new(0.35, 0, 0, 20)
+		LblSpinSpeed.Position = UDim2.new(0, 0, 0.5, -10)
+		LblSpinSpeed.BackgroundTransparency = 1
+		LblSpinSpeed.TextColor3 = C_TEXT_DIM
+		LblSpinSpeed.Font = Enum.Font.GothamBold
+		LblSpinSpeed.TextSize = 9
+		LblSpinSpeed.TextXAlignment = Enum.TextXAlignment.Left
+		RegisterTheme(LblSpinSpeed, "TextColor3", "TextDim")
+
+		local SldSpinBg = Instance.new("TextButton", SliderRowSpin)
+		SldSpinBg.Text = ""
+		SldSpinBg.Size = UDim2.new(0.6, 0, 0, 8)
+		SldSpinBg.Position = UDim2.new(0.38, 0, 0.5, -4)
+		SldSpinBg.BackgroundColor3 = C_SIDE
+		SldSpinBg.AutoButtonColor = false
+		Instance.new("UICorner", SldSpinBg).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldSpinBg, "BackgroundColor3", "Side")
+
+		local SldSpinFill = Instance.new("Frame", SldSpinBg)
+		SldSpinFill.Size = UDim2.new(SPIN_DURATION / 0.5, 0, 1, 0) -- 0.0s to 0.5s range
+		SldSpinFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldSpinFill).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldSpinFill, "BackgroundColor3", "Accent")
+
+		local draggingSpin = false
+
+		local function UpdateSpinSlider(input)
+			local rx = input.Position.X - SldSpinBg.AbsolutePosition.X
+			local sc = math.clamp(rx / SldSpinBg.AbsoluteSize.X, 0, 1)
+			SPIN_DURATION = sc * 0.5 -- Range 0.0s (instant) to 0.5s (slow)
+			SldSpinFill.Size = UDim2.new(sc, 0, 1, 0)
+			if SPIN_DURATION < 0.03 then
+				LblSpinSpeed.Text = "🌀 SPIN: INSTANT"
+			else
+				LblSpinSpeed.Text = "🌀 SPIN: " .. string.format("%.2fs", SPIN_DURATION)
+			end
+		end
+
+		SldSpinBg.MouseButton1Down:Connect(function()
+			draggingSpin = true
+		end)
+		UserInputService.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				draggingSpin = false
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement then
+				if draggingSpin then
+					UpdateSpinSlider(input)
+				end
+			end
+		end)
+
+		-- Smooth Spin Function
+		local function SmoothSpin(rootPart, degrees, duration)
+			if isSpinning then return end -- Prevent overlapping spins
+			if duration < 0.05 then
+				-- Instant rotation for very low duration
+				local rotateRad = math.rad(degrees)
+				rootPart.CFrame = rootPart.CFrame * CFrame.Angles(0, rotateRad, 0)
+				return
+			end
+			
+			isSpinning = true
+			local startCFrame = rootPart.CFrame
+			local targetRotation = math.rad(degrees)
+			local elapsed = 0
+			
+			task.spawn(function()
+				while elapsed < duration do
+					local dt = RunService.Heartbeat:Wait()
+					elapsed = elapsed + dt
+					local progress = math.min(elapsed / duration, 1)
+					
+					-- Smooth easing (ease out quad)
+					local easedProgress = 1 - (1 - progress) * (1 - progress)
+					
+					local currentRotation = targetRotation * easedProgress
+					local pos = rootPart.Position
+					local _, originalY, _ = startCFrame:ToEulerAnglesYXZ()
+					
+					-- Apply rotation while keeping current position (player might be moving)
+					rootPart.CFrame = CFrame.new(pos) * CFrame.Angles(0, originalY + currentRotation, 0)
+				end
+				isSpinning = false
+			end)
+		end
+
 		-- Auto Rotate + Jump State (activated on R2/L2 or A/D press like Quick Boost)
 		local isAutoRotateJump = false
-		local ROTATE_AMOUNT = 180 -- Degrees per trigger press
 
 		local function ToggleAutoRotateJump()
 			isAutoRotateJump = not isAutoRotateJump
@@ -1167,12 +1306,19 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 						local rtPressed =
 							UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonR2)
 
-						-- Gamepad left stick forward detection
+						-- Gamepad left stick full detection (all directions)
 						local gamepadState = UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1)
-						local lsForward = false
+						local lsForward = false  -- W equivalent
+						local lsBackward = false -- S equivalent
+						local lsLeft = false     -- A equivalent
+						local lsRight = false    -- D equivalent
+						
 						for _, input in ipairs(gamepadState) do
 							if input.KeyCode == Enum.KeyCode.Thumbstick1 then
-								lsForward = input.Position.Y > 0.5
+								lsForward = input.Position.Y > 0.3   -- Analog up (W)
+								lsBackward = input.Position.Y < -0.3 -- Analog down (S)
+								lsLeft = input.Position.X < -0.3     -- Analog left (A)
+								lsRight = input.Position.X > 0.3     -- Analog right (D)
 								break
 							end
 						end
@@ -1194,7 +1340,92 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 						-- Current time for cooldown check
 						local currentTime = tick()
 
-						-- Apply boost when in air
+						-- AUTO SPIN+JUMP: Technique S + A/D + W = Spin + Jump (HOLD TO REPEAT)
+						-- Keyboard: S-A+W = Spin left, S-D+W = Spin right
+						-- Gamepad Option 1: L2 = Spin left + jump, R2 = Spin right + jump
+						-- Gamepad Option 2: Analog down+left+up or down+right+up
+						-- HOLD the button to keep spin+jumping!
+						if isAutoRotateJump and isOnGround and not isSpinning then
+							-- KEYBOARD: Detect spin combo S + (A or D) + W HELD together
+							local spinComboLeftKB = sPressed and aPressed and wPressed  -- S+A+W = spin left
+							local spinComboRightKB = sPressed and dPressed and wPressed -- S+D+W = spin right
+							
+							-- GAMEPAD Option 1: L2/R2 HELD (simpler)
+							local spinComboLeftGP = ltPressed  -- L2 = spin left
+							local spinComboRightGP = rtPressed -- R2 = spin right
+							
+							-- GAMEPAD Option 2: Analog stick combo HELD (like keyboard)
+							local spinComboLeftAnalog = lsBackward and lsLeft and lsForward   -- Down+Left+Up
+							local spinComboRightAnalog = lsBackward and lsRight and lsForward -- Down+Right+Up
+							
+							-- Combine all methods (HOLD detection, not just press)
+							local spinLeft = spinComboLeftKB or spinComboLeftGP or spinComboLeftAnalog
+							local spinRight = spinComboRightKB or spinComboRightGP or spinComboRightAnalog
+							
+							-- Spin+Jump cooldown (separate from quick boost, longer for comfortable repeat)
+							local SPIN_JUMP_COOLDOWN = 0.1 -- Can repeat every 0.1s when held
+							
+							if (spinLeft or spinRight) and (currentTime - lastBoostTime) > SPIN_JUMP_COOLDOWN then
+								-- Determine spin direction
+								-- Left = negative rotation (counter-clockwise)
+								-- Right = positive rotation (clockwise)
+								local spinDirection = 1
+								if spinLeft then
+									spinDirection = -1 -- Spin to left (counter-clockwise)
+								else
+									spinDirection = 1  -- Spin to right (clockwise)
+								end
+								
+								-- Spin first on ground
+								SmoothSpin(r, ROTATE_AMOUNT * spinDirection, SPIN_DURATION)
+								lastBoostTime = currentTime
+								
+								-- Get boost settings
+								local baseBoost = Config.QuickBoostPower or 12
+								local forwardBoost = Config.BugJumpForward or 8
+								
+								-- Jump after spin completes (or immediately if instant) WITH BOOST
+								local jumpDelay = SPIN_DURATION > 0.05 and SPIN_DURATION or 0
+								task.delay(jumpDelay, function()
+									if h and h.Parent and r and r.Parent then
+										-- First, make character jump
+										h:ChangeState(Enum.HumanoidStateType.Jumping)
+										
+										-- Then apply boost after a tiny delay (let jump physics start)
+										task.delay(0.05, function()
+											if r and r.Parent then
+												local currentVel = r.AssemblyLinearVelocity
+												
+												-- Calculate boosted velocity
+												local boostedYVel = currentVel.Y + baseBoost
+												local maxYVel = 55 + baseBoost
+												if boostedYVel > maxYVel then
+													boostedYVel = maxYVel
+												end
+												
+												-- Get forward direction (camera direction for shift lock support)
+												local camera = workspace.CurrentCamera
+												local camLook = camera and camera.CFrame.LookVector or r.CFrame.LookVector
+												local horizontalLook = Vector3.new(camLook.X, 0, camLook.Z)
+												if horizontalLook.Magnitude > 0.1 then
+													horizontalLook = horizontalLook.Unit
+												else
+													horizontalLook = Vector3.new(r.CFrame.LookVector.X, 0, r.CFrame.LookVector.Z).Unit
+												end
+												
+												-- Apply boost with forward momentum
+												local boostedVelX = currentVel.X + horizontalLook.X * forwardBoost
+												local boostedVelZ = currentVel.Z + horizontalLook.Z * forwardBoost
+												
+												r.AssemblyLinearVelocity = Vector3.new(boostedVelX, boostedYVel, boostedVelZ)
+											end
+										end)
+									end
+								end)
+							end
+						end
+
+						-- Apply boost when in air (Quick Boost only, no spin here)
 						if
 							isInAir
 							and boostCount < MAX_BOOSTS_PER_JUMP
@@ -1256,15 +1487,6 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 									r.AssemblyLinearVelocity = Vector3.new(forwardVelX, newYVel, forwardVelZ)
 
 									boostCount = boostCount + 1
-
-								-- AUTO SPIN+JUMP: If toggle is ON, rotate player and jump
-								if isAutoRotateJump then
-									local rotateRad = math.rad(ROTATE_AMOUNT)
-									r.CFrame = r.CFrame * CFrame.Angles(0, rotateRad, 0)
-									if h.FloorMaterial ~= Enum.Material.Air then
-										h:ChangeState(Enum.HumanoidStateType.Jumping)
-									end
-								end
 									lastBoostTime = currentTime
 
 									-- Mark as boosted if we've used all boosts
