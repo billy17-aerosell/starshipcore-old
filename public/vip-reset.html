@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset HWID - Starship VIP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --black: #1a1a2e;
+            --white: #ffffff;
+            --bg: #f5f5f5;
+            --accent-1: #e94560;
+            --accent-2: #5865F2;
+            --accent-3: #43d9ad;
+            --border: 3px solid var(--black);
+            --shadow: 6px 6px 0 var(--black);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .reset-card {
+            background: var(--white);
+            border: var(--border);
+            box-shadow: var(--shadow);
+            max-width: 450px;
+            width: 100%;
+            padding: 40px 30px;
+            text-align: center;
+        }
+
+        .logo {
+            width: 80px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        /* Login Form */
+        .login-section {
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 12px 15px;
+            border: var(--border);
+            font-family: 'Space Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px var(--accent-2);
+        }
+
+        .verify-btn {
+            background: var(--accent-2);
+            color: var(--white);
+            border: var(--border);
+            padding: 12px 20px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .verify-btn:hover:not(:disabled) {
+            transform: translate(-2px, -2px);
+            box-shadow: 4px 4px 0 var(--black);
+        }
+
+        .verify-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Loading */
+        .loading {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+        }
+
+        .loading.show {
+            display: flex;
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--bg);
+            border-top-color: var(--accent-2);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Error/Success Messages */
+        .message {
+            padding: 15px;
+            border: var(--border);
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .message.warning {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        /* User Info Section */
+        .user-section {
+            display: none;
+        }
+
+        .user-section.show {
+            display: block;
+        }
+
+        .user-info-card {
+            background: var(--bg);
+            border: var(--border);
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .user-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .user-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .user-info-label {
+            font-weight: 500;
+            color: #666;
+        }
+
+        .user-info-value {
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+        }
+
+        .user-info-value.vip {
+            color: var(--accent-2);
+        }
+
+        .user-info-value.lifetime {
+            color: var(--accent-3);
+        }
+
+        .user-info-value.registered {
+            color: var(--accent-3);
+        }
+
+        .user-info-value.not-registered {
+            color: var(--accent-1);
+        }
+
+        /* Reset Button */
+        .reset-btn {
+            background: var(--accent-1);
+            color: var(--white);
+            border: var(--border);
+            padding: 15px 30px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.15s ease;
+            box-shadow: 4px 4px 0 var(--black);
+        }
+
+        .reset-btn:hover:not(:disabled) {
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0 var(--black);
+        }
+
+        .reset-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: #999;
+        }
+
+        /* Cooldown Timer */
+        .cooldown-info {
+            background: #fff3e0;
+            border: var(--border);
+            padding: 15px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .cooldown-info.show {
+            display: block;
+        }
+
+        .cooldown-timer {
+            font-family: 'Space Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #e65100;
+        }
+
+        /* Logout Button */
+        .logout-btn {
+            background: transparent;
+            border: none;
+            color: var(--accent-2);
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 15px;
+            text-decoration: underline;
+        }
+
+        .logout-btn:hover {
+            color: var(--accent-1);
+        }
+
+        /* Footer */
+        .footer-link {
+            margin-top: 20px;
+            font-size: 0.85rem;
+        }
+
+        .footer-link a {
+            color: var(--accent-2);
+            text-decoration: none;
+        }
+
+        /* Confirmation Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--white);
+            border: var(--border);
+            box-shadow: var(--shadow);
+            padding: 30px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .modal h3 {
+            margin-bottom: 15px;
+        }
+
+        .modal p {
+            margin-bottom: 20px;
+            color: #666;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .modal-btn {
+            padding: 12px 25px;
+            border: var(--border);
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .modal-btn.confirm {
+            background: var(--accent-1);
+            color: var(--white);
+        }
+
+        .modal-btn.cancel {
+            background: var(--bg);
+            color: var(--black);
+        }
+
+        .modal-btn:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 4px 4px 0 var(--black);
+        }
+
+        @media (max-width: 500px) {
+            .reset-card {
+                padding: 30px 20px;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            .verify-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="reset-card">
+        <img src="/starship-logo.png" alt="Starship" class="logo">
+        <h1>Reset HWID</h1>
+        <p class="subtitle">Portal self-service untuk reset HWID VIP</p>
+
+        <!-- Error/Success Message -->
+        <div class="message" id="message"></div>
+
+        <!-- Login Section -->
+        <div class="login-section" id="login-section">
+            <div class="input-group">
+                <input type="text" id="userId-input" placeholder="Masukkan Roblox User ID">
+                <button class="verify-btn" id="verify-btn" onclick="verifyUser()">Verifikasi</button>
+            </div>
+            <p style="font-size: 0.85rem; color: #666;">Contoh: 9337569193</p>
+        </div>
+
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <span id="loading-text">Memverifikasi...</span>
+        </div>
+
+        <!-- User Info Section (shown after login) -->
+        <div class="user-section" id="user-section">
+            <div class="user-info-card">
+                <div class="user-info-row">
+                    <span class="user-info-label">Username</span>
+                    <span class="user-info-value" id="info-username">-</span>
+                </div>
+                <div class="user-info-row">
+                    <span class="user-info-label">Platform</span>
+                    <span class="user-info-value" id="info-platform">-</span>
+                </div>
+                <div class="user-info-row">
+                    <span class="user-info-label">Tipe VIP</span>
+                    <span class="user-info-value vip" id="info-type">-</span>
+                </div>
+                <div class="user-info-row">
+                    <span class="user-info-label">Berlaku Sampai</span>
+                    <span class="user-info-value" id="info-expires">-</span>
+                </div>
+                <div class="user-info-row">
+                    <span class="user-info-label">Status HWID</span>
+                    <span class="user-info-value" id="info-hwid">-</span>
+                </div>
+            </div>
+
+            <!-- Cooldown Info -->
+            <div class="cooldown-info" id="cooldown-info">
+                <p>⏳ Tunggu sebelum reset lagi:</p>
+                <div class="cooldown-timer" id="cooldown-timer">00:00</div>
+            </div>
+
+            <!-- Reset Button -->
+            <button class="reset-btn" id="reset-btn" onclick="showConfirmModal()">
+                🔄 Reset HWID
+            </button>
+
+            <button class="logout-btn" onclick="logout()">← Kembali ke Login</button>
+        </div>
+
+        <div class="footer-link">
+            <a href="/">← Kembali ke Homepage</a>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal-overlay" id="confirm-modal">
+        <div class="modal">
+            <h3>⚠️ Konfirmasi Reset HWID</h3>
+            <p>Apakah Anda yakin ingin mereset HWID? Anda harus menunggu 1 jam sebelum dapat reset lagi.</p>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" onclick="hideConfirmModal()">Batal</button>
+                <button class="modal-btn confirm" onclick="resetHwid()">Ya, Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentUser = null;
+        let cooldownInterval = null;
+
+        // DOM Elements
+        const loginSection = document.getElementById('login-section');
+        const userSection = document.getElementById('user-section');
+        const loadingEl = document.getElementById('loading');
+        const loadingText = document.getElementById('loading-text');
+        const messageEl = document.getElementById('message');
+        const verifyBtn = document.getElementById('verify-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const cooldownInfo = document.getElementById('cooldown-info');
+        const cooldownTimer = document.getElementById('cooldown-timer');
+        const confirmModal = document.getElementById('confirm-modal');
+
+        // Show message
+        function showMessage(type, text) {
+            messageEl.className = `message show ${type}`;
+            messageEl.textContent = text;
+        }
+
+        // Hide message
+        function hideMessage() {
+            messageEl.className = 'message';
+        }
+
+        // Show loading
+        function showLoading(text = 'Memverifikasi...') {
+            loadingText.textContent = text;
+            loadingEl.classList.add('show');
+        }
+
+        // Hide loading
+        function hideLoading() {
+            loadingEl.classList.remove('show');
+        }
+
+        // Verify user
+        async function verifyUser() {
+            const userId = document.getElementById('userId-input').value.trim();
+
+            if (!userId || !/^\d+$/.test(userId)) {
+                showMessage('error', 'Masukkan User ID yang valid (angka saja)');
+                return;
+            }
+
+            hideMessage();
+            showLoading('Memverifikasi...');
+            verifyBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/whitelist-manager', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'self_verify', userId })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentUser = data.user;
+                    showUserInfo(data.user);
+                } else {
+                    showMessage('error', data.message || 'User ID tidak terdaftar sebagai VIP');
+                }
+            } catch (error) {
+                console.error('Verify error:', error);
+                showMessage('error', 'Terjadi kesalahan, coba lagi nanti');
+            }
+
+            hideLoading();
+            verifyBtn.disabled = false;
+        }
+
+        // Show user info
+        function showUserInfo(user) {
+            loginSection.style.display = 'none';
+            userSection.classList.add('show');
+
+            document.getElementById('info-username').textContent = user.username;
+            document.getElementById('info-platform').textContent = user.platform.toUpperCase();
+            document.getElementById('info-type').textContent = user.type;
+
+            // Expiration
+            const expiresEl = document.getElementById('info-expires');
+            if (user.expiresAt) {
+                const expiresDate = new Date(user.expiresAt);
+                expiresEl.textContent = expiresDate.toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                });
+                expiresEl.classList.remove('lifetime');
+            } else {
+                expiresEl.textContent = 'Lifetime ♾️';
+                expiresEl.classList.add('lifetime');
+            }
+
+            // HWID Status
+            const hwidEl = document.getElementById('info-hwid');
+            if (user.hasHwid) {
+                hwidEl.textContent = 'Terdaftar ✓';
+                hwidEl.className = 'user-info-value registered';
+            } else {
+                hwidEl.textContent = 'Belum Terdaftar';
+                hwidEl.className = 'user-info-value not-registered';
+            }
+
+            // Cooldown
+            updateCooldown(user.cooldownRemaining);
+        }
+
+        // Update cooldown display
+        function updateCooldown(seconds) {
+            if (cooldownInterval) {
+                clearInterval(cooldownInterval);
+                cooldownInterval = null;
+            }
+
+            if (seconds > 0) {
+                cooldownInfo.classList.add('show');
+                resetBtn.disabled = true;
+
+                const updateTimer = () => {
+                    if (seconds <= 0) {
+                        cooldownInfo.classList.remove('show');
+                        resetBtn.disabled = false;
+                        clearInterval(cooldownInterval);
+                        cooldownInterval = null;
+                        return;
+                    }
+
+                    const mins = Math.floor(seconds / 60);
+                    const secs = seconds % 60;
+                    cooldownTimer.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    seconds--;
+                };
+
+                updateTimer();
+                cooldownInterval = setInterval(updateTimer, 1000);
+            } else {
+                cooldownInfo.classList.remove('show');
+                resetBtn.disabled = false;
+            }
+        }
+
+        // Show confirmation modal
+        function showConfirmModal() {
+            confirmModal.classList.add('show');
+        }
+
+        // Hide confirmation modal
+        function hideConfirmModal() {
+            confirmModal.classList.remove('show');
+        }
+
+        // Reset HWID
+        async function resetHwid() {
+            hideConfirmModal();
+
+            if (!currentUser) {
+                showMessage('error', 'Silakan login terlebih dahulu');
+                return;
+            }
+
+            hideMessage();
+            showLoading('Mereset HWID...');
+            resetBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/whitelist-manager', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'self_reset_hwid', userId: currentUser.userId })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('success', data.message || 'HWID berhasil direset!');
+                    
+                    // Update HWID status display
+                    const hwidEl = document.getElementById('info-hwid');
+                    hwidEl.textContent = 'Belum Terdaftar';
+                    hwidEl.className = 'user-info-value not-registered';
+
+                    // Start cooldown (1 hour = 3600 seconds)
+                    updateCooldown(3600);
+                } else {
+                    if (data.cooldownRemaining) {
+                        showMessage('warning', data.message);
+                        updateCooldown(data.cooldownRemaining);
+                    } else {
+                        showMessage('error', data.message || 'Gagal mereset HWID');
+                    }
+                }
+            } catch (error) {
+                console.error('Reset error:', error);
+                showMessage('error', 'Terjadi kesalahan, coba lagi nanti');
+            }
+
+            hideLoading();
+        }
+
+        // Logout
+        function logout() {
+            currentUser = null;
+            if (cooldownInterval) {
+                clearInterval(cooldownInterval);
+                cooldownInterval = null;
+            }
+            
+            loginSection.style.display = 'block';
+            userSection.classList.remove('show');
+            cooldownInfo.classList.remove('show');
+            hideMessage();
+            document.getElementById('userId-input').value = '';
+        }
+
+        // Enter key to verify
+        document.getElementById('userId-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                verifyUser();
+            }
+        });
+    </script>
+</body>
+</html>

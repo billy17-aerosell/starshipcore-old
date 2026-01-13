@@ -11,6 +11,11 @@
     "ioredis": "^5.3.2"
   },
   "scripts": {
-    "sync-version": "node sync-version.js"
+    "sync-version": "node sync-version.js",
+    "test": "vitest --run"
+  },
+  "devDependencies": {
+    "fast-check": "^4.5.3",
+    "vitest": "^4.0.17"
   }
 }

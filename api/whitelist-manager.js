@@ -1,9 +1,13 @@
 // Unified Whitelist Management API - Redis Version with File Fallback
 // Supports both PC and Mobile platforms via ?platform=mobile query parameter
 // Full CRUD operations with Redis persistence
+// Also includes VIP Self-Service HWID Reset functionality
 
 // Owner userId - bypasses restrictions
 const OWNER_USER_ID = "9268011358";
+
+// Cooldown duration for self-service HWID reset (1 hour)
+const HWID_RESET_COOLDOWN_MS = 60 * 60 * 1000;
 
 import fs from "fs";
 import path from "path";
@@ -113,12 +117,73 @@ function saveKeysDataToFile(platform, data) {
   }
 }
 
+// === SELF-SERVICE HELPER FUNCTIONS ===
+
+/**
+ * Calculate remaining cooldown time in seconds
+ */
+function calculateCooldownRemaining(lastHwidReset) {
+  if (!lastHwidReset) return 0;
+  const lastResetTime = new Date(lastHwidReset).getTime();
+  const now = Date.now();
+  const elapsed = now - lastResetTime;
+  const remaining = HWID_RESET_COOLDOWN_MS - elapsed;
+  return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
+}
+
+/**
+ * Check if user is expired based on expiresAt field
+ */
+function isUserExpired(user) {
+  if (!user.expiresAt) return false;
+  return new Date(user.expiresAt) < new Date();
+}
+
+/**
+ * Find user in both PC and Mobile whitelists
+ */
+async function findUserInAllWhitelists(redisClient, userId) {
+  // Check PC whitelist
+  const pcData = await redisClient.get(PLATFORM_CONFIG.pc.whitelistKey);
+  const pcWhitelist = pcData ? JSON.parse(pcData) : {};
+  if (pcWhitelist[userId]) {
+    return { user: pcWhitelist[userId], platform: 'pc', whitelist: pcWhitelist };
+  }
+  
+  // Check Mobile whitelist
+  const mobileData = await redisClient.get(PLATFORM_CONFIG.mobile.whitelistKey);
+  const mobileWhitelist = mobileData ? JSON.parse(mobileData) : {};
+  if (mobileWhitelist[userId]) {
+    return { user: mobileWhitelist[userId], platform: 'mobile', whitelist: mobileWhitelist };
+  }
+  
+  return null;
+}
+
 // === MAIN HANDLER ===
 export default async function handler(req, res) {
+  // Set CORS headers for all requests
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-secret');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   // Get Redis client (may be null)
   const redisClient = await getRedis();
 
-  // Check admin auth
+  // Read action from query OR body
+  const action = req.query.action || req.body?.action;
+  const { method } = req;
+
+  // ==== SELF-SERVICE ACTIONS (No admin auth required) ====
+  if (action === 'self_verify' || action === 'self_reset_hwid') {
+    return await handleSelfService(req, res, redisClient, action);
+  }
+
+  // Check admin auth for all other actions
   const adminAuth = req.headers["x-admin-secret"];
   if (adminAuth !== ADMIN_SECRET) {
     return res
@@ -133,10 +198,6 @@ export default async function handler(req, res) {
   const platform = (platformFromQuery === "mobile" || platformFromBody === "mobile") ? "mobile" : "pc";
   const config = PLATFORM_CONFIG[platform];
   const platformLabel = platform === "mobile" ? "📱 Mobile" : "💻 PC";
-
-  // Read action from query OR body (for admin panel compatibility)
-  const action = req.query.action || req.body?.action;
-  const { method } = req;
 
   console.log(
     `[Whitelist Manager] ${platformLabel} | Action: ${action} | Method: ${method}`,
@@ -466,6 +527,8 @@ export default async function handler(req, res) {
       "stats",
       "extend",
       "reset_hwid",
+      "self_verify",
+      "self_reset_hwid",
     ],
   });
 }
@@ -738,4 +801,207 @@ async function handleRemove(req, res, redisClient, platform, config) {
       .status(500)
       .json({ error: "Failed to remove user", message: error.message });
   }
+}
+
+// === SELF-SERVICE HANDLER (No admin auth required) ===
+async function handleSelfService(req, res, redisClient, action) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ 
+      success: false, 
+      error: 'METHOD_NOT_ALLOWED',
+      message: 'Method not allowed' 
+    });
+  }
+
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      error: 'MISSING_USER_ID',
+      message: 'User ID diperlukan'
+    });
+  }
+
+  if (!redisClient) {
+    return res.status(503).json({
+      success: false,
+      error: 'DATABASE_UNAVAILABLE',
+      message: 'Database tidak tersedia, coba lagi nanti'
+    });
+  }
+
+  // ==== SELF VERIFY ====
+  if (action === 'self_verify') {
+    try {
+      const result = await findUserInAllWhitelists(redisClient, userId);
+      
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          error: 'USER_NOT_FOUND',
+          message: 'User ID tidak terdaftar sebagai VIP'
+        });
+      }
+
+      const { user, platform } = result;
+
+      if (isUserExpired(user)) {
+        return res.status(403).json({
+          success: false,
+          error: 'USER_EXPIRED',
+          message: 'VIP Anda sudah expired'
+        });
+      }
+
+      if (user.status === 'suspended') {
+        return res.status(403).json({
+          success: false,
+          error: 'USER_SUSPENDED',
+          message: 'Akun Anda sedang di-suspend'
+        });
+      }
+
+      if (user.status !== 'active') {
+        return res.status(403).json({
+          success: false,
+          error: 'USER_INACTIVE',
+          message: `Status akun: ${user.status}`
+        });
+      }
+
+      const cooldownRemaining = calculateCooldownRemaining(user.lastHwidReset);
+
+      return res.status(200).json({
+        success: true,
+        user: {
+          userId: userId,
+          username: user.username,
+          type: user.type,
+          status: user.status,
+          platform: platform,
+          expiresAt: user.expiresAt || null,
+          hasHwid: !!user.hwid,
+          lastHwidReset: user.lastHwidReset || null,
+          cooldownRemaining: cooldownRemaining
+        }
+      });
+
+    } catch (error) {
+      console.error('Self verify error:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'INTERNAL_ERROR',
+        message: 'Terjadi kesalahan, coba lagi nanti'
+      });
+    }
+  }
+
+  // ==== SELF RESET HWID ====
+  if (action === 'self_reset_hwid') {
+    try {
+      const result = await findUserInAllWhitelists(redisClient, userId);
+      
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          error: 'USER_NOT_FOUND',
+          message: 'User ID tidak terdaftar sebagai VIP'
+        });
+      }
+
+      const { user, platform, whitelist } = result;
+
+      if (isUserExpired(user)) {
+        return res.status(403).json({
+          success: false,
+          error: 'USER_EXPIRED',
+          message: 'VIP Anda sudah expired'
+        });
+      }
+
+      if (user.status === 'suspended') {
+        return res.status(403).json({
+          success: false,
+          error: 'USER_SUSPENDED',
+          message: 'Akun Anda sedang di-suspend'
+        });
+      }
+
+      if (user.status !== 'active') {
+        return res.status(403).json({
+          success: false,
+          error: 'USER_INACTIVE',
+          message: `Status akun: ${user.status}`
+        });
+      }
+
+      // Check cooldown
+      const cooldownRemaining = calculateCooldownRemaining(user.lastHwidReset);
+      if (cooldownRemaining > 0) {
+        const minutes = Math.floor(cooldownRemaining / 60);
+        const seconds = cooldownRemaining % 60;
+        return res.status(429).json({
+          success: false,
+          error: 'COOLDOWN_ACTIVE',
+          message: `Tunggu ${minutes} menit ${seconds} detik untuk reset lagi`,
+          cooldownRemaining: cooldownRemaining
+        });
+      }
+
+      // Save current HWID to history
+      user.hwidHistory = user.hwidHistory || [];
+      if (user.hwid) {
+        user.hwidHistory.push({
+          hwid: user.hwid,
+          resetAt: new Date().toISOString()
+        });
+      }
+
+      // Clear HWID
+      user.hwid = null;
+      user.lastHwidReset = new Date().toISOString();
+      user.updatedAt = new Date().toISOString();
+
+      // Save to Redis
+      whitelist[userId] = user;
+      const whitelistKey = PLATFORM_CONFIG[platform].whitelistKey;
+      await redisClient.set(whitelistKey, JSON.stringify(whitelist));
+
+      // Delete HWID registry key
+      const hwidKey = `hwid:${platform}:${userId}`;
+      await redisClient.del(hwidKey);
+      console.log(`[Self-Service] HWID reset for ${user.username} (${userId}) on ${platform}`);
+
+      return res.status(200).json({
+        success: true,
+        message: 'HWID berhasil direset',
+        user: {
+          userId: userId,
+          username: user.username,
+          type: user.type,
+          status: user.status,
+          platform: platform,
+          expiresAt: user.expiresAt || null,
+          hasHwid: false,
+          lastHwidReset: user.lastHwidReset,
+          cooldownRemaining: HWID_RESET_COOLDOWN_MS / 1000
+        }
+      });
+
+    } catch (error) {
+      console.error('Self reset HWID error:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'RESET_FAILED',
+        message: 'Gagal mereset HWID, coba lagi nanti'
+      });
+    }
+  }
+
+  return res.status(400).json({
+    success: false,
+    error: 'INVALID_ACTION',
+    message: 'Action tidak valid'
+  });
 }
