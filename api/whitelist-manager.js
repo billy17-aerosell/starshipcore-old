@@ -141,23 +141,54 @@ function isUserExpired(user) {
 
 /**
  * Find user in both PC and Mobile whitelists
+ * Prioritizes active (non-expired, non-suspended) accounts
+ * Returns the best available account, or the first found if all are problematic
  */
 async function findUserInAllWhitelists(redisClient, userId) {
+  const results = [];
+  
   // Check PC whitelist
   const pcData = await redisClient.get(PLATFORM_CONFIG.pc.whitelistKey);
   const pcWhitelist = pcData ? JSON.parse(pcData) : {};
   if (pcWhitelist[userId]) {
-    return { user: pcWhitelist[userId], platform: 'pc', whitelist: pcWhitelist };
+    results.push({ user: pcWhitelist[userId], platform: 'pc', whitelist: pcWhitelist });
   }
   
   // Check Mobile whitelist
   const mobileData = await redisClient.get(PLATFORM_CONFIG.mobile.whitelistKey);
   const mobileWhitelist = mobileData ? JSON.parse(mobileData) : {};
   if (mobileWhitelist[userId]) {
-    return { user: mobileWhitelist[userId], platform: 'mobile', whitelist: mobileWhitelist };
+    results.push({ user: mobileWhitelist[userId], platform: 'mobile', whitelist: mobileWhitelist });
   }
   
-  return null;
+  // No results found
+  if (results.length === 0) {
+    return null;
+  }
+  
+  // Prioritize: active & non-expired > suspended > expired
+  // Find the best account
+  const activeAccounts = results.filter(r => 
+    r.user.status === 'active' && !isUserExpired(r.user)
+  );
+  
+  if (activeAccounts.length > 0) {
+    // Return the first active account (could be PC or Mobile)
+    return activeAccounts[0];
+  }
+  
+  // No active accounts, check for suspended (non-expired)
+  const suspendedAccounts = results.filter(r => 
+    r.user.status === 'suspended' && !isUserExpired(r.user)
+  );
+  
+  if (suspendedAccounts.length > 0) {
+    return suspendedAccounts[0];
+  }
+  
+  // All accounts are expired or inactive, return the first one
+  // (will show appropriate error message)
+  return results[0];
 }
 
 /**
