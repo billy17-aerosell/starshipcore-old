@@ -424,13 +424,20 @@ export default async function handler(req, res) {
         });
       }
 
-      // Clear HWID data
+      // Clear HWID data in whitelist
       user.hwid = null;
       user.lastHwidReset = new Date().toISOString();
       user.updatedAt = new Date().toISOString();
 
       whitelist[userId] = user;
       await saveWhitelistToRedis(platform, whitelist);
+
+      // ALSO delete the separate HWID registry key
+      if (redis) {
+        const hwidKey = `hwid:${platform}:${userId}`;
+        await redis.del(hwidKey);
+        console.log(`[HWID Reset] Deleted HWID registry key: ${hwidKey}`);
+      }
 
       return res.status(200).json({
         success: true,
