@@ -160,6 +160,20 @@ async function findUserInAllWhitelists(redisClient, userId) {
   return null;
 }
 
+/**
+ * Check if user has HWID registered (from separate Redis key)
+ */
+async function checkHwidRegistered(redisClient, platform, userId) {
+  try {
+    const hwidKey = `hwid:${platform}:${userId}`;
+    const data = await redisClient.get(hwidKey);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    console.error('[HWID Check] Error:', error.message);
+    return null;
+  }
+}
+
 // === MAIN HANDLER ===
 export default async function handler(req, res) {
   // Set CORS headers for all requests
@@ -872,6 +886,10 @@ async function handleSelfService(req, res, redisClient, action) {
 
       const cooldownRemaining = calculateCooldownRemaining(user.lastHwidReset);
 
+      // Check HWID from separate Redis key (not from whitelist entry)
+      const hwidData = await checkHwidRegistered(redisClient, platform, userId);
+      const hasHwid = hwidData !== null && hwidData.hwid !== null;
+
       return res.status(200).json({
         success: true,
         user: {
@@ -881,7 +899,7 @@ async function handleSelfService(req, res, redisClient, action) {
           status: user.status,
           platform: platform,
           expiresAt: user.expiresAt || null,
-          hasHwid: !!user.hwid,
+          hasHwid: hasHwid,
           lastHwidReset: user.lastHwidReset || null,
           cooldownRemaining: cooldownRemaining
         }
