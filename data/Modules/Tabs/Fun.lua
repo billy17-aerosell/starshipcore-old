@@ -448,7 +448,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		end
 	end)
 
-	-- 3. INVISIBLE (FE Bypass - Seat Method)
+	-- 3. INVISIBLE (Seat Weld Method)
 	local CardInvis = CreateCard(L("invisible"), 85, 3)
 
 	local BtnInvis = Instance.new("TextButton", CardInvis)
@@ -458,7 +458,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 	StyleBtn(BtnInvis, C_RED)
 
 	local InvisInfo = Instance.new("TextLabel", CardInvis)
-	InvisInfo.Text = "Real invisible (others can't see)"
+	InvisInfo.Text = "Makes you invisible to others"
 	InvisInfo.Size = UDim2.new(1, 0, 0, 15)
 	InvisInfo.Position = UDim2.new(0, 0, 0, 70)
 	InvisInfo.BackgroundTransparency = 1
@@ -467,20 +467,25 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 	InvisInfo.TextSize = 8
 
 	local isInvis = false
-	local invisConnection = nil
-	local savedOffsets = {}
+	local INVIS_POSITION = Vector3.new(9999, 9999, 9999)
+
+	local function setCharacterTransparency(char, alpha)
+		for _, part in pairs(char:GetDescendants()) do
+			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+				part.LocalTransparencyModifier = alpha
+			elseif part:IsA("Decal") or part:IsA("Texture") then
+				part.Transparency = alpha
+			end
+		end
+	end
 
 	UIHandlers.ToggleRealInvisible = function()
 		local character = LocalPlayer.Character
-		if not character then
-			return
-		end
+		if not character then return end
 
-		local hrp = character:FindFirstChild("HumanoidRootPart")
 		local humanoid = character:FindFirstChild("Humanoid")
-		if not hrp or not humanoid then
-			return
-		end
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		if not humanoid or not hrp then return end
 
 		isInvis = not isInvis
 		BtnInvis.Text = "INVISIBLE: " .. (isInvis and "ON" or "OFF")
@@ -488,66 +493,51 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		BtnInvis.UIStroke.Color = isInvis and C_GREEN or C_RED
 
 		if isInvis then
-			-- FE Invisible using Viewpoint method
-			-- This works by offsetting character position every frame
-			-- Server sees you at offset position, but camera stays at real position
+			-- Save current position
+			local savedPosition = hrp.CFrame
 
-			local offset = Vector3.new(0, -500, 0)
+			-- Move to invisible position using MoveTo (replicates to server)
+			character:MoveTo(INVIS_POSITION)
+			task.wait(0.15)
 
-			invisConnection = RunService.Heartbeat:Connect(function()
-				if not isInvis then
-					return
-				end
+			-- Create seat at current character position (which is now at INVIS_POSITION)
+			local seat = Instance.new("Seat")
+			seat.Name = "invischair"
+			seat.Anchored = false
+			seat.CanCollide = false
+			seat.Transparency = 1
+			seat.Position = INVIS_POSITION
+			seat.Parent = workspace
 
-				local char = LocalPlayer.Character
-				if not char then
-					return
-				end
+			-- Weld to torso
+			local weld = Instance.new("Weld")
+			weld.Part0 = seat
+			weld.Part1 = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+			weld.Parent = seat
 
-				local root = char:FindFirstChild("HumanoidRootPart")
-				local hum = char:FindFirstChild("Humanoid")
-				if not root or not hum then
-					return
-				end
+			task.wait()
 
-				-- Save current position
-				local currentCF = root.CFrame
+			-- Move seat (and welded character) back to saved position
+			seat.CFrame = savedPosition
 
-				-- Teleport down (this is what server/other players see)
-				root.CFrame = currentCF * CFrame.new(offset)
-
-				-- Adjust camera offset so you see yourself at original position
-				hum.CameraOffset = Vector3.new(0, 500, 0)
-
-				-- Wait one render frame
-				RunService.RenderStepped:Wait()
-
-				-- Teleport back (only you see this)
-				root.CFrame = currentCF
-				hum.CameraOffset = Vector3.new(0, 0, 0)
-			end)
-
-			table.insert(Connections, invisConnection)
+			-- Visual feedback - make semi-transparent
+			setCharacterTransparency(character, 0.5)
 
 			InvisInfo.Text = "You are invisible to others!"
 			InvisInfo.TextColor3 = C_GREEN
 		else
-			-- Disable invisible
-			if invisConnection then
-				invisConnection:Disconnect()
-				invisConnection = nil
+			-- Destroy the invisible chair
+			local invisChair = workspace:FindFirstChild("invischair")
+			if invisChair then
+				invisChair:Destroy()
 			end
 
-			-- Reset camera offset
-			local character = LocalPlayer.Character
-			if character then
-				local humanoid = character:FindFirstChild("Humanoid")
-				if humanoid then
-					humanoid.CameraOffset = Vector3.new(0, 0, 0)
-				end
+			-- Restore transparency
+			if LocalPlayer.Character then
+				setCharacterTransparency(LocalPlayer.Character, 0)
 			end
 
-			InvisInfo.Text = "Real invisible (others can't see)"
+			InvisInfo.Text = "Makes you invisible to others"
 			InvisInfo.TextColor3 = C_TEXT_DIM
 		end
 	end
