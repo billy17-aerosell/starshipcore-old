@@ -904,6 +904,678 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		UIHandlers.ToggleAirLock = ToggleAirLock
 	end
 
+	-- 4.5 CLIMB STRAFE
+	-- Move horizontally while climbing on TrussParts/Ladders
+	do
+		local CardClimbStrafe = CreateCard("CLIMB STRAFE", 130, 4.5)
+
+		local BtnClimbStrafe, ClimbStrafeContainer = CreateFeatureButton(
+			CardClimbStrafe,
+			"CLIMB STRAFE: " .. L("off"),
+			"Press A/D to move sideways while climbing",
+			UDim2.new(0.94, 0, 0, 55),
+			UDim2.new(0.03, 0, 0, 35),
+			C_TEXT_DIM
+		)
+
+		-- Strafe Speed Slider
+		local LblStrafeSpeed = Instance.new("TextLabel", CardClimbStrafe)
+		LblStrafeSpeed.Text = "SPEED: 12"
+		LblStrafeSpeed.Size = UDim2.new(0.35, 0, 0, 20)
+		LblStrafeSpeed.Position = UDim2.new(0.03, 0, 0, 95)
+		LblStrafeSpeed.BackgroundTransparency = 1
+		LblStrafeSpeed.TextColor3 = C_TEXT_DIM
+		LblStrafeSpeed.Font = Enum.Font.GothamBold
+		LblStrafeSpeed.TextSize = 10
+		LblStrafeSpeed.TextXAlignment = Enum.TextXAlignment.Left
+		RegisterTheme(LblStrafeSpeed, "TextColor3", "TextDim")
+
+		local SldStrafeSpeedBg = Instance.new("TextButton", CardClimbStrafe)
+		SldStrafeSpeedBg.Text = ""
+		SldStrafeSpeedBg.Size = UDim2.new(0.55, 0, 0, 8)
+		SldStrafeSpeedBg.Position = UDim2.new(0.42, 0, 0, 101)
+		SldStrafeSpeedBg.BackgroundColor3 = C_SIDE
+		SldStrafeSpeedBg.AutoButtonColor = false
+		Instance.new("UICorner", SldStrafeSpeedBg).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldStrafeSpeedBg, "BackgroundColor3", "Side")
+
+		local strafeSpeed = 12 -- Default speed
+		local SldStrafeSpeedFill = Instance.new("Frame", SldStrafeSpeedBg)
+		SldStrafeSpeedFill.Size = UDim2.new((strafeSpeed - 5) / 25, 0, 1, 0) -- Range 5-30
+		SldStrafeSpeedFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldStrafeSpeedFill).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldStrafeSpeedFill, "BackgroundColor3", "Accent")
+
+		-- Slider drag handler
+		local draggingStrafeSpeed = false
+
+		SldStrafeSpeedBg.MouseButton1Down:Connect(function()
+			draggingStrafeSpeed = true
+		end)
+
+		UserInputService.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				draggingStrafeSpeed = false
+			end
+		end)
+
+		UserInputService.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement then
+				if draggingStrafeSpeed then
+					local rx = input.Position.X - SldStrafeSpeedBg.AbsolutePosition.X
+					local sc = math.clamp(rx / SldStrafeSpeedBg.AbsoluteSize.X, 0, 1)
+					strafeSpeed = math.floor(5 + sc * 25) -- Range 5-30
+					SldStrafeSpeedFill.Size = UDim2.new(sc, 0, 1, 0)
+					LblStrafeSpeed.Text = "SPEED: " .. strafeSpeed
+				end
+			end
+		end)
+
+		local isClimbStrafe = false
+		local climbStrafeLoop = nil
+
+		local function ToggleClimbStrafe(forceEnable)
+			if forceEnable ~= nil then
+				if forceEnable == isClimbStrafe then return end
+			end
+
+			isClimbStrafe = not isClimbStrafe
+			BtnClimbStrafe.Text = "CLIMB STRAFE: " .. (isClimbStrafe and L("on") or L("off"))
+			BtnClimbStrafe.TextColor3 = isClimbStrafe and C_GREEN or C_TEXT_DIM
+			BtnClimbStrafe.UIStroke.Color = isClimbStrafe and C_GREEN or C_TEXT_DIM
+			ShowFeatureToast("Climb Strafe", isClimbStrafe)
+
+			if isClimbStrafe then
+				climbStrafeLoop = RunService.Heartbeat:Connect(function()
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChild("Humanoid")
+					local r = c and c:FindFirstChild("HumanoidRootPart")
+
+					if not h or not r then return end
+
+					local state = h:GetState()
+					local isClimbing = state == Enum.HumanoidStateType.Climbing
+
+					-- Only apply strafe when climbing
+					if isClimbing then
+						-- Keyboard input
+						local aPressed = UserInputService:IsKeyDown(Enum.KeyCode.A)
+						local dPressed = UserInputService:IsKeyDown(Enum.KeyCode.D)
+
+						-- Gamepad input (Thumbstick1 left/right)
+						local gamepadLeftX = 0
+						local success, gamepadState = pcall(function()
+							return UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1)
+						end)
+						if success and gamepadState then
+							for _, input in ipairs(gamepadState) do
+								if input.KeyCode == Enum.KeyCode.Thumbstick1 then
+									gamepadLeftX = input.Position.X
+									break
+								end
+							end
+						end
+
+						-- Combine keyboard and gamepad
+						local strafeInput = 0
+						if aPressed then
+							strafeInput = -1
+						elseif dPressed then
+							strafeInput = 1
+						elseif math.abs(gamepadLeftX) > 0.3 then
+							strafeInput = gamepadLeftX -- -1 to 1 from joystick
+						end
+
+						if strafeInput ~= 0 then
+							local currentVel = r.AssemblyLinearVelocity
+							
+							-- Get camera's right vector for strafe direction
+							local camera = workspace.CurrentCamera
+							local camRight = camera.CFrame.RightVector
+							local horizontalRight = Vector3.new(camRight.X, 0, camRight.Z).Unit
+
+							-- Calculate strafe velocity (use strafeInput for direction and intensity)
+							local strafeDir = horizontalRight * strafeInput
+
+							-- Apply strafe velocity (keep vertical velocity for climbing)
+							local newVelX = strafeDir.X * strafeSpeed
+							local newVelZ = strafeDir.Z * strafeSpeed
+
+							r.AssemblyLinearVelocity = Vector3.new(newVelX, currentVel.Y, newVelZ)
+						end
+					end
+				end)
+				table.insert(Connections, climbStrafeLoop)
+			else
+				if climbStrafeLoop then
+					climbStrafeLoop:Disconnect()
+					climbStrafeLoop = nil
+				end
+			end
+		end
+
+		BtnClimbStrafe.MouseButton1Click:Connect(function()
+			ToggleClimbStrafe()
+		end)
+		UIHandlers.ToggleClimbStrafe = ToggleClimbStrafe
+	end
+
+	-- 4.6 CLIMB HOP
+	-- Jump sideways while climbing to reach adjacent trusses
+	do
+		local CardClimbHop = CreateCard("CLIMB HOP", 155, 4.6)
+
+		local BtnClimbHop, ClimbHopContainer = CreateFeatureButton(
+			CardClimbHop,
+			"CLIMB HOP: " .. L("off"),
+			"A/D=sideways | W+A/D=up | S+A/D=down",
+			UDim2.new(0.94, 0, 0, 55),
+			UDim2.new(0.03, 0, 0, 35),
+			C_TEXT_DIM
+		)
+
+		-- Hop Power Slider (Horizontal)
+		local LblHopPower = Instance.new("TextLabel", CardClimbHop)
+		LblHopPower.Text = "HOP POWER: 20"
+		LblHopPower.Size = UDim2.new(0.35, 0, 0, 20)
+		LblHopPower.Position = UDim2.new(0.03, 0, 0, 95)
+		LblHopPower.BackgroundTransparency = 1
+		LblHopPower.TextColor3 = C_TEXT_DIM
+		LblHopPower.Font = Enum.Font.GothamBold
+		LblHopPower.TextSize = 10
+		LblHopPower.TextXAlignment = Enum.TextXAlignment.Left
+		RegisterTheme(LblHopPower, "TextColor3", "TextDim")
+
+		local SldHopPowerBg = Instance.new("TextButton", CardClimbHop)
+		SldHopPowerBg.Text = ""
+		SldHopPowerBg.Size = UDim2.new(0.55, 0, 0, 8)
+		SldHopPowerBg.Position = UDim2.new(0.42, 0, 0, 101)
+		SldHopPowerBg.BackgroundColor3 = C_SIDE
+		SldHopPowerBg.AutoButtonColor = false
+		Instance.new("UICorner", SldHopPowerBg).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldHopPowerBg, "BackgroundColor3", "Side")
+
+		local hopPower = 20 -- Default horizontal hop power
+		local SldHopPowerFill = Instance.new("Frame", SldHopPowerBg)
+		SldHopPowerFill.Size = UDim2.new((hopPower - 10) / 30, 0, 1, 0) -- Range 10-40
+		SldHopPowerFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldHopPowerFill).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldHopPowerFill, "BackgroundColor3", "Accent")
+
+		-- Hop Height Slider (Vertical)
+		local LblHopHeight = Instance.new("TextLabel", CardClimbHop)
+		LblHopHeight.Text = "HOP HEIGHT: 10"
+		LblHopHeight.Size = UDim2.new(0.35, 0, 0, 20)
+		LblHopHeight.Position = UDim2.new(0.03, 0, 0, 120)
+		LblHopHeight.BackgroundTransparency = 1
+		LblHopHeight.TextColor3 = C_TEXT_DIM
+		LblHopHeight.Font = Enum.Font.GothamBold
+		LblHopHeight.TextSize = 10
+		LblHopHeight.TextXAlignment = Enum.TextXAlignment.Left
+		RegisterTheme(LblHopHeight, "TextColor3", "TextDim")
+
+		local SldHopHeightBg = Instance.new("TextButton", CardClimbHop)
+		SldHopHeightBg.Text = ""
+		SldHopHeightBg.Size = UDim2.new(0.55, 0, 0, 8)
+		SldHopHeightBg.Position = UDim2.new(0.42, 0, 0, 126)
+		SldHopHeightBg.BackgroundColor3 = C_SIDE
+		SldHopHeightBg.AutoButtonColor = false
+		Instance.new("UICorner", SldHopHeightBg).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldHopHeightBg, "BackgroundColor3", "Side")
+
+		local hopHeight = 10 -- Default vertical hop power
+		local SldHopHeightFill = Instance.new("Frame", SldHopHeightBg)
+		SldHopHeightFill.Size = UDim2.new((hopHeight - 0) / 25, 0, 1, 0) -- Range 0-25
+		SldHopHeightFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldHopHeightFill).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldHopHeightFill, "BackgroundColor3", "Accent")
+
+		-- Slider drag handlers
+		local draggingHopPower = false
+		local draggingHopHeight = false
+
+		SldHopPowerBg.MouseButton1Down:Connect(function()
+			draggingHopPower = true
+		end)
+		SldHopHeightBg.MouseButton1Down:Connect(function()
+			draggingHopHeight = true
+		end)
+
+		UserInputService.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				draggingHopPower = false
+				draggingHopHeight = false
+			end
+		end)
+
+		UserInputService.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement then
+				if draggingHopPower then
+					local rx = input.Position.X - SldHopPowerBg.AbsolutePosition.X
+					local sc = math.clamp(rx / SldHopPowerBg.AbsoluteSize.X, 0, 1)
+					hopPower = math.floor(10 + sc * 30) -- Range 10-40
+					SldHopPowerFill.Size = UDim2.new(sc, 0, 1, 0)
+					LblHopPower.Text = "HOP POWER: " .. hopPower
+				elseif draggingHopHeight then
+					local rx = input.Position.X - SldHopHeightBg.AbsolutePosition.X
+					local sc = math.clamp(rx / SldHopHeightBg.AbsoluteSize.X, 0, 1)
+					hopHeight = math.floor(sc * 25) -- Range 0-25
+					SldHopHeightFill.Size = UDim2.new(sc, 0, 1, 0)
+					LblHopHeight.Text = "HOP HEIGHT: " .. hopHeight
+				end
+			end
+		end)
+
+		local isClimbHop = false
+		local climbHopConnection = nil
+		local lastHopTime = 0
+		local HOP_COOLDOWN = 0.3 -- Cooldown between hops
+
+		local function ToggleClimbHop(forceEnable)
+			if forceEnable ~= nil then
+				if forceEnable == isClimbHop then return end
+			end
+
+			isClimbHop = not isClimbHop
+			BtnClimbHop.Text = "CLIMB HOP: " .. (isClimbHop and L("on") or L("off"))
+			BtnClimbHop.TextColor3 = isClimbHop and C_GREEN or C_TEXT_DIM
+			BtnClimbHop.UIStroke.Color = isClimbHop and C_GREEN or C_TEXT_DIM
+			ShowFeatureToast("Climb Hop", isClimbHop)
+
+			if isClimbHop then
+				-- Track previous key states for edge detection
+				local prevA, prevD, prevLT, prevRT = false, false, false, false
+
+				climbHopConnection = RunService.Heartbeat:Connect(function()
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChild("Humanoid")
+					local r = c and c:FindFirstChild("HumanoidRootPart")
+					if not h or not r then return end
+
+					local state = h:GetState()
+					local isClimbing = state == Enum.HumanoidStateType.Climbing
+
+					if not isClimbing then 
+						prevA, prevD, prevLT, prevRT = false, false, false, false
+						return 
+					end
+
+					-- Check cooldown
+					local currentTime = tick()
+					if currentTime - lastHopTime < HOP_COOLDOWN then return end
+
+					-- Current key states
+					local aPressed = UserInputService:IsKeyDown(Enum.KeyCode.A)
+					local dPressed = UserInputService:IsKeyDown(Enum.KeyCode.D)
+
+					-- Gamepad LT/RT
+					local ltPressed = false
+					local rtPressed = false
+					pcall(function()
+						ltPressed = UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonL2)
+						rtPressed = UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonR2)
+					end)
+
+					-- Detect key press (edge detection - just pressed)
+					local aJustPressed = aPressed and not prevA
+					local dJustPressed = dPressed and not prevD
+					local ltJustPressed = ltPressed and not prevLT
+					local rtJustPressed = rtPressed and not prevRT
+
+					-- Update previous states
+					prevA, prevD, prevLT, prevRT = aPressed, dPressed, ltPressed, rtPressed
+
+					local hopDirection = 0
+
+					-- Keyboard hop (single button, on press)
+					if aJustPressed then
+						hopDirection = -1 -- Hop left
+					elseif dJustPressed then
+						hopDirection = 1 -- Hop right
+					end
+
+					-- Gamepad hop (LT/RT, on press)
+					if ltJustPressed then
+						hopDirection = -1 -- Hop left
+					elseif rtJustPressed then
+						hopDirection = 1 -- Hop right
+					end
+
+					-- Execute hop
+					if hopDirection ~= 0 then
+						lastHopTime = currentTime
+
+						-- Check if W or S is held for vertical direction
+						local wPressed = UserInputService:IsKeyDown(Enum.KeyCode.W)
+						local sPressed = UserInputService:IsKeyDown(Enum.KeyCode.S)
+
+						-- Get camera's right vector for hop direction
+						local camera = workspace.CurrentCamera
+						local camRight = camera.CFrame.RightVector
+						local horizontalRight = Vector3.new(camRight.X, 0, camRight.Z).Unit
+
+						-- Calculate vertical component based on W/S
+						local verticalPower = 0
+						if sPressed then
+							-- S held = hop DOWN (negative height)
+							verticalPower = -hopHeight
+						elseif wPressed then
+							-- W held = hop UP (extra height)
+							verticalPower = hopHeight * 1.5
+						else
+							-- No W/S = normal hop height
+							verticalPower = hopHeight
+						end
+
+						-- Calculate hop velocity
+						local hopVelocity = horizontalRight * hopDirection * hopPower
+						hopVelocity = hopVelocity + Vector3.new(0, verticalPower, 0)
+
+						-- IMPORTANT: First change state to let go of truss, THEN apply velocity
+						-- Roblox overrides velocity while in Climbing state
+						h:ChangeState(Enum.HumanoidStateType.Jumping)
+						
+						-- Small delay to ensure state change takes effect
+						task.defer(function()
+							if r and r.Parent then
+								r.AssemblyLinearVelocity = hopVelocity
+							end
+						end)
+					end
+				end)
+				table.insert(Connections, climbHopConnection)
+			else
+				if climbHopConnection then
+					climbHopConnection:Disconnect()
+					climbHopConnection = nil
+				end
+			end
+		end
+
+		BtnClimbHop.MouseButton1Click:Connect(function()
+			ToggleClimbHop()
+		end)
+		UIHandlers.ToggleClimbHop = ToggleClimbHop
+	end
+
+	-- 4.7 CLIMB ASSIST
+	-- Auto-detect nearest truss and boost toward it when leaving climb state
+	do
+		local CardClimbAssist = CreateCard("CLIMB ASSIST", 130, 4.7)
+
+		local BtnClimbAssist, ClimbAssistContainer = CreateFeatureButton(
+			CardClimbAssist,
+			"CLIMB ASSIST: " .. L("off"),
+			"Auto boost to nearest truss when you let go (just press Space!)",
+			UDim2.new(0.94, 0, 0, 55),
+			UDim2.new(0.03, 0, 0, 35),
+			C_TEXT_DIM
+		)
+
+		-- Boost Power Slider
+		local LblAssistPower = Instance.new("TextLabel", CardClimbAssist)
+		LblAssistPower.Text = "BOOST POWER: 25"
+		LblAssistPower.Size = UDim2.new(0.35, 0, 0, 20)
+		LblAssistPower.Position = UDim2.new(0.03, 0, 0, 95)
+		LblAssistPower.BackgroundTransparency = 1
+		LblAssistPower.TextColor3 = C_TEXT_DIM
+		LblAssistPower.Font = Enum.Font.GothamBold
+		LblAssistPower.TextSize = 10
+		LblAssistPower.TextXAlignment = Enum.TextXAlignment.Left
+		RegisterTheme(LblAssistPower, "TextColor3", "TextDim")
+
+		local SldAssistPowerBg = Instance.new("TextButton", CardClimbAssist)
+		SldAssistPowerBg.Text = ""
+		SldAssistPowerBg.Size = UDim2.new(0.55, 0, 0, 8)
+		SldAssistPowerBg.Position = UDim2.new(0.42, 0, 0, 101)
+		SldAssistPowerBg.BackgroundColor3 = C_SIDE
+		SldAssistPowerBg.AutoButtonColor = false
+		Instance.new("UICorner", SldAssistPowerBg).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldAssistPowerBg, "BackgroundColor3", "Side")
+
+		local assistPower = 25
+		local SldAssistPowerFill = Instance.new("Frame", SldAssistPowerBg)
+		SldAssistPowerFill.Size = UDim2.new((assistPower - 10) / 40, 0, 1, 0) -- Range 10-50
+		SldAssistPowerFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldAssistPowerFill).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldAssistPowerFill, "BackgroundColor3", "Accent")
+
+		-- Slider drag handler
+		local draggingAssistPower = false
+
+		SldAssistPowerBg.MouseButton1Down:Connect(function()
+			draggingAssistPower = true
+		end)
+
+		UserInputService.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				draggingAssistPower = false
+			end
+		end)
+
+		UserInputService.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement then
+				if draggingAssistPower then
+					local rx = input.Position.X - SldAssistPowerBg.AbsolutePosition.X
+					local sc = math.clamp(rx / SldAssistPowerBg.AbsoluteSize.X, 0, 1)
+					assistPower = math.floor(10 + sc * 40) -- Range 10-50
+					SldAssistPowerFill.Size = UDim2.new(sc, 0, 1, 0)
+					LblAssistPower.Text = "BOOST POWER: " .. assistPower
+				end
+			end
+		end)
+
+		local isClimbAssist = false
+		local climbAssistConnection = nil
+		local wasClimbing = false
+		local lastAssistTime = 0
+		local ASSIST_COOLDOWN = 0.2
+		local lastClimbedTruss = nil -- Track the truss we just left
+		local lastClimbPosition = nil -- Track position when climbing
+
+		-- Find nearest TrussPart in all directions (with direction priority)
+		local function FindNearestTruss(character, rootPart, priorityDir)
+			local rayParams = RaycastParams.new()
+			rayParams.FilterDescendantsInstances = { character }
+			rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+			local playerPos = rootPart.Position
+			local SEARCH_DISTANCE = 25
+
+			local bestTruss = nil
+			local bestScore = math.huge -- Lower is better
+			local bestPosition = nil
+
+			-- Get camera vectors for relative directions
+			local camera = workspace.CurrentCamera
+			local camRight = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z).Unit
+			local camForward = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z).Unit
+
+			-- Search in multiple directions
+			local directions = {
+				{dir = camRight, name = "right"},
+				{dir = -camRight, name = "left"},
+				{dir = Vector3.new(0, 1, 0), name = "up"},
+				{dir = Vector3.new(0, -1, 0), name = "down"},
+				{dir = camForward, name = "forward"},
+				{dir = -camForward, name = "back"},
+				-- Diagonals horizontal
+				{dir = (camRight + camForward).Unit, name = "right"},
+				{dir = (-camRight + camForward).Unit, name = "left"},
+				{dir = (camRight - camForward).Unit, name = "right"},
+				{dir = (-camRight - camForward).Unit, name = "left"},
+				-- Diagonals with up
+				{dir = (camRight + Vector3.new(0, 0.5, 0)).Unit, name = "right"},
+				{dir = (-camRight + Vector3.new(0, 0.5, 0)).Unit, name = "left"},
+				{dir = (camRight + Vector3.new(0, 1, 0)).Unit, name = "right"},
+				{dir = (-camRight + Vector3.new(0, 1, 0)).Unit, name = "left"},
+				-- Diagonals with down
+				{dir = (camRight + Vector3.new(0, -0.5, 0)).Unit, name = "right"},
+				{dir = (-camRight + Vector3.new(0, -0.5, 0)).Unit, name = "left"},
+				{dir = (camRight + Vector3.new(0, -1, 0)).Unit, name = "right"},
+				{dir = (-camRight + Vector3.new(0, -1, 0)).Unit, name = "left"},
+			}
+
+			for _, data in ipairs(directions) do
+				local hitResult = workspace:Raycast(playerPos, data.dir * SEARCH_DISTANCE, rayParams)
+				if hitResult then
+					local hitPart = hitResult.Instance
+					
+					-- Skip if this is the truss we just left
+					if hitPart == lastClimbedTruss then
+						continue
+					end
+					
+					-- Check if it's a TrussPart or climbable
+					local isTruss = hitPart:IsA("TrussPart")
+					if not isTruss then
+						local name = hitPart.Name:lower()
+						isTruss = name:find("ladder") or name:find("truss") or name:find("climb")
+					end
+
+					if isTruss then
+						local dist = (hitResult.Position - playerPos).Magnitude
+						
+						-- Must be at least 2 studs away
+						if dist > 2 then
+							local score = dist
+							
+							-- Apply priority bonus if direction matches
+							if priorityDir then
+								if priorityDir == "left" and data.name == "left" then
+									score = score * 0.2
+								elseif priorityDir == "right" and data.name == "right" then
+									score = score * 0.2
+								elseif priorityDir == "up" and data.name == "up" then
+									score = score * 0.2
+								elseif priorityDir == "down" and data.name == "down" then
+									score = score * 0.2
+								end
+							end
+							
+							if score < bestScore then
+								bestScore = score
+								bestTruss = hitPart
+								bestPosition = hitResult.Position
+							end
+						end
+					end
+				end
+			end
+
+			return bestTruss, bestPosition
+		end
+
+		-- Detect which truss player is currently on
+		local function GetCurrentTruss(character, rootPart)
+			local rayParams = RaycastParams.new()
+			rayParams.FilterDescendantsInstances = { character }
+			rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+			local directions = {
+				Vector3.new(1, 0, 0), Vector3.new(-1, 0, 0),
+				Vector3.new(0, 0, 1), Vector3.new(0, 0, -1),
+				Vector3.new(0, 1, 0), Vector3.new(0, -1, 0),
+			}
+
+			for _, dir in ipairs(directions) do
+				local hit = workspace:Raycast(rootPart.Position, dir * 3, rayParams)
+				if hit and (hit.Instance:IsA("TrussPart") or hit.Instance.Name:lower():find("truss")) then
+					return hit.Instance
+				end
+			end
+			return nil
+		end
+
+		local function ToggleClimbAssist(forceEnable)
+			if forceEnable ~= nil then
+				if forceEnable == isClimbAssist then return end
+			end
+
+			isClimbAssist = not isClimbAssist
+			BtnClimbAssist.Text = "CLIMB ASSIST: " .. (isClimbAssist and L("on") or L("off"))
+			BtnClimbAssist.TextColor3 = isClimbAssist and C_GREEN or C_TEXT_DIM
+			BtnClimbAssist.UIStroke.Color = isClimbAssist and C_GREEN or C_TEXT_DIM
+			ShowFeatureToast("Climb Assist", isClimbAssist)
+
+			if isClimbAssist then
+				climbAssistConnection = RunService.Heartbeat:Connect(function()
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChild("Humanoid")
+					local r = c and c:FindFirstChild("HumanoidRootPart")
+					if not h or not r then return end
+
+					local state = h:GetState()
+					local isClimbing = state == Enum.HumanoidStateType.Climbing
+
+					-- While climbing, track current truss and position
+					if isClimbing then
+						lastClimbedTruss = GetCurrentTruss(c, r)
+						lastClimbPosition = r.Position
+					end
+
+					-- Detect transition: was climbing -> now jumping/falling
+					if wasClimbing and not isClimbing then
+						local currentTime = tick()
+						if currentTime - lastAssistTime > ASSIST_COOLDOWN then
+							-- Check direction keys for priority
+							local priorityDir = nil
+							if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+								priorityDir = "left"
+							elseif UserInputService:IsKeyDown(Enum.KeyCode.D) then
+								priorityDir = "right"
+							elseif UserInputService:IsKeyDown(Enum.KeyCode.W) then
+								priorityDir = "up"
+							elseif UserInputService:IsKeyDown(Enum.KeyCode.S) then
+								priorityDir = "down"
+							end
+
+							-- Find nearest truss
+							local nearestTruss, targetPos = FindNearestTruss(c, r, priorityDir)
+							
+							if nearestTruss and targetPos then
+								lastAssistTime = currentTime
+								
+								-- Calculate direction to target
+								local direction = (targetPos - r.Position).Unit
+								local distance = (targetPos - r.Position).Magnitude
+								
+								-- Calculate boost power based on distance
+								local power = math.clamp(assistPower + distance * 0.5, assistPower, assistPower * 1.5)
+								
+								-- Boost toward the truss
+								local boostVelocity = direction * power
+								
+								-- Always add some upward to prevent falling
+								boostVelocity = boostVelocity + Vector3.new(0, 12, 0)
+								
+								-- Apply immediately
+								r.AssemblyLinearVelocity = boostVelocity
+							else
+								-- No truss found, just give upward boost to prevent fall
+								r.AssemblyLinearVelocity = r.AssemblyLinearVelocity + Vector3.new(0, 15, 0)
+							end
+						end
+					end
+
+					wasClimbing = isClimbing
+				end)
+				table.insert(Connections, climbAssistConnection)
+			else
+				if climbAssistConnection then
+					climbAssistConnection:Disconnect()
+					climbAssistConnection = nil
+				end
+				wasClimbing = false
+			end
+		end
+
+		BtnClimbAssist.MouseButton1Click:Connect(function()
+			ToggleClimbAssist()
+		end)
+		UIHandlers.ToggleClimbAssist = ToggleClimbAssist
+	end
+
 	-- 5. QUICK BOOST (L2/R2 or A/D Control) + BUG JUMP SIMULATION
 	-- Technique: Press L2/R2 or A/D in air to get vertical boost
 	-- BUG JUMP: Press A/D + W together for 1.5x boost (works with Shift Lock ON/OFF)

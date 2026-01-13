@@ -8099,64 +8099,75 @@ FunTab:Divider()
 FunTab:Section({ Title = "👻 Invisible", TextSize = 20 })
 
 local isInvisibleOn = false
-local invisibleLoop = nil
+local INVIS_POSITION = Vector3.new(9999, 9999, 9999)
+
+local function setCharacterTransparency(char, alpha)
+	for _, part in pairs(char:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+			part.LocalTransparencyModifier = alpha
+		elseif part:IsA("Decal") or part:IsA("Texture") then
+			part.Transparency = alpha
+		end
+	end
+end
 
 FunTab:Toggle({
 	Title = "Invisible",
-	Desc = "Real invisible (others can't see you)",
+	Desc = "Makes you invisible to other players",
 	Value = false,
 	Callback = function(state)
+		local char = GetCharacter()
+		if not char then return end
+
+		local humanoid = char:FindFirstChild("Humanoid")
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not humanoid or not hrp then return end
+
 		isInvisibleOn = state
 
 		if isInvisibleOn then
-			local offset = Vector3.new(0, -500, 0)
+			-- Save current position
+			local savedPosition = hrp.CFrame
 
-			invisibleLoop = RunService.Heartbeat:Connect(function()
-				if not isInvisibleOn then
-					return
-				end
+			-- Move to invisible position using MoveTo (replicates to server)
+			char:MoveTo(INVIS_POSITION)
+			task.wait(0.15)
 
-				local char = GetCharacter()
-				if not char then
-					return
-				end
+			-- Create seat at current character position (which is now at INVIS_POSITION)
+			local seat = Instance.new("Seat")
+			seat.Name = "invischair"
+			seat.Anchored = false
+			seat.CanCollide = false
+			seat.Transparency = 1
+			seat.Position = INVIS_POSITION
+			seat.Parent = workspace
 
-				local root = char:FindFirstChild("HumanoidRootPart")
-				local hum = char:FindFirstChild("Humanoid")
-				if not root or not hum then
-					return
-				end
+			-- Weld to torso
+			local weld = Instance.new("Weld")
+			weld.Part0 = seat
+			weld.Part1 = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+			weld.Parent = seat
 
-				-- Save current position
-				local currentCF = root.CFrame
+			task.wait()
 
-				-- Teleport down (this is what server/other players see)
-				root.CFrame = currentCF * CFrame.new(offset)
+			-- Move seat (and welded character) back to saved position
+			seat.CFrame = savedPosition
 
-				-- Adjust camera offset so you see yourself at original position
-				hum.CameraOffset = Vector3.new(0, 500, 0)
-
-				-- Wait one render frame
-				RunService.RenderStepped:Wait()
-
-				-- Teleport back (only you see this)
-				root.CFrame = currentCF
-				hum.CameraOffset = Vector3.new(0, 0, 0)
-			end)
+			-- Visual feedback - make semi-transparent
+			setCharacterTransparency(char, 0.5)
 
 			WindUI:Notify({ Title = "Invisible", Content = "You are now invisible to others!", Duration = 3 })
 		else
-			if invisibleLoop then
-				invisibleLoop:Disconnect()
-				invisibleLoop = nil
+			-- Destroy the invisible chair
+			local invisChair = workspace:FindFirstChild("invischair")
+			if invisChair then
+				invisChair:Destroy()
 			end
 
+			-- Restore transparency
 			local char = GetCharacter()
 			if char then
-				local hum = char:FindFirstChild("Humanoid")
-				if hum then
-					hum.CameraOffset = Vector3.new(0, 0, 0)
-				end
+				setCharacterTransparency(char, 0)
 			end
 
 			WindUI:Notify({ Title = "Invisible", Content = "Invisible disabled.", Duration = 2 })
@@ -8595,8 +8606,8 @@ end
 WarpSystem.UpdatePointsInfo = function()
 	pcall(function()
 		if WarpSystem.pointsInfoParagraph then
-			WarpSystem.pointsInfoParagraph:SetDesc(string.format("Points: %d | Est. Time: %s | Config: %s",
-				#WarpSystem.points, WarpSystem.FormatTime(WarpSystem.GetTotalTime()), WarpSystem.currentConfig or "Unsaved"))
+			WarpSystem.pointsInfoParagraph:SetDesc(string.format("Points: %d | Delay: %.1fs | Est. Time: %s | Config: %s",
+				#WarpSystem.points, WarpSystem.loopDelay, WarpSystem.FormatTime(WarpSystem.GetTotalTime()), WarpSystem.currentConfig or "Unsaved"))
 		end
 	end)
 end
@@ -8677,7 +8688,7 @@ WarpTab:Divider()
 -- ══════════════════════════════════════════════════════════════════
 WarpTab:Section({ Title = "🔄 Warp Loop", TextSize = 16 })
 
-WarpTab:Input({
+WarpSystem.delayInput = WarpTab:Input({
 	Title = "⏱️ Loop Delay (seconds)",
 	Placeholder = "Enter delay in seconds (0.5-30)",
 	Callback = function(text)
@@ -8689,7 +8700,7 @@ WarpTab:Input({
 	end,
 })
 
-WarpTab:Input({
+WarpSystem.totalTimeInput = WarpTab:Input({
 	Title = "⏰ Set Total Time (seconds)",
 	Placeholder = "Enter desired total time",
 	Callback = function(text)
@@ -8881,7 +8892,7 @@ WarpTab:Button({
 		end
 		
 		if WarpSystem.LoadConfig(WarpSystem.selectedConfigToLoad) then
-			WindUI:Notify({ Title = "✅ Loaded!", Content = "Config '" .. WarpSystem.selectedConfigToLoad .. "' loaded with " .. #WarpSystem.points .. " points", Duration = 3 })
+			WindUI:Notify({ Title = "✅ Loaded!", Content = string.format("Config '%s' loaded with %d points (Delay: %.1fs)", WarpSystem.selectedConfigToLoad, #WarpSystem.points, WarpSystem.loopDelay), Duration = 3 })
 			WarpSystem.UpdatePointsInfo()
 		else 
 			WindUI:Notify({ Title = "Error", Content = "Failed to load config!", Duration = 2 }) 

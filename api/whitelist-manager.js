@@ -403,7 +403,7 @@ export default async function handler(req, res) {
   }
 
   // ==== RESET HWID ====
-  if (action === "reset_hwid" && method === "POST") {
+  if ((action === "reset_hwid" || req.body?.action === "reset_hwid") && method === "POST") {
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ error: "userId required" });
 
