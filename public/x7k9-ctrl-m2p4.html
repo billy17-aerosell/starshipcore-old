@@ -1774,17 +1774,12 @@
 
         async function confirmDelete() {
             try {
-                const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
-                    method: 'POST',
+                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=remove&platform=${deleteTarget.platform}&userId=${deleteTarget.userId}`, {
+                    method: 'DELETE',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-Admin-Secret': adminSecret
-                    },
-                    body: JSON.stringify({
-                        action: 'remove',
-                        platform: deleteTarget.platform,
-                        userId: deleteTarget.userId
-                    })
+                    }
                 });
                 
                 const data = await response.json();

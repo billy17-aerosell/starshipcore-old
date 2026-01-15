@@ -1,11 +1,24 @@
 {
-  "currentVersion": "1.5.2",
-  "lastUpdated": "2026-01-11",
+  "currentVersion": "1.5.3",
+  "lastUpdated": "2026-01-14",
   "updates": [
+    {
+      "version": "1.5.3",
+      "date": "2026-01-14",
+      "title": "Tool Equip & Playback Fix",
+      "changes": [
+        "Fixed tool equip causing double speed during playback",
+        "Fixed pause/resume playback not working properly",
+        "Added fingerprint matching for tools (name, tooltip, color, config)",
+        "Unified tool handling for both Flexible and Strict mode",
+        "Added throttle to prevent rapid tool re-equip",
+        "Fixed local register limit error"
+      ]
+    },
     {
       "version": "1.5.2",
       "date": "2026-01-11",
-      "title": "🔁 Loop Playback Fix",
+      "title": "Loop Playback Fix",
       "changes": [
         "Fixed loop playback not working properly",
         "Fixed travel phase not walking to start position",
@@ -17,7 +30,7 @@
     {
       "version": "1.5.1",
       "date": "2026-01-10",
-      "title": "🎭 Morph Avatar",
+      "title": "Morph Avatar",
       "changes": [
         "Added Morph Avatar feature to Fun tab",
         "Added live avatar preview before morphing",
@@ -29,10 +42,10 @@
       "date": "2026-01-10",
       "title": "Pathfinding & Visuals Update",
       "changes": [
-        "🚶 Smart Resume: Character now walks to resume point instead of teleporting",
-        "✨ High Precision Path: Smoother and more accurate path visualization",
-        "🔧 Fixed pathfinding timeout and stuck issues",
-        "⚡ Optimized waypoint navigation"
+        "Smart Resume: Character now walks to resume point instead of teleporting",
+        "High Precision Path: Smoother and more accurate path visualization",
+        "Fixed pathfinding timeout and stuck issues",
+        "Optimized waypoint navigation"
       ]
     },
     {
@@ -40,11 +53,11 @@
       "date": "2026-01-04",
       "title": "What's New",
       "changes": [
-        "✨ Improved loading experience",
-        "🚀 Performance boost",
-        "🛡️ Enhanced stability",
-        "🎨 UI improvements",
-        "🔧 Bug fixes"
+        "Improved loading experience",
+        "Performance boost",
+        "Enhanced stability",
+        "UI improvements",
+        "Bug fixes"
       ]
     },
     {
@@ -52,9 +65,9 @@
       "date": "2026-01-01",
       "title": "Update",
       "changes": [
-        "📍 Better accuracy",
-        "⚠️ Improved warnings",
-        "🎯 Quality improvements"
+        "Better accuracy",
+        "Improved warnings",
+        "Quality improvements"
       ]
     },
     {
@@ -62,9 +75,9 @@
       "date": "2025-12-28",
       "title": "New Features",
       "changes": [
-        "☁️ Cloud sync",
-        "🔐 Security enhancements",
-        "📂 Better file management"
+        "Cloud sync",
+        "Security enhancements",
+        "Better file management"
       ]
     }
   ]

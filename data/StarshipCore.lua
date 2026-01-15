@@ -10,7 +10,7 @@
 -- SERVER-BASED LOADING MODE
 -- Automatically detects environment and loads modules from appropriate server
 -- No manual configuration needed!
-local VERSION = "1.5.2"
+local VERSION = "1.5.3"
 
 -- Auto-detect: Check if URL was injected by bootstrap/dev-script
 if _G.StarshipServerMode == nil then
@@ -794,69 +794,21 @@ local lastFrameIndex = Playback.lastFrameIdx
 local cameraProxy = nil
 
 -- ============================================
--- ADAPTIVE PLAYBACK FPS SYSTEM
--- Auto-adjusts playback rate based on device performance
--- Supports high refresh rate monitors (120Hz+)
+-- PLAYBACK STATE (Zoom Debouncing)
 -- ============================================
 local DevicePerformance = {
-	frameCount = 0,
-	lastCheck = tick(),
-	currentFPS = 60,
-	targetPlaybackFPS = 60,
-	lastPlaybackUpdate = 0,
-	modeName = "Standard", -- For UI display
+	-- Zoom Punch Debouncing (prevents rapid FOV changes)
+	zoomPunch = {
+		currentState = "normal",
+		lastChangeTime = 0,
+		cooldown = 0.15,
+		pendingState = nil,
+	},
+	-- Interpolation mode: "catmullrom" (smooth but heavier) or "linear" (lighter but less smooth)
+	interpolationMode = "catmullrom",
 }
 
-local FPS_CHECK_INTERVAL = 2 -- Check every 2 seconds for stability
-
--- Update device FPS detection and adjust target playback FPS
-local function UpdateDevicePerformance()
-	local now = tick()
-	local elapsed = now - DevicePerformance.lastCheck
-	
-	if elapsed >= FPS_CHECK_INTERVAL then
-		DevicePerformance.currentFPS = DevicePerformance.frameCount / elapsed
-		DevicePerformance.frameCount = 0
-		DevicePerformance.lastCheck = now
-		
-		local fps = DevicePerformance.currentFPS
-		
-		-- Adaptive FPS tiers with high refresh rate support
-		if fps >= 170 then
-			DevicePerformance.targetPlaybackFPS = 180
-			DevicePerformance.modeName = "Extreme (180Hz)"
-		elseif fps >= 135 then
-			DevicePerformance.targetPlaybackFPS = 144
-			DevicePerformance.modeName = "Ultra+ (144Hz)"
-		elseif fps >= 110 then
-			DevicePerformance.targetPlaybackFPS = 120
-			DevicePerformance.modeName = "Ultra (120Hz)"
-		elseif fps >= 80 then
-			DevicePerformance.targetPlaybackFPS = 90
-			DevicePerformance.modeName = "High (90Hz)"
-		elseif fps >= 55 then
-			DevicePerformance.targetPlaybackFPS = 60
-			DevicePerformance.modeName = "Standard (60Hz)"
-		elseif fps >= 40 then
-			DevicePerformance.targetPlaybackFPS = 45
-			DevicePerformance.modeName = "Medium (45Hz)"
-		elseif fps >= 25 then
-			DevicePerformance.targetPlaybackFPS = 30
-			DevicePerformance.modeName = "Low (30Hz)"
-		else
-			DevicePerformance.targetPlaybackFPS = 20
-			DevicePerformance.modeName = "Minimal (20Hz)"
-		end
-		
-		if DEV_MODE then
-			warn(string.format("[Starship] Device FPS: %.1f | Playback Mode: %s", fps, DevicePerformance.modeName))
-		end
-	end
-	
-	DevicePerformance.frameCount = DevicePerformance.frameCount + 1
-end
-
--- Expose for UI access
+-- Expose for UI access (kept for compatibility)
 _G.StarshipDevicePerformance = DevicePerformance
 
 -- Binary search for frame index (O(log n) instead of O(n))
@@ -1076,21 +1028,51 @@ local function CatmullRomVector3(v0, v1, v2, v3, t)
 	)
 end
 
--- Smooth interpolation between two frames using Catmull-Rom (requires 4 frames context)
+-- Smooth interpolation between two frames using Catmull-Rom or Linear (based on DevicePerformance.interpolationMode)
 -- OPTIMIZED: Uses pre-cached posVector/velVector from PreprocessFrames when available
+-- Set DevicePerformance.interpolationMode = "linear" for better FPS on low-end devices
 local function SmoothInterpolateFrames(frames, frameIdx, alpha)
 	local n = #frames
 	if n < 2 then
 		return nil, nil
 	end
 
+	local f1, f2 = frames[frameIdx], frames[frameIdx + 1]
+	if not f1 or not f2 then
+		return nil, nil
+	end
+	
+	-- LINEAR MODE: Much lighter, good for low-end devices
+	if DevicePerformance.interpolationMode == "linear" then
+		local smoothPos = nil
+		if f1.posVector and f2.posVector then
+			smoothPos = f1.posVector:Lerp(f2.posVector, alpha)
+		elseif f1.pos and f2.pos then
+			local p1 = Vector3.new(f1.pos.x, f1.pos.y, f1.pos.z)
+			local p2 = Vector3.new(f2.pos.x, f2.pos.y, f2.pos.z)
+			smoothPos = p1:Lerp(p2, alpha)
+		end
+		
+		local smoothVel = nil
+		if f1.velVector and f2.velVector then
+			smoothVel = f1.velVector:Lerp(f2.velVector, alpha)
+		elseif f1.vel and f2.vel then
+			local v1 = Vector3.new(f1.vel.x, f1.vel.y, f1.vel.z)
+			local v2 = Vector3.new(f2.vel.x, f2.vel.y, f2.vel.z)
+			smoothVel = v1:Lerp(v2, alpha)
+		end
+		
+		return smoothPos, smoothVel
+	end
+
+	-- CATMULL-ROM MODE: Smoother but heavier
 	-- Get 4 frames for Catmull-Rom (clamp at boundaries)
 	local i0 = math.max(1, frameIdx - 1)
 	local i1 = frameIdx
 	local i2 = math.min(n, frameIdx + 1)
 	local i3 = math.min(n, frameIdx + 2)
 
-	local f0, f1, f2, f3 = frames[i0], frames[i1], frames[i2], frames[i3]
+	local f0, f3 = frames[i0], frames[i3]
 
 	-- Interpolate position with Catmull-Rom
 	-- OPTIMIZATION: Use pre-cached posVector if available (from PreprocessFrames)
@@ -1147,16 +1129,41 @@ local function GaussianWeight(distance, sigma)
 end
 
 local function GetSmoothedFrames(frames, strength, isFlexible)
-	local processedFrames = DeepCopy(frames) -- Work on a copy, never touch raw data
+	-- OPTIMIZED: Shallow copy + only deep copy modified fields
+	local processedFrames = {}
+	for i, frame in ipairs(frames) do
+		processedFrames[i] = {}
+		for k, v in pairs(frame) do
+			processedFrames[i][k] = v
+		end
+		-- Deep copy only fields we'll modify
+		if frame.pos then
+			processedFrames[i].pos = {x = frame.pos.x, y = frame.pos.y, z = frame.pos.z}
+		end
+		if frame.vel then
+			processedFrames[i].vel = {x = frame.vel.x, y = frame.vel.y, z = frame.vel.z}
+		end
+		if frame.r then
+			processedFrames[i].r = {}
+			for k, v in pairs(frame.r) do
+				processedFrames[i].r[k] = v
+			end
+		end
+	end
+	
 	local iterations = math.clamp(strength or 1, 1, 10)
-
-	-- Gaussian kernel radius scales with strength (1-5 neighbors on each side)
 	local kernelRadius = math.clamp(math.ceil(strength / 2), 1, 5)
-	local sigma = kernelRadius / 2 -- Standard deviation for Gaussian
+	local sigma = kernelRadius / 2
+
+	-- Pre-calculate Gaussian weights
+	local gaussianWeights = {}
+	for d = 0, kernelRadius do
+		gaussianWeights[d] = math.exp(-(d * d) / (2 * sigma * sigma))
+	end
 
 	for iter = 1, iterations do
-		-- Create temporary copy for this iteration to avoid reading modified values
-		local tempFrames = DeepCopy(processedFrames)
+		-- OPTIMIZED: Double-buffer approach instead of DeepCopy per iteration
+		local tempPos, tempVel, tempRot, tempR = {}, {}, {}, {}
 
 		for i = 2, #processedFrames - 1 do
 			local curr = processedFrames[i]
@@ -1167,11 +1174,11 @@ local function GetSmoothedFrames(frames, strength, isFlexible)
 					local weightSum = 0
 					local posSum = Vector3.new(0, 0, 0)
 
-					for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
-						local neighbor = tempFrames[j]
+					for j = math.max(1, i - kernelRadius), math.min(#processedFrames, i + kernelRadius) do
+						local neighbor = processedFrames[j]
 						if neighbor.pos then
 							local dist = math.abs(j - i)
-							local weight = GaussianWeight(dist, sigma)
+							local weight = gaussianWeights[dist] or GaussianWeight(dist, sigma)
 							local neighborPos = Vector3.new(neighbor.pos.x, neighbor.pos.y, neighbor.pos.z)
 							posSum = posSum + neighborPos * weight
 							weightSum = weightSum + weight
@@ -1180,12 +1187,9 @@ local function GetSmoothedFrames(frames, strength, isFlexible)
 
 					if weightSum > 0 then
 						local smoothedPos = posSum / weightSum
-						-- Blend between original and smoothed (preserves sharp corners when needed)
 						local currPos = Vector3.new(curr.pos.x, curr.pos.y, curr.pos.z)
-						local finalPos = currPos:Lerp(smoothedPos, 0.7) -- 70% smooth, 30% original
-						curr.pos.x = finalPos.X
-						curr.pos.y = finalPos.Y
-						curr.pos.z = finalPos.Z
+						local finalPos = currPos:Lerp(smoothedPos, 0.7)
+						tempPos[i] = {x = finalPos.X, y = finalPos.Y, z = finalPos.Z}
 					end
 				end
 
@@ -1194,11 +1198,11 @@ local function GetSmoothedFrames(frames, strength, isFlexible)
 					local weightSum = 0
 					local velSum = Vector3.new(0, 0, 0)
 
-					for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
-						local neighbor = tempFrames[j]
+					for j = math.max(1, i - kernelRadius), math.min(#processedFrames, i + kernelRadius) do
+						local neighbor = processedFrames[j]
 						if neighbor.vel then
 							local dist = math.abs(j - i)
-							local weight = GaussianWeight(dist, sigma)
+							local weight = gaussianWeights[dist] or GaussianWeight(dist, sigma)
 							local neighborVel = Vector3.new(neighbor.vel.x, neighbor.vel.y, neighbor.vel.z)
 							velSum = velSum + neighborVel * weight
 							weightSum = weightSum + weight
@@ -1207,34 +1211,26 @@ local function GetSmoothedFrames(frames, strength, isFlexible)
 
 					if weightSum > 0 then
 						local smoothedVel = velSum / weightSum
-						-- More aggressive velocity smoothing (reduces jitter)
 						local currVel = Vector3.new(curr.vel.x, curr.vel.y, curr.vel.z)
-						local finalVel = currVel:Lerp(smoothedVel, 0.8) -- 80% smooth
-						curr.vel.x = finalVel.X
-						curr.vel.y = finalVel.Y
-						curr.vel.z = finalVel.Z
+						local finalVel = currVel:Lerp(smoothedVel, 0.8)
+						tempVel[i] = {x = finalVel.X, y = finalVel.Y, z = finalVel.Z}
 					end
 				end
 
-				-- Also smooth rotation for more natural turning
+				-- Rotation smoothing
 				if curr.rot and type(curr.rot) == "number" then
 					local weightSum = 0
 					local rotSum = 0
 					local baseRot = curr.rot
 
-					for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
-						local neighbor = tempFrames[j]
+					for j = math.max(1, i - kernelRadius), math.min(#processedFrames, i + kernelRadius) do
+						local neighbor = processedFrames[j]
 						if neighbor.rot and type(neighbor.rot) == "number" then
 							local dist = math.abs(j - i)
-							local weight = GaussianWeight(dist, sigma)
-							-- Handle angle wrapping (-180 to 180)
+							local weight = gaussianWeights[dist] or GaussianWeight(dist, sigma)
 							local angleDiff = neighbor.rot - baseRot
-							if angleDiff > 180 then
-								angleDiff = angleDiff - 360
-							end
-							if angleDiff < -180 then
-								angleDiff = angleDiff + 360
-							end
+							if angleDiff > 180 then angleDiff = angleDiff - 360 end
+							if angleDiff < -180 then angleDiff = angleDiff + 360 end
 							rotSum = rotSum + (baseRot + angleDiff) * weight
 							weightSum = weightSum + weight
 						end
@@ -1242,28 +1238,23 @@ local function GetSmoothedFrames(frames, strength, isFlexible)
 
 					if weightSum > 0 then
 						local smoothedRot = rotSum / weightSum
-						-- Normalize to -180 to 180
-						while smoothedRot > 180 do
-							smoothedRot = smoothedRot - 360
-						end
-						while smoothedRot < -180 do
-							smoothedRot = smoothedRot + 360
-						end
-						curr.rot = curr.rot + (smoothedRot - curr.rot) * 0.6 -- 60% blend
+						while smoothedRot > 180 do smoothedRot = smoothedRot - 360 end
+						while smoothedRot < -180 do smoothedRot = smoothedRot + 360 end
+						tempRot[i] = curr.rot + (smoothedRot - curr.rot) * 0.6
 					end
 				end
 			else
-				-- Strict mode: Gaussian-weighted CFrame smoothing
+				-- Strict mode: CFrame smoothing
 				if curr.r then
 					local weightSum = 0
 					local posSum = Vector3.new(0, 0, 0)
 					local baseCF = TblToCF(curr.r)
 
-					for j = math.max(1, i - kernelRadius), math.min(#tempFrames, i + kernelRadius) do
-						local neighbor = tempFrames[j]
+					for j = math.max(1, i - kernelRadius), math.min(#processedFrames, i + kernelRadius) do
+						local neighbor = processedFrames[j]
 						if neighbor.r then
 							local dist = math.abs(j - i)
-							local weight = GaussianWeight(dist, sigma)
+							local weight = gaussianWeights[dist] or GaussianWeight(dist, sigma)
 							local neighborCF = TblToCF(neighbor.r)
 							posSum = posSum + neighborCF.Position * weight
 							weightSum = weightSum + weight
@@ -1273,18 +1264,28 @@ local function GetSmoothedFrames(frames, strength, isFlexible)
 					if weightSum > 0 then
 						local smoothedPos = posSum / weightSum
 						local finalPos = baseCF.Position:Lerp(smoothedPos, 0.7)
-						-- For rotation, use neighbors for lerp target
 						local prevIdx = math.max(1, i - 1)
-						local nextIdx = math.min(#tempFrames, i + 1)
-						local prevCF = TblToCF(tempFrames[prevIdx].r)
-						local nextCF = TblToCF(tempFrames[nextIdx].r)
+						local nextIdx = math.min(#processedFrames, i + 1)
+						local prevCF = TblToCF(processedFrames[prevIdx].r)
+						local nextCF = TblToCF(processedFrames[nextIdx].r)
 						local rotAvg = prevCF:Lerp(nextCF, 0.5)
 						local newRot = baseCF:Lerp(rotAvg, 0.5)
-						curr.r = CFToTbl(CFrame.new(finalPos) * newRot.Rotation)
+						tempR[i] = CFToTbl(CFrame.new(finalPos) * newRot.Rotation)
 					end
 				end
 			end
+			
+			-- Yield every 300 frames to prevent freeze
+			if i % 300 == 0 then
+				task.wait()
+			end
 		end
+		
+		-- Apply all changes at once
+		for i, pos in pairs(tempPos) do processedFrames[i].pos = pos end
+		for i, vel in pairs(tempVel) do processedFrames[i].vel = vel end
+		for i, rot in pairs(tempRot) do processedFrames[i].rot = rot end
+		for i, r in pairs(tempR) do processedFrames[i].r = r end
 	end
 	return processedFrames
 end
@@ -1317,7 +1318,7 @@ function UIHandlers.SmoothRecording(strength)
 	recordedData.Frames = GetSmoothedFrames(recordedData.Frames, strength, isFlexible)
 	ShowLoadingModal(false)
 	ShowToast(L("success"), L("path_smoothed"), "success", 2)
-	if isPathEnabled then
+	if isRecordingPathEnabled or isPlaybackPathEnabled then
 		GeneratePlaybackPath(recordedData.Frames)
 	end
 end
@@ -1660,7 +1661,9 @@ end
 -- --- PATH VARIABLES ---
 local PathContainer = nil
 local lastPathPoint = nil
-local isPathEnabled = false -- DEFAULT OFF untuk prevent FPS drop pada merged files
+local isRecordingPathEnabled = false -- Path toggle untuk Recorder Tab
+local isPlaybackPathEnabled = false -- Path toggle untuk Playback Window (terpisah)
+local currentPathColor = Color3.fromRGB(255, 50, 50) -- Default red, will be updated by UI
 
 local function GetJoints(char)
 	local j = {}
@@ -1770,7 +1773,8 @@ end
 
 local function GeneratePlaybackPath(frames)
 	ClearPath()
-	if not isPathEnabled or not frames or #frames < 2 then
+	-- Generate path (always on)
+	if not frames or #frames < 2 then
 		return
 	end
 	task.spawn(function()
@@ -1821,6 +1825,7 @@ local function GeneratePlaybackPath(frames)
 		end
 	end)
 end
+
 
 -- ═══════════════════════════════════════════════════════════════════
 -- AUTO-CHECKPOINT SYSTEM (Wrapped to reduce local variable count)
@@ -2386,6 +2391,8 @@ local function StartRecording()
 	if PathContainer then
 		PathContainer:ClearAllChildren()
 	end
+	-- Initialize path starting point for live drawing
+	lastPathPoint = r.Position
 
 	isRecording = true
 	isPaused = false
@@ -2585,10 +2592,16 @@ local function StartRecording()
 
 		table.insert(recordedData.Frames, fd)
 
-		if isPathEnabled then
+		-- Always draw path while recording
+		if isRecording then
 			local cp = r.Position
-			if (cp - lastPathPoint).Magnitude > 0.5 then
-				DrawLine(lastPathPoint, cp, currentPathColor)
+			if lastPathPoint then
+				local dist = (cp - lastPathPoint).Magnitude
+				if dist > 0.1 then
+					DrawLine(lastPathPoint, cp, currentPathColor)
+					lastPathPoint = cp
+				end
+			else
 				lastPathPoint = cp
 			end
 		end
@@ -2615,7 +2628,7 @@ local function CutAndResume(cutTime)
 	recordedData.Frames = nf
 	ClearPath()
 
-	if isPathEnabled then
+	if isRecordingPathEnabled then
 		local pp = nil
 		for _, f in ipairs(nf) do
 			local pos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
@@ -2731,13 +2744,35 @@ local function SaveRecording(fn)
 	end -- Auto Refresh Merge UI
 	return true
 end
--- ZOOM PUNCH EFFECT FUNCTION
+-- ZOOM PUNCH EFFECT FUNCTION (with debouncing to prevent rapid FOV changes)
 local defaultFOV = 70
 local currentZoomTween = nil
 local function SetZoomState(state)
 	if not isZoomPunch then
 		return
 	end
+	
+	-- Debouncing: prevent rapid state changes
+	local zps = DevicePerformance.zoomPunch
+	local now = tick()
+	
+	-- If same state, ignore
+	if state == zps.currentState then
+		zps.pendingState = nil
+		return
+	end
+	
+	-- If within cooldown, queue the state change
+	if now - zps.lastChangeTime < zps.cooldown then
+		zps.pendingState = state
+		return
+	end
+	
+	-- Apply state change
+	zps.currentState = state
+	zps.lastChangeTime = now
+	zps.pendingState = nil
+	
 	local cam = workspace.CurrentCamera
 	if not cam then
 		return
@@ -2750,16 +2785,16 @@ local function SetZoomState(state)
 
 	local targetFOV = defaultFOV
 	if state == "jump" then
-		targetFOV = defaultFOV + 15 -- Zoom OUT saat loncat
+		targetFOV = defaultFOV + 10 -- Reduced from +15 for smoother effect
 	elseif state == "fall" then
-		targetFOV = defaultFOV - 10 -- Zoom IN saat jatuh
+		targetFOV = defaultFOV - 5 -- Reduced from -10 for smoother effect
 	else
 		targetFOV = defaultFOV -- Normal
 	end
 
 	currentZoomTween = TweenService:Create(
 		cam,
-		TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), -- Smoother easing
 		{ FieldOfView = targetFOV }
 	)
 	currentZoomTween:Play()
@@ -2770,6 +2805,7 @@ local function StopPlayback()
 	isPlayPaused = false
 	isReversing = false
 	lastAirState = nil
+	DevicePerformance.zoomPunch.currentState = "normal" -- Reset zoom state
 	SetZoomState("normal")
 	if Connections.Playback then
 		Connections.Playback:Disconnect()
@@ -2894,42 +2930,167 @@ local function PreprocessFrames(frames)
 
 	for i, frame in ipairs(frames) do
 		-- Pre-calculate Vector3 for positions
-		if frame.pos then
+		if frame.pos and not frame.posVector then
 			frame.posVector = Vector3.new(frame.pos.x, frame.pos.y, frame.pos.z)
 		end
 
 		-- Pre-calculate Vector3 for velocities
-		if frame.vel then
+		if frame.vel and not frame.velVector then
 			frame.velVector = Vector3.new(frame.vel.x, frame.vel.y, frame.vel.z)
 		end
 
 		-- Pre-calculate Vector3 for move direction
-		if frame.md then
+		if frame.md and not frame.mdVector then
 			frame.mdVector = Vector3.new(frame.md.x, frame.md.y, frame.md.z)
 		end
 
 		-- Pre-parse state enum (expensive string.match)
-		if frame.st then
+		if frame.st and not frame.stEnum then
 			frame.stEnum = string.match(frame.st, "Enum%.HumanoidStateType%.(%w+)")
 		end
 
 		-- Pre-calculate camera look vector
-		if frame.camLook then
+		if frame.camLook and not frame.camLookVector then
 			frame.camLookVector = Vector3.new(frame.camLook.x, frame.camLook.y, frame.camLook.z)
 		end
 
 		-- Pre-calculate character look vector
-		if frame.charLook then
+		if frame.charLook and not frame.charLookVector then
 			frame.charLookVector = Vector3.new(frame.charLook.x, frame.charLook.y, frame.charLook.z)
 		end
 
-		-- Yield every 1000 frames to prevent freeze on large files
-		if i % 1000 == 0 then
+		-- Yield every 500 frames to prevent freeze on large files
+		if i % 500 == 0 then
 			task.wait()
 		end
 	end
 
 	return frames
+end
+
+-- ═══════════════════════════════════════════════════════════════════
+-- TOOL HANDLING HELPERS (Shared by Flexible & Strict Mode)
+-- Supports: Name, ToolTip, Handle Color, Configuration values
+-- Uses _G to avoid local variable limit
+-- ═══════════════════════════════════════════════════════════════════
+do
+	_G.StarshipToolState = _G.StarshipToolState or { lastEquipTime = 0, lastEquippedTool = nil }
+	local THROTTLE_INTERVAL = 0.3 -- Increased to prevent rapid re-equip
+
+	-- Helper: Check if handle color matches
+	local function ColorMatches(tool, targetColor)
+		if not targetColor then return true end
+		local handle = tool:FindFirstChild("Handle")
+		if not handle or not handle:IsA("BasePart") then return true end
+		local tolerance = 0.05
+		return math.abs(handle.Color.R - targetColor.r) < tolerance
+			and math.abs(handle.Color.G - targetColor.g) < tolerance
+			and math.abs(handle.Color.B - targetColor.b) < tolerance
+	end
+
+	-- Helper: Check if config values match
+	local function ConfigMatches(tool, targetConfig)
+		if not targetConfig then return true end
+		local config = tool:FindFirstChild("Configuration") or tool:FindFirstChild("Config")
+		if not config then return false end
+		for name, value in pairs(targetConfig) do
+			local child = config:FindFirstChild(name)
+			if child and (child:IsA("NumberValue") or child:IsA("IntValue")) then
+				if child.Value ~= value then return false end
+			else
+				return false
+			end
+		end
+		return true
+	end
+
+	-- Unified tool update function (used by both Flexible and Strict mode)
+	_G.UpdateToolEquip = function(char, recordedToolName, recordedToolTip, recordedToolColor, recordedToolConfig)
+		if not char then return end
+
+		-- Throttle tool changes
+		local now = os.clock()
+		if now - _G.StarshipToolState.lastEquipTime < THROTTLE_INTERVAL then return end
+
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if not hum then return end
+
+		local currentTool = char:FindFirstChildOfClass("Tool")
+		local currentToolName = currentTool and currentTool.Name or nil
+
+		-- CASE 1: No tool recorded, but player has tool equipped → unequip
+		if not recordedToolName then
+			if currentTool then
+				_G.StarshipToolState.lastEquipTime = now
+				_G.StarshipToolState.lastEquippedTool = nil
+				hum:UnequipTools()
+			end
+			return
+		end
+
+		-- CASE 2: Tool recorded, check if we need to equip
+		-- Skip if same tool is already equipped (prevent double equip/speed stack)
+		if currentTool and currentToolName == recordedToolName then
+			-- Tool with same name already equipped - DON'T re-equip to prevent speed stacking
+			-- Just update the tracking state
+			_G.StarshipToolState.lastEquippedTool = currentTool
+			return
+		end
+
+		-- CASE 3: Need to equip a different tool
+		_G.StarshipToolState.lastEquipTime = now
+
+		local backpack = LocalPlayer:FindFirstChild("Backpack")
+		if not backpack then return end
+
+		local toolToEquip = nil
+
+		-- Priority 1: Match name + tooltip + color + config (exact match)
+		if recordedToolTip or recordedToolColor or recordedToolConfig then
+			for _, tool in pairs(backpack:GetChildren()) do
+				if tool:IsA("Tool") and tool.Name == recordedToolName then
+					local tipMatch = (not recordedToolTip) or (tool.ToolTip == recordedToolTip)
+					local colorMatch = ColorMatches(tool, recordedToolColor)
+					local configMatch = ConfigMatches(tool, recordedToolConfig)
+					if tipMatch and colorMatch and configMatch then
+						toolToEquip = tool
+						break
+					end
+				end
+			end
+		end
+
+		-- Priority 2: Match name + tooltip
+		if not toolToEquip and recordedToolTip then
+			for _, tool in pairs(backpack:GetChildren()) do
+				if tool:IsA("Tool") and tool.Name == recordedToolName and tool.ToolTip == recordedToolTip then
+					toolToEquip = tool
+					break
+				end
+			end
+		end
+
+		-- Priority 3: Match name + color
+		if not toolToEquip and recordedToolColor then
+			for _, tool in pairs(backpack:GetChildren()) do
+				if tool:IsA("Tool") and tool.Name == recordedToolName and ColorMatches(tool, recordedToolColor) then
+					toolToEquip = tool
+					break
+				end
+			end
+		end
+
+		-- Priority 4: Fallback to name-only match
+		if not toolToEquip then
+			toolToEquip = backpack:FindFirstChild(recordedToolName)
+		end
+
+		-- Only equip if we found a tool AND it's different from current
+		if toolToEquip and toolToEquip:IsA("Tool") and toolToEquip ~= currentTool then
+			_G.StarshipToolState.lastEquippedTool = toolToEquip
+			hum:EquipTool(toolToEquip)
+		end
+	end
 end
 
 local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
@@ -3052,23 +3213,118 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 	local a = c:FindFirstChild("Animate")
 
 	-- SMART RESUME / SMART START
-	-- Always check for nearest point if resuming OR if starting fresh (to support mid-path start)
-	if true then
+	-- If resuming from pause, keep the paused time - but check if player moved too far
+	-- Only search for nearest point when starting fresh (not resuming)
+	local needTravelPhase = false -- Flag to trigger travel phase even when resuming
+	local useNearestPoint = false -- Flag to find nearest point instead of paused position
+	
+	if isResuming then
+		-- RESUME: Check if player moved too far from the paused position
+		-- Find the frame at currentPlaybackTime
+		local resumeFrame = nil
+		local resumeFrameIdx = 1
+		for i = 1, #currentFrameData do
+			if currentFrameData[i].t >= currentPlaybackTime then
+				resumeFrame = currentFrameData[i]
+				resumeFrameIdx = i
+				break
+			end
+		end
+		
+		if resumeFrame then
+			-- Check if resume frame is in air (Freefall/Jumping)
+			local stateName = resumeFrame.stEnum or (resumeFrame.st and string.match(resumeFrame.st, "Enum%.HumanoidStateType%.(%w+)"))
+			local isAirFrame = (stateName == "Jumping" or stateName == "Freefall")
+			
+			-- If paused in air, find nearest ground frame instead
+			if isAirFrame then
+				-- Search for nearest ground frame (forward and backward)
+				local searchRange = 120 -- ~2 seconds at 60fps
+				local bestGroundIdx = nil
+				
+				for offset = 1, searchRange do
+					-- Check forward first (prefer continuing forward)
+					local fwdIdx = resumeFrameIdx + offset
+					if fwdIdx <= #currentFrameData then
+						local f = currentFrameData[fwdIdx]
+						local fState = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+						if fState == nil or fState == "Running" or fState == "Landed" or fState == "Climbing" then
+							bestGroundIdx = fwdIdx
+							break
+						end
+					end
+					
+					-- Check backward
+					local bwdIdx = resumeFrameIdx - offset
+					if bwdIdx >= 1 and not bestGroundIdx then
+						local f = currentFrameData[bwdIdx]
+						local fState = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+						if fState == nil or fState == "Running" or fState == "Landed" or fState == "Climbing" then
+							bestGroundIdx = bwdIdx
+							break
+						end
+					end
+				end
+				
+				if bestGroundIdx then
+					resumeFrame = currentFrameData[bestGroundIdx]
+					currentPlaybackTime = resumeFrame.t
+					ShowToast(L("resuming") or "Resuming", 
+						string.format("Paused in air, resuming from ground at %.1fs", currentPlaybackTime), 
+						"info", 2)
+				end
+			end
+			
+			local resumePos = (resumeFrame.pos and Vector3.new(resumeFrame.pos.x, resumeFrame.pos.y, resumeFrame.pos.z))
+				or (resumeFrame.r and TblToCF(resumeFrame.r).Position)
+			
+			if resumePos then
+				local flatPlayer = r.Position * Vector3.new(1, 0, 1)
+				local flatResume = resumePos * Vector3.new(1, 0, 1)
+				local distFromPath = (flatPlayer - flatResume).Magnitude
+				
+				if distFromPath <= 10 then
+					-- Close enough, just continue
+					if not isAirFrame then
+						ShowToast(L("resuming") or "Resuming", 
+							string.format("Continuing from %.1fs", currentPlaybackTime), 
+							"info", 2)
+					end
+				elseif distFromPath <= 100 then
+					-- Medium distance (10-100 studs): walk back to paused position
+					ShowToast(L("resuming") or "Resuming", 
+						string.format("Returning to path (%.0f studs)...", distFromPath), 
+						"info", 2)
+					needTravelPhase = true
+				else
+					-- Too far (>100 studs, probably respawned/fell): find nearest point instead
+					ShowToast(L("resuming") or "Resuming", 
+						string.format("Too far (%.0f studs), finding nearest point...", distFromPath), 
+						"info", 2)
+					useNearestPoint = true
+				end
+			end
+		end
+	end
+	
+	if not isResuming or useNearestPoint then
+		-- FRESH START: Search for nearest point
 		ShowLoadingModal(true, L("finding_position"))
 		task.wait()
 
 		local bestT, minDst = currentPlaybackTime, math.huge
 		local rPos = r.Position
+		local bestFrameIdx = 1
 		
 		-- Store best ground frame separately (prefer ground over air)
 		local bestGroundT, minGroundDst = currentPlaybackTime, math.huge
+		local bestGroundIdx = 1
 
-		-- Check frames to find closest point
-		-- Optimization: Step by 5 to save performance on huge files
-		local step = math.max(1, math.floor(#currentFrameData / 500))
+		-- PHASE 1: Coarse search with larger step to find approximate nearest frame
+		local step = math.max(1, math.floor(#currentFrameData / 200)) -- Reduced from 500 to 200 for better accuracy
 
 		for i = 1, #currentFrameData, step do
-			if i % 50 == 0 then
+			if i % 100 == 0 then
 				task.wait()
 			end -- Yield to prevent freeze
 
@@ -3079,6 +3335,7 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 				if dst < minDst then
 					minDst = dst
 					bestT = f.t
+					bestFrameIdx = i
 				end
 				
 				-- Check if this is a ground frame (not jumping/freefalling)
@@ -3088,6 +3345,57 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 				if isGroundFrame and dst < minGroundDst then
 					minGroundDst = dst
 					bestGroundT = f.t
+					bestGroundIdx = i
+				end
+			end
+		end
+		
+		-- PHASE 2: Fine search around the best frame found (check every frame in range)
+		local searchRadius = step * 2 -- Search +/- this many frames around best
+		local fineStart = math.max(1, bestFrameIdx - searchRadius)
+		local fineEnd = math.min(#currentFrameData, bestFrameIdx + searchRadius)
+		
+		for i = fineStart, fineEnd do
+			local f = currentFrameData[i]
+			local pos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
+			if pos then
+				local dst = (rPos - pos).Magnitude
+				if dst < minDst then
+					minDst = dst
+					bestT = f.t
+					bestFrameIdx = i
+				end
+				
+				local stateName = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+				local isGroundFrame = (stateName == nil) or (stateName == "Running") or (stateName == "Landed") or (stateName == "Climbing")
+				
+				if isGroundFrame and dst < minGroundDst then
+					minGroundDst = dst
+					bestGroundT = f.t
+					bestGroundIdx = i
+				end
+			end
+		end
+		
+		-- Also do fine search around best ground frame if different
+		if bestGroundIdx ~= bestFrameIdx then
+			fineStart = math.max(1, bestGroundIdx - searchRadius)
+			fineEnd = math.min(#currentFrameData, bestGroundIdx + searchRadius)
+			
+			for i = fineStart, fineEnd do
+				local f = currentFrameData[i]
+				local pos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
+				if pos then
+					local dst = (rPos - pos).Magnitude
+					
+					local stateName = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+					local isGroundFrame = (stateName == nil) or (stateName == "Running") or (stateName == "Landed") or (stateName == "Climbing")
+					
+					if isGroundFrame and dst < minGroundDst then
+						minGroundDst = dst
+						bestGroundT = f.t
+						bestGroundIdx = i
+					end
 				end
 			end
 		end
@@ -3114,20 +3422,57 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 		-- Smart position logic (SAME AS MOBILE)
 		if forceFromStart then
 			currentPlaybackTime = 0
+			_G.StarshipSkipInitialSnap = false
 		-- If the nearest point is within the last 2 seconds, force restart from 0
 		elseif bestT >= (currentTotalDuration - 2.0) then
 			currentPlaybackTime = 0
+			-- But if player is close to start, skip travel phase
+			if minDst < 100 then
+				isResuming = true
+				_G.StarshipSkipInitialSnap = true
+				_G.StarshipSkipSnapFrames = 60
+				ShowToast(L("smart_start") or "Smart Start", 
+					"Restarting from beginning (near end)", 
+					"info", 2)
+			else
+				_G.StarshipSkipInitialSnap = false
+			end
 		-- Snap to Start: If nearest point is within first 1 second, start from 0
 		elseif bestT < 1.0 then
 			currentPlaybackTime = 0
+			-- If player is close to start, skip travel phase
+			if minDst < 100 then
+				isResuming = true
+				_G.StarshipSkipInitialSnap = true
+				_G.StarshipSkipSnapFrames = 60
+				ShowToast(L("smart_start") or "Smart Start", 
+					"Starting from beginning (already near start)", 
+					"info", 2)
+			else
+				_G.StarshipSkipInitialSnap = false
+			end
 		-- Otherwise, jump to nearest point if close enough to path
 		elseif minDst < 500 then
 			currentPlaybackTime = bestT
-			ShowToast(L("smart_start") or "Smart Start", 
-				string.format("Found nearest point at %.1fs (%.0f studs)", bestT, minDst), 
-				"info", 2)
+			-- If player is already close to path (< 100 studs), skip travel phase
+			-- Player will naturally sync with playback from their current position
+			if minDst < 100 then
+				isResuming = true -- This will skip travel phase
+				-- Set global flag to skip initial position snap in playback
+				_G.StarshipSkipInitialSnap = true
+				_G.StarshipSkipSnapFrames = 60 -- Skip position correction for first 60 frames (~1s)
+				ShowToast(L("smart_start") or "Smart Start", 
+					string.format("Starting from %.1fs (%.0f studs)", bestT, minDst), 
+					"info", 2)
+			else
+				_G.StarshipSkipInitialSnap = false
+				ShowToast(L("smart_start") or "Smart Start", 
+					string.format("Walking to path at %.1fs (%.0f studs)", bestT, minDst), 
+					"info", 2)
+			end
 		else
 			currentPlaybackTime = 0
+			_G.StarshipSkipInitialSnap = false
 		end
 	end
 
@@ -3136,14 +3481,10 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 	isPlayPaused = false
 	lastPlaybackTime = currentPlaybackTime
 
-	-- 1. PATH VISUAL
-	if isPathEnabled then
-		ShowLoadingModal(true, L("generating_path"))
-		task.wait()
-		GeneratePlaybackPath(currentFrameData)
-	else
-		ClearPath()
-	end
+	-- 1. PATH VISUAL (always show path during playback)
+	ShowLoadingModal(true, L("generating_path"))
+	task.wait()
+	GeneratePlaybackPath(currentFrameData)
 
 	-- 2. TRAVEL PHASE
 	local startFrame = currentFrameData[1]
@@ -3205,7 +3546,9 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 	ShowLoadingModal(false)
 
 	-- Travel to target if far away (SAME AS MOBILE - Simple direct walk)
-	if targetPos then
+	-- Run travel phase if: fresh start OR resuming but player moved away from path
+	-- Also run if useNearestPoint (player respawned/fell, need to walk to nearest point)
+	if targetPos and (not isResuming or needTravelPhase or useNearestPoint) then
 		if startFrame.r then
 			CreateStartBaseplate(targetPos)
 		end -- Only create baseplate if we have a position
@@ -3215,7 +3558,58 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 		local flatTarget = targetPos * Vector3.new(1, 0, 1)
 		local dist = (flatPos - flatTarget).Magnitude
 
-		if dist > 3 then
+		-- SMART START: Walk to nearest path point naturally (not snap/teleport)
+		if dist < 1000 and dist > 5 then
+			-- Player is within range but not on path - walk to it naturally
+			r.Anchored = false
+			if a then
+				a.Disabled = false
+			end
+			h.AutoRotate = true
+
+			ShowToast(L("smart_start") or "Smart Start", 
+				string.format("Walking to path (%.0f studs)...", dist), 
+				"info", 2)
+
+			-- Use normal walk speed
+			local walkSpeed = h.WalkSpeed
+			if walkSpeed < 16 then walkSpeed = 16 end
+			h.WalkSpeed = walkSpeed
+			h:MoveTo(targetPos)
+
+			-- Wait until close enough or timeout
+			local moveStart = os.clock()
+			local maxWalkTime = math.min(dist / 10, 15) -- Max 15 seconds, ~10 studs/sec
+
+			while isPlaying do
+				local currFlat = r.Position * Vector3.new(1, 0, 1)
+				local d = (currFlat - flatTarget).Magnitude
+
+				-- Close enough
+				if d <= 3 then
+					break
+				end
+
+				-- Timeout - just start from current position
+				if os.clock() - moveStart > maxWalkTime then
+					ShowToast(L("smart_start") or "Smart Start", "Starting from current position", "info", 2)
+					break
+				end
+
+				-- Keep walking
+				h:MoveTo(targetPos)
+				task.wait(0.1)
+			end
+
+			-- Stop walking
+			h:MoveTo(r.Position)
+			
+		elseif dist <= 5 then
+			-- Already very close, just start
+			ShowToast(L("smart_start") or "Smart Start", 
+				string.format("Starting from %.1fs", currentPlaybackTime), 
+				"info", 2)
+		elseif dist > 3 then
 			-- Enable animate for walking
 			r.Anchored = false
 			if a then
@@ -3420,6 +3814,10 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 		local cachedKeys = {}
 		local lastKeyCheck = 0
 		local KEY_CHECK_INTERVAL = 0.1 -- Check keys every 0.1s instead of every 2 frames
+		
+		-- PERFORMANCE: Throttle climbing animation speed adjustment (very expensive)
+		local lastClimbAnimCheck = 0
+		local CLIMB_ANIM_CHECK_INTERVAL = 0.2 -- Only check every 0.2s
 
 		-- Use Heartbeat for physics-synced playback (prevents vibration)
 		-- Still supports high refresh rates (120Hz+) in modern Roblox
@@ -3427,23 +3825,19 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 			Connections.Playback:Disconnect()
 		end
 		Connections.Playback = RunService.Heartbeat:Connect(function(dt)
-			-- Update device performance detection
-			UpdateDevicePerformance()
-			
-			-- Update Performance UI
-			if UIModule and UIModule.UpdatePerformance then
-				UIModule.UpdatePerformance(true, DevicePerformance.currentFPS, DevicePerformance.modeName)
+			-- Process pending zoom state (debounced)
+			if DevicePerformance.zoomPunch.pendingState then
+				if tick() - DevicePerformance.zoomPunch.lastChangeTime >= DevicePerformance.zoomPunch.cooldown then
+					SetZoomState(DevicePerformance.zoomPunch.pendingState)
+				end
 			end
 			
 			frameCounter = frameCounter + 1
 			if not isPlaying or isPlayPaused then
-				if UIModule and UIModule.UpdatePerformance then
-					UIModule.UpdatePerformance(false)
-				end
 				return
 			end
 			
-			-- Use actual delta time for smooth movement every frame
+			-- Use actual delta time for smooth movement
 			local updateDt = dt
 
 			-- REVERSE PLAYBACK SUPPORT
@@ -3554,25 +3948,8 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 				local isCurrentlyClimbing = (cachedStateName == "Climbing")
 				local isCurrentlySwimming = (cachedStateName == "Swimming")
 
-				-- OPTIMIZATION: Use high-quality Catmull-Rom only on capable devices
-				local smoothPos, smoothVel
-				if DevicePerformance.targetPlaybackFPS >= 45 then
-					-- High-end: Full Catmull-Rom spline (smooth but heavy)
-					smoothPos, smoothVel = SmoothInterpolateFrames(currentFrameData, frameIdx, alpha)
-				else
-					-- Low-end: Simple linear lerp (lightweight)
-					if fA.posVector and fB.posVector then
-						smoothPos = fA.posVector:Lerp(fB.posVector, alpha)
-					elseif fA.pos and fB.pos then
-						smoothPos = Vector3.new(fA.pos.x, fA.pos.y, fA.pos.z):Lerp(Vector3.new(fB.pos.x, fB.pos.y, fB.pos.z), alpha)
-					end
-					
-					if fA.velVector and fB.velVector then
-						smoothVel = fA.velVector:Lerp(fB.velVector, alpha)
-					elseif fA.vel and fB.vel then
-						smoothVel = Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z):Lerp(Vector3.new(fB.vel.x, fB.vel.y, fB.vel.z), alpha)
-					end
-				end
+				-- Use Catmull-Rom spline for smooth interpolation
+				local smoothPos, smoothVel = SmoothInterpolateFrames(currentFrameData, frameIdx, alpha)
 
 				if isCurrentlyClimbing or isCurrentlySwimming then
 					-- Climbing/Swimming: Use recorded velocity and simulate input for natural animation
@@ -3598,17 +3975,22 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 						h:ChangeState(Enum.HumanoidStateType.Climbing)
 
 						-- DIRECT ANIMATION SPEED CONTROL: Find and adjust climbing animation speed
-						local animator = h:FindFirstChildOfClass("Animator")
-						if animator then
-							local playingTracks = animator:GetPlayingAnimationTracks()
-							for _, track in ipairs(playingTracks) do
-								local animName = track.Animation and track.Animation.Name or ""
-								-- Check if this is a climbing animation
-								if string.lower(animName):find("climb") or track.IsPlaying then
-									-- Adjust animation speed based on recorded velocity
-									local targetSpeed = vel.Magnitude / 12 * playbackSpeed -- 12 is default climb speed
-									targetSpeed = math.max(0.5, targetSpeed) -- Minimum speed
-									track:AdjustSpeed(targetSpeed)
+						-- PERFORMANCE: Throttled to prevent FPS drop (GetPlayingAnimationTracks is expensive)
+						local nowClimb = tick()
+						if nowClimb - lastClimbAnimCheck > CLIMB_ANIM_CHECK_INTERVAL then
+							lastClimbAnimCheck = nowClimb
+							local animator = h:FindFirstChildOfClass("Animator")
+							if animator then
+								local playingTracks = animator:GetPlayingAnimationTracks()
+								for _, track in ipairs(playingTracks) do
+									local animName = track.Animation and track.Animation.Name or ""
+									-- Check if this is a climbing animation
+									if string.lower(animName):find("climb") or track.IsPlaying then
+										-- Adjust animation speed based on recorded velocity
+										local targetSpeed = vel.Magnitude / 12 * playbackSpeed -- 12 is default climb speed
+										targetSpeed = math.max(0.5, targetSpeed) -- Minimum speed
+										track:AdjustSpeed(targetSpeed)
+									end
 								end
 							end
 						end
@@ -4120,30 +4502,9 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 					end
 				end
 
-				-- 6. TOOL HANDLING: Equip/Unequip tools based on recorded data
-				if frameCounter % 10 == 0 then -- PERFORMANCE: Throttle to every 10 frames (was 3)
-					local recordedTool = fA.tool
-					local currentTool = c:FindFirstChildOfClass("Tool")
-					local currentToolName = currentTool and currentTool.Name or nil
-
-					if recordedTool ~= currentToolName then
-						if recordedTool then
-							-- Need to equip a tool
-							local backpack = LocalPlayer:FindFirstChild("Backpack")
-							if backpack then
-								local toolToEquip = backpack:FindFirstChild(recordedTool)
-								if toolToEquip and toolToEquip:IsA("Tool") then
-									h:EquipTool(toolToEquip)
-								end
-							end
-						else
-							-- Need to unequip current tool
-							if currentTool then
-								h:UnequipTools()
-							end
-						end
-					end
-				end
+				-- 6. TOOL HANDLING: Equip/Unequip tools based on recorded fingerprint
+				-- Uses unified _G.UpdateToolEquip function with full fingerprint matching
+				_G.UpdateToolEquip(c, fA.tool, fA.toolTip, fA.toolColor, fA.toolConfig)
 			end
 		end)
 	else
@@ -4322,8 +4683,9 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 					local isCurrentlyInAir = (currentHState == Enum.HumanoidStateType.Freefall or currentHState == Enum.HumanoidStateType.Jumping)
 					
 					-- PRE-DETECTION: Use recorded state to predict landing BEFORE it happens
-					local recordedStateA = fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
-					local recordedStateB = fB.st and string.match(fB.st, "Enum%.HumanoidStateType%.(%w+)")
+					-- OPTIMIZATION: Use pre-cached stEnum if available
+					local recordedStateA = fA.stEnum or (fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)"))
+					local recordedStateB = fB.stEnum or (fB.st and string.match(fB.st, "Enum%.HumanoidStateType%.(%w+)"))
 					local wasRecordedInAir = (recordedStateA == "Freefall" or recordedStateA == "Jumping")
 					local willLandSoon = wasRecordedInAir and (recordedStateB == "Running" or recordedStateB == "Landed")
 					
@@ -4634,7 +4996,8 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 								-- If we are in the air (confirmed by !isNearGround) and velocity is small
 							elseif not isNearGround then
 								-- Use RECORDED STATE for correct animation
-								local recordedState = fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)")
+								-- OPTIMIZATION: Use pre-cached stEnum if available
+								local recordedState = fA.stEnum or (fA.st and string.match(fA.st, "Enum%.HumanoidStateType%.(%w+)"))
 								if recordedState == "Freefall" and currentState ~= Enum.HumanoidStateType.Freefall then
 									h:ChangeState(Enum.HumanoidStateType.Freefall)
 								elseif
@@ -4679,132 +5042,8 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 				end
 
 				-- TOOL HANDLING: Equip/Unequip tools based on recorded fingerprint
-				if strictFrameCounter % 3 == 0 then -- Throttle to every 3 frames for performance
-					local recordedTool = fA.tool
-					local recordedToolTip = fA.toolTip
-					local recordedToolColor = fA.toolColor
-					local recordedToolTexture = fA.toolTexture
-					local recordedToolConfig = fA.toolConfig
-					local currentTool = c:FindFirstChildOfClass("Tool")
-					local currentToolName = currentTool and currentTool.Name or nil
-					local currentToolTip = currentTool and currentTool.ToolTip or nil
-
-					-- Helper function to check if handle color matches
-					local function ColorMatches(tool, targetColor)
-						if not targetColor then
-							return true
-						end -- No color recorded, skip check
-						local handle = tool:FindFirstChild("Handle")
-						if not handle or not handle:IsA("BasePart") then
-							return true
-						end
-						local tolerance = 0.05
-						return math.abs(handle.Color.R - targetColor.r) < tolerance
-							and math.abs(handle.Color.G - targetColor.g) < tolerance
-							and math.abs(handle.Color.B - targetColor.b) < tolerance
-					end
-
-					-- Helper function to check if config values match
-					local function ConfigMatches(tool, targetConfig)
-						if not targetConfig then
-							return true
-						end -- No config recorded, skip check
-						local config = tool:FindFirstChild("Configuration") or tool:FindFirstChild("Config")
-						if not config then
-							return false
-						end
-						for name, value in pairs(targetConfig) do
-							local child = config:FindFirstChild(name)
-							if child and (child:IsA("NumberValue") or child:IsA("IntValue")) then
-								if child.Value ~= value then
-									return false
-								end
-							else
-								return false
-							end
-						end
-						return true
-					end
-
-					-- Check if tool change is needed
-					local needsChange = false
-					if recordedTool ~= currentToolName then
-						needsChange = true
-					elseif recordedToolTip and currentToolTip and recordedToolTip ~= currentToolTip then
-						needsChange = true
-					elseif recordedToolColor and currentTool then
-						-- Same name+tooltip, but different color (e.g., same "Speed Up" but different speed)
-						if not ColorMatches(currentTool, recordedToolColor) then
-							needsChange = true
-						end
-					end
-
-					if needsChange then
-						if recordedTool then
-							local backpack = LocalPlayer:FindFirstChild("Backpack")
-							if backpack then
-								local toolToEquip = nil
-
-								-- Priority 1: Match name + tooltip + color + config (exact match)
-								if recordedToolTip or recordedToolColor or recordedToolConfig then
-									for _, tool in pairs(backpack:GetChildren()) do
-										if tool:IsA("Tool") and tool.Name == recordedTool then
-											local tipMatch = (not recordedToolTip) or (tool.ToolTip == recordedToolTip)
-											local colorMatch = ColorMatches(tool, recordedToolColor)
-											local configMatch = ConfigMatches(tool, recordedToolConfig)
-											if tipMatch and colorMatch and configMatch then
-												toolToEquip = tool
-												break
-											end
-										end
-									end
-								end
-
-								-- Priority 2: Match name + tooltip (if color not found)
-								if not toolToEquip and recordedToolTip then
-									for _, tool in pairs(backpack:GetChildren()) do
-										if
-											tool:IsA("Tool")
-											and tool.Name == recordedTool
-											and tool.ToolTip == recordedToolTip
-										then
-											toolToEquip = tool
-											break
-										end
-									end
-								end
-
-								-- Priority 3: Match name + color (if tooltip not found)
-								if not toolToEquip and recordedToolColor then
-									for _, tool in pairs(backpack:GetChildren()) do
-										if
-											tool:IsA("Tool")
-											and tool.Name == recordedTool
-											and ColorMatches(tool, recordedToolColor)
-										then
-											toolToEquip = tool
-											break
-										end
-									end
-								end
-
-								-- Priority 4: Fallback to name-only match
-								if not toolToEquip then
-									toolToEquip = backpack:FindFirstChild(recordedTool)
-								end
-
-								if toolToEquip and toolToEquip:IsA("Tool") then
-									h:EquipTool(toolToEquip)
-								end
-							end
-						else
-							-- Need to unequip current tool
-							if currentTool then
-								h:UnequipTools()
-							end
-						end
-					end
-				end
+				-- Uses unified _G.UpdateToolEquip function with full fingerprint matching
+				_G.UpdateToolEquip(c, fA.tool, fA.toolTip, fA.toolColor, fA.toolConfig)
 			end
 		end)
 	end
@@ -4927,11 +5166,8 @@ local function SelectRecording(fn)
 			task.wait()
 		end
 
-		if isPathEnabled then
-			GeneratePlaybackPath(currentFrameData)
-		else
-			ClearPath()
-		end
+		-- Always generate path during playback
+		GeneratePlaybackPath(currentFrameData)
 
 		local startFrame = currentFrameData[1]
 		local targetPos = (startFrame.pos and Vector3.new(startFrame.pos.x, startFrame.pos.y, startFrame.pos.z))
@@ -6478,7 +6714,6 @@ do
 end
 
 -- 3. Settings Panel
-local BtnTogglePath
 do
 	local SettingsPanel = Instance.new("Frame", PageRecord)
 	SettingsPanel.Size = UDim2.new(1, 0, 0, 95) -- Reduced height (removed Auto Rewind row)
@@ -6493,7 +6728,7 @@ do
 	RegisterDynamicUI(BtnToggleMode, function(el)
 		el.Text = isFlexibleRecording and L("mode_flexible") or L("mode_strict")
 	end)
-	BtnToggleMode.Size = UDim2.new(0.5, -10, 0, 30)
+	BtnToggleMode.Size = UDim2.new(0.7, -10, 0, 30)
 	BtnToggleMode.Position = UDim2.new(0, 5, 0, 5)
 	BtnToggleMode.BackgroundColor3 = C_MAIN
 	BtnToggleMode.TextColor3 = C_TEXT
@@ -6503,21 +6738,7 @@ do
 	RegisterTheme(BtnToggleMode, "BackgroundColor3", "Main")
 	RegisterTheme(BtnToggleMode, "TextColor3", "Text")
 
-	BtnTogglePath = Instance.new("TextButton", SettingsPanel)
-	BtnTogglePath.Text = L("path_on")
-	-- Register for language refresh (dynamic based on isPathEnabled state)
-	RegisterDynamicUI(BtnTogglePath, function(el)
-		el.Text = isPathEnabled and L("path_on") or L("path_off")
-	end)
-	BtnTogglePath.Size = UDim2.new(0.35, -5, 0, 30)
-	BtnTogglePath.Position = UDim2.new(0.5, 5, 0, 5)
-	BtnTogglePath.BackgroundColor3 = C_MAIN
-	BtnTogglePath.TextColor3 = C_GREEN
-	BtnTogglePath.Font = Enum.Font.GothamBold
-	BtnTogglePath.TextSize = 10
-	Instance.new("UICorner", BtnTogglePath).CornerRadius = UDim.new(0, 6)
-	RegisterTheme(BtnTogglePath, "BackgroundColor3", "Main")
-
+	-- Path Color picker (for path preview in recording list)
 	local PathColors = {
 		Color3.fromRGB(255, 50, 50), -- Red
 		Color3.fromRGB(50, 255, 50), -- Green
@@ -6528,13 +6749,16 @@ do
 		Color3.fromRGB(255, 255, 255), -- White
 	}
 	local currentPathColorIndex = 1
-	local currentPathColor = PathColors[1]
+	currentPathColor = PathColors[1] -- Update the global variable
 
 	local BtnPathColor = Instance.new("TextButton", SettingsPanel)
-	BtnPathColor.Text = ""
-	BtnPathColor.Size = UDim2.new(0.15, -5, 0, 30)
-	BtnPathColor.Position = UDim2.new(0.85, 5, 0, 5)
+	BtnPathColor.Text = "🎨"
+	BtnPathColor.Size = UDim2.new(0.3, -10, 0, 30)
+	BtnPathColor.Position = UDim2.new(0.7, 5, 0, 5)
 	BtnPathColor.BackgroundColor3 = currentPathColor
+	BtnPathColor.TextColor3 = Color3.new(0, 0, 0)
+	BtnPathColor.Font = Enum.Font.GothamBold
+	BtnPathColor.TextSize = 14
 	Instance.new("UICorner", BtnPathColor).CornerRadius = UDim.new(0, 6)
 
 	BtnPathColor.MouseButton1Click:Connect(function()
@@ -6542,22 +6766,15 @@ do
 		currentPathColor = PathColors[currentPathColorIndex]
 		BtnPathColor.BackgroundColor3 = currentPathColor
 
-		-- Live Update
-		if isPathEnabled then
-			UpdatePathColor(currentPathColor)
-		end
+		-- Live Update existing path
+		UpdatePathColor(currentPathColor)
+		ShowToast("Path Color", "Color changed", "info", 1)
 	end)
 
 	BtnToggleMode.MouseButton1Click:Connect(function()
 		isFlexibleRecording = not isFlexibleRecording
 		BtnToggleMode.Text = isFlexibleRecording and L("mode_flexible") or L("mode_strict")
 		BtnToggleMode.TextColor3 = isFlexibleRecording and C_ACCENT or C_TEXT
-	end)
-
-	BtnTogglePath.MouseButton1Click:Connect(function()
-		if UIHandlers.OnTogglePathClick then
-			UIHandlers.OnTogglePathClick()
-		end
 	end)
 
 	-- === AUTO-CHECKPOINT UI ===
@@ -7062,7 +7279,7 @@ local ShowSaveRecordingModal -- Forward Declaration
 
 					local lbl = Instance.new("TextLabel", item)
 					lbl.Text = n
-					lbl.Size = UDim2.new(0.7, 0, 1, 0)
+					lbl.Size = UDim2.new(0.6, 0, 1, 0)
 					lbl.Position = UDim2.new(0, 10, 0, 0)
 					lbl.BackgroundTransparency = 1
 					lbl.TextColor3 = C_TEXT
@@ -7071,10 +7288,23 @@ local ShowSaveRecordingModal -- Forward Declaration
 					lbl.TextXAlignment = Enum.TextXAlignment.Left
 					RegisterTheme(lbl, "TextColor3", "Text")
 
+					-- Path Preview Button (NEW)
+					local btnPath = Instance.new("TextButton", item)
+					btnPath.Text = "👁"
+					btnPath.Size = UDim2.new(0, 25, 0, 25)
+					btnPath.Position = UDim2.new(1, -120, 0, 2.5)
+					btnPath.BackgroundColor3 = C_ITEM
+					btnPath.TextColor3 = C_TEXT_DIM
+					Instance.new("UICorner", btnPath).CornerRadius = UDim.new(0, 4)
+					RegisterTheme(btnPath, "BackgroundColor3", "Item")
+					
+					-- Track path preview state per button
+					local isPathPreviewActive = false
+
 					local btnPlay = Instance.new("TextButton", item)
 					btnPlay.Text = "▶"
 					btnPlay.Size = UDim2.new(0, 25, 0, 25)
-					btnPlay.Position = UDim2.new(1, -90, 0, 2.5) -- Shifted left
+					btnPlay.Position = UDim2.new(1, -90, 0, 2.5)
 					btnPlay.BackgroundColor3 = C_ITEM
 					btnPlay.TextColor3 = C_GREEN
 					Instance.new("UICorner", btnPlay).CornerRadius = UDim.new(0, 4)
@@ -7115,6 +7345,72 @@ local ShowSaveRecordingModal -- Forward Declaration
 						else
 							btnPlay.Text = "▶"
 							btnPlay.TextColor3 = colors.GREEN
+						end
+					end)
+
+					-- Path Preview Click Handler
+					btnPath.MouseButton1Click:Connect(function()
+						isPathPreviewActive = not isPathPreviewActive
+						
+						if isPathPreviewActive then
+							-- Show path preview
+							btnPath.TextColor3 = C_ACCENT
+							ShowToast("Path Preview", "Loading path for " .. n, "info", 2)
+							
+							-- Load the recording file and generate path
+							task.spawn(function()
+								local success, content = pcall(readfile, f)
+								if success and content then
+									local ok, data = pcall(HttpService.JSONDecode, HttpService, content)
+									if ok and data then
+										local frames = data.Frames or data
+										if frames and #frames > 1 then
+											ClearPath()
+											-- Generate path preview
+											local prevPos = nil
+											-- Adaptive step: max 3000 line segments
+											local step = math.max(1, math.floor(#frames / 3000))
+											for idx = 1, #frames, step do
+												local frame = frames[idx]
+												local pos = (frame.pos and Vector3.new(frame.pos.x, frame.pos.y, frame.pos.z))
+													or (frame.r and TblToCF(frame.r).Position)
+												if pos then
+													if prevPos then
+														local dist = (pos - prevPos).Magnitude
+														-- Draw if moved enough but not teleported
+														if dist > 0.2 and dist < 50 then
+															DrawLine(prevPos, pos, currentPathColor)
+															prevPos = pos -- Only update after drawing
+														elseif dist >= 50 then
+															prevPos = pos -- Teleport: reset
+														end
+														-- If dist <= 0.2: don't update, accumulate small movements
+													else
+														prevPos = pos -- First point
+													end
+												end
+												-- Yield every 200 frames to prevent freeze
+												if idx % 200 == 0 then
+													task.wait()
+												end
+											end
+											-- Create start marker
+											local startFrame = frames[1]
+											local startPos = (startFrame.pos and Vector3.new(startFrame.pos.x, startFrame.pos.y, startFrame.pos.z))
+												or (startFrame.r and TblToCF(startFrame.r).Position)
+											if startPos then
+												CreateStartBaseplate(startPos)
+											end
+											ShowToast("Path Preview", "Path generated!", "success", 2)
+										end
+									end
+								end
+							end)
+						else
+							-- Hide path preview
+							btnPath.TextColor3 = C_TEXT_DIM
+							ClearPath()
+							ShowToast("Path Preview", "Path hidden", "info", 1)
 						end
 					end)
 
@@ -7546,37 +7842,6 @@ UIHandlers.ToggleRecording = function()
 	end
 end
 
-UIHandlers.OnTogglePathClick = function()
-	isPathEnabled = not isPathEnabled
-	BtnTogglePath.Text = L("path_visualizer") .. ": " .. (isPathEnabled and L("on") or L("off"))
-	BtnTogglePath.TextColor3 = isPathEnabled and C_GREEN or C_TEXT_DIM
-
-	if isPathEnabled then
-		if isPlaying or isPlayPaused then
-			GeneratePlaybackPath(currentFrameData)
-		elseif isRecording then
-			-- Draw existing path from recordedData
-			if recordedData.Frames and #recordedData.Frames > 1 then
-				local lastPos = nil
-				for _, f in ipairs(recordedData.Frames) do
-					local pos = (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z)) or (f.r and TblToCF(f.r).Position)
-					if pos then
-						if lastPos and (pos - lastPos).Magnitude > 0.5 then
-							DrawLine(lastPos, pos, currentPathColor)
-						end
-						lastPos = pos
-					end
-				end
-				-- Update lastPathPoint for the live loop to continue correctly
-				if lastPos then
-					lastPathPoint = lastPos
-				end
-			end
-		end
-	else
-		ClearPath()
-	end
-end
 
 -- Connections moved
 
@@ -9218,17 +9483,20 @@ function UIHandlers.SetupListMapUI()
 		local BtnPath = CreateToggle(Row2, "PATH", "📍", "path") -- Path visualization toggle
 		local BtnZoom = CreateToggle(Row2, "ZOOM", "🎯", "zoom")
 
-		-- Path toggle click handler
+		-- Path toggle click handler (Playback Window - separate from Recorder)
 		BtnPath.MouseButton1Click:Connect(function()
-			isPathEnabled = not isPathEnabled
-			UpdateToggleVisual("path", isPathEnabled, false)
-			if isPathEnabled then
-				if isPlaying and currentFrameData then
+			isPlaybackPathEnabled = not isPlaybackPathEnabled
+			UpdateToggleVisual("path", isPlaybackPathEnabled, false)
+			if isPlaybackPathEnabled then
+				if isPlaying and currentFrameData and #currentFrameData > 0 then
 					GeneratePlaybackPath(currentFrameData)
 				end
 				ShowToast("Path Visualization", "Path enabled", "success", 2)
 			else
-				ClearPath()
+				-- Only clear if recording path is also disabled
+				if not isRecordingPathEnabled then
+					ClearPath()
+				end
 				ShowToast("Path Visualization", "Path disabled", "info", 2)
 			end
 		end)

@@ -146,46 +146,46 @@ function isUserExpired(user) {
  */
 async function findUserInAllWhitelists(redisClient, userId) {
   const results = [];
-  
+
   // Check PC whitelist
   const pcData = await redisClient.get(PLATFORM_CONFIG.pc.whitelistKey);
   const pcWhitelist = pcData ? JSON.parse(pcData) : {};
   if (pcWhitelist[userId]) {
     results.push({ user: pcWhitelist[userId], platform: 'pc', whitelist: pcWhitelist });
   }
-  
+
   // Check Mobile whitelist
   const mobileData = await redisClient.get(PLATFORM_CONFIG.mobile.whitelistKey);
   const mobileWhitelist = mobileData ? JSON.parse(mobileData) : {};
   if (mobileWhitelist[userId]) {
     results.push({ user: mobileWhitelist[userId], platform: 'mobile', whitelist: mobileWhitelist });
   }
-  
+
   // No results found
   if (results.length === 0) {
     return null;
   }
-  
+
   // Prioritize: active & non-expired > suspended > expired
   // Find the best account
-  const activeAccounts = results.filter(r => 
+  const activeAccounts = results.filter(r =>
     r.user.status === 'active' && !isUserExpired(r.user)
   );
-  
+
   if (activeAccounts.length > 0) {
     // Return the first active account (could be PC or Mobile)
     return activeAccounts[0];
   }
-  
+
   // No active accounts, check for suspended (non-expired)
-  const suspendedAccounts = results.filter(r => 
+  const suspendedAccounts = results.filter(r =>
     r.user.status === 'suspended' && !isUserExpired(r.user)
   );
-  
+
   if (suspendedAccounts.length > 0) {
     return suspendedAccounts[0];
   }
-  
+
   // All accounts are expired or inactive, return the first one
   // (will show appropriate error message)
   return results[0];
@@ -835,10 +835,24 @@ async function handleRemove(req, res, redisClient, platform, config) {
     metadata.totalWhitelisted = Object.keys(whitelist).length;
     await saveMetadataToRedis(platform, metadata);
 
+    // Also delete the HWID registry key for this user
+    let hwidDeleted = false;
+    if (redis) {
+      try {
+        const hwidKey = `hwid:${platform}:${userId}`;
+        await redis.del(hwidKey);
+        hwidDeleted = true;
+        console.log(`[User Remove] Deleted HWID registry key: ${hwidKey}`);
+      } catch (hwidError) {
+        console.warn(`[User Remove] Failed to delete HWID key: ${hwidError.message}`);
+      }
+    }
+
     return res.status(200).json({
       success: true,
       message: `${platform.toUpperCase()} user ${username} removed`,
       platform,
+      hwidDeleted,
       deletedUser: { userId, ...deletedUser },
     });
   } catch (error) {
@@ -851,10 +865,10 @@ async function handleRemove(req, res, redisClient, platform, config) {
 // === SELF-SERVICE HANDLER (No admin auth required) ===
 async function handleSelfService(req, res, redisClient, action) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ 
-      success: false, 
+    return res.status(405).json({
+      success: false,
       error: 'METHOD_NOT_ALLOWED',
-      message: 'Method not allowed' 
+      message: 'Method not allowed'
     });
   }
 
@@ -880,7 +894,7 @@ async function handleSelfService(req, res, redisClient, action) {
   if (action === 'self_verify') {
     try {
       const result = await findUserInAllWhitelists(redisClient, userId);
-      
+
       if (!result) {
         return res.status(404).json({
           success: false,
@@ -950,7 +964,7 @@ async function handleSelfService(req, res, redisClient, action) {
   if (action === 'self_reset_hwid') {
     try {
       const result = await findUserInAllWhitelists(redisClient, userId);
-      
+
       if (!result) {
         return res.status(404).json({
           success: false,
