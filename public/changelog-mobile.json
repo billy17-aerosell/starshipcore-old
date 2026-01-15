@@ -1,51 +1,82 @@
 {
-    "currentVersion": "1.2.1",
-    "lastUpdated": "2026-01-10",
+    "currentVersion": "1.2.2",
+    "lastUpdated": "2026-01-15",
     "updates": [
+        {
+            "version": "1.2.2",
+            "date": "2026-01-15",
+            "title": "UI & Playback Fix",
+            "changes": [
+                "Fixed pause/resume playback not working properly",
+                "Cleaner UI: Removed excessive emojis for classic look",
+                "Fixed role display (MOBILE_VIP now shows as MOBILE VIP)",
+                "Fixed local register limit error",
+                "Optimized cloud recording state management",
+                "Added Background Transparency slider in Settings",
+                "Fixed theme dropdown with dynamic theme list",
+                "Set Indigo as default theme",
+                "Added topbar theme switch button",
+                "Updated Discord link to dsc.gg/starshipcore",
+                "Fixed window title invalid characters"
+            ]
+        },
+        {
+            "version": "1.2.2",
+            "date": "2026-01-14",
+            "title": "UI & Playback Fix",
+            "changes": [
+                "Fixed pause/resume playback not working properly",
+                "Cleaner UI: Removed excessive emojis for classic look",
+                "Fixed role display (MOBILE_VIP now shows as MOBILE VIP)",
+                "Fixed local register limit error",
+                "Optimized cloud recording state management",
+                "Improved overall stability"
+            ]
+        },
         {
             "version": "1.2.1",
             "date": "2026-01-10",
-            "title": "📱 Mobile Core Update",
+            "title": "Mobile Core Update",
             "changes": [
-                "🎭 Morph Avatar: Morph into any player with live preview",
-                "🌀 Warp: New teleport waypoint system",
-                "🚶 Smart Resume: Smoother playback resumption",
-                "✨ Enhanced path visualization precision",
-                "🔧 Core system optimizations",
-                "🏔️ Updated Track: MT Yayakin and MT Velora"
+                "Morph Avatar: Morph into any player with live preview",
+                "Warp: New teleport waypoint system",
+                "Smart Resume: Smoother playback resumption",
+                "Enhanced path visualization precision",
+                "Core system optimizations",
+                "Updated Track: MT Yayakin and MT Velora"
             ]
         },
         {
             "version": "1.2.0",
             "date": "2026-01-10",
-            "title": "📱 Mobile Core Update",
+            "title": "Mobile Core Update",
             "changes": [
-                "🚶 Smart Resume: Smoother playback resumption",
-                "✨ Enhanced path visualization precision",
-                "🔧 Core system optimizations",
-                "🚀 Improved stability"
+                "Smart Resume: Smoother playback resumption",
+                "Enhanced path visualization precision",
+                "Core system optimizations",
+                "Improved stability"
             ]
         },
         {
             "version": "1.1.0",
             "date": "2026-01-10",
-            "title": "📱 Mobile Update",
+            "title": "Mobile Update",
             "changes": [
-                "✨ New changelog popup",
-                "🎮 Improved touch controls",
-                "🚀 Better mobile performance",
-                "🎨 UI optimizations for mobile"
+                "New changelog popup",
+                "Improved touch controls",
+                "Better mobile performance",
+                "UI optimizations for mobile"
             ]
         },
         {
             "version": "1.0.0",
             "date": "2026-01-08",
-            "title": "🎉 Initial Release",
+            "title": "Initial Release",
             "changes": [
-                "📱 Mobile version launch",
-                "🎮 Touch-friendly interface",
-                "☁️ Cloud recordings support",
-                "🔐 Secure authentication"
+                "Mobile version launch",
+                "Touch-friendly interface",
+                "Cloud recordings support",
+                "Secure authentication"
             ]
         }
     ]

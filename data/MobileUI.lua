@@ -10,7 +10,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
-local VERSION = "1.2.1"
+local VERSION = "1.2.2"
 local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 
 -- DEV_MODE detection (same as StarshipCore)
@@ -21,7 +21,11 @@ local DEV_MODE = _G.StarshipDevMode or false
 -- ══════════════════════════════════════════════════════════════════
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
--- ══════════════════════════════════════════════════════════════════
+-- Set custom font (Michroma - futuristic/space theme)
+pcall(function()
+	WindUI:SetFont("rbxasset://fonts/families/RobotoMono.json")
+end)
+
 -- ══════════════════════════════════════════════════════════════════
 -- CONFIGURATION MANAGEMENT
 -- ══════════════════════════════════════════════════════════════════
@@ -313,7 +317,7 @@ local function ShowMobileChangelog()
 	Title.Position = UDim2.new(0, 10, 0, 15)
 	Title.BackgroundTransparency = 1
 	Title.TextColor3 = AccentColor
-	Title.Font = Enum.Font.GothamBold
+	Title.Font = Enum.Font.SourceSansBold
 	Title.TextSize = 16
 	Title.TextXAlignment = Enum.TextXAlignment.Left
 	
@@ -323,7 +327,7 @@ local function ShowMobileChangelog()
 	Subtitle.Position = UDim2.new(0, 10, 0, 45)
 	Subtitle.BackgroundTransparency = 1
 	Subtitle.TextColor3 = TextDimColor
-	Subtitle.Font = Enum.Font.Gotham
+	Subtitle.Font = Enum.Font.SourceSans
 	Subtitle.TextSize = 11
 	Subtitle.TextXAlignment = Enum.TextXAlignment.Left
 	
@@ -370,7 +374,7 @@ local function ShowMobileChangelog()
 			Ver.Size = UDim2.new(1, 0, 0, 18)
 			Ver.BackgroundTransparency = 1
 			Ver.TextColor3 = i == 1 and SuccessColor or TextDimColor
-			Ver.Font = Enum.Font.GothamBold
+			Ver.Font = Enum.Font.SourceSansBold
 			Ver.TextSize = 12
 			Ver.TextXAlignment = Enum.TextXAlignment.Left
 			Ver.LayoutOrder = 1
@@ -381,7 +385,7 @@ local function ShowMobileChangelog()
 				T.Size = UDim2.new(1, 0, 0, 16)
 				T.BackgroundTransparency = 1
 				T.TextColor3 = TextColor
-				T.Font = Enum.Font.GothamMedium
+				T.Font = Enum.Font.SourceSansSemibold
 				T.TextSize = 11
 				T.TextXAlignment = Enum.TextXAlignment.Left
 				T.LayoutOrder = 2
@@ -394,7 +398,7 @@ local function ShowMobileChangelog()
 					C.Size = UDim2.new(1, 0, 0, 14)
 					C.BackgroundTransparency = 1
 					C.TextColor3 = TextDimColor
-					C.Font = Enum.Font.Gotham
+					C.Font = Enum.Font.SourceSans
 					C.TextSize = 10
 					C.TextXAlignment = Enum.TextXAlignment.Left
 					C.TextWrapped = true
@@ -413,7 +417,7 @@ local function ShowMobileChangelog()
 	GotItBtn.BackgroundColor3 = AccentColor
 	GotItBtn.Text = "✓ Got it!"
 	GotItBtn.TextColor3 = Color3.new(1, 1, 1)
-	GotItBtn.Font = Enum.Font.GothamBold
+	GotItBtn.Font = Enum.Font.SourceSansBold
 	GotItBtn.TextSize = 14
 	GotItBtn.BorderSizePixel = 0
 	Instance.new("UICorner", GotItBtn).CornerRadius = UDim.new(0, 8)
@@ -460,13 +464,13 @@ ShowMobileChangelog()
 -- ══════════════════════════════════════════════════════════════════
 local Window = WindUI:CreateWindow({
 	-- ═══ PREMIUM BRANDING ═══
-	Title = "✨ STARSHIP",
+	Title = "✨ STARSHIP ┃ dsc.gg-starshipcore",
 	Icon = "rbxassetid://123840945153526", -- Logo next to title
 	IconSize = 36, -- Larger icon for premium look
 	Author = "Premium Edition • StarshipCore",
 
 	-- ═══ WINDOW SIZING ═══
-	Size = UDim2.fromOffset(700, 600),
+	Size = UDim2.fromOffset(830, 600),
 	SideBarWidth = 180, -- Slightly wider sidebar
 
 	-- ═══ PREMIUM TRANSPARENCY & GLASSMORPHISM ═══
@@ -475,7 +479,7 @@ local Window = WindUI:CreateWindow({
 	Background = "rbxassetid://123840945153526", -- Starship Logo as background
 
 	-- ═══ THEME ═══
-	Theme = Settings.Theme,
+	Theme = Settings.Theme or "Indigo",
 
 	-- ═══ USER PROFILE ═══
 	User = {
@@ -504,8 +508,8 @@ local Window = WindUI:CreateWindow({
 
 	-- ═══ FLOATING OPEN BUTTON (PREMIUM GRADIENT) ═══
 	OpenButton = {
-		Title = "⭐ STARSHIP",
-		Icon = "rbxassetid://91946746369709",
+		Title = "STARSHIP ✨",
+		Icon = "rbxassetid://123840945153526",
 		CornerRadius = UDim.new(1, 0), -- Fully rounded (pill shape)
 		StrokeThickness = 2,
 		Enabled = true,
@@ -529,6 +533,22 @@ getgenv().StarshipWindUI = WindUI
 Window:SetBackgroundImage("rbxassetid://91946746369709")
 Window:SetBackgroundImageTransparency(0.85)
 
+-- ══════════════════════════════════════════════════════════════════
+-- TOPBAR THEME SWITCH BUTTON
+-- ══════════════════════════════════════════════════════════════════
+getgenv().Theme = Settings.Theme or "Indigo"
+Window:CreateTopbarButton(
+	"SwitchTheme",
+	"eye",
+	function()
+		getgenv().Theme = getgenv().Theme == "Indigo" and "Dark" or "Indigo"
+		WindUI:SetTheme(getgenv().Theme)
+		Settings.Theme = getgenv().Theme
+		SaveSettings()
+	end,
+	990
+)
+
 -- Get session data from StarshipSession (set by main loader)
 local function GetSessionData()
 	local session = getgenv().StarshipSession or {}
@@ -541,16 +561,24 @@ end
 
 local sessionData = GetSessionData()
 
+-- Format role name (replace underscore with space)
+local function FormatRole(role)
+	if role then
+		return role:gsub("_", " ")
+	end
+	return role or "VIP"
+end
+
 -- Role Tag (VIP/OWNER)
 local roleColor = "#a855f7" -- Purple default
 if sessionData.Role == "OWNER" then
 	roleColor = "#f59e0b" -- Orange/Gold for OWNER
-elseif sessionData.Role == "VIP" then
+elseif sessionData.Role == "VIP" or sessionData.Role == "MOBILE_VIP" then
 	roleColor = "#a855f7" -- Purple for VIP
 end
 
 local RoleTag = Window:Tag({
-	Title = '<font size="11">' .. sessionData.Role .. "</font>",
+	Title = '<font size="11">' .. FormatRole(sessionData.Role) .. "</font>",
 	Color = Color3.fromHex(roleColor),
 })
 
@@ -628,10 +656,13 @@ local Config = {
 -- PERIODIC BAN CHECK SYSTEM (Every 5 minutes)
 -- Checks both IP ban and Google Sheets ban status
 -- ══════════════════════════════════════════════════════════════════
-local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
-local BAN_CHECK_INTERVAL = 5 * 60 -- 5 minutes in seconds
-local BAN_CHECK_API = (CLOUD_API_BASE or "https://starship-core.my.id") .. "/api/m-auth-k5r9z7"
-local isBanCheckRunning = false
+-- Ban check state stored in _G to reduce local count
+_G.StarshipBanCheck = _G.StarshipBanCheck or {
+	API_BASE = _G.StarshipServerURL or "https://starship-core.my.id",
+	INTERVAL = 5 * 60,
+	isRunning = false
+}
+_G.StarshipBanCheck.API_URL = _G.StarshipBanCheck.API_BASE .. "/api/m-auth-k5r9z7"
 
 local function ShowBannedMessage(reason)
 	-- FIRST: Try to destroy using local Window variable
@@ -762,7 +793,7 @@ local function ShowBannedMessage(reason)
 	icon.BackgroundTransparency = 1
 	icon.Text = "🚫"
 	icon.TextSize = 40
-	icon.Font = Enum.Font.GothamBold
+	icon.Font = Enum.Font.SourceSansBold
 
 	local title = Instance.new("TextLabel", container)
 	title.Size = UDim2.new(1, -40, 0, 30)
@@ -772,7 +803,7 @@ local function ShowBannedMessage(reason)
 	title.Text = "ACCESS REVOKED"
 	title.TextColor3 = Color3.fromRGB(239, 68, 68)
 	title.TextSize = 22
-	title.Font = Enum.Font.GothamBold
+	title.Font = Enum.Font.SourceSansBold
 
 	local msg = Instance.new("TextLabel", container)
 	msg.Size = UDim2.new(1, -40, 0, 60)
@@ -782,7 +813,7 @@ local function ShowBannedMessage(reason)
 	msg.Text = reason or "Your access has been revoked.\n\nPlease contact administrator."
 	msg.TextColor3 = Color3.fromRGB(161, 161, 170)
 	msg.TextSize = 14
-	msg.Font = Enum.Font.Gotham
+	msg.Font = Enum.Font.SourceSans
 	msg.TextWrapped = true
 
 	-- Keep the ban screen longer (30 seconds)
@@ -797,19 +828,19 @@ local function ShowBannedMessage(reason)
 end
 
 local function CheckBanStatus()
-	if isBanCheckRunning then
+	if _G.StarshipBanCheck.isRunning then
 		return
 	end
-	isBanCheckRunning = true
+	_G.StarshipBanCheck.isRunning = true
 
 	local userId = tostring(LocalPlayer.UserId)
-	local checkUrl = BAN_CHECK_API .. "?userId=" .. userId .. "&action=check"
+	local checkUrl = _G.StarshipBanCheck.API_URL .. "?userId=" .. userId .. "&action=check"
 
 	local success, response = pcall(function()
 		return game:HttpGet(checkUrl)
 	end)
 
-	isBanCheckRunning = false
+	_G.StarshipBanCheck.isRunning = false
 
 	if not success then
 		-- Connection error - silent failure in production
@@ -875,51 +906,47 @@ task.spawn(function()
 		end
 
 		-- Wait 5 minutes before next check
-		task.wait(BAN_CHECK_INTERVAL)
+		task.wait(_G.StarshipBanCheck.INTERVAL)
 	end
 end)
 
 -- Ban check initialized (silent in production)
 
--- Cloud recording storage (in memory for mobile) - declared early for PlayRecording access
-local CloudRecordingData = nil
-local CloudRecordingName = nil
-local CloudRecordingsCache = {} -- Cache: displayName -> {name, recordingId}
-local CloudDropdownValues = {}
-
--- Chunked Loading State (for streaming large recordings)
-local ChunkedState = {
-	isChunked = false, -- Whether current recording uses chunked loading
-	recordingId = nil, -- Current recording ID for chunk fetching
-	totalChunks = 0, -- Total number of chunks
-	loadedChunks = {}, -- Cached chunk data: [chunkIndex] = {frames}
-	currentLoadingChunk = -1, -- Chunk currently being loaded (-1 = none)
-	framesPerChunk = 3000, -- Frames per chunk (from server)
-	totalFrames = 0, -- Total frame count
-	isPreloading = false, -- Whether preloading is in progress
-	loadProgress = 0, -- Loading progress (0-100)
+-- Cloud recording storage (in memory for mobile) - use _G to reduce local count
+_G.StarshipCloud = _G.StarshipCloud or {
+	RecordingData = nil,
+	RecordingName = nil,
+	RecordingsCache = {},
+	DropdownValues = {},
+	EventCode = _G.StarshipEventCode or "",
+	Endpoints = {
+		main = "/api/cloud-store-x7k9",
+		chunked = "/api/cloud-chunk-m3p7",
+	},
+	ChunkedState = {
+		isChunked = false,
+		recordingId = nil,
+		totalChunks = 0,
+		loadedChunks = {},
+		currentLoadingChunk = -1,
+		framesPerChunk = 3000,
+		totalFrames = 0,
+		isPreloading = false,
+		loadProgress = 0,
+	}
 }
-
--- ══════════════════════════════════════════════════════════════════
--- CLOUD API SECURITY - Event Code required for R2 access
--- ══════════════════════════════════════════════════════════════════
-local CLOUD_API_ENDPOINTS = {
-	main = "/api/cloud-store-x7k9", -- Main recordings endpoint (renamed from r2-recordings)
-	chunked = "/api/cloud-chunk-m3p7", -- Chunked streaming endpoint (renamed from r2-chunked)
-}
-local CLOUD_EVENT_CODE = _G.StarshipEventCode or "" -- Event code set by loader or entered by user
 
 -- Helper function to build cloud API URL with event code and userId
 -- @param params: table of query parameters
 -- @param useChunked: boolean - if true, use chunked endpoint instead of main
 local function BuildCloudURL(params, useChunked)
-	local endpoint = useChunked and CLOUD_API_ENDPOINTS.chunked or CLOUD_API_ENDPOINTS.main
+	local endpoint = useChunked and _G.StarshipCloud.Endpoints.chunked or _G.StarshipCloud.Endpoints.main
 	local url = CLOUD_API_BASE .. endpoint
 	local queryParts = {}
 
 	-- Add event code first (required for R2 access)
-	if CLOUD_EVENT_CODE and CLOUD_EVENT_CODE ~= "" then
-		table.insert(queryParts, "eventCode=" .. CLOUD_EVENT_CODE)
+	if _G.StarshipCloud.EventCode and _G.StarshipCloud.EventCode ~= "" then
+		table.insert(queryParts, "eventCode=" .. _G.StarshipCloud.EventCode)
 	end
 
 	-- Always add userId for server-side validation and blacklist check
@@ -1333,13 +1360,13 @@ local AvatarTab = Window:Tab({
 local function GetGreeting()
 	local hour = tonumber(os.date("%H"))
 	if hour >= 5 and hour < 12 then
-		return "☀️ Good Morning"
+		return "Good Morning"
 	elseif hour >= 12 and hour < 17 then
-		return "🌤️ Good Afternoon"
+		return "Good Afternoon"
 	elseif hour >= 17 and hour < 21 then
-		return "🌆 Good Evening"
+		return "Good Evening"
 	else
-		return "🌙 Good Night"
+		return "Good Night"
 	end
 end
 
@@ -1424,67 +1451,67 @@ DashboardTab:Paragraph({
 -- ══════════════════════════════════════════════════════════════════
 -- VIP STATUS
 -- ══════════════════════════════════════════════════════════════════
-AccountTab:Section({ Title = "💎 VIP Status", TextSize = 16 })
+AccountTab:Section({ Title = "VIP Status", TextSize = 16 })
 AccountTab:Divider()
 
-local vipStatusDesc = '<font size="16">👑 Role: '
-	.. sessionData.Role
+local vipStatusDesc = '<font size="16">Role: '
+	.. FormatRole(sessionData.Role)
 	.. "\n"
-	.. "⏰ Duration: "
+	.. "Duration: "
 	.. sessionData.Duration
 	.. "\n"
-	.. "✅ Status: Active</font>"
+	.. "Status: Active</font>"
 
 AccountTab:Paragraph({
-	Title = "🎫 Your Subscription",
+	Title = "Subscription",
 	Desc = vipStatusDesc,
 })
 
 -- ══════════════════════════════════════════════════════════════════
 -- GAME DETECTION
 -- ══════════════════════════════════════════════════════════════════
-ServerTab:Section({ Title = "🎮 Current Game", TextSize = 16 })
+ServerTab:Section({ Title = "Current Game", TextSize = 16 })
 ServerTab:Divider()
 
 local gameName = GetGameName()
 ServerTab:Paragraph({
-	Title = "📍 " .. gameName,
+	Title = gameName,
 	Desc = "Place ID: " .. game.PlaceId,
 })
 
 -- ══════════════════════════════════════════════════════════════════
 -- ACCOUNT INFORMATION
 -- ══════════════════════════════════════════════════════════════════
-AccountTab:Section({ Title = "👤 Your Account", TextSize = 16 })
+AccountTab:Section({ Title = "Account Info", TextSize = 16 })
 AccountTab:Divider()
 
-local accountDesc = '<font size="16">🏷️ Display Name: '
+local accountDesc = '<font size="16">Display Name: '
 	.. LocalPlayer.DisplayName
 	.. "\n"
-	.. "👤 Username: "
+	.. "Username: "
 	.. LocalPlayer.Name
 	.. "\n"
-	.. "🆔 User ID: "
+	.. "User ID: "
 	.. LocalPlayer.UserId
 	.. "\n"
-	.. "📅 Account Age: "
+	.. "Account Age: "
 	.. LocalPlayer.AccountAge
 	.. " days\n"
-	.. "⭐ Status: Premium Member</font>"
+	.. "Status: Premium Member</font>"
 
 local AccountCard = AccountTab:Paragraph({
-	Title = "🎭 Profile Info",
+	Title = "Profile",
 	Desc = accountDesc,
 })
 
 -- ══════════════════════════════════════════════════════════════════
 -- SERVER INFORMATION
 -- ══════════════════════════════════════════════════════════════════
-ServerTab:Section({ Title = "🌐 Server Details", TextSize = 16 })
+ServerTab:Section({ Title = "Server Details", TextSize = 16 })
 ServerTab:Divider()
 
 ServerTab:Button({
-	Title = "📋 Copy Job ID",
+	Title = "Copy Job ID",
 	Desc = "Copy server Job ID to clipboard",
 	Callback = function()
 		if setclipboard then
@@ -1499,7 +1526,7 @@ ServerTab:Button({
 -- ══════════════════════════════════════════════════════════════════
 -- FRIENDS IN SERVER
 -- ══════════════════════════════════════════════════════════════════
-AccountTab:Section({ Title = "👥 Friends in Server", TextSize = 16 })
+AccountTab:Section({ Title = "Friends in Server", TextSize = 16 })
 AccountTab:Divider()
 
 local function GetFriendsInServer()
@@ -1521,72 +1548,72 @@ local function GetFriendsInServer()
 end
 
 local FriendsCard = AccountTab:Paragraph({
-	Title = "🤝 Friends Here",
+	Title = "Friends Here",
 	Desc = GetFriendsInServer(),
 })
 
 -- ══════════════════════════════════════════════════════════════════
 -- QUICK ACTIONS
 -- ══════════════════════════════════════════════════════════════════
-DashboardTab:Section({ Title = "⚡ Quick Actions", TextSize = 16 })
+DashboardTab:Section({ Title = "Quick Actions", TextSize = 16 })
 
 DashboardTab:Divider()
 
 DashboardTab:Button({
-	Title = "🔄 Refresh Dashboard",
+	Title = "Refresh Dashboard",
 	Desc = "Update all statistics",
 	Callback = function()
 		-- Update Live Stats
 		local newExecName, newExecVersion = GetExecutorInfo()
-		local newStatsDesc = "⚡ Executor: "
+		local newStatsDesc = "Executor: "
 			.. newExecName
 			.. " ("
 			.. newExecVersion
 			.. ")\n"
-			.. "👥 Players: "
+			.. "Players: "
 			.. #Players:GetPlayers()
 			.. "/"
 			.. Players.MaxPlayers
 			.. "\n"
-			.. "📶 Ping: "
+			.. "Ping: "
 			.. GetPing()
 			.. " ms\n"
-			.. "🖥️ FPS: "
+			.. "FPS: "
 			.. GetFPS()
 			.. "\n"
-			.. "⏱️ Server Age: "
+			.. "Server Age: "
 			.. GetServerAge()
 		LiveStatsCard:SetDesc(newStatsDesc)
 
 		-- Update Server Card
-		local newServerDesc = "👥 Players: "
+		local newServerDesc = "Players: "
 			.. #Players:GetPlayers()
 			.. " / "
 			.. Players.MaxPlayers
 			.. "\n"
-			.. "⏱️ Uptime: "
+			.. "Uptime: "
 			.. GetServerAge()
 			.. "\n"
-			.. "📶 Ping: "
+			.. "Ping: "
 			.. GetPing()
 			.. " ms\n"
-			.. "🖥️ FPS: "
+			.. "FPS: "
 			.. GetFPS()
 		ServerCard:SetDesc(newServerDesc)
 
 		-- Update Friends
 		FriendsCard:SetDesc(GetFriendsInServer())
 
-		WindUI:Notify({ Title = "✅ Refreshed", Content = "Dashboard updated!", Duration = 2 })
+		WindUI:Notify({ Title = "Refreshed", Content = "Dashboard updated!", Duration = 2 })
 	end,
 })
 
 DashboardTab:Button({
-	Title = "💬 Copy Discord Invite",
+	Title = "Copy Discord Invite",
 	Desc = "Get Starship Discord link",
 	Callback = function()
 		if setclipboard then
-			setclipboard("https://discord.gg/ftmA7BheTc")
+			setclipboard("https://dsc.gg/starshipcore")
 			WindUI:Notify({ Title = "Copied!", Content = "Discord link copied!", Duration = 2 })
 		end
 	end,
@@ -1595,10 +1622,10 @@ DashboardTab:Button({
 -- ══════════════════════════════════════════════════════════════════
 -- SERVER ACTIONS (Moved to ServerTab)
 -- ══════════════════════════════════════════════════════════════════
-ServerTab:Section({ Title = "⚡ Server Actions", TextSize = 16 })
+ServerTab:Section({ Title = "Server Actions", TextSize = 16 })
 ServerTab:Divider()
 ServerTab:Button({
-	Title = "🔗 Rejoin Server",
+	Title = "Rejoin Server",
 	Desc = "Rejoin the current server",
 	Callback = function()
 		WindUI:Notify({ Title = "Rejoining...", Content = "Teleporting to server...", Duration = 2 })
@@ -1609,7 +1636,7 @@ ServerTab:Button({
 })
 
 ServerTab:Button({
-	Title = "🌍 Server Hop",
+	Title = "Server Hop",
 	Desc = "Join a different server",
 	Callback = function()
 		WindUI:Notify({ Title = "Server Hop", Content = "Finding new server...", Duration = 2 })
@@ -2331,23 +2358,23 @@ task.spawn(function()
 	while task.wait(5) do
 		pcall(function()
 			local newExecName, newExecVersion = GetExecutorInfo()
-			local newStatsDesc = "⚡ Executor: "
+			local newStatsDesc = "Executor: "
 				.. newExecName
 				.. " ("
 				.. newExecVersion
 				.. ")\n"
-				.. "👥 Players: "
+				.. "Players: "
 				.. #Players:GetPlayers()
 				.. "/"
 				.. Players.MaxPlayers
 				.. "\n"
-				.. "📶 Ping: "
+				.. "Ping: "
 				.. GetPing()
 				.. " ms\n"
-				.. "🖥️ FPS: "
+				.. "FPS: "
 				.. GetFPS()
 				.. "\n"
-				.. "⏱️ Server Age: "
+				.. "Server Age: "
 				.. GetServerAge()
 			LiveStatsCard:SetDesc(newStatsDesc)
 		end)
@@ -3140,7 +3167,7 @@ local function CreateFlyControls()
 	upBtn.BackgroundTransparency = 0.3
 	upBtn.Text = "⬆️"
 	upBtn.TextSize = 30
-	upBtn.Font = Enum.Font.GothamBold
+	upBtn.Font = Enum.Font.SourceSansBold
 	upBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	upBtn.AutoButtonColor = false
 	upBtn.Parent = container
@@ -3156,7 +3183,7 @@ local function CreateFlyControls()
 	upLabel.BackgroundTransparency = 1
 	upLabel.Text = "UP"
 	upLabel.TextSize = 12
-	upLabel.Font = Enum.Font.GothamBold
+	upLabel.Font = Enum.Font.SourceSansBold
 	upLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 	upLabel.Parent = upBtn
 
@@ -3169,7 +3196,7 @@ local function CreateFlyControls()
 	downBtn.BackgroundTransparency = 0.3
 	downBtn.Text = "⬇️"
 	downBtn.TextSize = 30
-	downBtn.Font = Enum.Font.GothamBold
+	downBtn.Font = Enum.Font.SourceSansBold
 	downBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	downBtn.AutoButtonColor = false
 	downBtn.Parent = container
@@ -3185,7 +3212,7 @@ local function CreateFlyControls()
 	downLabel.BackgroundTransparency = 1
 	downLabel.Text = "DOWN"
 	downLabel.TextSize = 12
-	downLabel.Font = Enum.Font.GothamBold
+	downLabel.Font = Enum.Font.SourceSansBold
 	downLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 	downLabel.Parent = downBtn
 
@@ -3533,7 +3560,7 @@ local function CreateSpeedDisplayMobile()
 	titleLbl.Position = UDim2.new(0, 0, 0, 6)
 	titleLbl.BackgroundTransparency = 1
 	titleLbl.TextColor3 = Color3.fromRGB(150, 150, 160)
-	titleLbl.Font = Enum.Font.GothamBold
+	titleLbl.Font = Enum.Font.SourceSansBold
 	titleLbl.TextSize = 9
 	titleLbl.Parent = frame
 
@@ -3544,7 +3571,7 @@ local function CreateSpeedDisplayMobile()
 	speedLbl.Position = UDim2.new(0, 0, 0, 22)
 	speedLbl.BackgroundTransparency = 1
 	speedLbl.TextColor3 = Color3.fromRGB(99, 102, 241)
-	speedLbl.Font = Enum.Font.GothamBold
+	speedLbl.Font = Enum.Font.SourceSansBold
 	speedLbl.TextSize = 24
 	speedLbl.Parent = frame
 
@@ -3554,7 +3581,7 @@ local function CreateSpeedDisplayMobile()
 	unitLbl.Position = UDim2.new(0, 0, 0, 50)
 	unitLbl.BackgroundTransparency = 1
 	unitLbl.TextColor3 = Color3.fromRGB(120, 120, 130)
-	unitLbl.Font = Enum.Font.Gotham
+	unitLbl.Font = Enum.Font.SourceSans
 	unitLbl.TextSize = 9
 	unitLbl.Parent = frame
 
@@ -4889,7 +4916,7 @@ local function DrawPath(frames)
 		startText.Text = "▶ START"
 		startText.TextColor3 = Color3.new(1, 1, 1)
 		startText.TextScaled = true
-		startText.Font = Enum.Font.GothamBold
+		startText.Font = Enum.Font.SourceSansBold
 		startText.Parent = startBillboard
 
 		local startCorner = Instance.new("UICorner")
@@ -4943,7 +4970,7 @@ local function DrawPath(frames)
 		endText.Text = "⏹ END"
 		endText.TextColor3 = Color3.new(1, 1, 1)
 		endText.TextScaled = true
-		endText.Font = Enum.Font.GothamBold
+		endText.Font = Enum.Font.SourceSansBold
 		endText.Parent = endBillboard
 
 		local endCorner = Instance.new("UICorner")
@@ -5005,7 +5032,7 @@ local function DrawPath(frames)
 			arrowIcon.Text = "➤"
 			arrowIcon.TextColor3 = arrowColor
 			arrowIcon.TextScaled = true
-			arrowIcon.Font = Enum.Font.GothamBold
+			arrowIcon.Font = Enum.Font.SourceSansBold
 			arrowIcon.Rotation = math.deg(math.atan2(direction.X, direction.Z))
 			arrowIcon.Parent = arrowBB
 		end
@@ -5108,15 +5135,15 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 	local data = nil
 
 	if isCloudRecording then
-		-- Load from memory (CloudRecordingData)
-		if not CloudRecordingData then
+		-- Load from memory (_G.StarshipCloud.RecordingData)
+		if not _G.StarshipCloud.RecordingData then
 			WindUI:Notify({ Title = "Error", Content = "Cloud recording not loaded!", Duration = 2 })
 			return
 		end
-		data = CloudRecordingData
+		data = _G.StarshipCloud.RecordingData
 
 		-- Simple notification - all data is already loaded
-		local frameCount = CloudRecordingData.Frames and #CloudRecordingData.Frames or 0
+		local frameCount = _G.StarshipCloud.RecordingData.Frames and #_G.StarshipCloud.RecordingData.Frames or 0
 		WindUI:Notify({
 			Title = "☁️ Playing",
 			Content = string.format("Starting playback (%d frames)", frameCount),
@@ -5266,80 +5293,314 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 	-- Cache joints for Standard mode
 	PlaybackState.jointMap = GetJoints(char)
 
-	-- SMART START / SMART RESUME: Always find nearest position (SAME AS PC)
-	-- This ensures play from nearest path point after stop
-	WindUI:Notify({ Title = "Finding Position", Content = "Locating nearest path point...", Duration = 1 })
-
-	local bestT, minDist = PlaybackState.currentTime, math.huge
-	local rPos = hrp.Position
-
-	-- Optimization: Step by frames to save performance on huge files
-	local step = math.max(1, math.floor(#PlaybackState.frameData / 500))
-
-	for i = 1, #PlaybackState.frameData, step do
-		local f = PlaybackState.frameData[i]
-		local pos
-		if f.pos then
-			pos = Vector3.new(f.pos.x, f.pos.y, f.pos.z)
-		elseif f.r then
-			pos = TblToCF(f.r).Position
+	-- SMART START / SMART RESUME: 
+	-- If resuming from pause, keep the paused time - but check if player moved too far
+	-- Only search for nearest point when starting fresh (not resuming)
+	local needTravelPhase = false -- Flag to trigger travel phase even when resuming
+	local useNearestPoint = false -- Flag to find nearest point instead of paused position
+	
+	if isResuming then
+		-- RESUME: Check if player moved too far from the paused position
+		local resumeFrame = nil
+		local resumeFrameIdx = 1
+		for i = 1, #PlaybackState.frameData do
+			if PlaybackState.frameData[i].t >= PlaybackState.currentTime then
+				resumeFrame = PlaybackState.frameData[i]
+				resumeFrameIdx = i
+				break
+			end
 		end
-
-		if pos then
-			local dist = (rPos - pos).Magnitude
-			if dist < minDist then
-				minDist = dist
-				bestT = f.t
+		
+		if resumeFrame then
+			-- Check if resume frame is in air (Freefall/Jumping)
+			local stateName = resumeFrame.stEnum or (resumeFrame.st and string.match(resumeFrame.st, "Enum%.HumanoidStateType%.(%w+)"))
+			local isAirFrame = (stateName == "Jumping" or stateName == "Freefall")
+			
+			-- If paused in air, find nearest ground frame instead
+			if isAirFrame then
+				-- Search for nearest ground frame (forward and backward)
+				local searchRange = 120 -- ~2 seconds at 60fps
+				local bestGroundIdx = nil
+				
+				for offset = 1, searchRange do
+					-- Check forward first (prefer continuing forward)
+					local fwdIdx = resumeFrameIdx + offset
+					if fwdIdx <= #PlaybackState.frameData then
+						local f = PlaybackState.frameData[fwdIdx]
+						local fState = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+						if fState == nil or fState == "Running" or fState == "Landed" or fState == "Climbing" then
+							bestGroundIdx = fwdIdx
+							break
+						end
+					end
+					
+					-- Check backward
+					local bwdIdx = resumeFrameIdx - offset
+					if bwdIdx >= 1 and not bestGroundIdx then
+						local f = PlaybackState.frameData[bwdIdx]
+						local fState = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+						if fState == nil or fState == "Running" or fState == "Landed" or fState == "Climbing" then
+							bestGroundIdx = bwdIdx
+							break
+						end
+					end
+				end
+				
+				if bestGroundIdx then
+					resumeFrame = PlaybackState.frameData[bestGroundIdx]
+					PlaybackState.currentTime = resumeFrame.t
+					WindUI:Notify({ 
+						Title = "Resuming", 
+						Content = string.format("Paused in air, resuming from ground at %.1fs", PlaybackState.currentTime), 
+						Duration = 2 
+					})
+				end
+			end
+			
+			local resumePos
+			if resumeFrame.pos then
+				resumePos = Vector3.new(resumeFrame.pos.x, resumeFrame.pos.y, resumeFrame.pos.z)
+			elseif resumeFrame.r then
+				resumePos = TblToCF(resumeFrame.r).Position
+			end
+			
+			if resumePos then
+				local flatPlayer = hrp.Position * Vector3.new(1, 0, 1)
+				local flatResume = resumePos * Vector3.new(1, 0, 1)
+				local distFromPath = (flatPlayer - flatResume).Magnitude
+				
+				if distFromPath <= 10 then
+					-- Close enough, just continue
+					if not isAirFrame then
+						WindUI:Notify({ 
+							Title = "Resuming", 
+							Content = string.format("Continuing from %.1fs", PlaybackState.currentTime), 
+							Duration = 2 
+						})
+					end
+				elseif distFromPath <= 100 then
+					-- Medium distance (10-100 studs): walk back to paused position
+					WindUI:Notify({ 
+						Title = "Resuming", 
+						Content = string.format("Returning to path (%.0f studs)...", distFromPath), 
+						Duration = 2 
+					})
+					needTravelPhase = true
+				else
+					-- Too far (>100 studs, probably respawned/fell): find nearest point instead
+					WindUI:Notify({ 
+						Title = "Resuming", 
+						Content = string.format("Too far (%.0f studs), finding nearest point...", distFromPath), 
+						Duration = 2 
+					})
+					useNearestPoint = true
+				end
 			end
 		end
 	end
+	
+	if not isResuming or useNearestPoint then
+		-- FRESH START: Find nearest position
+		WindUI:Notify({ Title = "Finding Position", Content = "Locating nearest path point...", Duration = 1 })
 
-	-- Also check the last frame explicitly
-	local lastF = PlaybackState.frameData[#PlaybackState.frameData]
-	local lastPos
-	if lastF.pos then
-		lastPos = Vector3.new(lastF.pos.x, lastF.pos.y, lastF.pos.z)
-	elseif lastF.r then
-		lastPos = TblToCF(lastF.r).Position
-	end
-	if lastPos then
-		local dist = (rPos - lastPos).Magnitude
-		if dist < minDist then
-			minDist = dist
-			bestT = lastF.t
+		local bestT, minDist = PlaybackState.currentTime, math.huge
+		local rPos = hrp.Position
+		local bestFrameIdx = 1
+		
+		-- Store best ground frame separately (prefer ground over air) - SAME AS PC
+		local bestGroundT, minGroundDist = PlaybackState.currentTime, math.huge
+		local bestGroundIdx = 1
+
+		-- PHASE 1: Coarse search with larger step to find approximate nearest frame
+		local step = math.max(1, math.floor(#PlaybackState.frameData / 200))
+
+		for i = 1, #PlaybackState.frameData, step do
+			local f = PlaybackState.frameData[i]
+			local pos
+			if f.pos then
+				pos = Vector3.new(f.pos.x, f.pos.y, f.pos.z)
+			elseif f.r then
+				pos = TblToCF(f.r).Position
+			end
+
+			if pos then
+				local dist = (rPos - pos).Magnitude
+				if dist < minDist then
+					minDist = dist
+					bestT = f.t
+					bestFrameIdx = i
+				end
+				
+				-- Check if this is a ground frame (not jumping/freefalling) - SAME AS PC
+				local stateName = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+				local isGroundFrame = (stateName == nil) or (stateName == "Running") or (stateName == "Landed") or (stateName == "Climbing")
+				
+				if isGroundFrame and dist < minGroundDist then
+					minGroundDist = dist
+					bestGroundT = f.t
+					bestGroundIdx = i
+				end
+			end
 		end
-	end
+		
+		-- PHASE 2: Fine search around the best frame found (check every frame in range)
+		local searchRadius = step * 2
+		local fineStart = math.max(1, bestFrameIdx - searchRadius)
+		local fineEnd = math.min(#PlaybackState.frameData, bestFrameIdx + searchRadius)
+		
+		for i = fineStart, fineEnd do
+			local f = PlaybackState.frameData[i]
+			local pos
+			if f.pos then
+				pos = Vector3.new(f.pos.x, f.pos.y, f.pos.z)
+			elseif f.r then
+				pos = TblToCF(f.r).Position
+			end
 
-	-- DISTANCE VALIDATION (Prevent playing on wrong map)
-	local MAP_DISTANCE_THRESHOLD = 500
-	if minDist > MAP_DISTANCE_THRESHOLD then
-		WindUI:Notify({
-			Title = "Wrong Map Detected",
-			Content = string.format("Path is too far (%.0f studs)!", minDist),
-			Duration = 4,
-		})
-		return
-	end
+			if pos then
+				local dist = (rPos - pos).Magnitude
+				if dist < minDist then
+					minDist = dist
+					bestT = f.t
+					bestFrameIdx = i
+				end
+				
+				local stateName = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+				local isGroundFrame = (stateName == nil) or (stateName == "Running") or (stateName == "Landed") or (stateName == "Climbing")
+				
+				if isGroundFrame and dist < minGroundDist then
+					minGroundDist = dist
+					bestGroundT = f.t
+					bestGroundIdx = i
+				end
+			end
+		end
+		
+		-- Also do fine search around best ground frame if different
+		if bestGroundIdx ~= bestFrameIdx then
+			fineStart = math.max(1, bestGroundIdx - searchRadius)
+			fineEnd = math.min(#PlaybackState.frameData, bestGroundIdx + searchRadius)
+			
+			for i = fineStart, fineEnd do
+				local f = PlaybackState.frameData[i]
+				local pos
+				if f.pos then
+					pos = Vector3.new(f.pos.x, f.pos.y, f.pos.z)
+				elseif f.r then
+					pos = TblToCF(f.r).Position
+				end
 
-	-- Smart position logic (SAME AS PC)
-	if forceFromStart then
-		PlaybackState.currentTime = 0
-	-- If the nearest point is within the last 2 seconds, force restart from 0
-	elseif bestT >= (PlaybackState.totalDuration - 2.0) then
-		PlaybackState.currentTime = 0
-		-- Snap to Start: If nearest point is within first 1 second, start from 0
-	elseif bestT < 1.0 then
-		PlaybackState.currentTime = 0
-		-- Otherwise, jump to nearest point if close enough to path
-	elseif minDist < 500 then
-		PlaybackState.currentTime = bestT
-		WindUI:Notify({
-			Title = "Smart Start",
-			Content = string.format("Starting from %.1fs (%.0f studs away)", bestT, minDist),
-			Duration = 2,
-		})
-	else
-		PlaybackState.currentTime = 0
+				if pos then
+					local dist = (rPos - pos).Magnitude
+					
+					local stateName = f.stEnum or (f.st and string.match(f.st, "Enum%.HumanoidStateType%.(%w+)"))
+					local isGroundFrame = (stateName == nil) or (stateName == "Running") or (stateName == "Landed") or (stateName == "Climbing")
+					
+					if isGroundFrame and dist < minGroundDist then
+						minGroundDist = dist
+						bestGroundT = f.t
+						bestGroundIdx = i
+					end
+				end
+			end
+		end
+
+		-- Also check the last frame explicitly
+		local lastF = PlaybackState.frameData[#PlaybackState.frameData]
+		local lastPos
+		if lastF.pos then
+			lastPos = Vector3.new(lastF.pos.x, lastF.pos.y, lastF.pos.z)
+		elseif lastF.r then
+			lastPos = TblToCF(lastF.r).Position
+		end
+		if lastPos then
+			local dist = (rPos - lastPos).Magnitude
+			if dist < minDist then
+				minDist = dist
+				bestT = lastF.t
+			end
+		end
+		-- PRIORITIZE GROUND FRAMES: If we found a close ground frame, use it instead - SAME AS PC
+		-- This prevents walking/teleporting to mid-air positions
+		if minGroundDist < minDist + 20 then -- Allow 20 studs tolerance
+			bestT = bestGroundT
+			minDist = minGroundDist
+		end
+
+		-- DISTANCE VALIDATION (Prevent playing on wrong map)
+		local MAP_DISTANCE_THRESHOLD = 500
+		if minDist > MAP_DISTANCE_THRESHOLD then
+			WindUI:Notify({
+				Title = "Wrong Map Detected",
+				Content = string.format("Path is too far (%.0f studs)!", minDist),
+				Duration = 4,
+			})
+			return
+		end
+
+		-- Smart position logic (SAME AS PC)
+		if forceFromStart then
+			PlaybackState.currentTime = 0
+			_G.StarshipSkipInitialSnap = false
+		-- If the nearest point is within the last 2 seconds, force restart from 0
+		elseif bestT >= (PlaybackState.totalDuration - 2.0) then
+			PlaybackState.currentTime = 0
+			-- But if player is close to start, skip travel phase
+			if minDist < 100 then
+				isResuming = true
+				_G.StarshipSkipInitialSnap = true
+				_G.StarshipSkipSnapFrames = 60
+				WindUI:Notify({
+					Title = "Smart Start",
+					Content = "Restarting from beginning (near end)",
+					Duration = 2,
+				})
+			else
+				_G.StarshipSkipInitialSnap = false
+			end
+			-- Snap to Start: If nearest point is within first 1 second, start from 0
+		elseif bestT < 1.0 then
+			PlaybackState.currentTime = 0
+			-- If player is close to start, skip travel phase
+			if minDist < 100 then
+				isResuming = true
+				_G.StarshipSkipInitialSnap = true
+				_G.StarshipSkipSnapFrames = 60
+				WindUI:Notify({
+					Title = "Smart Start",
+					Content = "Starting from beginning (already near start)",
+					Duration = 2,
+				})
+			else
+				_G.StarshipSkipInitialSnap = false
+			end
+			-- Otherwise, jump to nearest point if close enough to path
+		elseif minDist < 500 then
+			PlaybackState.currentTime = bestT
+			-- If player is already close to path (< 100 studs), skip travel phase
+			-- Player will naturally sync with playback from their current position
+			if minDist < 100 then
+				isResuming = true -- This will skip travel phase
+				-- Set global flag to skip initial position snap in playback
+				_G.StarshipSkipInitialSnap = true
+				_G.StarshipSkipSnapFrames = 60 -- Skip position correction for first 60 frames (~1s)
+				WindUI:Notify({
+					Title = "Smart Start",
+					Content = string.format("Starting from %.1fs (%.0f studs)", bestT, minDist),
+					Duration = 2,
+				})
+			else
+				_G.StarshipSkipInitialSnap = false
+				WindUI:Notify({
+					Title = "Smart Start",
+					Content = string.format("Walking to path at %.1fs (%.0f studs)", bestT, minDist),
+					Duration = 2,
+				})
+			end
+		else
+			PlaybackState.currentTime = 0
+			_G.StarshipSkipInitialSnap = false
+		end
 	end
 
 	-- Disconnect old connection if exists (important for resume)
@@ -5350,41 +5611,45 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 
 	-- ═══════════════════════════════════════════════════════════════════
 	-- TRAVEL PHASE: Walk to target position before playback (SAME AS PC)
+	-- Run travel phase if: fresh start OR resuming but player moved away from path
+	-- Also run if useNearestPoint (player respawned/fell, need to walk to nearest point)
 	-- ═══════════════════════════════════════════════════════════════════
-	local startFrame = PlaybackState.frameData[1]
-	local targetPos
+	if (not isResuming or needTravelPhase or useNearestPoint) then
+		local startFrame = PlaybackState.frameData[1]
+		local targetPos
 
-	-- Find target position based on currentPlaybackTime
-	if PlaybackState.currentTime > 0 then
-		for i = 1, #PlaybackState.frameData do
-			if PlaybackState.frameData[i].t >= PlaybackState.currentTime then
-				local f = PlaybackState.frameData[i]
-				if f.pos then
-					targetPos = Vector3.new(f.pos.x, f.pos.y, f.pos.z)
-				elseif f.r then
-					targetPos = TblToCF(f.r).Position
+		-- Find target position based on currentPlaybackTime
+		if PlaybackState.currentTime > 0 then
+			for i = 1, #PlaybackState.frameData do
+				if PlaybackState.frameData[i].t >= PlaybackState.currentTime then
+					local f = PlaybackState.frameData[i]
+					if f.pos then
+						targetPos = Vector3.new(f.pos.x, f.pos.y, f.pos.z)
+					elseif f.r then
+						targetPos = TblToCF(f.r).Position
+					end
+					break
 				end
-				break
+			end
+		else
+			-- Start from beginning
+			if startFrame.pos then
+				targetPos = Vector3.new(startFrame.pos.x, startFrame.pos.y, startFrame.pos.z)
+			elseif startFrame.r then
+				targetPos = TblToCF(startFrame.r).Position
 			end
 		end
-	else
-		-- Start from beginning
-		if startFrame.pos then
-			targetPos = Vector3.new(startFrame.pos.x, startFrame.pos.y, startFrame.pos.z)
-		elseif startFrame.r then
-			targetPos = TblToCF(startFrame.r).Position
-		end
-	end
 
-	-- Travel to target if far away
-	if targetPos then
-		-- Use horizontal distance to prevent getting stuck due to height differences
-		local flatPos = hrp.Position * Vector3.new(1, 0, 1)
-		local flatTarget = targetPos * Vector3.new(1, 0, 1)
-		local dist = (flatPos - flatTarget).Magnitude
+		-- Travel to target if far away
+		if targetPos then
+			-- Use horizontal distance to prevent getting stuck due to height differences
+			local flatPos = hrp.Position * Vector3.new(1, 0, 1)
+			local flatTarget = targetPos * Vector3.new(1, 0, 1)
+			local dist = (flatPos - flatTarget).Magnitude
 
-		if dist > 3 then
-			-- Enable animate for walking
+		-- SMART START: Walk to nearest path point naturally (not snap/teleport)
+		if dist < 1000 and dist > 5 then
+			-- Player is within range but not on path - walk to it naturally
 			hrp.Anchored = false
 			if animate then
 				animate.Disabled = false
@@ -5392,59 +5657,114 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 			hum.AutoRotate = true
 
 			WindUI:Notify({
-				Title = "Traveling",
+				Title = "Smart Start",
 				Content = string.format("Walking to path (%.0f studs)...", dist),
-				Duration = 3,
+				Duration = 2,
 			})
 
-			-- DYNAMIC SPEED: Calculate speed from recorded data + playback multiplier
-			local recSpeed = 16
-			-- Find the frame we are traveling to (startFrame usually)
-			local f = startFrame
-			if f.vel then
-				recSpeed = Vector3.new(f.vel.x, 0, f.vel.z).Magnitude
-			end
-			
-			-- Apply playback speed multiplier
-			local pSpeed = tonumber(PlaybackState.speed) or 1
-			local finalSpeed = recSpeed * pSpeed
-			if finalSpeed < 16 then finalSpeed = 16 end
-			
-			hum.WalkSpeed = finalSpeed
+			-- Use normal walk speed
+			local walkSpeed = hum.WalkSpeed
+			if walkSpeed < 16 then walkSpeed = 16 end
+			hum.WalkSpeed = walkSpeed
 			hum:MoveTo(targetPos)
 
-			-- Timeout safety (Dynamic based on distance, min 30s)
+			-- Wait until close enough or timeout
 			local moveStart = os.clock()
-			local isWalking = true
-			local maxTravelTime = math.max(30, dist * 0.5) -- Allow 0.5s per stud, min 30s
+			local maxWalkTime = math.min(dist / 10, 15) -- Max 15 seconds, ~10 studs/sec
 
-			while isWalking do
+			while true do
 				local currFlat = hrp.Position * Vector3.new(1, 0, 1)
 				local d = (currFlat - flatTarget).Magnitude
 
-				-- Close enough, start playback
-				if d <= 2 then
+				-- Close enough
+				if d <= 3 then
 					break
 				end
 
-				-- Timeout
-				if os.clock() - moveStart > maxTravelTime then
-					hrp.CFrame = CFrame.new(targetPos) * hrp.CFrame.Rotation
-					WindUI:Notify({ Title = "Timeout", Content = "Teleported to path", Duration = 2 })
+				-- Timeout - just start from current position
+				if os.clock() - moveStart > maxWalkTime then
+					WindUI:Notify({ Title = "Smart Start", Content = "Starting from current position", Duration = 2 })
 					break
 				end
 
-				-- Refresh MoveTo every second
-				if math.floor(os.clock() - moveStart) % 1 < 0.1 then
-					hum.WalkSpeed = finalSpeed -- Ensure speed is maintained
-					hum:MoveTo(targetPos)
-				end
-
+				-- Keep walking
+				hum:MoveTo(targetPos)
 				task.wait(0.1)
 			end
 
 			-- Stop walking
 			hum:MoveTo(hrp.Position)
+			
+		elseif dist <= 5 then
+			-- Already very close, just start
+			WindUI:Notify({
+				Title = "Smart Start",
+				Content = string.format("Starting from %.1fs", PlaybackState.currentTime),
+				Duration = 2,
+			})
+		elseif dist > 3 then
+				-- Enable animate for walking
+				hrp.Anchored = false
+				if animate then
+					animate.Disabled = false
+				end
+				hum.AutoRotate = true
+
+				WindUI:Notify({
+					Title = "Traveling",
+					Content = string.format("Walking to path (%.0f studs)...", dist),
+					Duration = 3,
+				})
+
+				-- DYNAMIC SPEED: Calculate speed from recorded data + playback multiplier
+				local recSpeed = 16
+				-- Find the frame we are traveling to (startFrame usually)
+				local f = startFrame
+				if f.vel then
+					recSpeed = Vector3.new(f.vel.x, 0, f.vel.z).Magnitude
+				end
+				
+				-- Apply playback speed multiplier
+				local pSpeed = tonumber(PlaybackState.speed) or 1
+				local finalSpeed = recSpeed * pSpeed
+				if finalSpeed < 16 then finalSpeed = 16 end
+				
+				hum.WalkSpeed = finalSpeed
+				hum:MoveTo(targetPos)
+
+				-- Timeout safety (Dynamic based on distance, min 30s)
+				local moveStart = os.clock()
+				local isWalking = true
+				local maxTravelTime = math.max(30, dist * 0.5) -- Allow 0.5s per stud, min 30s
+
+				while isWalking do
+					local currFlat = hrp.Position * Vector3.new(1, 0, 1)
+					local d = (currFlat - flatTarget).Magnitude
+
+					-- Close enough, start playback
+					if d <= 2 then
+						break
+					end
+
+					-- Timeout
+					if os.clock() - moveStart > maxTravelTime then
+						hrp.CFrame = CFrame.new(targetPos) * hrp.CFrame.Rotation
+						WindUI:Notify({ Title = "Timeout", Content = "Teleported to path", Duration = 2 })
+						break
+					end
+
+					-- Refresh MoveTo every second
+					if math.floor(os.clock() - moveStart) % 1 < 0.1 then
+						hum.WalkSpeed = finalSpeed -- Ensure speed is maintained
+						hum:MoveTo(targetPos)
+					end
+
+					task.wait(0.1)
+				end
+
+				-- Stop walking
+				hum:MoveTo(hrp.Position)
+			end
 		end
 	end
 
@@ -6306,6 +6626,10 @@ ListMapTab:Space()
 
 -- Fetch cloud recordings list BEFORE creating dropdown
 do
+	-- Clear existing data first (prevent duplicates on re-execute)
+	_G.StarshipCloud.DropdownValues = {}
+	_G.StarshipCloud.RecordingsCache = {}
+	
 	local apiUrl = BuildCloudURL({ list = "all" })
 
 	local success, response = pcall(function()
@@ -6320,30 +6644,30 @@ do
 		if parseSuccess and data and data.success and data.recordings then
 			-- Store as simple strings for dropdown (supports search)
 			for _, rec in ipairs(data.recordings) do
-				local displayName = rec.name
-				table.insert(CloudDropdownValues, displayName)
+				local displayName = "☁️ " .. rec.name
+				table.insert(_G.StarshipCloud.DropdownValues, displayName)
 
 				-- Cache full info for lookup
-				CloudRecordingsCache[displayName] = {
+				_G.StarshipCloud.RecordingsCache[displayName] = {
 					name = rec.name,
 					recordingId = rec.recordingId,
 				}
 			end
 
 			-- Sort alphabetically (A-Z)
-			table.sort(CloudDropdownValues, function(a, b)
+			table.sort(_G.StarshipCloud.DropdownValues, function(a, b)
 				return string.lower(a) < string.lower(b)
 			end)
 		end
 	end
 
-	if #CloudDropdownValues == 0 then
-		table.insert(CloudDropdownValues, "No cloud recordings")
+	if #_G.StarshipCloud.DropdownValues == 0 then
+		table.insert(_G.StarshipCloud.DropdownValues, "No cloud recordings")
 	end
 end
 
 ListMapTab:Paragraph({
-	Title = "☁️ Cloud Recordings (" .. #CloudDropdownValues .. ")",
+	Title = "☁️ Cloud Recordings (" .. #_G.StarshipCloud.DropdownValues .. ")",
 	Desc = "Recordings uploaded by Dev/Owner",
 })
 
@@ -6359,8 +6683,8 @@ ListMapTab:Button({
 		})
 
 		-- Clear existing cache
-		CloudDropdownValues = {}
-		CloudRecordingsCache = {}
+		_G.StarshipCloud.DropdownValues = {}
+		_G.StarshipCloud.RecordingsCache = {}
 
 		local apiUrl = BuildCloudURL({ list = "all" })
 
@@ -6376,15 +6700,15 @@ ListMapTab:Button({
 			if parseSuccess and data and data.success and data.recordings then
 				for _, rec in ipairs(data.recordings) do
 					local displayName = "☁️ " .. rec.name
-					table.insert(CloudDropdownValues, displayName)
-					CloudRecordingsCache[displayName] = {
+					table.insert(_G.StarshipCloud.DropdownValues, displayName)
+					_G.StarshipCloud.RecordingsCache[displayName] = {
 						name = rec.name,
 						recordingId = rec.recordingId,
 					}
 				end
 
 				-- Sort alphabetically (A-Z)
-				table.sort(CloudDropdownValues, function(a, b)
+				table.sort(_G.StarshipCloud.DropdownValues, function(a, b)
 					return string.lower(a) < string.lower(b)
 				end)
 
@@ -6467,20 +6791,20 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 		return
 	end
 
-	if ChunkedState.loadedChunks[chunkIndex] then
+	if _G.StarshipCloud.ChunkedState.loadedChunks[chunkIndex] then
 		-- Already loaded
 		if callback then
-			callback(true, ChunkedState.loadedChunks[chunkIndex])
+			callback(true, _G.StarshipCloud.ChunkedState.loadedChunks[chunkIndex])
 		end
 		return
 	end
 
-	if ChunkedState.currentLoadingChunk == chunkIndex then
+	if _G.StarshipCloud.ChunkedState.currentLoadingChunk == chunkIndex then
 		-- Already loading this chunk
 		return
 	end
 
-	ChunkedState.currentLoadingChunk = chunkIndex
+	_G.StarshipCloud.ChunkedState.currentLoadingChunk = chunkIndex
 
 	task.spawn(function()
 		local apiUrl = BuildCloudURL({ recordingId = recordingId, chunk = chunkIndex }, true) -- true = use chunked endpoint
@@ -6489,7 +6813,7 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 			return game:HttpGet(apiUrl)
 		end)
 
-		ChunkedState.currentLoadingChunk = -1
+		_G.StarshipCloud.ChunkedState.currentLoadingChunk = -1
 
 		if not success then
 			if DEV_MODE then
@@ -6507,7 +6831,7 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 
 		if parseSuccess and data and data.success and data.frames then
 			-- Cache the chunk
-			ChunkedState.loadedChunks[chunkIndex] = {
+			_G.StarshipCloud.ChunkedState.loadedChunks[chunkIndex] = {
 				frames = data.frames,
 				startFrame = data.startFrame,
 				endFrame = data.endFrame,
@@ -6515,23 +6839,23 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 
 			-- Update metadata from first chunk if available
 			if chunkIndex == 0 and data.totalFrames then
-				ChunkedState.totalFrames = data.totalFrames
-				ChunkedState.framesPerChunk = data.framesPerChunk or 3000
-				ChunkedState.totalChunks = data.totalChunks or 1
+				_G.StarshipCloud.ChunkedState.totalFrames = data.totalFrames
+				_G.StarshipCloud.ChunkedState.framesPerChunk = data.framesPerChunk or 3000
+				_G.StarshipCloud.ChunkedState.totalChunks = data.totalChunks or 1
 			end
 
 			-- Calculate progress
 			local loadedCount = 0
-			for _ in pairs(ChunkedState.loadedChunks) do
+			for _ in pairs(_G.StarshipCloud.ChunkedState.loadedChunks) do
 				loadedCount = loadedCount + 1
 			end
-			ChunkedState.loadProgress = math.floor((loadedCount / ChunkedState.totalChunks) * 100)
+			_G.StarshipCloud.ChunkedState.loadProgress = math.floor((loadedCount / _G.StarshipCloud.ChunkedState.totalChunks) * 100)
 
 			-- Reset retry count on success
 			ChunkRetryCount[chunkIndex] = nil
 
 			if callback then
-				callback(true, ChunkedState.loadedChunks[chunkIndex])
+				callback(true, _G.StarshipCloud.ChunkedState.loadedChunks[chunkIndex])
 			end
 		else
 			-- More detailed error for debugging
@@ -6551,7 +6875,7 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 			ChunkRetryCount[chunkIndex] = (ChunkRetryCount[chunkIndex] or 0) + 1
 
 			-- Only retry if under limit and chunk not already loaded
-			if ChunkRetryCount[chunkIndex] <= MAX_CHUNK_RETRIES and not ChunkedState.loadedChunks[chunkIndex] then
+			if ChunkRetryCount[chunkIndex] <= MAX_CHUNK_RETRIES and not _G.StarshipCloud.ChunkedState.loadedChunks[chunkIndex] then
 				if DEV_MODE then
 					warn("[Chunked] Retrying chunk " .. chunkIndex .. " (attempt " .. ChunkRetryCount[chunkIndex] .. "/" .. MAX_CHUNK_RETRIES .. ")")
 				end
@@ -6579,25 +6903,25 @@ PreloadNextChunks = function(recordingId, currentChunkIndex, numToPreload)
 		return
 	end
 
-	if ChunkedState.isPreloading then
+	if _G.StarshipCloud.ChunkedState.isPreloading then
 		return
 	end
-	ChunkedState.isPreloading = true
+	_G.StarshipCloud.ChunkedState.isPreloading = true
 
 	task.spawn(function()
 		for i = 1, numToPreload do
 			local nextChunk = currentChunkIndex + i
-			if nextChunk < ChunkedState.totalChunks and not ChunkedState.loadedChunks[nextChunk] then
+			if nextChunk < _G.StarshipCloud.ChunkedState.totalChunks and not _G.StarshipCloud.ChunkedState.loadedChunks[nextChunk] then
 				-- Load next chunk
 				LoadChunk(recordingId, nextChunk, function(success)
 					if success then
-						-- Update CloudRecordingData with new frames
-						if CloudRecordingData and CloudRecordingData._isChunked then
-							local newChunk = ChunkedState.loadedChunks[nextChunk]
+						-- Update _G.StarshipCloud.RecordingData with new frames
+						if _G.StarshipCloud.RecordingData and _G.StarshipCloud.RecordingData._isChunked then
+							local newChunk = _G.StarshipCloud.ChunkedState.loadedChunks[nextChunk]
 							if newChunk and newChunk.frames then
 								-- Append new frames to existing data
 								for _, frame in ipairs(newChunk.frames) do
-									table.insert(CloudRecordingData.Frames, frame)
+									table.insert(_G.StarshipCloud.RecordingData.Frames, frame)
 								end
 
 								-- Also update PlaybackState.frameData if it's the same recording
@@ -6617,7 +6941,7 @@ PreloadNextChunks = function(recordingId, currentChunkIndex, numToPreload)
 
 								-- Count loaded chunks
 								local loadedCount = 0
-								for _ in pairs(ChunkedState.loadedChunks) do
+								for _ in pairs(_G.StarshipCloud.ChunkedState.loadedChunks) do
 									loadedCount = loadedCount + 1
 								end
 
@@ -6629,7 +6953,7 @@ PreloadNextChunks = function(recordingId, currentChunkIndex, numToPreload)
 				task.wait(1.0) -- Delay between preloads to avoid network congestion
 			end
 		end
-		ChunkedState.isPreloading = false
+		_G.StarshipCloud.ChunkedState.isPreloading = false
 	end)
 end
 
@@ -6638,8 +6962,8 @@ local function AssembleFrameData()
 	local allFrames = {}
 
 	-- Assemble chunks in order
-	for chunkIdx = 0, ChunkedState.totalChunks - 1 do
-		local chunkData = ChunkedState.loadedChunks[chunkIdx]
+	for chunkIdx = 0, _G.StarshipCloud.ChunkedState.totalChunks - 1 do
+		local chunkData = _G.StarshipCloud.ChunkedState.loadedChunks[chunkIdx]
 		if chunkData and chunkData.frames then
 			for _, frame in ipairs(chunkData.frames) do
 				table.insert(allFrames, frame)
@@ -6668,8 +6992,8 @@ local function LoadCloudRecording(recInfo)
 	-- MEMORY CLEANUP: Clear old data before loading new recording
 	-- Prevents memory buildup on low-end mobile devices
 	-- ═══════════════════════════════════════════════════════════════
-	if CloudRecordingData then
-		CloudRecordingData = nil
+	if _G.StarshipCloud.RecordingData then
+		_G.StarshipCloud.RecordingData = nil
 	end
 	if PlaybackState.frameData then
 		PlaybackState.frameData = nil
@@ -6696,15 +7020,15 @@ local function LoadCloudRecording(recInfo)
 		local cachedData = LoadFromCache(recInfo.recordingId)
 		if cachedData then
 			-- Loaded from cache! INSTANT!
-			CloudRecordingData = cachedData
-			CloudRecordingName = cachedData.name or recInfo.name
+			_G.StarshipCloud.RecordingData = cachedData
+			_G.StarshipCloud.RecordingName = cachedData.name or recInfo.name
 			CloudRecordingLoaded = true
 
 			-- Update selected file display
 			selectedFile = "CLOUD:" .. recInfo.recordingId
 			if selectedFileDisplay then
 				pcall(function()
-					selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
+					selectedFileDisplay:SetTitle("☁️ " .. _G.StarshipCloud.RecordingName)
 					local frameCount = cachedData.Frames and #cachedData.Frames or 0
 					selectedFileDisplay:SetDesc(string.format("Ready! • %d frames (cached)", frameCount))
 				end)
@@ -6713,7 +7037,7 @@ local function LoadCloudRecording(recInfo)
 			local frameCount = cachedData.Frames and #cachedData.Frames or 0
 			WindUI:Notify({
 				Title = "✅ Ready! (Cached)",
-				Content = string.format("%s loaded instantly - Press Play!", CloudRecordingName),
+				Content = string.format("%s loaded instantly - Press Play!", _G.StarshipCloud.RecordingName),
 				Duration = 2,
 			})
 
@@ -6819,27 +7143,27 @@ LoadCloudRecordingDirect = function(recInfo)
 
 			-- Normalize data structure
 			if fileData.data then
-				CloudRecordingData = fileData.data
+				_G.StarshipCloud.RecordingData = fileData.data
 			else
-				CloudRecordingData = fileData
+				_G.StarshipCloud.RecordingData = fileData
 			end
 
-			CloudRecordingName = data.name or fileData.name or recInfo.name
+			_G.StarshipCloud.RecordingName = data.name or fileData.name or recInfo.name
 			CloudRecordingLoaded = true
-			ChunkedState.isChunked = false
+			_G.StarshipCloud.ChunkedState.isChunked = false
 
 			-- Update selected file display
 			selectedFile = "CLOUD:" .. recInfo.recordingId
 			if selectedFileDisplay then
 				pcall(function()
-					selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
+					selectedFileDisplay:SetTitle("☁️ " .. _G.StarshipCloud.RecordingName)
 					selectedFileDisplay:SetDesc("Cloud Recording • Ready to play")
 				end)
 			end
 
 			WindUI:Notify({
 				Title = "☁️ Ready!",
-				Content = CloudRecordingName .. " loaded - tap Play to start",
+				Content = _G.StarshipCloud.RecordingName .. " loaded - tap Play to start",
 				Duration = 3,
 			})
 
@@ -6850,23 +7174,23 @@ LoadCloudRecordingDirect = function(recInfo)
 
 		if data.success and data.recording then
 			-- Store in memory
-			CloudRecordingData = data.recording
-			CloudRecordingName = data.name or recInfo.name
+			_G.StarshipCloud.RecordingData = data.recording
+			_G.StarshipCloud.RecordingName = data.name or recInfo.name
 			CloudRecordingLoaded = true -- Mark as loaded!
-			ChunkedState.isChunked = false
+			_G.StarshipCloud.ChunkedState.isChunked = false
 
 			-- Update selected file display
 			selectedFile = "CLOUD:" .. recInfo.recordingId
 			if selectedFileDisplay then
 				pcall(function()
-					selectedFileDisplay:SetTitle("☁️ " .. CloudRecordingName)
+					selectedFileDisplay:SetTitle("☁️ " .. _G.StarshipCloud.RecordingName)
 					selectedFileDisplay:SetDesc("Cloud Recording • Ready to play")
 				end)
 			end
 
 			WindUI:Notify({
 				Title = "☁️ Ready!",
-				Content = CloudRecordingName .. " loaded - tap Play to start",
+				Content = _G.StarshipCloud.RecordingName .. " loaded - tap Play to start",
 				Duration = 3,
 			})
 
@@ -6878,7 +7202,7 @@ LoadCloudRecordingDirect = function(recInfo)
 				local cacheData = {
 					Frames = data.recording.Frames or data.recording,
 					Mode = data.recording.Mode or "Flexible",
-					name = CloudRecordingName,
+					name = _G.StarshipCloud.RecordingName,
 				}
 				SaveToCache(recInfo.recordingId, cacheData)
 			end)
@@ -6896,14 +7220,14 @@ end
 ListMapTab:Dropdown({
 	Title = "Select Cloud Recording",
 	Desc = "Sorted A-Z • Use search to find",
-	Values = CloudDropdownValues,
+	Values = _G.StarshipCloud.DropdownValues,
 	SearchBarEnabled = true,
 	Callback = function(selected)
 		if selected == "No cloud recordings" then
 			return
 		end
 
-		local recInfo = CloudRecordingsCache[selected]
+		local recInfo = _G.StarshipCloud.RecordingsCache[selected]
 		if not recInfo then
 			WindUI:Notify({
 				Title = "Error",
@@ -7049,7 +7373,7 @@ local function ToggleMiniPlayer(state)
 		closeBtn.BackgroundTransparency = 0.5
 		closeBtn.Text = "×"
 		closeBtn.TextColor3 = Color3.fromRGB(180, 180, 200)
-		closeBtn.Font = Enum.Font.GothamBold
+		closeBtn.Font = Enum.Font.SourceSansBold
 		closeBtn.TextSize = 12
 		closeBtn.AutoButtonColor = false
 		closeBtn.ZIndex = 6
@@ -7102,7 +7426,7 @@ local function ToggleMiniPlayer(state)
 			btn.BackgroundTransparency = 0.15
 			btn.Text = icon
 			btn.TextColor3 = Color3.new(1, 1, 1)
-			btn.Font = Enum.Font.GothamBold
+			btn.Font = Enum.Font.SourceSansBold
 			btn.TextSize = 16
 			btn.AutoButtonColor = false
 			btn.ZIndex = 6
@@ -7513,7 +7837,7 @@ function CreatePlaybackControls()
 		Icon.BackgroundTransparency = 1
 		Icon.Position = UDim2.new(0, 15, 0, 0)
 		Icon.Size = UDim2.new(0, 40, 1, 0)
-		Icon.Font = Enum.Font.GothamBold
+		Icon.Font = Enum.Font.SourceSansBold
 		Icon.Text = "⚠️"
 		Icon.TextSize = 28
 		Icon.TextColor3 = Color3.fromRGB(251, 191, 36) -- Amber
@@ -7524,7 +7848,7 @@ function CreatePlaybackControls()
 		Title.BackgroundTransparency = 1
 		Title.Position = UDim2.new(0, 55, 0, 0)
 		Title.Size = UDim2.new(1, -70, 1, 0)
-		Title.Font = Enum.Font.GothamBold
+		Title.Font = Enum.Font.SourceSansBold
 		Title.Text = "Admin Detected!"
 		Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 		Title.TextSize = 18
@@ -7544,7 +7868,7 @@ function CreatePlaybackControls()
 		AdminLabel.BackgroundTransparency = 1
 		AdminLabel.Position = UDim2.new(0, 20, 0, 5)
 		AdminLabel.Size = UDim2.new(1, -40, 0, 25)
-		AdminLabel.Font = Enum.Font.GothamMedium
+		AdminLabel.Font = Enum.Font.SourceSansSemibold
 		AdminLabel.Text = "👤 " .. adminName
 		AdminLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 		AdminLabel.TextSize = 15
@@ -7556,7 +7880,7 @@ function CreatePlaybackControls()
 		ReasonLabel.BackgroundTransparency = 1
 		ReasonLabel.Position = UDim2.new(0, 20, 0, 32)
 		ReasonLabel.Size = UDim2.new(1, -40, 0, 40)
-		ReasonLabel.Font = Enum.Font.Gotham
+		ReasonLabel.Font = Enum.Font.SourceSans
 		ReasonLabel.Text = "📋 " .. reason
 		ReasonLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
 		ReasonLabel.TextSize = 13
@@ -7580,7 +7904,7 @@ function CreatePlaybackControls()
 		RejoinBtn.BackgroundTransparency = 0.1
 		RejoinBtn.Position = UDim2.new(0, 0, 0, 0)
 		RejoinBtn.Size = UDim2.new(0.48, 0, 1, 0)
-		RejoinBtn.Font = Enum.Font.GothamBold
+		RejoinBtn.Font = Enum.Font.SourceSansBold
 		RejoinBtn.Text = "🔄 Rejoin"
 		RejoinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		RejoinBtn.TextSize = 14
@@ -7598,7 +7922,7 @@ function CreatePlaybackControls()
 		ExitBtn.BackgroundTransparency = 0.1
 		ExitBtn.Position = UDim2.new(0.52, 0, 0, 0)
 		ExitBtn.Size = UDim2.new(0.48, 0, 1, 0)
-		ExitBtn.Font = Enum.Font.GothamBold
+		ExitBtn.Font = Enum.Font.SourceSansBold
 		ExitBtn.Text = "🚪 Leave"
 		ExitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		ExitBtn.TextSize = 14
@@ -7614,7 +7938,7 @@ function CreatePlaybackControls()
 		Footer.BackgroundTransparency = 1
 		Footer.Position = UDim2.new(0, 0, 1, -30)
 		Footer.Size = UDim2.new(1, 0, 0, 25)
-		Footer.Font = Enum.Font.Gotham
+		Footer.Font = Enum.Font.SourceSans
 		Footer.Text = "⚡ Starship Protection"
 		Footer.TextColor3 = Color3.fromRGB(100, 100, 120)
 		Footer.TextSize = 11
@@ -8935,10 +9259,10 @@ SocialTab:Button({
 	Desc = "Get updates, support & community",
 	Callback = function()
 		if setclipboard then
-			setclipboard("https://discord.gg/ftmA7BheTc")
+			setclipboard("https://dsc.gg/starshipcore")
 			WindUI:Notify({ Title = "✅ Copied!", Content = "Discord invite link copied to clipboard!", Duration = 3 })
 		else
-			WindUI:Notify({ Title = "Discord", Content = "https://discord.gg/ftmA7BheTc", Duration = 5 })
+			WindUI:Notify({ Title = "Discord", Content = "https://dsc.gg/starshipcore", Duration = 5 })
 		end
 	end,
 })
@@ -8994,30 +9318,24 @@ local ShowNotificationsToggle = SettingsTab:Toggle({
 	end,
 })
 
+-- Get available themes from WindUI
+local availableThemes = {}
+pcall(function()
+	local themes = WindUI:GetThemes() or {}
+	for themeName, _ in pairs(themes) do
+		table.insert(availableThemes, themeName)
+	end
+	table.sort(availableThemes) -- Sort alphabetically
+end)
+if #availableThemes == 0 then
+	availableThemes = { "Dark", "Light" } -- Fallback
+end
+
 local ThemeDropdown = SettingsTab:Dropdown({
 	Title = "🎨 Theme",
-	Desc = "Choose UI color theme (15 themes)",
-	Values = {
-		-- Classic Themes
-		"Dark",
-		"Light",
-		"Midnight",
-		-- Color Themes
-		"Rose",
-		"Emerald",
-		"Plant",
-		"Red",
-		"Indigo",
-		"Sky",
-		"Violet",
-		"Amber",
-		"Crimson",
-		-- Special Themes
-		"Monokai Pro",
-		"Cotton Candy",
-		"Rainbow",
-	},
-	Value = Settings.Theme,
+	Desc = "Choose UI color theme (" .. #availableThemes .. " themes)",
+	Values = availableThemes,
+	Value = Settings.Theme or "Indigo",
 	Callback = function(selected)
 		Settings.Theme = selected
 		SaveSettings()
@@ -9029,6 +9347,23 @@ local ThemeDropdown = SettingsTab:Dropdown({
 			Content = "Theme changed to " .. selected,
 			Duration = 2,
 		})
+	end,
+})
+
+-- UI Transparency Slider (Background Image)
+SettingsTab:Slider({
+	Title = "🔍 Background Transparency",
+	Desc = "Adjust background image transparency (0 = visible, 1 = hidden)",
+	Step = 0.05,
+	Value = {
+		Min = 0,
+		Max = 1,
+		Default = 0.85,
+	},
+	Callback = function(value)
+		pcall(function()
+			Window:SetBackgroundImageTransparency(value)
+		end)
 	end,
 })
 
@@ -9167,18 +9502,18 @@ SettingsTab:Button({
 
 -- ══════════════════════════════════════════════════════════════════
 -- SELECT DEFAULT TAB & WELCOME
--- ═════════════════════��════════════════════════════════════════════
+-- ══════════════════════════════════════════════════════════════════
 DashboardTab:Select()
 
--- Track window state untuk cleanup
-local isWindowDestroyed = false
+-- Track window state untuk cleanup (use _G to reduce local count)
+_G.StarshipWindowState = _G.StarshipWindowState or { isDestroyed = false }
 
 -- Fungsi cleanup untuk destroy semua
 local function CleanupAll()
-	if isWindowDestroyed then
+	if _G.StarshipWindowState.isDestroyed then
 		return
 	end
-	isWindowDestroyed = true
+	_G.StarshipWindowState.isDestroyed = true
 
 	StopPlayback()
 	if MiniPlayerGui then

@@ -21,7 +21,7 @@ local Colors = _G.StarshipColors
 		YELLOW = Color3.fromRGB(255, 220, 60),
 		RED = Color3.fromRGB(255, 80, 80),
 	}
-local DISCORD_LINK = "https://discord.gg/ftmA7BheTc"
+local DISCORD_LINK = "dsc.gg/starshipcore"
 
 return function(Page, UI, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
 	Page:ClearAllChildren()
