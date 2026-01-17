@@ -1492,31 +1492,40 @@ local function main()
 	-- Detect device HWID for binding
 	local deviceHWID = getDeviceHWID()
 
-	-- STEP 1: Call secure loader for authentication & webhook notification
-	-- SECURITY: Using obscured endpoint name with HWID
-	local authUrl = SERVER_URL .. "/api/pc-ld-q8r4?userId=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
-	local authSuccess, authResponse = pcall(function()
-		return game:HttpGet(authUrl)
-	end)
-
-	if not authSuccess then
-		if loaderGui then
-			loaderGui:Destroy()
+	-- SKIP second API call if CDN is enabled (already authenticated via initial loadstring)
+	local authResponse = nil
+	local authSuccess = true
+	
+	if _G.StarshipCDN and _G.StarshipCDN.enabled then
+		-- CDN mode: Authentication was already done, skip redundant API call
+		authResponse = "-- CDN mode: Already authenticated"
+	else
+		-- Standard mode: Call secure loader for authentication & webhook notification
+		-- SECURITY: Using obscured endpoint name with HWID
+		local authUrl = SERVER_URL .. "/api/pc-ld-q8r4?userId=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
+		authSuccess, authResponse = pcall(function()
+			return game:HttpGet(authUrl)
+		end)
+		
+		if not authSuccess then
+			if loaderGui then
+				loaderGui:Destroy()
+			end
+			showError("Connection Failed: Server Unreachable")
+			return
 		end
-		showError("Connection Failed: Server Unreachable")
-		return
-	end
 
-	-- Check if authentication was successful (should return loader.lua script or error)
-	if authResponse:find("error%(") or authResponse:find("ERROR:") then
-		if loaderGui then
-			loaderGui:Destroy()
+		-- Check if authentication was successful (should return loader.lua script or error)
+		if authResponse:find("error%(") or authResponse:find("ERROR:") then
+			if loaderGui then
+				loaderGui:Destroy()
+			end
+			-- Extract error message from Lua error string
+			local errorMsg = authResponse:match('error%("(.-)"%)')
+			showError(errorMsg or "Authentication Failed")
+			return
 		end
-		-- Extract error message from Lua error string
-		local errorMsg = authResponse:match('error%("(.-)"%)')
-		showError(errorMsg or "Authentication Failed")
-		return
-	end
+	end -- Close CDN check if-else
 
 	-- STEP 2: Now call /api/load to get the encrypted script (with HWID)
 	local targetUrl = SERVER_URL .. "/api/load?user=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
