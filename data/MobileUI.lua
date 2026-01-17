@@ -10,7 +10,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
-local VERSION = "1.2.3"
+local VERSION = "1.2.2"
 local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 
 -- DEV_MODE detection (same as StarshipCore)

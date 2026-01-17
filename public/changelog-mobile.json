@@ -1,10 +1,10 @@
 {
-    "currentVersion": "1.2.3",
+    "currentVersion": "1.2.2",
     "lastUpdated": "2026-01-17",
     "updates": [
         {
-            "version": "1.2.3",
-            "date": "2026-01-15",
+            "version": "1.2.2",
+            "date": "2026-01-14",
             "title": "UI & Playback Fix",
             "changes": [
                 "Fixed pause/resume playback not working properly",
@@ -17,19 +17,7 @@
                 "Set Indigo as default theme",
                 "Added topbar theme switch button",
                 "Updated Discord link to dsc.gg/starshipcore",
-                "Fixed window title invalid characters"
-            ]
-        },
-        {
-            "version": "1.2.2",
-            "date": "2026-01-14",
-            "title": "UI & Playback Fix",
-            "changes": [
-                "Fixed pause/resume playback not working properly",
-                "Cleaner UI: Removed excessive emojis for classic look",
-                "Fixed role display (MOBILE_VIP now shows as MOBILE VIP)",
-                "Fixed local register limit error",
-                "Optimized cloud recording state management",
+                "Fixed window title invalid characters",
                 "Improved overall stability"
             ]
         },
