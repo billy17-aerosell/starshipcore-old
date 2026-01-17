@@ -17,7 +17,7 @@ local MODULES = {
 local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua", "Emotes.lua", "ConfigTab.lua" }
 
 -- Dev mode detection (for debug logging)
-local DEV_MODE = true  -- DEBUG: Check why Tabs fallback to Vercel
+local DEV_MODE = false
 
 -- In-memory module storage (no files saved to disk for security!)
 local LoadedModules = {}
@@ -327,7 +327,6 @@ local function downloadModule(moduleName, userId)
 			
 			if DEV_MODE then
 				warn("[Starship] CDN Loading: " .. moduleName .. " from Cloudflare")
-				warn("[Starship] CDN URL: " .. fullUrl:sub(1, 80) .. "...")
 			end
 			
 			local success, response = pcall(function()
