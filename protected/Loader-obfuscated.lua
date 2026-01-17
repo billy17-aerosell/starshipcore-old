@@ -510,25 +510,57 @@ local function downloadModules(statusCallback)
 	local userId = tostring(game:GetService("Players").LocalPlayer.UserId)
 	local totalFiles = #MODULES + #TABS
 	local downloaded = 0
-
-	-- Download main modules via secure API (loaded to memory)
-	for _, moduleName in ipairs(MODULES) do
-		if downloadModule(moduleName, userId) then
+	local pending = totalFiles
+	
+	-- ══════════════════════════════════════════════════════════════════
+	-- PARALLEL LOADING - Download all modules simultaneously
+	-- Much faster than sequential loading!
+	-- ══════════════════════════════════════════════════════════════════
+	
+	local function onModuleComplete(moduleName, success)
+		pending = pending - 1
+		if success then
 			downloaded = downloaded + 1
-			if statusCallback then
-				statusCallback("Downloading: " .. moduleName, downloaded / totalFiles)
-			end
+		end
+		if statusCallback then
+			statusCallback("Loading: " .. moduleName, (totalFiles - pending) / totalFiles)
 		end
 	end
-
-	-- Download tab modules via secure API (loaded to memory)
+	
+	-- Spawn parallel downloads for main modules
+	for _, moduleName in ipairs(MODULES) do
+		task.spawn(function()
+			local success = downloadModule(moduleName, userId)
+			onModuleComplete(moduleName, success)
+		end)
+	end
+	
+	-- Spawn parallel downloads for tab modules
 	for _, tabName in ipairs(TABS) do
-		-- API expects "Tabs/Dashboard.lua" format
-		if downloadModule("Tabs/" .. tabName, userId) then
-			downloaded = downloaded + 1
-			if statusCallback then
-				statusCallback("Downloading: Tabs/" .. tabName, downloaded / totalFiles)
-			end
+		task.spawn(function()
+			local fullName = "Tabs/" .. tabName
+			local success = downloadModule(fullName, userId)
+			onModuleComplete(fullName, success)
+		end)
+	end
+	
+	-- Wait for all downloads to complete (with timeout)
+	local startTime = tick()
+	local timeout = 30 -- 30 second timeout
+	
+	while pending > 0 and (tick() - startTime) < timeout do
+		if statusCallback then
+			statusCallback("Loading modules... (" .. (totalFiles - pending) .. "/" .. totalFiles .. ")", (totalFiles - pending) / totalFiles)
+		end
+		task.wait(0.05)
+	end
+	
+	-- Final status update
+	if statusCallback then
+		if pending > 0 then
+			statusCallback("⚠️ Some modules failed to load", 1)
+		else
+			statusCallback("✅ All modules loaded!", 1)
 		end
 	end
 
