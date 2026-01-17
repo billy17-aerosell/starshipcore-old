@@ -17,7 +17,7 @@ local MODULES = {
 local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua", "Emotes.lua", "ConfigTab.lua" }
 
 -- Dev mode detection (for debug logging)
-local DEV_MODE = false
+local DEV_MODE = true  -- TEMPORARY: Enable for CDN debugging
 
 -- In-memory module storage (no files saved to disk for security!)
 local LoadedModules = {}
