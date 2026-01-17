@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -8,7 +9,9 @@
     <link rel="icon" type="image/png" href="/starship-logo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -126,8 +129,13 @@
         }
 
         @keyframes marquee {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
+            0% {
+                transform: translateX(0);
+            }
+
+            100% {
+                transform: translateX(-50%);
+            }
         }
 
         /* ============ STATUS BADGE ============ */
@@ -251,18 +259,41 @@
         }
 
         @keyframes status-pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.7; transform: scale(0.9); }
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.7;
+                transform: scale(0.9);
+            }
         }
 
         @keyframes pulse-maintenance {
-            0%, 100% { box-shadow: var(--shadow-sm); }
-            50% { box-shadow: 0 0 15px rgba(255, 152, 0, 0.4), var(--shadow-sm); }
+
+            0%,
+            100% {
+                box-shadow: var(--shadow-sm);
+            }
+
+            50% {
+                box-shadow: 0 0 15px rgba(255, 152, 0, 0.4), var(--shadow-sm);
+            }
         }
 
         @keyframes pulse-updating {
-            0%, 100% { box-shadow: var(--shadow-sm); }
-            50% { box-shadow: 0 0 15px rgba(33, 150, 243, 0.4), var(--shadow-sm); }
+
+            0%,
+            100% {
+                box-shadow: var(--shadow-sm);
+            }
+
+            50% {
+                box-shadow: 0 0 15px rgba(33, 150, 243, 0.4), var(--shadow-sm);
+            }
         }
 
         /* ============ MAIN CONTAINER ============ */
@@ -740,9 +771,17 @@
             font-weight: 700;
         }
 
-        .input-status.valid { color: #16a34a; }
-        .input-status.invalid { color: #dc2626; }
-        .input-status.checking { color: #666; }
+        .input-status.valid {
+            color: #16a34a;
+        }
+
+        .input-status.invalid {
+            color: #dc2626;
+        }
+
+        .input-status.checking {
+            color: #666;
+        }
 
         .user-preview {
             display: flex;
@@ -962,7 +1001,9 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         /* ============ TOAST ============ */
@@ -1218,7 +1259,8 @@
         }
 
         /* ============ WAITING CARD ============ */
-        .waiting-card, .success-card {
+        .waiting-card,
+        .success-card {
             max-width: 500px;
             margin: 0 auto;
             background: var(--white);
@@ -1228,29 +1270,40 @@
             text-align: center;
         }
 
-        .waiting-icon, .success-icon {
+        .waiting-icon,
+        .success-icon {
             font-size: 4rem;
             margin-bottom: 20px;
             animation: bounce 1s ease infinite;
         }
 
         @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
         }
 
-        .waiting-card h2, .success-card h2 {
+        .waiting-card h2,
+        .success-card h2 {
             font-size: 1.5rem;
             text-transform: uppercase;
             margin-bottom: 10px;
         }
 
-        .waiting-card > p, .success-card > p {
+        .waiting-card>p,
+        .success-card>p {
             color: #666;
             margin-bottom: 25px;
         }
 
-        .waiting-details, .success-details {
+        .waiting-details,
+        .success-details {
             background: var(--bg-alt);
             border: var(--border);
             padding: 20px;
@@ -1258,19 +1311,22 @@
             text-align: left;
         }
 
-        .waiting-row, .success-row {
+        .waiting-row,
+        .success-row {
             display: flex;
             justify-content: space-between;
             padding: 10px 0;
             border-bottom: 2px dashed var(--black);
         }
 
-        .waiting-row:last-child, .success-row:last-child {
+        .waiting-row:last-child,
+        .success-row:last-child {
             border-bottom: none;
             padding-bottom: 0;
         }
 
-        .waiting-row span, .success-row span {
+        .waiting-row span,
+        .success-row span {
             color: #666;
         }
 
@@ -1324,9 +1380,17 @@
         }
 
         @keyframes celebrate {
-            0% { transform: scale(0); }
-            50% { transform: scale(1.2); }
-            100% { transform: scale(1); }
+            0% {
+                transform: scale(0);
+            }
+
+            50% {
+                transform: scale(1.2);
+            }
+
+            100% {
+                transform: scale(1);
+            }
         }
 
         .success-status-badge {
@@ -1394,11 +1458,14 @@
         }
 
         @media (max-width: 500px) {
-            .waiting-card, .success-card {
+
+            .waiting-card,
+            .success-card {
                 padding: 30px 20px;
             }
 
-            .waiting-icon, .success-icon {
+            .waiting-icon,
+            .success-icon {
                 font-size: 3rem;
             }
 
@@ -1482,8 +1549,13 @@
         }
 
         @keyframes skeleton-shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
+            0% {
+                background-position: 200% 0;
+            }
+
+            100% {
+                background-position: -200% 0;
+            }
         }
 
         .user-preview-skeleton {
@@ -1528,10 +1600,12 @@
                 top: 10px;
                 right: 10px;
             }
+
             .lang-btn {
                 padding: 8px 12px;
                 font-size: 0.7rem;
             }
+
             .theme-toggle {
                 top: 10px;
                 right: 85px;
@@ -1542,6 +1616,7 @@
         }
     </style>
 </head>
+
 <body>
     <!-- Language Switcher -->
     <div class="lang-switcher">
@@ -1557,10 +1632,14 @@
     <!-- Marquee -->
     <div class="marquee-wrapper">
         <div class="marquee">
-            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★ DUKUNGAN 24/7 ★</span>
-            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★ DUKUNGAN 24/7 ★</span>
-            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★ DUKUNGAN 24/7 ★</span>
-            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★ DUKUNGAN 24/7 ★</span>
+            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★
+                DUKUNGAN 24/7 ★</span>
+            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★
+                DUKUNGAN 24/7 ★</span>
+            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★
+                DUKUNGAN 24/7 ★</span>
+            <span data-i18n="marquee">★ AKSES VIP ★ REKAM CLOUD ★ ANTI-DETEKSI ★ UPDATE OTOMATIS ★ MULTI-BAHASA ★
+                DUKUNGAN 24/7 ★</span>
         </div>
     </div>
 
@@ -1568,7 +1647,7 @@
         <!-- Hero Section -->
         <section class="hero">
             <img src="/starship-logo.png" alt="Starship Logo" class="hero-logo">
-            
+
             <!-- Status Badges (PC & Mobile) -->
             <div class="status-badge-container">
                 <!-- PC Status -->
@@ -1588,10 +1667,10 @@
                     </div>
                 </div>
             </div>
-            
+
             <h1>STARSHIP <span>VIP</span></h1>
             <p data-i18n="hero_desc">Buka fitur premium untuk pengalaman Roblox Anda. Tanpa batas. Kekuatan penuh.</p>
-            
+
             <div class="hero-socials">
                 <a href="https://www.tiktok.com/@starshipcore" class="social-link tiktok" target="_blank">
                     <span>🎵</span> TikTok
@@ -1653,18 +1732,20 @@
             <div class="section-header">
                 <div class="section-badge" data-i18n="step_01">Langkah 01</div>
                 <h2 class="section-title" data-i18n="choose_platform">Pilih Platform Anda</h2>
-                <p class="section-desc" data-i18n="choose_platform_desc">Pilih di mana Anda ingin menggunakan Starship VIP</p>
+                <p class="section-desc" data-i18n="choose_platform_desc">Pilih di mana Anda ingin menggunakan Starship
+                    VIP</p>
             </div>
-            
+
             <div class="platform-grid">
                 <div class="platform-card mobile" data-platform="mobile" onclick="selectPlatform('mobile')">
                     <div class="platform-accent"></div>
                     <div class="platform-icon">📱</div>
                     <h3 class="platform-name">Mobile VIP</h3>
-                    <p class="platform-desc" data-i18n="mobile_desc">Untuk perangkat Android & iOS dengan executor mobile</p>
+                    <p class="platform-desc" data-i18n="mobile_desc">Untuk perangkat Android & iOS dengan executor
+                        mobile</p>
                     <p class="platform-price" data-i18n="mobile_price">Mulai dari <strong>Rp 5K</strong></p>
                 </div>
-                
+
                 <div class="platform-card pc" data-platform="pc" onclick="selectPlatform('pc')">
                     <div class="platform-accent"></div>
                     <div class="platform-icon">💻</div>
@@ -1672,7 +1753,7 @@
                     <p class="platform-desc" data-i18n="pc_desc">Untuk Windows dengan executor desktop</p>
                     <p class="platform-price" data-i18n="pc_price">Selamanya <strong>Rp 250K</strong></p>
                 </div>
-                
+
                 <div class="platform-card bundle" data-platform="bundle" onclick="selectPlatform('bundle')">
                     <div class="platform-accent"></div>
                     <span class="platform-badge" data-i18n="save_20">Hemat 20%</span>
@@ -1691,7 +1772,7 @@
                 <h2 class="section-title" data-i18n="select_duration">Pilih Durasi</h2>
                 <p class="section-desc" data-i18n="select_duration_desc">Berapa lama Anda butuh akses VIP?</p>
             </div>
-            
+
             <div class="duration-grid" id="duration-grid">
                 <!-- Dynamically populated -->
             </div>
@@ -1704,21 +1785,14 @@
                 <h2 class="section-title" data-i18n="enter_roblox">Masukkan Akun Roblox</h2>
                 <p class="section-desc" data-i18n="enter_roblox_desc">Masukkan Username atau User ID Anda</p>
             </div>
-            
+
             <div class="input-wrapper">
                 <div class="input-container">
-                    <input 
-                        type="text" 
-                        class="input-field"
-                        id="userid-input" 
-                        placeholder="Username atau User ID"
-                        data-i18n-placeholder="input_placeholder"
-                        autocomplete="off"
-                        oninput="validateUser()"
-                    >
+                    <input type="text" class="input-field" id="userid-input" placeholder="Username atau User ID"
+                        data-i18n-placeholder="input_placeholder" autocomplete="off" oninput="validateUser()">
                     <div class="input-status" id="input-status"></div>
                 </div>
-                
+
                 <div class="user-preview" id="user-preview">
                     <img id="user-avatar" src="" alt="Avatar">
                     <div class="user-details">
@@ -1726,7 +1800,7 @@
                         <p id="user-id-display">ID: </p>
                     </div>
                 </div>
-                
+
                 <!-- Skeleton Loader -->
                 <div class="user-preview-skeleton" id="user-preview-skeleton">
                     <div class="skeleton skeleton-avatar"></div>
@@ -1745,7 +1819,7 @@
                 <h2 class="section-title" data-i18n="complete_order">Selesaikan Pesanan</h2>
                 <p class="section-desc" data-i18n="complete_order_desc">Periksa dan lanjutkan ke pembayaran</p>
             </div>
-            
+
             <div class="summary-section">
                 <div class="how-it-works">
                     <h4 data-i18n="how_payment_works">📋 Cara Pembayaran</h4>
@@ -1755,7 +1829,7 @@
                         <li data-i18n="payment_step3">VIP aktif otomatis dalam 5 menit!</li>
                     </ol>
                 </div>
-                
+
                 <div class="summary-card">
                     <div class="summary-header">
                         <h4 data-i18n="order_summary">Ringkasan Pesanan</h4>
@@ -1777,7 +1851,7 @@
                         <span class="summary-value summary-total" id="summary-total">Rp 0</span>
                     </div>
                 </div>
-                
+
                 <button class="pay-button" id="pay-button" onclick="proceedToPayment()" disabled>
                     <span class="icon">💳</span>
                     <span id="pay-button-text" data-i18n="complete_payment">Selesaikan Pembayaran</span>
@@ -1791,7 +1865,7 @@
                 <div class="waiting-icon">⏳</div>
                 <h2>Menunggu Konfirmasi Pembayaran</h2>
                 <p>Kami sedang mengecek status pembayaran Anda...</p>
-                
+
                 <div class="waiting-details">
                     <div class="waiting-row">
                         <span>Platform:</span>
@@ -1806,15 +1880,17 @@
                         <strong id="waiting-userid">-</strong>
                     </div>
                 </div>
-                
+
                 <div class="waiting-progress">
                     <div class="progress-bar">
                         <div class="progress-fill" id="progress-fill"></div>
                     </div>
-                    <p class="waiting-status" id="waiting-status">Mengecek status... <span id="check-count">0</span>/20</p>
+                    <p class="waiting-status" id="waiting-status">Mengecek status... <span
+                            id="check-count">0</span>/<span id="max-count">72</span></p>
                 </div>
-                
-                <button class="cancel-btn" onclick="cancelWaiting()" data-i18n="cancel_restart">Batalkan & Mulai Ulang</button>
+
+                <button class="cancel-btn" onclick="cancelWaiting()" data-i18n="cancel_restart">Batalkan & Mulai
+                    Ulang</button>
             </div>
         </section>
 
@@ -1824,7 +1900,7 @@
                 <div class="success-icon">🎉</div>
                 <h2>VIP Berhasil Diaktifkan!</h2>
                 <p>Selamat! Akun Anda sekarang sudah VIP.</p>
-                
+
                 <div class="success-details">
                     <div class="success-row">
                         <span>Username:</span>
@@ -1847,7 +1923,7 @@
                         <strong id="success-expires">-</strong>
                     </div>
                 </div>
-                
+
                 <div class="success-instructions">
                     <h4>📖 Cara Menggunakan:</h4>
                     <ol>
@@ -1856,11 +1932,14 @@
                         <li>VIP features sudah aktif otomatis!</li>
                     </ol>
                 </div>
-                
+
                 <div class="success-buttons">
-                    <a href="/verify.html" class="success-btn verify" data-i18n="verify_discord">🔗 Verifikasi & Dapatkan Role Discord</a>
-                    <a href="https://discord.gg/ftmA7BheTc" target="_blank" class="success-btn discord" data-i18n="join_discord">💬 Gabung Discord</a>
-                    <button class="success-btn primary" onclick="resetToHome()" data-i18n="back_home">🏠 Kembali ke Home</button>
+                    <a href="/verify.html" class="success-btn verify" data-i18n="verify_discord">🔗 Verifikasi &
+                        Dapatkan Role Discord</a>
+                    <a href="https://discord.gg/ftmA7BheTc" target="_blank" class="success-btn discord"
+                        data-i18n="join_discord">💬 Gabung Discord</a>
+                    <button class="success-btn primary" onclick="resetToHome()" data-i18n="back_home">🏠 Kembali ke
+                        Home</button>
                 </div>
             </div>
         </section>
@@ -1888,7 +1967,7 @@
             </div>
             <div class="modal-body">
                 <p class="modal-subtitle">Karena Saweria tidak support auto-fill, silakan copy informasi berikut:</p>
-                
+
                 <div class="copy-section">
                     <label>1️⃣ Nominal Pembayaran:</label>
                     <div class="copy-box">
@@ -1896,7 +1975,7 @@
                         <button class="copy-btn" onclick="copyToClipboard('amount')">📋 Copy</button>
                     </div>
                 </div>
-                
+
                 <div class="copy-section">
                     <label>2️⃣ Pesan (WAJIB diisi persis):</label>
                     <div class="copy-box message-box">
@@ -1904,11 +1983,12 @@
                         <button class="copy-btn" onclick="copyToClipboard('message')">📋 Copy</button>
                     </div>
                 </div>
-                
+
                 <div class="modal-warning">
-                    ⚠️ <strong>PENTING:</strong> Paste pesan di atas ke kolom "Pesan" di Saweria agar VIP otomatis aktif!
+                    ⚠️ <strong>PENTING:</strong> Paste pesan di atas ke kolom "Pesan" di Saweria agar VIP otomatis
+                    aktif!
                 </div>
-                
+
                 <div class="modal-steps">
                     <p><strong>Langkah:</strong></p>
                     <ol>
@@ -1923,7 +2003,8 @@
             </div>
             <div class="modal-footer">
                 <button class="modal-btn secondary" onclick="closePaymentModal()">Batal</button>
-                <a href="#" id="saweria-link" class="modal-btn primary" onclick="return openSaweria(event)" target="_blank" rel="noopener noreferrer">🚀 Buka Saweria</a>
+                <a href="#" id="saweria-link" class="modal-btn primary" onclick="return openSaweria(event)"
+                    target="_blank" rel="noopener noreferrer">🚀 Buka Saweria</a>
             </div>
         </div>
     </div>
@@ -1944,7 +2025,7 @@
             padding: 20px;
             box-sizing: border-box;
         }
-        
+
         .modal-content {
             background: var(--white);
             border: var(--border-thick);
@@ -1954,7 +2035,7 @@
             max-height: 90vh;
             overflow-y: auto;
         }
-        
+
         .modal-header {
             display: flex;
             justify-content: space-between;
@@ -1963,13 +2044,13 @@
             border-bottom: var(--border);
             background: var(--accent-4);
         }
-        
+
         .modal-header h3 {
             margin: 0;
             font-size: 1.3rem;
             text-transform: uppercase;
         }
-        
+
         .modal-close {
             background: var(--black);
             color: var(--white);
@@ -1982,32 +2063,32 @@
             align-items: center;
             justify-content: center;
         }
-        
+
         .modal-close:hover {
             background: var(--accent-1);
         }
-        
+
         .modal-body {
             padding: 25px;
         }
-        
+
         .modal-subtitle {
             margin-bottom: 20px;
             font-size: 0.95rem;
             color: #666;
         }
-        
+
         .copy-section {
             margin-bottom: 20px;
         }
-        
+
         .copy-section label {
             display: block;
             font-weight: 700;
             margin-bottom: 8px;
             font-size: 0.9rem;
         }
-        
+
         .copy-box {
             display: flex;
             align-items: center;
@@ -2016,19 +2097,20 @@
             border: var(--border);
             padding: 12px 15px;
         }
-        
-        .copy-box span, .copy-box code {
+
+        .copy-box span,
+        .copy-box code {
             flex: 1;
             font-family: 'Space Mono', monospace;
             font-size: 1.1rem;
             font-weight: 700;
         }
-        
+
         .copy-box code {
             color: var(--accent-2);
             word-break: break-all;
         }
-        
+
         .copy-btn {
             background: var(--accent-3);
             border: 2px solid var(--black);
@@ -2040,17 +2122,17 @@
             transition: all 0.15s ease;
             white-space: nowrap;
         }
-        
+
         .copy-btn:hover {
             background: var(--accent-4);
             transform: translate(-2px, -2px);
             box-shadow: 3px 3px 0 var(--black);
         }
-        
+
         .copy-btn.copied {
             background: var(--accent-3);
         }
-        
+
         .modal-warning {
             background: var(--accent-1);
             color: var(--white);
@@ -2059,25 +2141,25 @@
             margin: 20px 0;
             font-size: 0.9rem;
         }
-        
+
         .modal-steps {
             background: var(--bg-alt);
             border: var(--border);
             padding: 15px 15px 15px 20px;
         }
-        
+
         .modal-steps p {
             margin: 0 0 10px 0;
             font-size: 0.9rem;
         }
-        
+
         .modal-steps ol {
             margin: 0;
             padding-left: 20px;
             font-size: 0.85rem;
             line-height: 1.8;
         }
-        
+
         .modal-footer {
             display: flex;
             gap: 15px;
@@ -2085,7 +2167,7 @@
             border-top: var(--border);
             background: var(--bg-alt);
         }
-        
+
         .modal-btn {
             flex: 1;
             padding: 15px;
@@ -2097,23 +2179,23 @@
             cursor: pointer;
             transition: all 0.15s ease;
         }
-        
+
         .modal-btn.secondary {
             background: var(--white);
             color: var(--black);
         }
-        
+
         .modal-btn.primary {
             background: var(--accent-1);
             color: var(--white);
             box-shadow: var(--shadow-sm);
         }
-        
+
         .modal-btn:hover {
             transform: translate(-2px, -2px);
             box-shadow: var(--shadow);
         }
-        
+
         /* Anchor button styling */
         a.modal-btn {
             text-decoration: none;
@@ -2122,30 +2204,30 @@
             justify-content: center;
             text-align: center;
         }
-        
+
         @media (max-width: 500px) {
             .modal-content {
                 max-height: 85vh;
             }
-            
+
             .modal-header h3 {
                 font-size: 1.1rem;
             }
-            
+
             .modal-body {
                 padding: 20px;
             }
-            
+
             .copy-box {
                 flex-direction: column;
                 align-items: stretch;
                 gap: 8px;
             }
-            
+
             .copy-btn {
                 text-align: center;
             }
-            
+
             .modal-footer {
                 flex-direction: column;
             }
@@ -2284,11 +2366,11 @@
         function setLanguage(lang) {
             currentLang = lang;
             localStorage.setItem('starship_lang', lang);
-            
+
             // Update buttons
             document.getElementById('lang-id').classList.toggle('active', lang === 'id');
             document.getElementById('lang-en').classList.toggle('active', lang === 'en');
-            
+
             // Update all translatable elements
             document.querySelectorAll('[data-i18n]').forEach(el => {
                 const key = el.getAttribute('data-i18n');
@@ -2296,7 +2378,7 @@
                     el.innerHTML = translations[lang][key];
                 }
             });
-            
+
             // Update placeholders
             document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
                 const key = el.getAttribute('data-i18n-placeholder');
@@ -2323,7 +2405,7 @@
             const body = document.body;
             const toggle = document.getElementById('theme-toggle');
             const isDark = body.classList.toggle('dark-mode');
-            
+
             localStorage.setItem('starship_darkmode', isDark ? 'true' : 'false');
             toggle.textContent = isDark ? '☀️' : '🌙';
         }
@@ -2331,7 +2413,7 @@
         function initDarkMode() {
             const savedMode = localStorage.getItem('starship_darkmode');
             const toggle = document.getElementById('theme-toggle');
-            
+
             if (savedMode === 'true') {
                 document.body.classList.add('dark-mode');
                 toggle.textContent = '☀️';
@@ -2390,7 +2472,7 @@
 
             updateSteps(2);
             renderDurations(platform);
-            
+
             document.getElementById('section-duration').style.display = 'block';
             document.getElementById('section-userid').style.display = 'none';
             document.getElementById('section-summary').style.display = 'none';
@@ -2470,25 +2552,25 @@
                 try {
                     // Check if input is numeric (User ID) or text (Username)
                     const isNumeric = /^\d+$/.test(userInput);
-                    const apiUrl = isNumeric 
+                    const apiUrl = isNumeric
                         ? `/api/roblox-user?userId=${userInput}`
                         : `/api/roblox-user?username=${encodeURIComponent(userInput)}`;
 
                     const response = await fetch(apiUrl);
-                    
+
                     if (response.ok) {
                         const data = await response.json();
-                        
+
                         status.innerHTML = t('found');
                         status.className = 'input-status valid';
-                        
+
                         validatedUserId = data.id.toString();
                         validatedUsername = data.name;
-                        
+
                         document.getElementById('user-avatar').src = data.avatar;
                         document.getElementById('user-name').textContent = data.displayName || data.name;
                         document.getElementById('user-id-display').textContent = `@${data.name} • ID: ${data.id}`;
-                        
+
                         // Hide skeleton, show actual preview
                         skeleton.classList.remove('visible');
                         preview.classList.add('visible');
@@ -2579,7 +2661,7 @@
                 event.preventDefault();
                 return false;
             }
-            
+
             // Save pending order to localStorage immediately (synchronous)
             const pendingOrder = {
                 platform: selectedPlatform,
@@ -2595,38 +2677,41 @@
                 previousUpdatedAt: null
             };
             localStorage.setItem('starship_pending_order', JSON.stringify(pendingOrder));
-            
+
             // Update anchor href immediately before click completes
             const saweriaLink = document.getElementById('saweria-link');
             saweriaLink.href = pendingPaymentData.saweriaUrl;
-            
+
             // Check VIP status in background (non-blocking)
             checkVipStatusInBackground();
-            
+
             // Close modal and show waiting page after a small delay
             setTimeout(() => {
                 closePaymentModal();
                 showWaitingPage();
                 showToast(t('dont_forget_paste'), 'success');
             }, 100);
-            
+
             // Allow the native anchor click to proceed (opens Saweria in new tab)
             return true;
         }
-        
+
         // Background VIP check - updates localStorage if needed
         async function checkVipStatusInBackground() {
             try {
                 const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
                 if (!pendingOrder) return;
-                
+
                 const checkResponse = await fetch(`/api/roblox-user?userId=${pendingOrder.userId}&checkVip=true&platform=${pendingOrder.platform}`);
                 const checkData = await checkResponse.json();
-                
+
                 // Update the pending order with VIP status
                 pendingOrder.wasAlreadyVip = checkData.isVip;
                 pendingOrder.previousUpdatedAt = checkData.updatedAt || null;
+                // Also save purchase history length for fallback renewal detection
+                pendingOrder.previousPurchaseHistoryLength = checkData.purchaseHistory?.length || 0;
                 localStorage.setItem('starship_pending_order', JSON.stringify(pendingOrder));
+                console.log('📋 Pre-check saved:', { wasVip: checkData.isVip, updatedAt: checkData.updatedAt, historyLen: pendingOrder.previousPurchaseHistoryLength });
             } catch (e) {
                 console.log('Could not check existing VIP status:', e);
             }
@@ -2710,8 +2795,10 @@
         // ============ WAITING & POLLING ============
         let pollingInterval = null;
         let checkCount = 0;
-        const MAX_CHECKS = 20;
+        const MAX_CHECKS = 36; // 36 checks x 5 seconds = 3 minutes total
         const CHECK_INTERVAL = 5000; // 5 seconds
+        let retryCount = 0;
+        const MAX_RETRIES = 1; // Auto-retry up to 1 time after timeout
 
         function showWaitingPage() {
             const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
@@ -2749,19 +2836,31 @@
 
                     if (data.isVip) {
                         let shouldShowSuccess = false;
+                        const orderTimestamp = new Date(pendingOrder.timestamp);
 
                         if (pendingOrder.wasAlreadyVip) {
-                            // User was already VIP - check if updatedAt changed (renewal)
+                            // User was already VIP - check if updatedAt is AFTER order timestamp
                             const currentUpdatedAt = data.updatedAt || data.addedAt;
-                            const previousUpdatedAt = pendingOrder.previousUpdatedAt;
-                            
-                            // If updatedAt is different, a renewal happened
-                            if (currentUpdatedAt && currentUpdatedAt !== previousUpdatedAt) {
+
+                            if (currentUpdatedAt) {
+                                const updateTime = new Date(currentUpdatedAt);
+                                // If update happened AFTER the order was placed, it's a renewal
+                                if (updateTime > orderTimestamp) {
+                                    shouldShowSuccess = true;
+                                    console.log('✅ Renewal detected! UpdatedAt:', currentUpdatedAt, '> OrderTime:', pendingOrder.timestamp);
+                                }
+                            }
+
+                            // Fallback: Also check purchase history length change
+                            const prevHistoryLength = pendingOrder.previousPurchaseHistoryLength || 0;
+                            if (data.purchaseHistory && data.purchaseHistory.length > prevHistoryLength) {
                                 shouldShowSuccess = true;
+                                console.log('✅ Renewal detected via purchase history!');
                             }
                         } else {
                             // User was NOT VIP before - any VIP status means new purchase confirmed
                             shouldShowSuccess = true;
+                            console.log('✅ New VIP detected!');
                         }
 
                         if (shouldShowSuccess) {
@@ -2778,28 +2877,121 @@
 
                 if (checkCount >= MAX_CHECKS) {
                     clearInterval(pollingInterval);
-                    document.getElementById('waiting-status').innerHTML = 
-                        '⚠️ Belum dikonfirmasi. <a href="#" onclick="restartPolling()">Cek lagi</a> atau hubungi admin.';
+
+                    // Auto-retry if not reached max retries
+                    if (retryCount < MAX_RETRIES) {
+                        retryCount++;
+                        console.log(`🔄 Auto-retry ${retryCount}/${MAX_RETRIES}...`);
+                        document.getElementById('waiting-status').innerHTML =
+                            `🔄 Mencoba lagi... (Percobaan ${retryCount + 1})`;
+                        setTimeout(() => startPolling(pendingOrder), 2000);
+                    } else {
+                        // Max retries reached, show manual check button
+                        showTimeoutUI();
+                    }
                 }
             }, CHECK_INTERVAL);
         }
 
         function updatePollingProgress() {
-            const progress = (checkCount / MAX_CHECKS) * 100;
+            const totalChecks = MAX_CHECKS * (MAX_RETRIES + 1); // Total including retries
+            const currentTotal = (retryCount * MAX_CHECKS) + checkCount;
+            const progress = (currentTotal / totalChecks) * 100;
             const progressFill = document.getElementById('progress-fill');
             const checkCountEl = document.getElementById('check-count');
-            
-            if (progressFill) progressFill.style.width = `${progress}%`;
-            if (checkCountEl) checkCountEl.textContent = checkCount;
+            const maxCountEl = document.getElementById('max-count');
+
+            if (progressFill) progressFill.style.width = `${Math.min(progress, 100)}%`;
+            if (checkCountEl) checkCountEl.textContent = currentTotal;
+            if (maxCountEl) maxCountEl.textContent = totalChecks;
+        }
+
+        function showTimeoutUI() {
+            const waitingStatus = document.getElementById('waiting-status');
+            if (waitingStatus) {
+                waitingStatus.innerHTML = `
+                    <div style="margin-bottom: 15px;">
+                        ⚠️ Belum dikonfirmasi. <a href="#" onclick="return manualCheck()">Cek lagi</a> atau hubungi admin.
+                    </div>
+                    <button onclick="manualCheck()" style="
+                        background: var(--accent-3);
+                        border: var(--border);
+                        padding: 12px 25px;
+                        font-family: 'Space Grotesk', sans-serif;
+                        font-weight: 700;
+                        font-size: 1rem;
+                        cursor: pointer;
+                        box-shadow: var(--shadow-sm);
+                        transition: all 0.15s ease;
+                    ">🔍 Cek Sekarang</button>
+                `;
+            }
+        }
+
+        async function manualCheck() {
+            const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
+            if (!pendingOrder) return false;
+
+            const waitingStatus = document.getElementById('waiting-status');
+            if (waitingStatus) {
+                waitingStatus.innerHTML = '🔄 Mengecek...';
+            }
+
+            try {
+                const response = await fetch(`/api/roblox-user?userId=${pendingOrder.userId}&checkVip=true&platform=${pendingOrder.platform}`);
+                const data = await response.json();
+
+                if (data.isVip) {
+                    const orderTimestamp = new Date(pendingOrder.timestamp);
+                    let shouldShowSuccess = false;
+
+                    if (pendingOrder.wasAlreadyVip) {
+                        const currentUpdatedAt = data.updatedAt || data.addedAt;
+                        if (currentUpdatedAt) {
+                            const updateTime = new Date(currentUpdatedAt);
+                            if (updateTime > orderTimestamp) {
+                                shouldShowSuccess = true;
+                            }
+                        }
+                        // Fallback: check purchase history
+                        const prevHistoryLength = pendingOrder.previousPurchaseHistoryLength || 0;
+                        if (data.purchaseHistory && data.purchaseHistory.length > prevHistoryLength) {
+                            shouldShowSuccess = true;
+                        }
+                    } else {
+                        shouldShowSuccess = true;
+                    }
+
+                    if (shouldShowSuccess) {
+                        localStorage.removeItem('starship_pending_order');
+                        showSuccessPage(data);
+                        return false;
+                    }
+                }
+
+                // Not confirmed yet
+                showTimeoutUI();
+                showToast('⏳ Pembayaran belum terdeteksi. Coba lagi nanti atau hubungi admin.', 'error');
+            } catch (error) {
+                console.error('Manual check error:', error);
+                showTimeoutUI();
+                showToast('❌ Gagal mengecek status. Coba lagi.', 'error');
+            }
+
+            return false;
         }
 
         function restartPolling() {
             const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
             if (pendingOrder) {
-                // Reset the status text first
+                // Reset counters
+                retryCount = 0;
+                checkCount = 0;
+
+                // Reset the status text
                 const waitingStatus = document.getElementById('waiting-status');
                 if (waitingStatus) {
-                    waitingStatus.innerHTML = 'Mengecek status... <span id="check-count">0</span>/20';
+                    waitingStatus.innerHTML = 'Mengecek status... <span id="check-count">0</span>/<span id="max-count">' + (MAX_CHECKS * (MAX_RETRIES + 1)) + '</span>';
                 }
                 startPolling(pendingOrder);
             }
@@ -2825,7 +3017,7 @@
             if (vipData.isLifetime) {
                 document.getElementById('success-expires-row').style.display = 'none';
             } else {
-                document.getElementById('success-expires').textContent = 
+                document.getElementById('success-expires').textContent =
                     vipData.expiresAt ? new Date(vipData.expiresAt).toLocaleDateString('id-ID') : '-';
             }
 
@@ -2872,12 +3064,12 @@
             const statusValuePc = document.getElementById('status-value-pc');
             const badgeMobile = document.getElementById('status-badge-mobile');
             const statusValueMobile = document.getElementById('status-value-mobile');
-            
+
             try {
                 // Fetch both platforms at once
                 const response = await fetch('/api/tags?action=status');
                 const data = await response.json();
-                
+
                 if (data.success) {
                     // Update PC badge
                     if (data.pc) {
@@ -2885,25 +3077,25 @@
                         badgePc.title = data.pc.message || 'PC Status';
                         statusValuePc.textContent = `${data.pc.emoji} ${data.pc.label}`;
                     }
-                    
+
                     // Update Mobile badge
                     if (data.mobile) {
                         badgeMobile.className = `status-badge ${data.mobile.status}`;
                         badgeMobile.title = data.mobile.message || 'Mobile Status';
                         statusValueMobile.textContent = `${data.mobile.emoji} ${data.mobile.label}`;
                     }
-                    
+
                     // If any platform is maintenance/offline, show banner
                     const pcDown = data.pc?.status === 'maintenance' || data.pc?.status === 'offline';
                     const mobileDown = data.mobile?.status === 'maintenance' || data.mobile?.status === 'offline';
-                    
+
                     if (pcDown || mobileDown) {
                         showMaintenanceBanner({
                             status: pcDown && mobileDown ? 'offline' : 'maintenance',
                             emoji: pcDown && mobileDown ? '🔴' : '🟠',
                             label: pcDown && mobileDown ? 'All Systems' : (pcDown ? 'PC' : 'Mobile'),
-                            message: pcDown && mobileDown 
-                                ? 'All systems are under maintenance' 
+                            message: pcDown && mobileDown
+                                ? 'All systems are under maintenance'
                                 : (pcDown ? 'PC is under maintenance' : 'Mobile is under maintenance')
                         });
                     } else {
@@ -2918,11 +3110,11 @@
                 statusValueMobile.textContent = '🟢 Online';
             }
         }
-        
+
         function showMaintenanceBanner(data) {
             // Check if banner already exists
             if (document.getElementById('maintenance-banner')) return;
-            
+
             const banner = document.createElement('div');
             banner.id = 'maintenance-banner';
             banner.style.cssText = `
@@ -2948,7 +3140,7 @@
                 <span>${data.emoji}</span>
                 <span>${data.label.toUpperCase()}: ${data.message}</span>
             `;
-            
+
             // Add animation keyframes
             const style = document.createElement('style');
             style.textContent = `
@@ -2959,11 +3151,11 @@
             `;
             document.head.appendChild(style);
             document.body.prepend(banner);
-            
+
             // Add padding to body
             document.body.style.paddingTop = '48px';
         }
-        
+
         function hideMaintenanceBanner() {
             const banner = document.getElementById('maintenance-banner');
             if (banner) {
@@ -2981,9 +3173,9 @@
             fetchSystemStatus();
             // Refresh status every 60 seconds
             setInterval(fetchSystemStatus, 60000);
-            
+
             const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
-            
+
             if (pendingOrder) {
                 // Check if order is not too old (max 30 minutes)
                 const orderTime = new Date(pendingOrder.timestamp);
@@ -3015,4 +3207,5 @@
         }
     </script>
 </body>
+
 </html>

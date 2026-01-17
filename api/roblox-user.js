@@ -73,7 +73,7 @@ export default async function handler(req, res) {
                 const expiryDate = new Date(user.expiresAt);
                 const now = new Date();
                 isExpired = expiryDate < now;
-                
+
                 if (!isExpired) {
                     daysRemaining = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
                 }
@@ -91,7 +91,9 @@ export default async function handler(req, res) {
                 updatedAt: user.updatedAt,
                 expiresAt: user.expiresAt,
                 daysRemaining: user.expiresAt ? (isExpired ? 0 : daysRemaining) : 'lifetime',
-                isLifetime: !user.expiresAt
+                isLifetime: !user.expiresAt,
+                // Include purchase history for renewal detection
+                purchaseHistory: user.purchaseHistory || []
             });
 
         } catch (error) {
@@ -107,11 +109,11 @@ export default async function handler(req, res) {
         // If userId is provided, fetch by ID
         if (userId) {
             const response = await fetch(`https://users.roblox.com/v1/users/${userId}`);
-            
+
             if (!response.ok) {
                 return res.status(404).json({ error: 'User not found' });
             }
-            
+
             userData = await response.json();
         }
         // If username is provided, search by username
@@ -155,7 +157,7 @@ export default async function handler(req, res) {
             const thumbnailResponse = await fetch(
                 `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userData.id}&size=150x150&format=Png&isCircular=false`
             );
-            
+
             if (thumbnailResponse.ok) {
                 const thumbnailData = await thumbnailResponse.json();
                 if (thumbnailData.data && thumbnailData.data.length > 0) {
