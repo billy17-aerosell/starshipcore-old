@@ -273,6 +273,68 @@ end
 
 -- Download and load module directly to memory (no file saved!)
 local function downloadModule(moduleName, userId)
+	-- ══════════════════════════════════════════════════════════════════
+	-- CDN LOADING (Cloudflare) - Injected by loader for PC
+	-- Reduces Vercel bandwidth by loading from Cloudflare CDN
+	-- ══════════════════════════════════════════════════════════════════
+	if _G.StarshipCDN and _G.StarshipCDN.enabled then
+		local cdnUrl = _G.StarshipCDN.url
+		local cdnToken = _G.StarshipCDN.token
+		
+		if cdnUrl and cdnToken then
+			-- Build CDN URL for module
+			-- moduleName is like "Config.lua" or "Tabs/Dashboard.lua"
+			local modulePath = "Modules/" .. moduleName
+			local fullUrl = cdnUrl .. "/" .. modulePath .. "?token=" .. cdnToken
+			
+			if DEV_MODE then
+				warn("[Starship] CDN Loading: " .. moduleName .. " from Cloudflare")
+			end
+			
+			local success, response = pcall(function()
+				return game:HttpGet(fullUrl)
+			end)
+			
+			if success and response then
+				-- Check if response is an error from CDN
+				if response:match("^-- ERROR:") or response:match("^error%(") then
+					if DEV_MODE then
+						warn("[Starship] CDN Error for " .. moduleName .. ": " .. response:sub(1, 100))
+					end
+					-- Fall through to Vercel loading
+				else
+					-- Successfully got module from CDN - load to memory
+					local func, err = loadstring(response)
+					if func then
+						local execSuccess, result = pcall(func)
+						if execSuccess then
+							LoadedModules[moduleName] = result
+							if DEV_MODE then
+								warn("[Starship] ✅ CDN Loaded: " .. moduleName)
+							end
+							return true
+						else
+							if DEV_MODE then
+								warn("[Starship] CDN Execute error for " .. moduleName .. ": " .. tostring(result))
+							end
+						end
+					else
+						if DEV_MODE then
+							warn("[Starship] CDN Loadstring error for " .. moduleName .. ": " .. tostring(err))
+						end
+					end
+				end
+			else
+				if DEV_MODE then
+					warn("[Starship] CDN Failed for " .. moduleName .. ", falling back to Vercel")
+				end
+			end
+		end
+	end
+	
+	-- ══════════════════════════════════════════════════════════════════
+	-- VERCEL LOADING (Fallback) - Original method
+	-- ══════════════════════════════════════════════════════════════════
 	local url = SERVER_URL .. "/api/get-module?name=" .. moduleName .. "&user=" .. userId
 
 	local success, response = pcall(function()
