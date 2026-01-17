@@ -513,12 +513,16 @@ local function downloadModules(statusCallback)
 	local pending = totalFiles
 	
 	-- ══════════════════════════════════════════════════════════════════
-	-- PARALLEL LOADING - Download all modules simultaneously
-	-- Much faster than sequential loading!
+	-- BATCHED PARALLEL LOADING - Limits concurrent requests to avoid
+	-- hitting executor HTTP request limits (some executors cap at ~8-10)
 	-- ══════════════════════════════════════════════════════════════════
+	
+	local MAX_CONCURRENT = 4  -- Max concurrent downloads
+	local activeDownloads = 0
 	
 	local function onModuleComplete(moduleName, success)
 		pending = pending - 1
+		activeDownloads = activeDownloads - 1
 		if success then
 			downloaded = downloaded + 1
 		end
@@ -527,21 +531,31 @@ local function downloadModules(statusCallback)
 		end
 	end
 	
-	-- Spawn parallel downloads for main modules
+	-- Combine all modules into single queue
+	local allModules = {}
 	for _, moduleName in ipairs(MODULES) do
-		task.spawn(function()
-			local success = downloadModule(moduleName, userId)
-			onModuleComplete(moduleName, success)
-		end)
+		table.insert(allModules, moduleName)
+	end
+	for _, tabName in ipairs(TABS) do
+		table.insert(allModules, "Tabs/" .. tabName)
 	end
 	
-	-- Spawn parallel downloads for tab modules
-	for _, tabName in ipairs(TABS) do
-		task.spawn(function()
-			local fullName = "Tabs/" .. tabName
-			local success = downloadModule(fullName, userId)
-			onModuleComplete(fullName, success)
-		end)
+	-- Download with batching
+	local moduleIndex = 1
+	while moduleIndex <= #allModules or activeDownloads > 0 do
+		-- Spawn new downloads while under limit
+		while moduleIndex <= #allModules and activeDownloads < MAX_CONCURRENT do
+			local moduleName = allModules[moduleIndex]
+			moduleIndex = moduleIndex + 1
+			activeDownloads = activeDownloads + 1
+			
+			task.spawn(function()
+				local success = downloadModule(moduleName, userId)
+				onModuleComplete(moduleName, success)
+			end)
+		end
+		
+		task.wait(0.05)
 	end
 	
 	-- Wait for all downloads to complete (with timeout)
