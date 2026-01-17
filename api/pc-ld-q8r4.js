@@ -7,9 +7,51 @@ const OWNER_USER_ID = "9268011358";
 
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 // Event Code System API (from environment variable for security)
 const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
+
+// ══════════════════════════════════════════════════════════════════
+// CLOUDFLARE CDN CONFIGURATION (PC ONLY)
+// ══════════════════════════════════════════════════════════════════
+const CDN_SECRET_KEY = process.env.CDN_SECRET_KEY || "";
+const CDN_BASE_URL = process.env.CDN_PC_URL || ""; // e.g., https://starship-pc-modules.YOUR_SUBDOMAIN.workers.dev
+const CDN_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Generate signed token for Cloudflare CDN access (PC only)
+ * Token is verified by Cloudflare Worker before serving modules
+ */
+function generateCDNToken(userId, platform) {
+  if (!CDN_SECRET_KEY) {
+    return null;
+  }
+
+  const exp = Date.now() + CDN_TOKEN_EXPIRY_MS;
+  const dataToSign = `${userId}:${platform}:${exp}`;
+
+  const sig = crypto
+    .createHmac("sha256", CDN_SECRET_KEY)
+    .update(dataToSign)
+    .digest("base64");
+
+  const token = Buffer.from(JSON.stringify({
+    userId,
+    platform,
+    exp,
+    sig
+  })).toString("base64");
+
+  return token;
+}
+
+/**
+ * Check if CDN is configured for PC modules
+ */
+function isCDNEnabled() {
+  return CDN_SECRET_KEY && CDN_BASE_URL;
+}
 
 // Check if user has active event access from Google Sheets
 async function checkEventAccess(userId) {
@@ -601,6 +643,7 @@ export default async function handler(req, res) {
           config,
           isOwner ? "owner" : "vip",
           vipUser.type,
+          userId
         );
       } else if (vipUser.status === "suspended") {
         console.log(
@@ -624,7 +667,7 @@ export default async function handler(req, res) {
       );
       // Owner not in this platform's whitelist, but allow anyway
       // Serve the loader script
-      return serveLoaderScript(res, config, "owner", "OWNER");
+      return serveLoaderScript(res, config, "owner", "OWNER", userId);
     }
 
     // Check if user exists in the OTHER platform's whitelist
@@ -646,7 +689,7 @@ export default async function handler(req, res) {
           );
 
           // Note: Discord webhook sent from load.js instead (to avoid duplicate)
-          return serveLoaderScript(res, config, "event", "EVENT_ACCESS");
+          return serveLoaderScript(res, config, "event", "EVENT_ACCESS", userId);
         }
       }
 
@@ -699,7 +742,7 @@ export default async function handler(req, res) {
                 `[${timestamp}] 🎟️ EVENT ACCESS GRANTED (File PC user with event code) - ${platformLabel} Loader - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
               );
 
-              return serveLoaderScript(res, config, "event", "EVENT_ACCESS");
+              return serveLoaderScript(res, config, "event", "EVENT_ACCESS", userId);
             }
           }
 
@@ -757,7 +800,7 @@ export default async function handler(req, res) {
         }
       }
 
-      return serveLoaderScript(res, config, "vip", fileWhitelist.type);
+      return serveLoaderScript(res, config, "vip", fileWhitelist.type, userId);
     }
   }
 
@@ -771,7 +814,7 @@ export default async function handler(req, res) {
       );
 
       // Note: Discord webhook sent from load.js instead (to avoid duplicate)
-      return serveLoaderScript(res, config, "event", "EVENT_ACCESS");
+      return serveLoaderScript(res, config, "event", "EVENT_ACCESS", userId);
     }
   }
 
@@ -816,7 +859,7 @@ export default async function handler(req, res) {
     );
 
     // Serve loader script - it will show event code popup for new users
-    return serveLoaderScript(res, config, "pending", "PENDING_EVENT");
+    return serveLoaderScript(res, config, "pending", "PENDING_EVENT", userId);
   }
 
   // For PC: Block access (PC doesn't have event code system)
@@ -849,7 +892,8 @@ export default async function handler(req, res) {
 }
 
 // Helper function to serve loader script
-function serveLoaderScript(res, config, accessType, userType) {
+// For PC: Injects CDN token if CDN is enabled
+function serveLoaderScript(res, config, accessType, userType, userId = null) {
   try {
     const loaderPath = path.join(process.cwd(), "protected", config.loaderFile);
 
@@ -858,7 +902,27 @@ function serveLoaderScript(res, config, accessType, userType) {
       return res.status(500).send(`error("Loader not available")`);
     }
 
-    const loaderScript = fs.readFileSync(loaderPath, "utf8");
+    let loaderScript = fs.readFileSync(loaderPath, "utf8");
+
+    // For PC platform: Inject CDN URL if configured
+    const isPlatformPC = !config.label.includes("Mobile");
+
+    if (isPlatformPC && isCDNEnabled() && userId) {
+      const cdnToken = generateCDNToken(userId, "pc");
+
+      if (cdnToken) {
+        // Inject CDN configuration at the beginning of the script
+        const cdnInjection = `-- [CDN] Cloudflare CDN enabled for PC modules
+_G.StarshipCDN = {
+  url = "${CDN_BASE_URL}",
+  token = "${cdnToken}",
+  enabled = true
+}
+`;
+        loaderScript = cdnInjection + loaderScript;
+        console.log(`[CDN] Token injected for PC user: ${userId}`);
+      }
+    }
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -866,7 +930,7 @@ function serveLoaderScript(res, config, accessType, userType) {
     res.setHeader("X-User-Type", userType || config.defaultType);
     res.setHeader(
       "X-Platform",
-      config.label.includes("Mobile") ? "mobile" : "pc",
+      isPlatformPC ? "pc" : "mobile",
     );
 
     return res.status(200).send(loaderScript);

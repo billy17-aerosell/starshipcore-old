@@ -197,6 +197,55 @@ local function LoadModule(name)
 		end
 	end
 
+	-- 0.5. TRY CDN LOADING (Cloudflare - injected by loader for PC)
+	-- This reduces Vercel bandwidth by loading modules from Cloudflare CDN
+	if _G.StarshipCDN and _G.StarshipCDN.enabled then
+		local cdnUrl = _G.StarshipCDN.url
+		local cdnToken = _G.StarshipCDN.token
+		
+		if cdnUrl and cdnToken then
+			-- Build CDN URL for module
+			local modulePath = "Modules/" .. name .. ".lua"
+			local fullUrl = cdnUrl .. "/" .. modulePath .. "?token=" .. cdnToken
+			
+			local isDev = DEV_MODE
+			if isDev then
+				warn("[Starship] CDN Loading: " .. name .. " from Cloudflare")
+			end
+			
+			local success, result = pcall(function()
+				return game:HttpGet(fullUrl)
+			end)
+			
+			if success and result then
+				-- Check if response is an error
+				if result:match("^-- ERROR:") or result:match("^error%(") then
+					if isDev then
+						warn("[Starship] CDN Error for " .. name .. ": " .. result:sub(1, 100))
+					end
+					-- Fall through to Vercel loading
+				else
+					-- Successfully got module from CDN
+					local func, err = loadstring(result)
+					if func then
+						if isDev then
+							warn("[Starship] ✅ CDN Loaded: " .. name)
+						end
+						return func()
+					else
+						if isDev then
+							warn("[Starship] Syntax Error in " .. name .. " (CDN): " .. tostring(err))
+						end
+					end
+				end
+			else
+				if isDev then
+					warn("[Starship] CDN Failed for " .. name .. ", falling back to Vercel")
+				end
+			end
+		end
+	end
+
 	-- 1. Try HTTP Server Loading (Auto-detect: works for both dev and production)
 	if _G.StarshipServerMode then
 		local serverUrl = _G.StarshipServerURL or "https://starship-core.my.id"
