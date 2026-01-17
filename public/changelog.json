@@ -1,9 +1,9 @@
 {
-  "currentVersion": "1.5.3",
+  "currentVersion": "1.5.2",
   "lastUpdated": "2026-01-17",
   "updates": [
     {
-      "version": "1.5.3",
+      "version": "1.5.2",
       "date": "2026-01-14",
       "title": "Tool Equip & Playback Fix, Performance & Stability",
       "changes": [
@@ -16,16 +16,6 @@
         "Character walks naturally to starting point",
         "Better ladder and water movement",
         "Overall stability improvements"
-      ]
-    },
-    {
-      "version": "1.5.2",
-      "date": "2026-01-11",
-      "title": "Loop Playback Fix",
-      "changes": [
-        "Fixed loop not working properly",
-        "Character now walks to start when looping",
-        "Improved Smart Start"
       ]
     },
     {
