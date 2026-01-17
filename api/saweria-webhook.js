@@ -40,6 +40,7 @@ const PRICING = {
     mobile: {
         name: 'Mobile VIP',
         durations: {
+            '1d': { label: '1 Day (Test)', price: 500, days: 1 },
             '3d': { label: '3 Days', price: 5000, days: 3 },
             '7d': { label: '7 Days', price: 10000, days: 7 },
             '14d': { label: '14 Days', price: 25000, days: 14 },
@@ -98,7 +99,7 @@ async function getRobloxUsername(userId) {
 // Add user to whitelist (with expiry extension for renewals)
 async function addToWhitelist(redisClient, platform, userId, username, duration, daysUntilExpiry) {
     const config = PLATFORM_CONFIG[platform];
-    
+
     // Get current whitelist
     const whitelistData = await redisClient.get(config.whitelistKey);
     const whitelist = whitelistData ? JSON.parse(whitelistData) : {};
@@ -110,12 +111,12 @@ async function addToWhitelist(redisClient, platform, userId, username, duration,
     // Calculate expiry date with EXTENSION logic
     let expiresAt = null;
     let extendedDays = 0;
-    
+
     if (daysUntilExpiry) {
         if (isExisting && previousData.expiresAt) {
             const currentExpiry = new Date(previousData.expiresAt);
             const now = new Date();
-            
+
             // If current VIP is still active (not expired), EXTEND from current expiry
             if (currentExpiry > now) {
                 expiresAt = new Date(currentExpiry.getTime() + daysUntilExpiry * 24 * 60 * 60 * 1000).toISOString();
@@ -157,7 +158,7 @@ async function addToWhitelist(redisClient, platform, userId, username, duration,
             noLogging: false
         },
         platform,
-        notes: isExisting 
+        notes: isExisting
             ? `Renewed via Saweria on ${new Date().toLocaleDateString('id-ID')}${extendedDays > 0 ? ` (+${daysUntilExpiry} days extended)` : ''}`
             : `Auto-whitelisted via Saweria payment on ${new Date().toLocaleDateString('id-ID')}`,
         // Track purchase history
@@ -183,12 +184,12 @@ async function addToWhitelist(redisClient, platform, userId, username, duration,
 
     // Return with extended info
     const isExtended = isExisting && extendedDays > 0;
-    return { 
-        isExisting, 
-        isExtended, 
+    return {
+        isExisting,
+        isExtended,
         extendedDays,
         totalDays: isExtended ? extendedDays + (daysUntilExpiry || 0) : daysUntilExpiry,
-        user: whitelist[userId] 
+        user: whitelist[userId]
     };
 }
 
@@ -207,22 +208,22 @@ export default async function handler(req, res) {
     }
 
     // ===== SECURITY CHECKS =====
-    
+
     // 1. Secret Token Check (PRIMARY - Most reliable)
     const WEBHOOK_SECRET = process.env.SAWERIA_WEBHOOK_SECRET;
     const urlToken = req.query.token;
     const hasValidToken = WEBHOOK_SECRET && urlToken === WEBHOOK_SECRET;
-    
+
     // 2. IP Whitelist Check (SECONDARY - for when no secret is configured)
     const SAWERIA_ALLOWED_IPS = [
         '157.230.37.7',     // Saweria Singapore (confirmed)
         '157.230.37.0/24',  // Saweria IP range
     ];
-    
-    const clientIP = req.headers['x-real-ip'] || 
-                     req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                     'unknown';
-    
+
+    const clientIP = req.headers['x-real-ip'] ||
+        req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+        'unknown';
+
     const isAllowedIP = SAWERIA_ALLOWED_IPS.some(ip => {
         if (ip.includes('/')) {
             const baseIP = ip.split('/')[0].split('.').slice(0, 3).join('.');
@@ -264,8 +265,8 @@ export default async function handler(req, res) {
         if (messageParts.length !== 3) {
             console.error('❌ Invalid message format:', message);
             // Still return 200 to acknowledge receipt (might be a regular donation)
-            return res.status(200).json({ 
-                success: false, 
+            return res.status(200).json({
+                success: false,
                 reason: 'Not a VIP purchase message format',
                 message: 'Acknowledged but not processed'
             });
@@ -277,10 +278,10 @@ export default async function handler(req, res) {
         // Validate platform
         if (!['mobile', 'pc', 'bundle'].includes(platform)) {
             console.error('❌ Invalid platform:', platform);
-            return res.status(200).json({ 
-                success: false, 
+            return res.status(200).json({
+                success: false,
                 reason: 'Invalid platform',
-                platform 
+                platform
             });
         }
 
@@ -288,8 +289,8 @@ export default async function handler(req, res) {
         const pricingConfig = PRICING[platform];
         if (!pricingConfig || !pricingConfig.durations[duration]) {
             console.error('❌ Invalid duration for platform:', platform, duration);
-            return res.status(200).json({ 
-                success: false, 
+            return res.status(200).json({
+                success: false,
                 reason: 'Invalid duration for platform',
                 platform,
                 duration
@@ -303,7 +304,7 @@ export default async function handler(req, res) {
         const minAmount = expectedPrice * 0.95;
         if (amount_raw < minAmount) {
             console.error(`❌ Amount too low: ${amount_raw} < ${minAmount}`);
-            
+
             // Send Discord alert for underpayment
             await sendDiscordNotification({
                 title: '⚠️ Underpayment Detected',
@@ -319,8 +320,8 @@ export default async function handler(req, res) {
                 timestamp: new Date().toISOString()
             });
 
-            return res.status(200).json({ 
-                success: false, 
+            return res.status(200).json({
+                success: false,
                 reason: 'Underpayment',
                 expected: expectedPrice,
                 received: amount_raw
@@ -330,8 +331,8 @@ export default async function handler(req, res) {
         // Validate userId is numeric
         if (!/^\d+$/.test(userId)) {
             console.error('❌ Invalid userId:', userId);
-            return res.status(200).json({ 
-                success: false, 
+            return res.status(200).json({
+                success: false,
                 reason: 'Invalid userId format',
                 userId
             });
@@ -341,7 +342,7 @@ export default async function handler(req, res) {
         const redisClient = await getRedis();
         if (!redisClient) {
             console.error('❌ Redis not available');
-            
+
             // Send Discord alert
             await sendDiscordNotification({
                 title: '🔴 Payment Received - Manual Action Required',
@@ -358,7 +359,7 @@ export default async function handler(req, res) {
                 timestamp: new Date().toISOString()
             });
 
-            return res.status(503).json({ 
+            return res.status(503).json({
                 error: 'Redis unavailable',
                 message: 'Payment received but whitelist update failed. Admin notified.'
             });
@@ -373,7 +374,7 @@ export default async function handler(req, res) {
             const mobileResult = await addToWhitelist(
                 redisClient, 'mobile', userId, username, duration, durationConfig.days
             );
-            
+
             // Add to PC
             const pcResult = await addToWhitelist(
                 redisClient, 'pc', userId, username, duration, durationConfig.days
@@ -393,9 +394,11 @@ export default async function handler(req, res) {
                     { name: 'Duration', value: durationConfig.label, inline: true },
                     { name: 'Amount', value: `Rp ${amount_raw.toLocaleString()}`, inline: true },
                     { name: 'Donator', value: donator_name || 'Anonymous', inline: true },
-                    { name: 'Status', value: (mobileResult.isExtended || pcResult.isExtended) 
-                        ? `📅 Extended (+${mobileResult.extendedDays || pcResult.extendedDays} days remaining)`
-                        : (mobileResult.isExisting || pcResult.isExisting) ? '🔄 Renewed' : '🆕 New VIP', inline: true }
+                    {
+                        name: 'Status', value: (mobileResult.isExtended || pcResult.isExtended)
+                            ? `📅 Extended (+${mobileResult.extendedDays || pcResult.extendedDays} days remaining)`
+                            : (mobileResult.isExisting || pcResult.isExisting) ? '🔄 Renewed' : '🆕 New VIP', inline: true
+                    }
                 ],
                 footer: { text: `Transaction: ${transactionId || 'N/A'}` },
                 timestamp: new Date().toISOString()
@@ -408,7 +411,7 @@ export default async function handler(req, res) {
                 username,
                 platforms: ['mobile', 'pc'],
                 duration: durationConfig.label,
-                expiresAt: durationConfig.days 
+                expiresAt: durationConfig.days
                     ? new Date(Date.now() + durationConfig.days * 24 * 60 * 60 * 1000).toISOString()
                     : null
             });
@@ -455,7 +458,7 @@ export default async function handler(req, res) {
             username,
             platform,
             duration: durationConfig.label,
-            expiresAt: durationConfig.days 
+            expiresAt: durationConfig.days
                 ? new Date(Date.now() + durationConfig.days * 24 * 60 * 60 * 1000).toISOString()
                 : null,
             isRenewal: result.isExisting
@@ -475,9 +478,9 @@ export default async function handler(req, res) {
             timestamp: new Date().toISOString()
         });
 
-        return res.status(500).json({ 
+        return res.status(500).json({
             error: 'Webhook processing failed',
-            message: error.message 
+            message: error.message
         });
     }
 }
