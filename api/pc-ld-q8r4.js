@@ -17,7 +17,7 @@ async function checkEventAccess(userId) {
   if (!EVENT_CODE_API) {
     return { hasAccess: false };
   }
-  
+
   try {
     const apiUrl = `${EVENT_CODE_API}?action=check&userId=${userId}`;
     const response = await fetch(apiUrl);
@@ -43,13 +43,13 @@ async function checkUserBanned(userId) {
   if (!EVENT_CODE_API) {
     return { isBanned: false };
   }
-  
+
   try {
     const apiUrl = `${EVENT_CODE_API}?action=check&userId=${userId}`;
     const response = await fetch(apiUrl);
     const data = await response.json();
-    
-    return { 
+
+    return {
       isBanned: data.isBanned || false,
       reason: data.banReason || "Banned by administrator"
     };
@@ -92,7 +92,7 @@ async function getStoredHWID(userId, platform) {
   try {
     const redisClient = await getRedis();
     if (!redisClient) return null;
-    
+
     const key = `hwid:${platform}:${userId}`;
     const data = await redisClient.get(key);
     return data ? JSON.parse(data) : null;
@@ -107,7 +107,7 @@ async function storeHWID(userId, platform, hwid, username) {
   try {
     const redisClient = await getRedis();
     if (!redisClient) return false;
-    
+
     const key = `hwid:${platform}:${userId}`;
     const data = {
       hwid: hwid,
@@ -117,7 +117,7 @@ async function storeHWID(userId, platform, hwid, username) {
       registeredAt: new Date().toISOString(),
       lastUsed: new Date().toISOString(),
     };
-    
+
     // Store with no expiry (permanent until reset)
     await redisClient.set(key, JSON.stringify(data));
     console.log(`[HWID] Registered new HWID for ${userId} (${platform})`);
@@ -134,14 +134,14 @@ async function validateHWID(userId, platform, providedHWID, username) {
   if (!isHWIDEnabled()) {
     return { valid: true, reason: "HWID binding disabled" };
   }
-  
+
   // If no HWID provided, reject (required when enabled)
   if (!providedHWID || providedHWID === "" || providedHWID === "unknown") {
     return { valid: false, reason: "No HWID provided" };
   }
-  
+
   const storedData = await getStoredHWID(userId, platform);
-  
+
   // If no stored HWID, this is first login - store and allow
   if (!storedData) {
     const stored = await storeHWID(userId, platform, providedHWID, username);
@@ -152,7 +152,7 @@ async function validateHWID(userId, platform, providedHWID, username) {
       return { valid: true, reason: "Redis unavailable, allowing access" };
     }
   }
-  
+
   // Compare stored HWID with provided
   if (storedData.hwid === providedHWID) {
     // Update last used timestamp
@@ -163,13 +163,13 @@ async function validateHWID(userId, platform, providedHWID, username) {
         const key = `hwid:${platform}:${userId}`;
         await redisClient.set(key, JSON.stringify(storedData));
       }
-    } catch (e) {}
-    
+    } catch (e) { }
+
     return { valid: true, reason: "HWID match" };
   } else {
     // HWID mismatch - reject!
-    return { 
-      valid: false, 
+    return {
+      valid: false,
       reason: "HWID mismatch - device tidak dikenali",
       storedHWID: storedData.hwid?.substring(0, 16) + "...",
       providedHWID: providedHWID?.substring(0, 16) + "...",
@@ -510,24 +510,27 @@ export default async function handler(req, res) {
               .status(403)
               .send(
                 `-- ERROR: ${platform.toUpperCase()} VIP access expired\n` +
-                  `-- Expired on: ${expiryDate.toDateString()}\n` +
-                  `error("${platform.toUpperCase()} VIP access expired")`,
+                `-- Expired on: ${expiryDate.toDateString()}\n` +
+                `error("${platform.toUpperCase()} VIP access expired")`,
               );
           }
         }
 
         // VIP user - grant access
         const isOwner = userId === "9268011358";
-        
+
+        // Declare hwidResult before the block so it's accessible later
+        let hwidResult = null;
+
         // === HWID VALIDATION (Skip for owner) ===
         if (!isOwner && isHWIDEnabled()) {
-          const hwidResult = await validateHWID(userId, platform, hwid, vipUser.username);
-          
+          hwidResult = await validateHWID(userId, platform, hwid, vipUser.username);
+
           if (!hwidResult.valid) {
             console.log(
               `[${timestamp}] 🚫 HWID MISMATCH - UserID: ${userId} | Platform: ${platform} | Reason: ${hwidResult.reason}`,
             );
-            
+
             await sendDiscordLog({
               title: `🚫 PC HWID Mismatch Detected`,
               status: "blocked",
@@ -540,7 +543,7 @@ export default async function handler(req, res) {
               timestamp: timestamp,
               message: `⚠️ **Possible account sharing detected!**\n\n**Reason:** ${hwidResult.reason}\n**Stored HWID:** ${hwidResult.storedHWID || "N/A"}\n**Provided HWID:** ${hwidResult.providedHWID || "N/A"}\n**Registered:** ${hwidResult.registeredAt || "N/A"}`,
             });
-            
+
             res.setHeader("Content-Type", "text/plain; charset=utf-8");
             return res.status(403).send(
               `-- ERROR: Device tidak dikenali\n` +
@@ -549,13 +552,13 @@ export default async function handler(req, res) {
               `error("Device tidak dikenali. HWID mismatch.")`
             );
           }
-          
+
           // Log new HWID registration
           if (hwidResult.isNew) {
             console.log(
               `[${timestamp}] 📱 NEW HWID REGISTERED - UserID: ${userId} (${vipUser.username}) | Platform: ${platform}`,
             );
-            
+
             await sendDiscordLog({
               title: `📱 New PC HWID Registered`,
               status: "success",
@@ -570,7 +573,7 @@ export default async function handler(req, res) {
             });
           }
         }
-        
+
         console.log(
           `[${timestamp}] ${isOwner ? "👑 OWNER" : "💎 VIP"} ACCESS [${platformLabel}] - UserID: ${userId} (${vipUser.username}) | IP: ${clientIP}`,
         );
@@ -607,8 +610,8 @@ export default async function handler(req, res) {
           .status(403)
           .send(
             `-- ERROR: Your ${platform.toUpperCase()} VIP access has been suspended\n` +
-              `-- Contact administrator\n` +
-              `error("${platform.toUpperCase()} VIP access suspended")`,
+            `-- Contact administrator\n` +
+            `error("${platform.toUpperCase()} VIP access suspended")`,
           );
       }
     }
@@ -636,12 +639,12 @@ export default async function handler(req, res) {
       // If user has event access for mobile, allow them even if they have PC license
       if (platform === "mobile") {
         const eventAccess = await checkEventAccess(userId);
-        
+
         if (eventAccess.hasAccess) {
           console.log(
             `[${timestamp}] 🎟️ EVENT ACCESS GRANTED (PC user with event code) - ${platformLabel} Loader - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
           );
-          
+
           // Note: Discord webhook sent from load.js instead (to avoid duplicate)
           return serveLoaderScript(res, config, "event", "EVENT_ACCESS");
         }
@@ -665,7 +668,7 @@ export default async function handler(req, res) {
       console.log(
         `[${timestamp}] ❌ BLOCKING cross-platform access - ${config.otherLabel} user trying ${platformLabel} - UserID: ${userId}`,
       );
-      
+
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       return res.status(403).send(
         `-- StarshipCore ${platform.toUpperCase()}\\n` +
@@ -690,12 +693,12 @@ export default async function handler(req, res) {
           // === CHECK EVENT ACCESS FIRST (before blocking cross-platform) ===
           if (platform === "mobile") {
             const eventAccess = await checkEventAccess(userId);
-            
+
             if (eventAccess.hasAccess) {
               console.log(
                 `[${timestamp}] 🎟️ EVENT ACCESS GRANTED (File PC user with event code) - ${platformLabel} Loader - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
               );
-              
+
               return serveLoaderScript(res, config, "event", "EVENT_ACCESS");
             }
           }
@@ -718,7 +721,7 @@ export default async function handler(req, res) {
           console.log(
             `[${timestamp}] ❌ BLOCKING cross-platform access (File) - ${config.otherLabel} user trying ${platformLabel} - UserID: ${userId}`,
           );
-          
+
           res.setHeader("Content-Type", "text/plain; charset=utf-8");
           return res.status(403).send(
             `-- StarshipCore ${platform.toUpperCase()}\\n` +
@@ -761,12 +764,12 @@ export default async function handler(req, res) {
   // === PRIORITY 3: CHECK EVENT CODE ACCESS (Google Sheets) - Mobile Only ===
   if (platform === "mobile" && userId) {
     const eventAccess = await checkEventAccess(userId);
-    
+
     if (eventAccess.hasAccess) {
       console.log(
         `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - ${platformLabel} Loader - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
       );
-      
+
       // Note: Discord webhook sent from load.js instead (to avoid duplicate)
       return serveLoaderScript(res, config, "event", "EVENT_ACCESS");
     }
@@ -777,12 +780,12 @@ export default async function handler(req, res) {
   if (platform === "mobile") {
     // Check if user is banned in Google Sheets
     const banCheck = await checkUserBanned(userId);
-    
+
     if (banCheck.isBanned) {
       console.log(
         `[${timestamp}] 🚫 BANNED USER BLOCKED - UserID: ${userId} | IP: ${clientIP}`,
       );
-      
+
       await sendDiscordLog({
         title: `🚫 Banned User Attempted Access`,
         status: "blocked",
@@ -795,7 +798,7 @@ export default async function handler(req, res) {
         timestamp: timestamp,
         message: `🚫 Banned user attempted to access\\nReason: ${banCheck.reason}`,
       });
-      
+
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       return res.status(403).send(
         `-- StarshipCore MOBILE\\n` +
@@ -806,16 +809,16 @@ export default async function handler(req, res) {
         `error("You are banned from using StarshipCore.")`
       );
     }
-    
+
     // Not banned - serve loader for event code popup
     console.log(
       `[${timestamp}] ℹ️ NOT WHITELISTED - Serving loader for event code popup - UserID: ${userId} | IP: ${clientIP}`,
     );
-    
+
     // Serve loader script - it will show event code popup for new users
     return serveLoaderScript(res, config, "pending", "PENDING_EVENT");
   }
-  
+
   // For PC: Block access (PC doesn't have event code system)
   console.log(
     `[${timestamp}] ❌ NOT ${platform.toUpperCase()} WHITELISTED - ACCESS BLOCKED - UserID: ${userId} | IP: ${clientIP}`,
