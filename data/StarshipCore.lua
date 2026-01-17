@@ -10,7 +10,7 @@
 -- SERVER-BASED LOADING MODE
 -- Automatically detects environment and loads modules from appropriate server
 -- No manual configuration needed!
-local VERSION = "1.5.4"
+local VERSION = "1.5.3"
 
 -- Auto-detect: Check if URL was injected by bootstrap/dev-script
 if _G.StarshipServerMode == nil then
