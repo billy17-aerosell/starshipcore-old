@@ -35,6 +35,11 @@ const PLATFORM_CONFIG = {
     }
 };
 
+// Pending orders for time-based matching
+const PENDING_ORDERS_KEY = 'starship:pending_orders';
+const PENDING_ORDER_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+const UNCLAIMED_PAYMENTS_KEY = 'starship:unclaimed_payments';
+
 // Pricing configuration (must match frontend)
 const PRICING = {
     mobile: {
@@ -58,7 +63,7 @@ const PRICING = {
             'lifetime': { label: 'Lifetime', price: 300000, days: null }
         }
     }
-};
+}
 
 // Discord notification helper - Uses separate webhook for VIP purchases
 async function sendDiscordNotification(embed) {
@@ -78,6 +83,148 @@ async function sendDiscordNotification(embed) {
         console.log('✅ Discord VIP notification sent');
     } catch (error) {
         console.error('❌ Discord notification failed:', error.message);
+    }
+}
+
+// Find pending order by amount (for time-based matching)
+async function findPendingOrderByAmount(redisClient, amount) {
+    try {
+        const pendingData = await redisClient.get(PENDING_ORDERS_KEY);
+        if (!pendingData) return { matches: [], allOrders: [] };
+
+        const pendingOrders = JSON.parse(pendingData);
+        const now = Date.now();
+
+        // Filter valid (non-expired) orders
+        const validOrders = pendingOrders.filter(order => {
+            const orderTime = new Date(order.createdAt).getTime();
+            return (now - orderTime) < PENDING_ORDER_EXPIRY_MS && order.status === 'pending';
+        });
+
+        // Find orders matching the amount (with 5% tolerance for fees)
+        const minAmount = amount * 0.90; // Allow 10% variance
+        const maxAmount = amount * 1.10;
+
+        const matches = validOrders.filter(order =>
+            order.amount >= minAmount && order.amount <= maxAmount
+        );
+
+        return { matches, allOrders: validOrders };
+    } catch (error) {
+        console.error('Error finding pending order:', error);
+        return { matches: [], allOrders: [] };
+    }
+}
+
+// Mark pending order as completed
+async function completePendingOrder(redisClient, orderId) {
+    try {
+        const pendingData = await redisClient.get(PENDING_ORDERS_KEY);
+        if (!pendingData) return;
+
+        const pendingOrders = JSON.parse(pendingData);
+        const updatedOrders = pendingOrders.filter(order => order.orderId !== orderId);
+
+        await redisClient.set(PENDING_ORDERS_KEY, JSON.stringify(updatedOrders));
+        console.log(`✅ Pending order ${orderId} completed and removed`);
+    } catch (error) {
+        console.error('Error completing pending order:', error);
+    }
+}
+
+// Save unclaimed payment for manual processing
+async function saveUnclaimedPayment(redisClient, paymentData) {
+    try {
+        const unclaimedData = await redisClient.get(UNCLAIMED_PAYMENTS_KEY);
+        const unclaimed = unclaimedData ? JSON.parse(unclaimedData) : [];
+
+        unclaimed.push({
+            ...paymentData,
+            savedAt: new Date().toISOString()
+        });
+
+        // Keep only last 100 unclaimed payments
+        const trimmed = unclaimed.slice(-100);
+        await redisClient.set(UNCLAIMED_PAYMENTS_KEY, JSON.stringify(trimmed));
+
+        console.log(`📦 Unclaimed payment saved: ${paymentData.transactionId}`);
+    } catch (error) {
+        console.error('Error saving unclaimed payment:', error);
+    }
+}
+
+// Handle create-pending-order action
+async function handleCreatePendingOrder(req, res) {
+    const { userId, username, platform, duration, amount } = req.body;
+
+    // Validate required fields
+    if (!userId || !platform || !duration || !amount) {
+        return res.status(400).json({
+            error: 'Missing required fields',
+            required: ['userId', 'platform', 'duration', 'amount']
+        });
+    }
+
+    // Validate userId is numeric
+    if (!/^\d+$/.test(userId)) {
+        return res.status(400).json({ error: 'Invalid userId format' });
+    }
+
+    // Validate platform
+    if (!['mobile', 'pc', 'bundle'].includes(platform)) {
+        return res.status(400).json({ error: 'Invalid platform' });
+    }
+
+    try {
+        const redisClient = await getRedis();
+        if (!redisClient) {
+            return res.status(503).json({ error: 'Database unavailable' });
+        }
+
+        // Get existing pending orders
+        const pendingData = await redisClient.get(PENDING_ORDERS_KEY);
+        const pendingOrders = pendingData ? JSON.parse(pendingData) : [];
+
+        // Clean up expired orders (older than 30 minutes)
+        const now = Date.now();
+        const validOrders = pendingOrders.filter(order => {
+            const orderTime = new Date(order.createdAt).getTime();
+            return (now - orderTime) < PENDING_ORDER_EXPIRY_MS;
+        });
+
+        // Generate unique order ID
+        const orderId = `${userId}-${now}-${Math.random().toString(36).substring(2, 8)}`;
+
+        // Create new pending order
+        const newOrder = {
+            orderId,
+            userId,
+            username: username || `User_${userId}`,
+            platform,
+            duration,
+            amount: parseInt(amount),
+            createdAt: new Date().toISOString(),
+            status: 'pending'
+        };
+
+        // Add to list
+        validOrders.push(newOrder);
+
+        // Save back to Redis
+        await redisClient.set(PENDING_ORDERS_KEY, JSON.stringify(validOrders));
+
+        console.log(`📝 Pending order created: ${orderId} - ${platform}:${duration} Rp${amount} for User ${userId}`);
+
+        return res.status(200).json({
+            success: true,
+            orderId,
+            message: 'Pending order created',
+            expiresIn: '30 minutes'
+        });
+
+    } catch (error) {
+        console.error('Create pending order error:', error);
+        return res.status(500).json({ error: 'Failed to create pending order' });
     }
 }
 
@@ -206,6 +353,12 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    // Check if this is a create-pending-order request
+    const action = req.query.action;
+    if (action === 'create-pending-order') {
+        return await handleCreatePendingOrder(req, res);
+    }
+
     // ===== SECURITY CHECKS =====
 
     // 1. Secret Token Check (PRIMARY - Most reliable)
@@ -232,9 +385,9 @@ export default async function handler(req, res) {
     });
 
     // SECURITY: Only pass if has valid token OR IP is whitelisted
-    // User-Agent is NOT checked because it can be easily spoofed!
     if (!hasValidToken && !isAllowedIP) {
-        console.warn(`🚫 BLOCKED webhook attempt - IP: ${clientIP}, Token: ${urlToken ? 'invalid' : 'missing'}`);
+        console.warn(`🚫 BLOCKED webhook attempt - IP: ${clientIP}, Token: ${urlToken ? 'valid' : 'missing'}`);
+        console.log('💡 Tip: If this is a legitimate Saweria IP, add it to SAWERIA_ALLOWED_IPS in api/saweria-webhook.js');
         return res.status(403).json({ error: 'Forbidden - Unauthorized source' });
     }
 
@@ -252,18 +405,128 @@ export default async function handler(req, res) {
         //   "created_at": "2024-01-01T00:00:00Z"
         // }
 
-        const { message, amount_raw, donator_name, id: transactionId } = req.body;
+        const { message: rawMessage, amount_raw, donator_name, id: transactionId } = req.body;
 
-        if (!message) {
-            console.error('❌ No message in webhook payload');
-            return res.status(400).json({ error: 'Invalid payload: message required' });
-        }
+        // Allow empty message - will use time-based matching
+        const message = (rawMessage || '').trim();
+        console.log(`📝 Processing message: "${message || '(empty)'}" from ${donator_name || 'Anonymous'}, Amount: ${amount_raw}`);
 
         // Parse message format: PLATFORM:DURATION:USERID
-        const messageParts = message.split(':');
-        if (messageParts.length !== 3) {
-            console.error('❌ Invalid message format:', message);
-            // Still return 200 to acknowledge receipt (might be a regular donation)
+        const messageParts = message.split(':').map(part => part.trim());
+
+        if (!message || messageParts.length !== 3) {
+            console.log('⚠️ Invalid message format, trying time-based matching...', message);
+
+            // Try time-based matching as fallback
+            const redisClient = await getRedis();
+            if (redisClient) {
+                const { matches } = await findPendingOrderByAmount(redisClient, amount_raw);
+
+                if (matches.length === 1) {
+                    // Exactly one match - process it!
+                    const matchedOrder = matches[0];
+                    console.log(`🎯 Time-based match found! Order: ${matchedOrder.orderId}`);
+
+                    // Get username
+                    const username = await getRobloxUsername(matchedOrder.userId);
+
+                    // Validate duration exists
+                    const pricingConfig = PRICING[matchedOrder.platform];
+                    const durationConfig = pricingConfig?.durations[matchedOrder.duration];
+
+                    if (durationConfig) {
+                        // Process the order
+                        if (matchedOrder.platform === 'bundle') {
+                            await addToWhitelist(redisClient, 'mobile', matchedOrder.userId, username, matchedOrder.duration, durationConfig.days);
+                            await addToWhitelist(redisClient, 'pc', matchedOrder.userId, username, matchedOrder.duration, durationConfig.days);
+                        } else {
+                            await addToWhitelist(redisClient, matchedOrder.platform, matchedOrder.userId, username, matchedOrder.duration, durationConfig.days);
+                        }
+
+                        // Mark order as completed
+                        await completePendingOrder(redisClient, matchedOrder.orderId);
+
+                        // Send Discord notification
+                        const platformEmoji = matchedOrder.platform === 'mobile' ? '📱' : (matchedOrder.platform === 'bundle' ? '🎁' : '💻');
+                        await sendDiscordNotification({
+                            title: `${platformEmoji} VIP Activated via Time-Match!`,
+                            color: 0x4caf50,
+                            description: `Message was: "${message}" (auto-matched by amount)`,
+                            fields: [
+                                { name: 'Username', value: username, inline: true },
+                                { name: 'User ID', value: matchedOrder.userId, inline: true },
+                                { name: 'Platform', value: matchedOrder.platform.toUpperCase(), inline: true },
+                                { name: 'Duration', value: durationConfig.label, inline: true },
+                                { name: 'Amount', value: `Rp ${amount_raw.toLocaleString()}`, inline: true },
+                                { name: 'Donator', value: donator_name || 'Anonymous', inline: true }
+                            ],
+                            footer: { text: `Transaction: ${transactionId || 'N/A'}` },
+                            timestamp: new Date().toISOString()
+                        });
+
+                        return res.status(200).json({
+                            success: true,
+                            message: 'VIP activated via time-based matching',
+                            matchedOrder: matchedOrder.orderId
+                        });
+                    }
+                } else if (matches.length > 1) {
+                    // Multiple matches - save for manual processing
+                    console.log(`⚠️ Multiple pending orders match amount ${amount_raw}, saving for manual review`);
+
+                    await saveUnclaimedPayment(redisClient, {
+                        transactionId,
+                        amount: amount_raw,
+                        donatorName: donator_name,
+                        message,
+                        possibleMatches: matches.map(m => ({ orderId: m.orderId, userId: m.userId })),
+                        reason: 'multiple_matches'
+                    });
+
+                    await sendDiscordNotification({
+                        title: '⚠️ Payment Needs Manual Review',
+                        color: 0xff9800,
+                        description: `Multiple pending orders match this amount. Please review manually.`,
+                        fields: [
+                            { name: 'Amount', value: `Rp ${amount_raw.toLocaleString()}`, inline: true },
+                            { name: 'Donator', value: donator_name || 'Anonymous', inline: true },
+                            { name: 'Message', value: message || '(empty)', inline: true },
+                            { name: 'Possible Matches', value: matches.map(m => m.userId).join(', '), inline: false }
+                        ],
+                        timestamp: new Date().toISOString()
+                    });
+
+                    return res.status(200).json({
+                        success: false,
+                        reason: 'Multiple matches, saved for manual review'
+                    });
+                } else {
+                    // No matches found - save as unclaimed
+                    console.log(`❌ No pending orders match amount ${amount_raw}`);
+
+                    await saveUnclaimedPayment(redisClient, {
+                        transactionId,
+                        amount: amount_raw,
+                        donatorName: donator_name,
+                        message,
+                        reason: 'no_match'
+                    });
+
+                    await sendDiscordNotification({
+                        title: '❌ Payment Not Matched',
+                        color: 0xf44336,
+                        description: `No pending orders found for this amount.`,
+                        fields: [
+                            { name: 'Amount', value: `Rp ${amount_raw.toLocaleString()}`, inline: true },
+                            { name: 'Donator', value: donator_name || 'Anonymous', inline: true },
+                            { name: 'Message', value: message || '(empty)', inline: false }
+                        ],
+                        footer: { text: 'Please process manually via admin panel' },
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            }
+
             return res.status(200).json({
                 success: false,
                 reason: 'Not a VIP purchase message format',
@@ -271,8 +534,9 @@ export default async function handler(req, res) {
             });
         }
 
-        const [platformRaw, duration, userId] = messageParts;
+        const [platformRaw, durationRaw, userId] = messageParts;
         const platform = platformRaw.toLowerCase();
+        const duration = durationRaw.toLowerCase();
 
         // Validate platform
         if (!['mobile', 'pc', 'bundle'].includes(platform)) {
@@ -329,7 +593,7 @@ export default async function handler(req, res) {
 
         // Validate userId is numeric
         if (!/^\d+$/.test(userId)) {
-            console.error('❌ Invalid userId:', userId);
+            console.error('❌ Invalid userId format:', userId);
             return res.status(200).json({
                 success: false,
                 reason: 'Invalid userId format',

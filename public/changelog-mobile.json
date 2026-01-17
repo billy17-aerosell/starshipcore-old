@@ -1,9 +1,21 @@
 {
-    "currentVersion": "1.2.2",
-    "lastUpdated": "2026-01-15",
+    "currentVersion": "1.2.4",
+    "lastUpdated": "2026-01-17",
     "updates": [
         {
-            "version": "1.2.2",
+            "version": "1.2.4",
+            "date": "2026-01-17",
+            "title": "Performance Boost",
+            "changes": [
+                "Playback now runs smoother with better FPS",
+                "Reduced lag when climbing ladders and swimming",
+                "More stable movement during playback",
+                "Matched playback quality with PC version",
+                "Less stuttering overall"
+            ]
+        },
+        {
+            "version": "1.2.3",
             "date": "2026-01-15",
             "title": "UI & Playback Fix",
             "changes": [

@@ -20,7 +20,7 @@ console.log(`Token Preview: ${TOKEN.substring(0, 5)}...`);
 client.on('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
     console.log(`Target Channel ID: ${CHANNEL_ID}`);
-    console.log('Starting auto-gamble loop every 25 seconds...');
+    console.log('Starting auto-gamble loop every 17 seconds...');
 
     const channel = await client.channels.fetch(CHANNEL_ID);
     if (!channel) {
@@ -31,10 +31,10 @@ client.on('ready', async () => {
     // Send immediately on start
     sendGamble(channel);
 
-    // Loop every 25 seconds (25000 ms)
+    // Loop every 17 seconds (17000 ms)
     setInterval(() => {
         sendGamble(channel);
-    }, 25000);
+    }, 17000);
 });
 
 async function sendGamble(channel) {

@@ -10,7 +10,7 @@
 -- SERVER-BASED LOADING MODE
 -- Automatically detects environment and loads modules from appropriate server
 -- No manual configuration needed!
-local VERSION = "1.5.3"
+local VERSION = "1.5.4"
 
 -- Auto-detect: Check if URL was injected by bootstrap/dev-script
 if _G.StarshipServerMode == nil then
@@ -806,7 +806,86 @@ local DevicePerformance = {
 	},
 	-- Interpolation mode: "catmullrom" (smooth but heavier) or "linear" (lighter but less smooth)
 	interpolationMode = "catmullrom",
+	-- Device detection
+	isMobile = false,
+	isLowEnd = false,
+	averageFPS = 60,
 }
+
+-- AUTO-DETECT MOBILE/LOW-END DEVICE
+-- Mobile devices use linear interpolation for better FPS
+do
+	local uis = UserInputService
+	
+	-- Detect touch/mobile device
+	local isTouchDevice = uis.TouchEnabled and not uis.KeyboardEnabled
+	local isTablet = uis.TouchEnabled and uis.KeyboardEnabled -- iPad with keyboard
+	local isMobile = isTouchDevice or isTablet
+	
+	-- Store detection result
+	DevicePerformance.isMobile = isMobile
+	
+	-- Set interpolation mode based on device type
+	if isMobile then
+		DevicePerformance.interpolationMode = "linear"
+		if DEV_MODE then
+			warn("[Starship] Mobile device detected - using LINEAR interpolation for better FPS")
+		end
+	end
+	
+	-- Optional: FPS-based auto-adjustment
+	-- If FPS drops below threshold, switch to linear mode
+	task.spawn(function()
+		local frameCount = 0
+		local lastCheck = tick()
+		local CHECK_INTERVAL = 3 -- Check every 3 seconds (faster response)
+		local LOW_FPS_THRESHOLD = 45 -- Raised from 35 - switch earlier for better experience
+		local HIGH_FPS_THRESHOLD = 55 -- FPS threshold to switch back to catmullrom
+		local lowFpsStreak = 0 -- Track consecutive low FPS readings
+		local highFpsStreak = 0 -- Track consecutive high FPS readings
+		
+		RunService.Heartbeat:Connect(function()
+			frameCount = frameCount + 1
+			
+			local now = tick()
+			if now - lastCheck >= CHECK_INTERVAL then
+				local fps = frameCount / (now - lastCheck)
+				DevicePerformance.averageFPS = math.floor(fps)
+				
+				-- Auto-switch to linear if FPS is consistently low (2 consecutive readings)
+				if fps < LOW_FPS_THRESHOLD then
+					lowFpsStreak = lowFpsStreak + 1
+					highFpsStreak = 0
+					if lowFpsStreak >= 2 and DevicePerformance.interpolationMode == "catmullrom" then
+						DevicePerformance.interpolationMode = "linear"
+						DevicePerformance.isLowEnd = true
+						if DEV_MODE then
+							warn("[Starship] Low FPS detected (" .. math.floor(fps) .. ") - switching to LINEAR interpolation")
+						end
+					end
+				elseif fps > HIGH_FPS_THRESHOLD then
+					-- FPS recovered - switch back to catmullrom for smoother playback
+					highFpsStreak = highFpsStreak + 1
+					lowFpsStreak = 0
+					if highFpsStreak >= 3 and DevicePerformance.interpolationMode == "linear" and not DevicePerformance.isMobile then
+						DevicePerformance.interpolationMode = "catmullrom"
+						DevicePerformance.isLowEnd = false
+						if DEV_MODE then
+							warn("[Starship] FPS recovered (" .. math.floor(fps) .. ") - switching back to CATMULLROM interpolation")
+						end
+					end
+				else
+					-- FPS in middle range - reset streaks
+					lowFpsStreak = math.max(0, lowFpsStreak - 1)
+					highFpsStreak = math.max(0, highFpsStreak - 1)
+				end
+				
+				frameCount = 0
+				lastCheck = now
+			end
+		end)
+	end)
+end
 
 -- Expose for UI access (kept for compatibility)
 _G.StarshipDevicePerformance = DevicePerformance
@@ -1010,6 +1089,77 @@ local function OptimizeMergedData(recordingData)
 	end
 
 	return result
+end
+
+-- ═══════════════════════════════════════════════════════════════════
+-- PREPROCESS FRAMES - Cache Vector3 and state enums for faster playback
+-- This is CRITICAL for FPS! Without this, every frame creates new Vector3s
+-- ═══════════════════════════════════════════════════════════════════
+local function PreprocessFrames(frames)
+	if not frames or #frames == 0 then
+		return frames
+	end
+	
+	-- Check if already preprocessed (avoid double processing)
+	if frames[1].posVector ~= nil or frames._preprocessed then
+		return frames
+	end
+	
+	local startTime = tick()
+	local frameCount = #frames
+	
+	for i = 1, frameCount do
+		local f = frames[i]
+		
+		-- Pre-cache position as Vector3
+		if f.pos and not f.posVector then
+			f.posVector = Vector3.new(f.pos.x, f.pos.y, f.pos.z)
+		end
+		
+		-- Pre-cache velocity as Vector3
+		if f.vel and not f.velVector then
+			f.velVector = Vector3.new(f.vel.x, f.vel.y, f.vel.z)
+		end
+		
+		-- Pre-cache moveDirection as Vector3
+		if f.md and not f.mdVector then
+			f.mdVector = Vector3.new(f.md.x, f.md.y, f.md.z)
+		end
+		
+		-- Pre-cache character look direction as Vector3
+		if f.charLook and not f.charLookVector then
+			f.charLookVector = Vector3.new(f.charLook.x, f.charLook.y or 0, f.charLook.z)
+		end
+		
+		-- Pre-cache camera look direction as Vector3
+		if f.camLook and not f.camLookVector then
+			f.camLookVector = Vector3.new(f.camLook.x, f.camLook.y, f.camLook.z)
+		end
+		
+		-- Pre-parse state string to enum name (avoid string.match every frame)
+		-- "Enum.HumanoidStateType.Running" -> "Running"
+		if f.st and not f.stEnum then
+			local stateName = string.match(f.st, "Enum%.HumanoidStateType%.(%w+)")
+			if stateName then
+				f.stEnum = stateName
+			end
+		end
+		
+		-- Yield periodically to prevent freeze during large recordings
+		if i % 1000 == 0 then
+			task.wait()
+		end
+	end
+	
+	-- Mark as preprocessed to avoid double processing
+	frames._preprocessed = true
+	
+	if DEV_MODE then
+		local elapsed = tick() - startTime
+		warn(string.format("[Starship] PreprocessFrames: %d frames in %.2fms", frameCount, elapsed * 1000))
+	end
+	
+	return frames
 end
 
 -- Catmull-Rom Spline Interpolation for ultra-smooth curves
@@ -3818,6 +3968,9 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 		-- PERFORMANCE: Throttle climbing animation speed adjustment (very expensive)
 		local lastClimbAnimCheck = 0
 		local CLIMB_ANIM_CHECK_INTERVAL = 0.2 -- Only check every 0.2s
+		
+		-- LANDING FIX: Track previous air state to detect landing moment
+		local wasInAirLastFrame = false
 
 		-- Use Heartbeat for physics-synced playback (prevents vibration)
 		-- Still supports high refresh rates (120Hz+) in modern Roblox
@@ -4047,6 +4200,29 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 					-- Check if in air state - use position-based for smooth jump like recording
 					-- OPTIMIZATION: Reuse cachedStateName from earlier in this frame iteration
 					local isInAir = (cachedStateName == "Jumping" or cachedStateName == "Freefall")
+					
+					-- LANDING FIX: Detect landing moment (was in air last frame, now on ground)
+					local justLanded = wasInAirLastFrame and not isInAir
+					
+					-- LANDING FIX ENHANCED: Also check real-time ground contact
+					-- MORE CONSERVATIVE: Only trigger when FREEFALL (falling down, not jumping up)
+					-- AND velocity Y is negative/near-zero (actually landing, not bouncing)
+					if wasInAirLastFrame and not justLanded then
+						local isFreefall = (cachedStateName == "Freefall")
+						local realFloorMaterial = h.FloorMaterial
+						local isActuallyOnGround = realFloorMaterial ~= Enum.Material.Air
+						-- Get recorded velocity Y to check if actually falling
+						local velY = fA.velVector and fA.velVector.Y or (fA.vel and fA.vel.y or 0)
+						local isActuallyFalling = velY < 5 -- Only trigger if velocity Y is low (not jumping up)
+						
+						if isFreefall and isActuallyOnGround and isActuallyFalling then
+							-- Recording says Freefall, we're on ground, and velocity is downward - force landing
+							justLanded = true
+							isInAir = false -- Override for this frame
+						end
+					end
+					
+					wasInAirLastFrame = isInAir -- Update for next frame
 
 					-- CROSS-RIG HEIGHT OFFSET CORRECTION: Apply height adjustment for cross-rig playback
 					-- Note: smoothPos is already calculated at higher scope
@@ -4075,6 +4251,30 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 							local recordedVelY = fA.velVector and fA.velVector.Y or (fA.vel and fA.vel.y or 0)
 							local horizVel = (targetPos - currentPos) * 10 * playbackSpeed
 							r.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY * playbackSpeed, horizVel.Z)
+						end
+					-- LANDING FIX: When just landed, use higher blend factor for more responsive ground contact
+					-- But don't use separate handling - let normal ground movement code handle it
+					elseif justLanded and smoothPos then
+						-- Landing: Higher blend to ground position for responsive feel
+						local currentPos = r.Position
+						local landBlend = 0.7 -- Higher blend for responsive landing (was using slow lerp before)
+						local newPos = currentPos:Lerp(smoothPos, landBlend)
+						r.CFrame = CFrame.new(newPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
+						r.AssemblyLinearVelocity = smoothVel or vel
+						
+						-- Trigger movement animation
+						if fA.mdVector or fA.md then
+							local moveDir = fA.mdVector or Vector3.new(fA.md.x, fA.md.y, fA.md.z)
+							h:Move(moveDir, false)
+						elseif (smoothVel or vel).Magnitude > 0.1 then
+							local flatVel = Vector3.new((smoothVel or vel).X, 0, (smoothVel or vel).Z)
+							if flatVel.Magnitude > 0.1 then
+								h:Move(flatVel.Unit, false)
+							else
+								h:Move(Vector3.new(0, 0, 0))
+							end
+						else
+							h:Move(Vector3.new(0, 0, 0))
 						end
 					else
 						-- IMPROVED: Position-based playback option for ground too (smoother)

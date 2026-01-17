@@ -1,18 +1,28 @@
 {
-  "currentVersion": "1.5.3",
-  "lastUpdated": "2026-01-14",
+  "currentVersion": "1.5.4",
+  "lastUpdated": "2026-01-17",
   "updates": [
+    {
+      "version": "1.5.4",
+      "date": "2026-01-17",
+      "title": "Performance & Stability",
+      "changes": [
+        "Smoother playback experience",
+        "Fixed checkpoint not saving properly",
+        "Character walks naturally to starting point",
+        "Better ladder and water movement",
+        "Overall stability improvements"
+      ]
+    },
     {
       "version": "1.5.3",
       "date": "2026-01-14",
       "title": "Tool Equip & Playback Fix",
       "changes": [
-        "Fixed tool equip causing double speed during playback",
-        "Fixed pause/resume playback not working properly",
-        "Added fingerprint matching for tools (name, tooltip, color, config)",
-        "Unified tool handling for both Flexible and Strict mode",
-        "Added throttle to prevent rapid tool re-equip",
-        "Fixed local register limit error"
+        "Fixed speed issue when equipping tools",
+        "Fixed pause/resume not working",
+        "Smarter tool detection",
+        "Fixed register error"
       ]
     },
     {
@@ -20,11 +30,9 @@
       "date": "2026-01-11",
       "title": "Loop Playback Fix",
       "changes": [
-        "Fixed loop playback not working properly",
-        "Fixed travel phase not walking to start position",
-        "Simplified travel phase (same as Mobile)",
-        "Fixed race condition when loop is enabled",
-        "Improved Smart Start logic consistency"
+        "Fixed loop not working properly",
+        "Character now walks to start when looping",
+        "Improved Smart Start"
       ]
     },
     {
@@ -32,9 +40,9 @@
       "date": "2026-01-10",
       "title": "Morph Avatar",
       "changes": [
-        "Added Morph Avatar feature to Fun tab",
-        "Added live avatar preview before morphing",
-        "Added Reset Avatar button"
+        "Added Morph Avatar feature",
+        "Live avatar preview",
+        "Reset Avatar button"
       ]
     },
     {
@@ -42,10 +50,9 @@
       "date": "2026-01-10",
       "title": "Pathfinding & Visuals Update",
       "changes": [
-        "Smart Resume: Character now walks to resume point instead of teleporting",
-        "High Precision Path: Smoother and more accurate path visualization",
-        "Fixed pathfinding timeout and stuck issues",
-        "Optimized waypoint navigation"
+        "Smart Resume: Walk to resume point",
+        "Smoother path visualization",
+        "Fixed stuck issues"
       ]
     },
     {
@@ -53,11 +60,10 @@
       "date": "2026-01-04",
       "title": "What's New",
       "changes": [
-        "Improved loading experience",
+        "Improved loading",
         "Performance boost",
         "Enhanced stability",
-        "UI improvements",
-        "Bug fixes"
+        "UI improvements"
       ]
     },
     {

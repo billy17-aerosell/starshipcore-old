@@ -10,7 +10,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
-local VERSION = "1.2.2"
+local VERSION = "1.2.4"
 local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 
 -- DEV_MODE detection (same as StarshipCore)
@@ -651,6 +651,31 @@ local Config = {
 	JumpPower = 50,
 	FlySpeed = 50,
 }
+
+-- ══════════════════════════════════════════════════════════════════
+-- DEVICE PERFORMANCE (MOBILE-OPTIMIZED)
+-- Force linear interpolation for better FPS on all mobile devices
+-- ══════════════════════════════════════════════════════════════════
+_G.StarshipDevicePerformance = _G.StarshipDevicePerformance or {
+	zoomPunch = {
+		currentState = "normal",
+		lastChangeTime = 0,
+		cooldown = 0.15,
+		pendingState = nil,
+	},
+	interpolationMode = "linear", -- FORCE LINEAR for mobile
+	isMobile = true, -- This is the mobile script
+	isLowEnd = false,
+	averageFPS = 60,
+}
+
+-- Ensure linear mode is set (in case StarshipCore loaded first with catmullrom)
+_G.StarshipDevicePerformance.interpolationMode = "linear"
+_G.StarshipDevicePerformance.isMobile = true
+
+if DEV_MODE then
+	warn("[MobileUI] Using LINEAR interpolation mode for optimal mobile performance")
+end
 
 -- ══════════════════════════════════════════════════════════════════
 -- PERIODIC BAN CHECK SYSTEM (Every 5 minutes)
@@ -4265,63 +4290,39 @@ local function PreprocessFrames(frames)
 	return frames
 end
 
--- Smooth interpolation between frames using Catmull-Rom (requires 4 frames context)
--- OPTIMIZED: Uses pre-cached posVector/velVector from PreprocessFrames when available
+-- Smooth interpolation between frames using LINEAR interpolation
+-- MOBILE OPTIMIZATION: Uses linear lerp instead of Catmull-Rom for better FPS
+-- This matches PC behavior when DevicePerformance.interpolationMode == "linear"
 local function SmoothInterpolateFrames(frames, frameIdx, alpha)
 	local n = #frames
 	if n < 2 then
 		return nil, nil
 	end
 
-	-- Get 4 frames for Catmull-Rom (clamp at boundaries)
-	local i0 = math.max(1, frameIdx - 1)
-	local i1 = frameIdx
-	local i2 = math.min(n, frameIdx + 1)
-	local i3 = math.min(n, frameIdx + 2)
+	local f1, f2 = frames[frameIdx], frames[frameIdx + 1]
+	if not f1 or not f2 then
+		return nil, nil
+	end
 
-	local f0, f1, f2, f3 = frames[i0], frames[i1], frames[i2], frames[i3]
-
-	-- Interpolate position with Catmull-Rom
-	-- OPTIMIZATION: Use pre-cached posVector if available (from PreprocessFrames)
+	-- LINEAR interpolation for position (much lighter than Catmull-Rom)
 	local smoothPos = nil
-	if f0.posVector and f1.posVector and f2.posVector and f3.posVector then
-		-- Use pre-cached Vector3 (faster path)
-		smoothPos = CatmullRomVector3(f0.posVector, f1.posVector, f2.posVector, f3.posVector, alpha)
-	elseif f0.pos and f1.pos and f2.pos and f3.pos then
-		-- Fallback: Create Vector3 from table (slower path for non-preprocessed data)
-		local p0 = Vector3.new(f0.pos.x, f0.pos.y, f0.pos.z)
-		local p1 = Vector3.new(f1.pos.x, f1.pos.y, f1.pos.z)
-		local p2 = Vector3.new(f2.pos.x, f2.pos.y, f2.pos.z)
-		local p3 = Vector3.new(f3.pos.x, f3.pos.y, f3.pos.z)
-		smoothPos = CatmullRomVector3(p0, p1, p2, p3, alpha)
-	elseif f1.posVector and f2.posVector then
-		-- Use pre-cached for linear lerp
+	if f1.posVector and f2.posVector then
+		-- Use pre-cached Vector3 (fastest path)
 		smoothPos = f1.posVector:Lerp(f2.posVector, alpha)
 	elseif f1.pos and f2.pos then
-		-- Fallback to linear lerp
+		-- Fallback: Create Vector3 from table
 		local p1 = Vector3.new(f1.pos.x, f1.pos.y, f1.pos.z)
 		local p2 = Vector3.new(f2.pos.x, f2.pos.y, f2.pos.z)
 		smoothPos = p1:Lerp(p2, alpha)
 	end
 
-	-- Interpolate velocity with Catmull-Rom (smoother acceleration)
-	-- OPTIMIZATION: Use pre-cached velVector if available
+	-- LINEAR interpolation for velocity
 	local smoothVel = nil
-	if f0.velVector and f1.velVector and f2.velVector and f3.velVector then
-		-- Use pre-cached Vector3 (faster path)
-		smoothVel = CatmullRomVector3(f0.velVector, f1.velVector, f2.velVector, f3.velVector, alpha)
-	elseif f0.vel and f1.vel and f2.vel and f3.vel then
-		-- Fallback: Create Vector3 from table
-		local v0 = Vector3.new(f0.vel.x, f0.vel.y, f0.vel.z)
-		local v1 = Vector3.new(f1.vel.x, f1.vel.y, f1.vel.z)
-		local v2 = Vector3.new(f2.vel.x, f2.vel.y, f2.vel.z)
-		local v3 = Vector3.new(f3.vel.x, f3.vel.y, f3.vel.z)
-		smoothVel = CatmullRomVector3(v0, v1, v2, v3, alpha)
-	elseif f1.velVector and f2.velVector then
-		-- Use pre-cached for linear lerp
+	if f1.velVector and f2.velVector then
+		-- Use pre-cached Vector3 (fastest path)
 		smoothVel = f1.velVector:Lerp(f2.velVector, alpha)
 	elseif f1.vel and f2.vel then
-		-- Fallback to linear lerp
+		-- Fallback: Create Vector3 from table
 		local v1 = Vector3.new(f1.vel.x, f1.vel.y, f1.vel.z)
 		local v2 = Vector3.new(f2.vel.x, f2.vel.y, f2.vel.z)
 		smoothVel = v1:Lerp(v2, alpha)
@@ -5780,6 +5781,10 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 	local frameCounter = 0
 	local wasInAir = false -- Track if player was in air (for landing detection)
 	local landingFrameCount = 0 -- Frames since landing (for faster snap)
+	
+	-- PERFORMANCE: Throttle climbing animation speed adjustment (expensive operation)
+	local lastClimbAnimCheck = 0
+	local CLIMB_ANIM_CHECK_INTERVAL = 0.2 -- Only check every 0.2s (same as PC)
 
 	-- Create attachment for AlignOrientation (same as PC)
 	local cachedAtt = hrp:FindFirstChild("PlaybackAtt") or Instance.new("Attachment", hrp)
@@ -5895,7 +5900,7 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 			})
 		end
 
-		PlaybackState.connection = RunService.Stepped:Connect(function(_, dt)
+		PlaybackState.connection = RunService.Heartbeat:Connect(function(dt)
 			frameCounter = frameCounter + 1
 			if not PlaybackState.isPlaying or PlaybackState.isPaused then
 				return
@@ -6013,23 +6018,28 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 						isCurrentlyClimbing and Enum.HumanoidStateType.Climbing or Enum.HumanoidStateType.Swimming
 					)
 
-					-- Apply movement input for animation
+				-- Apply movement input for animation
 					if fA.md then
 						local moveDir = Vector3.new(fA.md.x, fA.md.y, fA.md.z)
 						hum:Move(moveDir)
 
 						-- CRITICAL: Control climbing/swimming animation speed directly via AnimationTrack
-						local animator = hum:FindFirstChildOfClass("Animator")
-						if animator then
-							local playingTracks = animator:GetPlayingAnimationTracks()
-							for _, track in ipairs(playingTracks) do
-								local animName = track.Animation and track.Animation.Name or ""
-								local animNameLower = string.lower(animName)
-								if animNameLower:find("climb") or animNameLower:find("swim") or track.IsPlaying then
-									local baseSpeed = isCurrentlyClimbing and 12 or 8
-									local targetSpeed = vel.Magnitude / baseSpeed * speed
-									targetSpeed = math.max(0.5, targetSpeed)
-									track:AdjustSpeed(targetSpeed)
+						-- PERFORMANCE: Throttled to prevent FPS drop (GetPlayingAnimationTracks is expensive)
+						local nowClimb = tick()
+						if nowClimb - lastClimbAnimCheck > CLIMB_ANIM_CHECK_INTERVAL then
+							lastClimbAnimCheck = nowClimb
+							local animator = hum:FindFirstChildOfClass("Animator")
+							if animator then
+								local playingTracks = animator:GetPlayingAnimationTracks()
+								for _, track in ipairs(playingTracks) do
+									local animName = track.Animation and track.Animation.Name or ""
+									local animNameLower = string.lower(animName)
+									if animNameLower:find("climb") or animNameLower:find("swim") or track.IsPlaying then
+										local baseSpeed = isCurrentlyClimbing and 12 or 8
+										local targetSpeed = vel.Magnitude / baseSpeed * speed
+										targetSpeed = math.max(0.5, targetSpeed)
+										track:AdjustSpeed(targetSpeed)
+									end
 								end
 							end
 						end
@@ -6461,7 +6471,7 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 			animate.Disabled = true
 		end
 
-		PlaybackState.connection = RunService.Stepped:Connect(function(_, dt)
+		PlaybackState.connection = RunService.Heartbeat:Connect(function(dt)
 			if not PlaybackState.isPlaying or PlaybackState.isPaused then
 				return
 			end

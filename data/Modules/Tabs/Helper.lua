@@ -1576,6 +1576,352 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		UIHandlers.ToggleClimbAssist = ToggleClimbAssist
 	end
 
+	-- 4.8 ANTI-WIND (SPEED-AWARE MODE)
+	-- Block wind effect with speed-adaptive control
+	-- High speed (coil) = more responsive, less momentum
+	-- Normal speed = natural momentum preserved
+	do
+		local CardAntiWind = CreateCard("ANTI-WIND", 100, 4.8)
+
+		local BtnAntiWind, AntiWindContainer = CreateFeatureButton(
+			CardAntiWind,
+			"ANTI-WIND: " .. L("off"),
+			"Speed-aware wind block (coil-friendly!)",
+			UDim2.new(0.94, 0, 0, 55),
+			UDim2.new(0.03, 0, 0, 35),
+			C_TEXT_DIM
+		)
+
+		local isAntiWind = false
+		local antiWindLoop = nil
+		
+		-- Track velocity when leaving ground to preserve jump momentum
+		local jumpStartVelocity = Vector3.new(0, 0, 0)
+		local wasOnGround = true
+		local lastGroundVelocity = Vector3.new(0, 0, 0)
+
+		-- Speed thresholds
+		local NORMAL_SPEED = 16 -- Default walkspeed
+		local HIGH_SPEED = 50 -- Coil territory
+
+		-- Cleanup function
+		local function CleanupWindObjects(rootPart)
+			if rootPart then
+				for _, child in pairs(rootPart:GetChildren()) do
+					if child.Name == "StarshipWindLock" or child.Name == "StarshipWindBlocker" or child.Name == "StarshipWindCounter" then
+						child:Destroy()
+					end
+				end
+			end
+		end
+
+		local function ToggleAntiWind(forceEnable)
+			if forceEnable ~= nil then
+				if forceEnable == isAntiWind then return end
+			end
+
+			isAntiWind = not isAntiWind
+			BtnAntiWind.Text = "ANTI-WIND: " .. (isAntiWind and L("on") or L("off"))
+			BtnAntiWind.TextColor3 = isAntiWind and C_GREEN or C_TEXT_DIM
+			BtnAntiWind.UIStroke.Color = isAntiWind and C_GREEN or C_TEXT_DIM
+			ShowFeatureToast("Anti-Wind", isAntiWind)
+
+			if isAntiWind then
+				antiWindLoop = RunService.Heartbeat:Connect(function(dt)
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChild("Humanoid")
+					local r = c and c:FindFirstChild("HumanoidRootPart")
+					
+					if not c or not h or not r then return end
+					
+					local state = h:GetState()
+					local isOnGround = state == Enum.HumanoidStateType.Running 
+						or state == Enum.HumanoidStateType.RunningNoPhysics
+						or state == Enum.HumanoidStateType.Landed
+					local isInAir = state == Enum.HumanoidStateType.Jumping 
+						or state == Enum.HumanoidStateType.Freefall
+					
+					local currentVel = r.AssemblyLinearVelocity
+					local horizontalVel = Vector3.new(currentVel.X, 0, currentVel.Z)
+					local walkSpeed = h.WalkSpeed
+					
+					-- Calculate speed factor (0 = normal speed, 1 = very high speed)
+					local speedFactor = math.clamp((walkSpeed - NORMAL_SPEED) / (HIGH_SPEED - NORMAL_SPEED), 0, 1)
+					
+					-- Track ground velocity for momentum preservation
+					if isOnGround then
+						lastGroundVelocity = horizontalVel
+						wasOnGround = true
+					end
+					
+					-- Detect jump start - save momentum
+					if wasOnGround and isInAir then
+						jumpStartVelocity = lastGroundVelocity
+						wasOnGround = false
+					end
+					
+					-- ONLY apply wind correction when IN AIR
+					if isInAir then
+						-- Get player's current input direction
+						local moveDir = h.MoveDirection
+						local inputVel = moveDir * walkSpeed
+						
+						-- SPEED-ADAPTIVE SETTINGS
+						-- At high speed: more responsive, less momentum
+						-- At normal speed: more momentum, natural feel
+						
+						-- Momentum weight: 30% at normal speed → 5% at high speed
+						local momentumWeight = 0.30 - (speedFactor * 0.25)
+						-- Input weight: 70% at normal speed → 95% at high speed
+						local inputWeight = 0.70 + (speedFactor * 0.25)
+						-- Correction speed: 15% at normal speed → 50% at high speed
+						local correctionSpeed = 0.15 + (speedFactor * 0.35)
+						-- Momentum decay when not pressing: 95% at normal → 60% at high speed
+						local momentumDecay = 0.95 - (speedFactor * 0.35)
+						
+						local targetHorizontalVel
+						
+						if moveDir.Magnitude > 0.1 then
+							-- Player is actively controlling
+							targetHorizontalVel = (jumpStartVelocity * momentumWeight) + (inputVel * inputWeight)
+						else
+							-- Player not pressing anything
+							-- At high speed, stop faster (less momentum carry)
+							targetHorizontalVel = jumpStartVelocity * momentumDecay
+							
+							-- At high speed, also decay the stored momentum faster
+							if speedFactor > 0.5 then
+								jumpStartVelocity = jumpStartVelocity * 0.9
+							end
+						end
+						
+						-- Apply correction with speed-adaptive smoothing
+						local correctedVel = horizontalVel:Lerp(targetHorizontalVel, correctionSpeed)
+						
+						-- Apply corrected velocity (keep vertical unchanged)
+						r.AssemblyLinearVelocity = Vector3.new(
+							correctedVel.X,
+							currentVel.Y,
+							correctedVel.Z
+						)
+					end
+					-- When on ground, don't interfere - let normal physics work
+				end)
+				table.insert(Connections, antiWindLoop)
+			else
+				if antiWindLoop then
+					antiWindLoop:Disconnect()
+					antiWindLoop = nil
+				end
+				-- Cleanup
+				local c = LocalPlayer.Character
+				if c then
+					local r = c:FindFirstChild("HumanoidRootPart")
+					if r then
+						CleanupWindObjects(r)
+					end
+				end
+			end
+		end
+
+		BtnAntiWind.MouseButton1Click:Connect(function()
+			ToggleAntiWind()
+		end)
+		UIHandlers.ToggleAntiWind = ToggleAntiWind
+	end
+
+	-- 4.9 LADDER MAGNET
+	-- Auto-detect nearby ladders/trusses and guide character towards them
+	-- Slows down when approaching for precise landing
+	do
+		local CardLadderMagnet = CreateCard("LADDER MAGNET", 130, 4.9)
+
+		local BtnLadderMagnet, LadderMagnetContainer = CreateFeatureButton(
+			CardLadderMagnet,
+			"LADDER MAGNET: " .. L("off"),
+			"Auto-guide to nearby ladders (great for coil!)",
+			UDim2.new(0.94, 0, 0, 55),
+			UDim2.new(0.03, 0, 0, 35),
+			C_TEXT_DIM
+		)
+
+		-- Magnet Strength Slider
+		local LblMagnetStrength = Instance.new("TextLabel", CardLadderMagnet)
+		LblMagnetStrength.Text = "STRENGTH: 50%"
+		LblMagnetStrength.Size = UDim2.new(0.35, 0, 0, 20)
+		LblMagnetStrength.Position = UDim2.new(0.03, 0, 0, 95)
+		LblMagnetStrength.BackgroundTransparency = 1
+		LblMagnetStrength.TextColor3 = C_TEXT_DIM
+		LblMagnetStrength.Font = Enum.Font.GothamBold
+		LblMagnetStrength.TextSize = 10
+		LblMagnetStrength.TextXAlignment = Enum.TextXAlignment.Left
+		RegisterTheme(LblMagnetStrength, "TextColor3", "TextDim")
+
+		local SldMagnetStrengthBg = Instance.new("TextButton", CardLadderMagnet)
+		SldMagnetStrengthBg.Text = ""
+		SldMagnetStrengthBg.Size = UDim2.new(0.55, 0, 0, 8)
+		SldMagnetStrengthBg.Position = UDim2.new(0.42, 0, 0, 101)
+		SldMagnetStrengthBg.BackgroundColor3 = C_SIDE
+		SldMagnetStrengthBg.AutoButtonColor = false
+		Instance.new("UICorner", SldMagnetStrengthBg).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldMagnetStrengthBg, "BackgroundColor3", "Side")
+
+		local magnetStrength = 50 -- Default 50%
+		local SldMagnetStrengthFill = Instance.new("Frame", SldMagnetStrengthBg)
+		SldMagnetStrengthFill.Size = UDim2.new(magnetStrength / 100, 0, 1, 0)
+		SldMagnetStrengthFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldMagnetStrengthFill).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldMagnetStrengthFill, "BackgroundColor3", "Accent")
+
+		-- Slider drag handler
+		local draggingMagnetStrength = false
+
+		SldMagnetStrengthBg.MouseButton1Down:Connect(function()
+			draggingMagnetStrength = true
+		end)
+
+		UserInputService.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				draggingMagnetStrength = false
+			end
+		end)
+
+		UserInputService.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement then
+				if draggingMagnetStrength then
+					local rx = input.Position.X - SldMagnetStrengthBg.AbsolutePosition.X
+					local sc = math.clamp(rx / SldMagnetStrengthBg.AbsoluteSize.X, 0, 1)
+					magnetStrength = math.floor(sc * 100)
+					SldMagnetStrengthFill.Size = UDim2.new(sc, 0, 1, 0)
+					LblMagnetStrength.Text = "STRENGTH: " .. magnetStrength .. "%"
+				end
+			end
+		end)
+
+		local isLadderMagnet = false
+		local ladderMagnetLoop = nil
+
+		-- Detection settings
+		local DETECT_RADIUS = 15 -- Studs to search for ladders
+		local MAGNET_RANGE = 8 -- Start magnetizing at this distance
+		local SLOW_DOWN_RANGE = 5 -- Start slowing down at this distance
+
+		-- Check if part is a ladder/truss
+		local function IsLadderPart(part)
+			if not part then return false end
+			if part:IsA("TrussPart") then return true end
+			local name = part.Name:lower()
+			return name:find("ladder") or name:find("truss") or name:find("climb") or name:find("vine") or name:find("rope")
+		end
+
+		-- Find nearest ladder
+		local function FindNearestLadder(character, rootPart)
+			local playerPos = rootPart.Position
+			local nearestLadder = nil
+			local nearestDist = math.huge
+			local nearestPos = nil
+
+			-- Search in workspace for nearby trusses
+			local parts = workspace:GetPartBoundsInRadius(playerPos, DETECT_RADIUS)
+			
+			for _, part in pairs(parts) do
+				if IsLadderPart(part) and not part:IsDescendantOf(character) then
+					local dist = (part.Position - playerPos).Magnitude
+					if dist < nearestDist then
+						nearestDist = dist
+						nearestLadder = part
+						nearestPos = part.Position
+					end
+				end
+			end
+
+			return nearestLadder, nearestPos, nearestDist
+		end
+
+		local function ToggleLadderMagnet(forceEnable)
+			if forceEnable ~= nil then
+				if forceEnable == isLadderMagnet then return end
+			end
+
+			isLadderMagnet = not isLadderMagnet
+			BtnLadderMagnet.Text = "LADDER MAGNET: " .. (isLadderMagnet and L("on") or L("off"))
+			BtnLadderMagnet.TextColor3 = isLadderMagnet and C_GREEN or C_TEXT_DIM
+			BtnLadderMagnet.UIStroke.Color = isLadderMagnet and C_GREEN or C_TEXT_DIM
+			ShowFeatureToast("Ladder Magnet", isLadderMagnet)
+
+			if isLadderMagnet then
+				ladderMagnetLoop = RunService.Heartbeat:Connect(function(dt)
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChild("Humanoid")
+					local r = c and c:FindFirstChild("HumanoidRootPart")
+					
+					if not c or not h or not r then return end
+					
+					local state = h:GetState()
+					local isInAir = state == Enum.HumanoidStateType.Jumping 
+						or state == Enum.HumanoidStateType.Freefall
+					
+					-- Only activate when in air
+					if not isInAir then return end
+					
+					-- Find nearest ladder
+					local ladder, ladderPos, distance = FindNearestLadder(c, r)
+					
+					if not ladder or distance > MAGNET_RANGE then return end
+					
+					-- Calculate magnet effect based on distance
+					-- Closer = stronger effect
+					local distanceFactor = 1 - (distance / MAGNET_RANGE)
+					local strength = (magnetStrength / 100) * distanceFactor
+					
+					local currentVel = r.AssemblyLinearVelocity
+					local currentSpeed = Vector3.new(currentVel.X, 0, currentVel.Z).Magnitude
+					
+					-- Calculate direction to ladder
+					local dirToLadder = (ladderPos - r.Position)
+					local horizontalDir = Vector3.new(dirToLadder.X, 0, dirToLadder.Z)
+					if horizontalDir.Magnitude > 0.1 then
+						horizontalDir = horizontalDir.Unit
+					else
+						return -- Already at ladder
+					end
+					
+					-- MAGNET EFFECT: Guide velocity toward ladder
+					local targetVel = horizontalDir * math.min(currentSpeed, h.WalkSpeed * 0.7)
+					
+					-- SLOW DOWN EFFECT: Reduce speed when very close
+					local slowFactor = 1
+					if distance < SLOW_DOWN_RANGE then
+						-- Closer = slower (scale from 1.0 to 0.3)
+						slowFactor = 0.3 + (0.7 * (distance / SLOW_DOWN_RANGE))
+						targetVel = targetVel * slowFactor
+					end
+					
+					-- Blend current velocity with target velocity
+					local blendedVel = Vector3.new(currentVel.X, 0, currentVel.Z):Lerp(targetVel, strength * 0.3)
+					
+					-- Apply new velocity (keep vertical unchanged)
+					r.AssemblyLinearVelocity = Vector3.new(
+						blendedVel.X,
+						currentVel.Y,
+						blendedVel.Z
+					)
+				end)
+				table.insert(Connections, ladderMagnetLoop)
+			else
+				if ladderMagnetLoop then
+					ladderMagnetLoop:Disconnect()
+					ladderMagnetLoop = nil
+				end
+			end
+		end
+
+		BtnLadderMagnet.MouseButton1Click:Connect(function()
+			ToggleLadderMagnet()
+		end)
+		UIHandlers.ToggleLadderMagnet = ToggleLadderMagnet
+	end
+
 	-- 5. QUICK BOOST (L2/R2 or A/D Control) + BUG JUMP SIMULATION
 	-- Technique: Press L2/R2 or A/D in air to get vertical boost
 	-- BUG JUMP: Press A/D + W together for 1.5x boost (works with Shift Lock ON/OFF)
