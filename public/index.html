@@ -1966,7 +1966,7 @@
                 <button class="modal-close" onclick="closePaymentModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="modal-subtitle">Karena Saweria tidak support auto-fill, silakan copy informasi berikut:</p>
+                <p class="modal-subtitle">Silakan copy informasi berikut ke Saweria:</p>
 
                 <div class="copy-section">
                     <label>1️⃣ Nominal Pembayaran:</label>
@@ -1977,26 +1977,25 @@
                 </div>
 
                 <div class="copy-section">
-                    <label>2️⃣ Pesan (WAJIB diisi persis):</label>
+                    <label>2️⃣ Pesan (Opsional tapi direkomendasikan):</label>
                     <div class="copy-box message-box">
                         <code id="modal-message">-</code>
                         <button class="copy-btn" onclick="copyToClipboard('message')">📋 Copy</button>
                     </div>
                 </div>
 
-                <div class="modal-warning">
-                    ⚠️ <strong>PENTING:</strong> Paste pesan di atas ke kolom "Pesan" di Saweria agar VIP otomatis
-                    aktif!
+                <div class="modal-info"
+                    style="background: var(--accent-3); color: var(--black); padding: 15px; margin: 20px 0; font-size: 0.9rem; border: var(--border);">
+                    ✅ <strong>KABAR BAIK:</strong> Meskipun lupa paste pesan, VIP tetap akan aktif otomatis! Sistem kami
+                    bisa mencocokkan pembayaran berdasarkan nominal & waktu.
                 </div>
 
                 <div class="modal-steps">
                     <p><strong>Langkah:</strong></p>
                     <ol>
-                        <li>Copy nominal & pesan di atas</li>
+                        <li>Copy nominal di atas</li>
                         <li>Klik "Buka Saweria" di bawah</li>
-                        <li>Paste nominal ke kolom "Nominal"</li>
-                        <li>Paste pesan ke kolom "Pesan"</li>
-                        <li>Selesaikan pembayaran</li>
+                        <li>Paste nominal, bayar</li>
                         <li>VIP aktif dalam 5 menit! 🎉</li>
                     </ol>
                 </div>
