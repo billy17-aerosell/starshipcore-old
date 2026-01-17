@@ -248,6 +248,44 @@ local function getDeviceHWID()
 		return hwid
 	end
 
+	-- Method 8: Wave executor specific
+	pcall(function()
+		-- Wave may use different HWID functions
+		if getuniqueidentifier then
+			hwid = getuniqueidentifier()
+		elseif gethid then
+			hwid = gethid()
+		elseif getdeviceid then
+			hwid = getdeviceid()
+		elseif getmachineguid then
+			hwid = getmachineguid()
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+	
+	-- Method 9: Try RbxAnalyticsService ClientId (works on most executors)
+	pcall(function()
+		local analyticsService = game:GetService("RbxAnalyticsService")
+		if analyticsService and analyticsService.GetClientId then
+			hwid = analyticsService:GetClientId()
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+	
+	-- Method 10: Try HttpService GenerateGUID (persistent per machine in some executors)
+	pcall(function()
+		if getgenv and getgenv().StarshipHWID then
+			hwid = getgenv().StarshipHWID
+		end
+	end)
+	if hwid and hwid ~= "" then
+		return hwid
+	end
+
 	-- Method 8: Fallback - Generate pseudo-HWID from user data
 	pcall(function()
 		local userId = tostring(game:GetService("Players").LocalPlayer.UserId)
