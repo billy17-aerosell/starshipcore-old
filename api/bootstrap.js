@@ -627,34 +627,26 @@ ${loaderScript}`;
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // CDN INJECTION - DISABLED to use Vercel bundle instead
-    // Bundle mode hides module names from HTTP spy (single request)
-    // Re-enable later if CDN bundle endpoint is added
+    // BUNDLE KEY INJECTION - Required for decrypting static bundle
+    // Key is only sent to authenticated users via bootstrap/loader
     // ═══════════════════════════════════════════════════════════════
-    let cdnInjection = "";
-    // CDN disabled - using Vercel bundle for security (hides module names)
-    // if (isCDNEnabled()) {
-    //   const cdnToken = generateCDNToken("bootstrap", "pc");
-    //   if (cdnToken) {
-    //     cdnInjection = `do
-    // -- [CDN] Cloudflare CDN enabled for PC modules
-    // local cdnConfig = {}
-    // cdnConfig.url = "${CDN_BASE_URL}"
-    // cdnConfig.token = "${cdnToken}"
-    // cdnConfig.enabled = true
-    // _G.StarshipCDN = cdnConfig
-    // end
-    // `;
-    //     console.log(`[CDN] Token injected via bootstrap`);
-    //   }
-    // }
+    let bundleKeyInjection = "";
+    const bundleKey = process.env.BUNDLE_KEY || "";
+    if (bundleKey) {
+      bundleKeyInjection = `-- [BUNDLE] Server-side key injection
+_G.StarshipBundleKey = "${bundleKey}"
+`;
+      console.log(`[Bundle] Key injected via bootstrap`);
+    } else {
+      console.warn("[Bundle] BUNDLE_KEY not configured in environment!");
+    }
 
     // Inject server mode config at the top (before obfuscated code)
     const configuredScript = `-- StarshipCore PC v3.0
 _G.StarshipServerMode = true
 _G.StarshipServerURL = "https://starship-core.my.id"
 
-${cdnInjection}${loaderScript}`;
+${bundleKeyInjection}${loaderScript}`;
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");

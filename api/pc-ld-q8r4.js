@@ -892,7 +892,7 @@ export default async function handler(req, res) {
 }
 
 // Helper function to serve loader script
-// For PC: Injects CDN token if CDN is enabled
+// Injects bundle key for authenticated users
 function serveLoaderScript(res, config, accessType, userType, userId = null) {
   try {
     const loaderPath = path.join(process.cwd(), "protected", config.loaderFile);
@@ -904,28 +904,23 @@ function serveLoaderScript(res, config, accessType, userType, userId = null) {
 
     let loaderScript = fs.readFileSync(loaderPath, "utf8");
 
-    // For PC platform: CDN DISABLED to use Vercel bundle mode
-    // Bundle mode hides module names from HTTP spy
     const isPlatformPC = !config.label.includes("Mobile");
 
-    // CDN disabled - using Vercel bundle for security
-    // if (isPlatformPC && isCDNEnabled() && userId) {
-    //   const cdnToken = generateCDNToken(userId, "pc");
-    //   if (cdnToken) {
-    //     const cdnInjection = `do
-    // -- [CDN] Cloudflare CDN enabled for PC modules
-    // local cdnConfig = {}
-    // cdnConfig.url = "${CDN_BASE_URL}"
-    // cdnConfig.token = "${cdnToken}"
-    // cdnConfig.enabled = true
-    // _G.StarshipCDN = cdnConfig
-    // print("[CDN] _G.StarshipCDN injected successfully")
-    // end
-    // `;
-    //     loaderScript = cdnInjection + loaderScript;
-    //     console.log(`[CDN] Token injected for PC user: ${userId}`);
-    //   }
-    // }
+    // Inject bundle key for PC users (required to decrypt bundle)
+    if (isPlatformPC) {
+      const bundleKey = process.env.BUNDLE_KEY || "";
+      if (bundleKey) {
+        const keyInjection = `do
+-- [BUNDLE] Server-side key injection
+_G.StarshipBundleKey = "${bundleKey}"
+end
+`;
+        loaderScript = keyInjection + loaderScript;
+        console.log(`[Bundle] Key injected for user: ${userId}`);
+      } else {
+        console.warn("[Bundle] BUNDLE_KEY not configured in environment!");
+      }
+    }
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
