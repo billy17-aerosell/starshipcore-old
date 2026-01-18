@@ -312,17 +312,17 @@ end
 -- ══════════════════════════════════════════════════════════════════
 -- BUNDLE LOADING - Single encrypted request for all modules!
 -- SECURITY: Hides individual module names from HTTP spy tools
+-- Uses pre-generated static bundle (CDN cached) for fast loading
 -- ══════════════════════════════════════════════════════════════════
 local function downloadBundle(statusCallback)
-	local userId = tostring(game:GetService("Players").LocalPlayer.UserId)
 	local totalFiles = #MODULES + #TABS
 	
 	if statusCallback then
 		statusCallback("Connecting to server...", 0.1)
 	end
 	
-	-- Build bundle URL (uses get-module endpoint with bundle param)
-	local bundleUrl = SERVER_URL .. "/api/get-module?bundle=true&userId=" .. userId
+	-- Use pre-generated static bundle (CDN cached, much faster!)
+	local bundleUrl = SERVER_URL .. "/b/pc.json"
 	
 	if statusCallback then
 		statusCallback("Downloading components...", 0.2)
