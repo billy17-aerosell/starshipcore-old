@@ -1,0 +1,85 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Sync Modules to Cloudflare R2 CDN
+# 
+# This workflow automatically uploads PC modules to R2 when changes are pushed.
+# Modules are used by StarshipCore for faster loading via Cloudflare CDN.
+# ═══════════════════════════════════════════════════════════════════════════
+
+name: Sync Modules to R2 CDN
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      # Only trigger when module files change
+      - 'data/Modules/**'
+      - 'data/StarshipCore.lua'
+      - 'data/StarshipCore-obfuscated.lua'
+
+  # Allow manual trigger from GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  sync-to-r2:
+    name: Upload to Cloudflare R2
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wrangler CLI
+        run: npm install -g wrangler
+
+      - name: Sync Modules to R2
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          echo "🚀 Starting module sync to R2..."
+          
+          # Upload main modules to pc/Modules/
+          echo "📦 Uploading Modules..."
+          for file in data/Modules/*.lua; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              echo "  → Uploading $filename"
+              wrangler r2 object put "$R2_BUCKET_NAME/pc/Modules/$filename" --file="$file" --content-type="text/plain"
+            fi
+          done
+          
+          # Upload Tabs to pc/Modules/Tabs/
+          echo "📦 Uploading Tabs..."
+          for file in data/Modules/Tabs/*.lua; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              echo "  → Uploading Tabs/$filename"
+              wrangler r2 object put "$R2_BUCKET_NAME/pc/Modules/Tabs/$filename" --file="$file" --content-type="text/plain"
+            fi
+          done
+          
+          # Upload main StarshipCore script (optional - if serving from CDN)
+          if [ -f "data/StarshipCore.lua" ]; then
+            echo "📦 Uploading StarshipCore.lua..."
+            wrangler r2 object put "$R2_BUCKET_NAME/pc/StarshipCore.lua" --file="data/StarshipCore.lua" --content-type="text/plain"
+          fi
+          
+          echo "✅ All modules synced to R2 CDN!"
+
+      - name: Summary
+        run: |
+          echo "## ✅ R2 Sync Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Modules have been uploaded to Cloudflare R2 CDN." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Uploaded Files:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`pc/Modules/*.lua\` - Main modules" >> $GITHUB_STEP_SUMMARY
+          echo "- \`pc/Modules/Tabs/*.lua\` - Tab modules" >> $GITHUB_STEP_SUMMARY
+          echo "- \`pc/StarshipCore.lua\` - Main script" >> $GITHUB_STEP_SUMMARY
