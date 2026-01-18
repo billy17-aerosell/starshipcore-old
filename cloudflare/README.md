@@ -6,6 +6,7 @@ Repo ini sudah support mode ini:
 - Vercel akan meng-inject `_G.StarshipCDN` (baseUrl + token) ke loader **setelah auth**.
 - `Loader.lua` / `protected/Loader-obfuscated.lua` akan download bundle dari Cloudflare jika token tersedia.
 - Akses langsung `https://starship-core.my.id/b/pc.json` akan **diblock** jika `CDN_PC_URL` + `CDN_SECRET_KEY` sudah di-set di Vercel.
+  (Bundle route diproteksi tanpa menambah serverless function baru; tetap aman untuk Hobby plan.)
 
 ### 1) Deploy Worker
 

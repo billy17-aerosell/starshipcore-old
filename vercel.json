@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/b/pc.json",
-      "destination": "/api/bundle-pc"
+      "destination": "/api/pc-ld-q8r4?action=bundle"
     },
     {
       "source": "/api/mobile-whitelist-manager",

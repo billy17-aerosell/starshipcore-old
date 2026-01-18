@@ -439,6 +439,33 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // PUBLIC BUNDLE ENDPOINT (NO EXTRA SERVERLESS FUNCTION)
+  // Reached via vercel.json rewrite: /b/pc.json -> /api/pc-ld-q8r4?action=bundle
+  // - If Cloudflare CDN is configured, block direct public access to the bundle.
+  // - If CDN is NOT configured, serve local bundle (fallback).
+  // ══════════════════════════════════════════════════════════════════
+  if (req.query.action === "bundle") {
+    const cdnEnabled = !!(process.env.CDN_SECRET_KEY && process.env.CDN_PC_URL);
+    if (cdnEnabled) {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(404).json({ error: "NOT_FOUND" });
+    }
+
+    const bundlePath = path.join(process.cwd(), "public", "b", "pc.json");
+    if (!fs.existsSync(bundlePath)) {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(404).json({ error: "NOT_FOUND" });
+    }
+
+    const content = fs.readFileSync(bundlePath, "utf8");
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    return res.status(200).send(content);
+  }
+
   // Get parameters
   const { key, userId, platform: platformParam, hwid } = req.query;
   const platform = platformParam === "mobile" ? "mobile" : "pc";
