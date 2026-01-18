@@ -49,12 +49,38 @@ async function generateBundle() {
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
     if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
 
-    // Generate encryption key (32 chars hex)
-    const bundleKey = generateBundleKey();
+    // ══════════════════════════════════════════════════════════════════
+    // REUSE EXISTING KEY - No need to update Vercel every time!
+    // Priority: 1. ENV var  2. Existing file  3. Generate new
+    // ══════════════════════════════════════════════════════════════════
+    const keyFile = path.join(outputDir, "bundle-key.txt");
+    let bundleKey = null;
+    let keySource = "";
+
+    // Priority 1: Check environment variable
+    if (process.env.BUNDLE_KEY && process.env.BUNDLE_KEY.length === 32) {
+        bundleKey = process.env.BUNDLE_KEY;
+        keySource = "environment variable";
+    }
+    // Priority 2: Check existing key file
+    else if (fs.existsSync(keyFile)) {
+        const keyContent = fs.readFileSync(keyFile, "utf8");
+        const match = keyContent.match(/BUNDLE_KEY=([a-f0-9]{32})/i);
+        if (match) {
+            bundleKey = match[1];
+            keySource = "existing bundle-key.txt";
+        }
+    }
+    // Priority 3: Generate new key (first time only)
+    if (!bundleKey) {
+        bundleKey = generateBundleKey();
+        keySource = "newly generated (SET THIS IN VERCEL!)";
+    }
+
     const encKey = "S" + bundleKey + "X";
 
     console.log(`🔐 Bundle Key: ${bundleKey}`);
-    console.log(`   (This key must be stored in environment variable)\n`);
+    console.log(`   Source: ${keySource}\n`);
 
     const bundleData = {
         v: 3,  // Version 3 = Server-side key
@@ -112,8 +138,8 @@ async function generateBundle() {
     fs.writeFileSync(bundleFile, bundleJson);
 
     // Save key to separate file (for backup/reference)
-    const keyFile = path.join(outputDir, "bundle-key.txt");
-    fs.writeFileSync(keyFile, `BUNDLE_KEY=${bundleKey}\n\nAdd this to Vercel Environment Variables!`);
+    // keyFile already declared above, just reuse it
+    fs.writeFileSync(keyFile, `BUNDLE_KEY=${bundleKey}\n\nThis key should match your Vercel Environment Variable.`);
 
     console.log("\n" + "═".repeat(50));
     console.log("📊 Bundle Statistics:");
@@ -125,12 +151,17 @@ async function generateBundle() {
 
     console.log("\n✅ Bundle generated successfully!");
     console.log(`📁 Bundle: ${bundleFile}`);
-    console.log(`🔑 Key saved to: ${keyFile}`);
+    console.log(`🔑 Key: ${keyFile}`);
 
-    console.log("\n" + "⚠️".repeat(25));
-    console.log("⚠️  IMPORTANT: Add this to Vercel Environment Variables:");
-    console.log(`    BUNDLE_KEY = ${bundleKey}`);
-    console.log("⚠️".repeat(25));
+    // Only show warning if key was newly generated
+    if (keySource.includes("newly generated")) {
+        console.log("\n" + "⚠️".repeat(25));
+        console.log("⚠️  FIRST TIME SETUP: Add this to Vercel Environment Variables:");
+        console.log(`    BUNDLE_KEY = ${bundleKey}`);
+        console.log("⚠️".repeat(25));
+    } else {
+        console.log("\n✅ Using existing BUNDLE_KEY - No Vercel update needed!");
+    }
 }
 
 generateBundle().catch(console.error);
