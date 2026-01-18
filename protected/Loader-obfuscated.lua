@@ -1914,8 +1914,20 @@ local function main()
 		end
 	end
 
-	-- Now load the main script
-	func()
+	-- ══════════════════════════════════════════════════════════════════
+	-- SMOOTH TRANSITION: Start main script immediately for seamless UX
+	-- Main UI will start rendering while any remaining transitions complete
+	-- ══════════════════════════════════════════════════════════════════
+	if DEV_MODE then
+		warn("[Starship] ✅ Starting main script...")
+	end
+	
+	-- Start main script in protected call
+	local mainSuccess, mainError = pcall(func)
+	if not mainSuccess then
+		warn("[Starship] ⚠️ Main script error: " .. tostring(mainError))
+	end
+
 
 	-- ══════════════════════════════════════════════════════════════════
 	-- CHECK FOR PENDING ANNOUNCEMENTS (Compensation after maintenance)
