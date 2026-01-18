@@ -1399,8 +1399,13 @@ local function main()
 			return
 		end
 
-		-- Check if authentication was successful (should return loader.lua script or error)
-		if authResponse:find("error%(") or authResponse:find("ERROR:") then
+		-- Check if authentication was successful
+		-- Error responses start with "-- ERROR:" or "error(" at the beginning
+		-- Success responses start with "local" or "--" (the Loader script)
+		local trimmed = authResponse:match("^%s*(.-)") or authResponse
+		local isError = trimmed:match("^error%(") or trimmed:match("^%-%- ERROR:")
+		
+		if isError then
 			if loaderGui then
 				loaderGui:Destroy()
 			end
