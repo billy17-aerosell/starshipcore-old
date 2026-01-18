@@ -19,18 +19,22 @@ const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
 // ═══════════════════════════════════════════════════════════════════
 const CDN_SECRET_KEY = process.env.CDN_SECRET_KEY || "";
 const CDN_BASE_URL = process.env.CDN_PC_URL || "";
-const CDN_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+const CDN_TOKEN_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes (shorter for security)
+const CDN_TOKEN_REDIS_TTL = 900; // 15 minutes in seconds
 
 /**
  * Generate signed token for Cloudflare CDN access (PC only)
+ * SINGLE-USE: Token is saved to Redis and can only be used once
  */
-function generateCDNToken(userId, platform) {
+async function generateCDNToken(userId, platform) {
   if (!CDN_SECRET_KEY) {
     return null;
   }
 
   const exp = Date.now() + CDN_TOKEN_EXPIRY_MS;
-  const dataToSign = `${userId}:${platform}:${exp}`;
+  // Generate unique token ID for single-use tracking
+  const tokenId = crypto.randomBytes(16).toString("hex");
+  const dataToSign = `${userId}:${platform}:${exp}:${tokenId}`;
 
   const sig = crypto
     .createHmac("sha256", CDN_SECRET_KEY)
@@ -41,8 +45,27 @@ function generateCDNToken(userId, platform) {
     userId,
     platform,
     exp,
+    tokenId, // Unique ID for single-use verification
     sig
   })).toString("base64");
+
+  // Save token to Redis for single-use verification
+  try {
+    const redisClient = await getRedis();
+    if (redisClient) {
+      const tokenKey = `cdn_token:${tokenId}`;
+      await redisClient.set(tokenKey, JSON.stringify({
+        userId,
+        platform,
+        exp,
+        createdAt: Date.now()
+      }), { ex: CDN_TOKEN_REDIS_TTL });
+      console.log(`[CDN] Single-use token saved: ${tokenId.substring(0, 8)}... for user ${userId}`);
+    }
+  } catch (error) {
+    console.error("[CDN] Failed to save token to Redis:", error.message);
+    // Continue anyway - token signature is still valid
+  }
 
   return token;
 }
@@ -1513,14 +1536,14 @@ async function handlePCSuccess(
   // ═══════════════════════════════════════════════════════════════════
   let cdnConfig = null;
   if (isCDNEnabled()) {
-    const cdnToken = generateCDNToken(userId, "pc");
+    const cdnToken = await generateCDNToken(userId, "pc");
     if (cdnToken) {
       cdnConfig = {
         enabled: true,
         baseUrl: CDN_BASE_URL,
         token: cdnToken,
       };
-      console.log(`[CDN] Token generated for PC user: ${userId}`);
+      console.log(`[CDN] Single-use token generated for PC user: ${userId}`);
     }
   }
   
@@ -1611,14 +1634,14 @@ async function servePCScript(res, userId, userData, now, remainingDays) {
   // CDN CONFIG: Generate signed token for Cloudflare CDN access
   let cdnConfig = null;
   if (isCDNEnabled()) {
-    const cdnToken = generateCDNToken(userId, "pc");
+    const cdnToken = await generateCDNToken(userId, "pc");
     if (cdnToken) {
       cdnConfig = {
         enabled: true,
         baseUrl: CDN_BASE_URL,
         token: cdnToken,
       };
-      console.log(`[CDN] Token generated for PC user (file-based): ${userId}`);
+      console.log(`[CDN] Single-use token generated for PC user (file-based): ${userId}`);
     }
   }
   
