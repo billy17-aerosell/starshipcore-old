@@ -644,7 +644,6 @@ cdnConfig.url = "${CDN_BASE_URL}"
 cdnConfig.token = "${cdnToken}"
 cdnConfig.enabled = true
 _G.StarshipCDN = cdnConfig
-print("[CDN] _G.StarshipCDN injected from bootstrap")
 end
 `;
         console.log(`[CDN] Token injected via bootstrap`);
