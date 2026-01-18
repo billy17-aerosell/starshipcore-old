@@ -555,6 +555,7 @@ local function downloadModules(statusCallback)
 	
 	local MAX_CONCURRENT = 4  -- Max concurrent downloads
 	local activeDownloads = 0
+	local loadedCount = 0
 	
 	local function onModuleComplete(moduleName, success)
 		pending = pending - 1
@@ -562,8 +563,10 @@ local function downloadModules(statusCallback)
 		if success then
 			downloaded = downloaded + 1
 		end
+		loadedCount = loadedCount + 1
 		if statusCallback then
-			statusCallback("Loading: " .. moduleName, (totalFiles - pending) / totalFiles)
+			-- Hide real module name for security
+			statusCallback("Loading components... [" .. loadedCount .. "/" .. totalFiles .. "]", loadedCount / totalFiles)
 		end
 	end
 	
