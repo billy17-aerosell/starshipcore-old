@@ -1,4 +1,4 @@
--- Fun Tab Module (R2 Sync: 2026-01-18)
+-- Fun Tab Module (Updated: 2026-01-18 08:26)
 local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
 	local Players = game:GetService("Players")
 	local RunService = game:GetService("RunService")
