@@ -14,6 +14,46 @@ import { createSecurePayload, generateHoneypot, isHoneypotTriggered, generateAES
 // Event Code System API (from environment variable for security)
 const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
 
+// ═══════════════════════════════════════════════════════════════════
+// CLOUDFLARE CDN CONFIGURATION (PC ONLY)
+// ═══════════════════════════════════════════════════════════════════
+const CDN_SECRET_KEY = process.env.CDN_SECRET_KEY || "";
+const CDN_BASE_URL = process.env.CDN_PC_URL || "";
+const CDN_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Generate signed token for Cloudflare CDN access (PC only)
+ */
+function generateCDNToken(userId, platform) {
+  if (!CDN_SECRET_KEY) {
+    return null;
+  }
+
+  const exp = Date.now() + CDN_TOKEN_EXPIRY_MS;
+  const dataToSign = `${userId}:${platform}:${exp}`;
+
+  const sig = crypto
+    .createHmac("sha256", CDN_SECRET_KEY)
+    .update(dataToSign)
+    .digest("base64");
+
+  const token = Buffer.from(JSON.stringify({
+    userId,
+    platform,
+    exp,
+    sig
+  })).toString("base64");
+
+  return token;
+}
+
+/**
+ * Check if CDN is configured for PC modules
+ */
+function isCDNEnabled() {
+  return CDN_SECRET_KEY && CDN_BASE_URL;
+}
+
 // Check if user has active event access from Google Sheets
 async function checkEventAccess(userId) {
   // Skip if EVENT_CODE_API not configured
@@ -1467,6 +1507,23 @@ async function handlePCSuccess(
   // ═══════════════════════════════════════════════════════════════════
   const bundleKey = process.env.BUNDLE_KEY || null;
   
+  // ═══════════════════════════════════════════════════════════════════
+  // CDN CONFIG: Generate signed token for Cloudflare CDN access
+  // Token allows downloading encrypted bundle from CDN after auth
+  // ═══════════════════════════════════════════════════════════════════
+  let cdnConfig = null;
+  if (isCDNEnabled()) {
+    const cdnToken = generateCDNToken(userId, "pc");
+    if (cdnToken) {
+      cdnConfig = {
+        enabled: true,
+        baseUrl: CDN_BASE_URL,
+        token: cdnToken,
+      };
+      console.log(`[CDN] Token generated for PC user: ${userId}`);
+    }
+  }
+  
   // Create response data (XOR encrypted, like mobile style)
   const responseData = {
     status: "success",
@@ -1488,6 +1545,8 @@ async function handlePCSuccess(
     announcement: announcement,
     // SERVER-SIDE KEY: Bundle decryption key (only sent after auth!)
     bundleKey: bundleKey,
+    // CDN CONFIG: For downloading bundle from Cloudflare (after auth)
+    cdn: cdnConfig,
   };
 
   // Sign the payload to prevent tampering (userId bound)
@@ -1549,6 +1608,20 @@ async function servePCScript(res, userId, userData, now, remainingDays) {
   // SERVER-SIDE KEY: Also include bundle key for file-based whitelist
   const bundleKey = process.env.BUNDLE_KEY || null;
   
+  // CDN CONFIG: Generate signed token for Cloudflare CDN access
+  let cdnConfig = null;
+  if (isCDNEnabled()) {
+    const cdnToken = generateCDNToken(userId, "pc");
+    if (cdnToken) {
+      cdnConfig = {
+        enabled: true,
+        baseUrl: CDN_BASE_URL,
+        token: cdnToken,
+      };
+      console.log(`[CDN] Token generated for PC user (file-based): ${userId}`);
+    }
+  }
+  
   return res.status(200).json({
     status: "success",
     role: userData.role || "VIP",
@@ -1560,5 +1633,7 @@ async function servePCScript(res, userId, userData, now, remainingDays) {
     blob: base64Blob,
     // SERVER-SIDE KEY: Bundle decryption key (only sent after auth!)
     bundleKey: bundleKey,
+    // CDN CONFIG: For downloading bundle from Cloudflare (after auth)
+    cdn: cdnConfig,
   });
 }

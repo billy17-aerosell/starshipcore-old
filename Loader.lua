@@ -1539,29 +1539,14 @@ local function main()
 	task.wait(0.2)
 
 	-- ══════════════════════════════════════════════════════════════════
-	-- SERVER-SIDE KEY SYSTEM v2: Two-Phase Loading
-	-- Phase 1: Download bundle (without key/decryption)
-	-- Phase 2: Auth -> Get bundleKey from server -> Decrypt
-	-- This prevents bundle cracking since key is server-side only!
+	-- SERVER-SIDE KEY + CDN TOKEN SYSTEM v3
+	-- Flow: Auth first → Get CDN token + bundleKey → Download bundle → Decrypt
+	-- This ensures bundle can only be downloaded with valid CDN token!
 	-- ══════════════════════════════════════════════════════════════════
-	
-	-- 2. Phase 1: Download Bundle (encrypted, no key yet)
-	updateStatus("Downloading components...", 0.2)
-	local bundleDownloaded = downloadBundleRaw(function(text, progress)
-		updateStatus(text, 0.2 + (progress * 0.2))
-	end)
-	
-	if not bundleDownloaded then
-		if loaderGui then
-			loaderGui:Destroy()
-		end
-		showError("Failed to download components. Please try again.")
-		return
-	end
 
-	-- 3. Secure Login & Download Script
+	-- 2. Secure Login & Download Script
 	-- 🔒 Auto-detect User ID (cannot be hardcoded by users!)
-	updateStatus("Authenticating with Secure Server...", 0.45)
+	updateStatus("Authenticating with Secure Server...", 0.2)
 	task.wait(0.3)
 
 	-- Auto-detect userId from current logged-in player
@@ -1570,47 +1555,39 @@ local function main()
 	-- Detect device HWID for binding
 	local deviceHWID = getDeviceHWID()
 
-	-- SKIP second API call if CDN is enabled (already authenticated via initial loadstring)
-	local authResponse = nil
-	local authSuccess = true
+	-- Standard mode: Call secure loader for authentication & webhook notification
+	-- SECURITY: Using obscured endpoint name with HWID
+	local authUrl = SERVER_URL .. "/api/pc-ld-q8r4?userId=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
+	local authSuccess, authResponse = pcall(function()
+		return game:HttpGet(authUrl)
+	end)
 	
-	if _G.StarshipCDN and _G.StarshipCDN.enabled then
-		-- CDN mode: Authentication was already done, skip redundant API call
-		authResponse = "-- CDN mode: Already authenticated"
-	else
-		-- Standard mode: Call secure loader for authentication & webhook notification
-		-- SECURITY: Using obscured endpoint name with HWID
-		local authUrl = SERVER_URL .. "/api/pc-ld-q8r4?userId=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
-		authSuccess, authResponse = pcall(function()
-			return game:HttpGet(authUrl)
-		end)
-		
-		if not authSuccess then
-			if loaderGui then
-				loaderGui:Destroy()
-			end
-			showError("Connection Failed: Server Unreachable")
-			return
+	if not authSuccess then
+		if loaderGui then
+			loaderGui:Destroy()
 		end
+		showError("Connection Failed: Server Unreachable")
+		return
+	end
 
-		-- Check if authentication was successful
-		-- Error responses start with "-- ERROR:" or "error(" at the beginning
-		-- Success responses start with "local" or "--" (the Loader script)
-		local trimmed = authResponse:match("^%s*(.-)") or authResponse
-		local isError = trimmed:match("^error%(") or trimmed:match("^%-%- ERROR:")
-		
-		if isError then
-			if loaderGui then
-				loaderGui:Destroy()
-			end
-			-- Extract error message from Lua error string
-			local errorMsg = authResponse:match('error%("(.-)"%)')
-			showError(errorMsg or "Authentication Failed")
-			return
+	-- Check if authentication was successful
+	-- Error responses start with "-- ERROR:" or "error(" at the beginning
+	-- Success responses start with "local" or "--" (the Loader script)
+	local trimmed = authResponse:match("^%s*(.-)") or authResponse
+	local isError = trimmed:match("^error%(") or trimmed:match("^%-%- ERROR:")
+	
+	if isError then
+		if loaderGui then
+			loaderGui:Destroy()
 		end
-	end -- Close CDN check if-else
+		-- Extract error message from Lua error string
+		local errorMsg = authResponse:match('error%("(.-)"%)')
+		showError(errorMsg or "Authentication Failed")
+		return
+	end
 
-	-- STEP 2: Now call /api/load to get the encrypted script + bundleKey (with HWID)
+	-- 3. Call /api/load to get the encrypted script + bundleKey + CDN config (with HWID)
+	updateStatus("Loading secure data...", 0.35)
 	local targetUrl = SERVER_URL .. "/api/load?user=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
 
 	local success, response = pcall(function()
@@ -1660,8 +1637,37 @@ local function main()
 		return
 	end
 
+	-- ══════════════════════════════════════════════════════════════════
+	-- 4. DOWNLOAD BUNDLE WITH CDN TOKEN (after auth success)
+	-- CDN config is received from /api/load response
+	-- ══════════════════════════════════════════════════════════════════
+	if data.cdn and data.cdn.enabled then
+		-- Set CDN config for bundle download
+		_G.StarshipCDN = {
+			enabled = true,
+			baseUrl = data.cdn.baseUrl,
+			token = data.cdn.token,
+		}
+		if DEV_MODE then
+			warn("[Starship] CDN enabled, using signed token for bundle download")
+		end
+	end
+	
+	updateStatus("Downloading components...", 0.45)
+	local bundleDownloaded = downloadBundleRaw(function(text, progress)
+		updateStatus(text, 0.45 + (progress * 0.2))
+	end)
+	
+	if not bundleDownloaded then
+		if loaderGui then
+			loaderGui:Destroy()
+		end
+		showError("Failed to download components. Please try again.")
+		return
+	end
+
 	-- 5. Decrypt Dynamic Payload
-	updateStatus("Decrypting Secure Payload...", 0.8)
+	updateStatus("Decrypting Secure Payload...", 0.7)
 
 	local encryptedBlob = data.blob
 	local dynamicKey = data.key
@@ -1676,20 +1682,20 @@ local function main()
 	end
 
 	-- Decrypt using XOR (simple, compatible with all executors)
-	local success, result = pcall(function()
+	local decryptSuccess, decryptResult = pcall(function()
 		local encryptedString = base64Decode(encryptedBlob)
 		return xorEncrypt(encryptedString, dynamicKey)
 	end)
 
-	if not success or not result then
+	if not decryptSuccess or not decryptResult then
 		if loaderGui then
 			loaderGui:Destroy()
 		end
-		showError("Decryption Error: " .. tostring(result or "Failed"))
+		showError("Decryption Error: " .. tostring(decryptResult or "Failed"))
 		return
 	end
 
-	decryptedCode = result
+	decryptedCode = decryptResult
 
 	-- Hapus BOM character jika ada (U+feff) agar loadstring tidak error
 	if string.byte(decryptedCode, 1, 3) == "\239\187\191" then
@@ -1704,17 +1710,17 @@ local function main()
 	}
 
 	-- ══════════════════════════════════════════════════════════════════
-	-- SERVER-SIDE KEY: Phase 2 - Decrypt bundle with key from server
+	-- 6. SERVER-SIDE KEY: Decrypt bundle with key from server
 	-- Key was NOT in bundle - only received after successful auth!
 	-- ══════════════════════════════════════════════════════════════════
 	local bundleKey = data.bundleKey
 	if bundleKey and bundleKey ~= "" then
-		updateStatus("Decrypting components with server key...", 0.82)
-		local decryptSuccess = decryptBundleWithKey(bundleKey, function(text, progress)
-			updateStatus(text, 0.82 + (progress * 0.08))
+		updateStatus("Decrypting components with server key...", 0.75)
+		local bundleDecryptSuccess = decryptBundleWithKey(bundleKey, function(text, progress)
+			updateStatus(text, 0.75 + (progress * 0.15))
 		end)
 		
-		if not decryptSuccess then
+		if not bundleDecryptSuccess then
 			if loaderGui then
 				loaderGui:Destroy()
 			end
