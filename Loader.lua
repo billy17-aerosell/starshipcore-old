@@ -59,6 +59,108 @@ local function base64Decode(data)
 end
 
 -- ══════════════════════════════════════════════════════════════════
+-- SECURITY: HTTP SPY DETECTION
+-- Detects common HTTP spy tools and blocks execution
+-- ══════════════════════════════════════════════════════════════════
+local function detectHttpSpy()
+	local detected = false
+	local detectionReason = nil
+	
+	-- Check 1: Common HTTP spy global variables
+	local suspiciousGlobals = {
+		"HttpSpy", "httpspy", "HTTP_SPY", "Httpspy",
+		"SimpleSpy", "simplespy", "SIMPLE_SPY",
+		"RemoteSpy", "remotespy", "REMOTE_SPY",
+		"Dex", "dex", "DEX",
+		"InfYield", "infyield",
+		"spy", "Spy", "SPY",
+		"logs", "Logs", "httpLogs", "HttpLogs",
+	}
+	
+	for _, name in ipairs(suspiciousGlobals) do
+		-- Check _G
+		if rawget(_G, name) then
+			detected = true
+			detectionReason = "suspicious_global"
+			break
+		end
+		-- Check getgenv if available
+		pcall(function()
+			if getgenv and rawget(getgenv(), name) then
+				detected = true
+				detectionReason = "suspicious_genv"
+			end
+		end)
+		-- Check getrenv if available
+		pcall(function()
+			if getrenv and rawget(getrenv(), name) then
+				detected = true
+				detectionReason = "suspicious_renv"
+			end
+		end)
+		if detected then break end
+	end
+	
+	-- Check 2: HTTP function hooks (compare function identity)
+	if not detected then
+		pcall(function()
+			local originalHttpGet = game.HttpGet
+			local currentHttpGet = game:GetService("HttpService").HttpGet or game.HttpGet
+			-- Check if function has been wrapped/hooked
+			if type(debug) == "table" and debug.info then
+				local info = debug.info(game.HttpGet, "s")
+				if info and (info:find("spy") or info:find("hook") or info:find("intercept")) then
+					detected = true
+					detectionReason = "hooked_function"
+				end
+			end
+		end)
+	end
+	
+	-- Check 3: Check for request/http_request modifications
+	if not detected then
+		pcall(function()
+			if request then
+				local reqStr = tostring(request)
+				if reqStr:find("spy") or reqStr:find("hook") or reqStr:find("log") then
+					detected = true
+					detectionReason = "modified_request"
+				end
+			end
+		end)
+	end
+	
+	-- Check 4: Look for common spy UI elements
+	if not detected then
+		pcall(function()
+			local playerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+			if playerGui then
+				for _, gui in ipairs(playerGui:GetChildren()) do
+					local name = gui.Name:lower()
+					if name:find("spy") or name:find("httplog") or name:find("remotelog") or name:find("dex") or name:find("simplespy") then
+						detected = true
+						detectionReason = "spy_ui_detected"
+						break
+					end
+				end
+			end
+		end)
+	end
+	
+	-- Check 5: Check for hookfunction/hookmetamethod
+	if not detected then
+		pcall(function()
+			if _G.__HTTPSPY_HOOKED or _G.__SPY_ACTIVE or _G.__LOGGING_HTTP then
+				detected = true
+				detectionReason = "spy_flag_detected"
+			end
+		end)
+	end
+	
+	return detected, detectionReason
+end
+
+-- ══════════════════════════════════════════════════════════════════
 -- SECURITY v3.0: SERVER-SIDE Token Verification
 -- NO SECRET KEYS STORED ON CLIENT - Server validates tokens!
 -- XOR Encryption for maximum executor compatibility
@@ -1529,6 +1631,19 @@ local function main()
 	if not isOnline and statusData then
 		showMaintenanceUI(statusData)
 		return -- Stop execution if maintenance/offline
+	end
+
+	-- 🛡️ HTTP SPY DETECTION - Block if spy tools detected
+	local spyDetected, spyReason = detectHttpSpy()
+	if spyDetected then
+		warn("[StarshipCore] ⚠️ Security check failed")
+		-- Show generic error (don't reveal detection method)
+		showError("Security Error: Unauthorized tools detected.\nPlease close any debugging tools and try again.")
+		-- Log to console for debugging (optional)
+		if DEV_MODE then
+			warn("[Starship] HTTP Spy detected: " .. tostring(spyReason))
+		end
+		return -- Stop execution
 	end
 
 	local loaderGui, updateStatus = createLoadingUI()
