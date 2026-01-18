@@ -404,14 +404,18 @@ local function downloadBundle(statusCallback)
 		local key = "m" .. i
 		if bundleData.m[key] then
 			local content = xorDecrypt(bundleData.m[key], encKey)
-			local success, result = pcall(function()
-				return loadstring(content)()
-			end)
-			if success and result then
-				LoadedModules[moduleName] = result
-				loadedCount = loadedCount + 1
+			local func, loadErr = loadstring(content)
+			if func then
+				local success, result = pcall(func)
+				if success and result then
+					LoadedModules[moduleName] = result
+					loadedCount = loadedCount + 1
+				else
+					warn("[Starship] Execute error module " .. i .. ": " .. tostring(result))
+				end
 			else
-				warn("[Starship] Failed to load module " .. i .. ": " .. tostring(result))
+				warn("[Starship] Syntax error module " .. i .. ": " .. tostring(loadErr))
+				warn("[Starship] First 100 chars: " .. content:sub(1, 100))
 			end
 		else
 			warn("[Starship] Missing bundle data for module " .. i)
@@ -428,14 +432,18 @@ local function downloadBundle(statusCallback)
 		local key = "t" .. i
 		if bundleData.tabs and bundleData.tabs[key] then
 			local content = xorDecrypt(bundleData.tabs[key], encKey)
-			local success, result = pcall(function()
-				return loadstring(content)()
-			end)
-			if success and result then
-				LoadedModules["Tabs/" .. tabName] = result
-				loadedCount = loadedCount + 1
+			local func, loadErr = loadstring(content)
+			if func then
+				local success, result = pcall(func)
+				if success and result then
+					LoadedModules["Tabs/" .. tabName] = result
+					loadedCount = loadedCount + 1
+				else
+					warn("[Starship] Execute error tab " .. i .. ": " .. tostring(result))
+				end
 			else
-				warn("[Starship] Failed to load tab " .. i .. ": " .. tostring(result))
+				warn("[Starship] Syntax error tab " .. i .. ": " .. tostring(loadErr))
+				warn("[Starship] First 100 chars: " .. content:sub(1, 100))
 			end
 		else
 			warn("[Starship] Missing bundle data for tab " .. i)
