@@ -449,6 +449,34 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		end
 	end)
 
+	-- ══════════════════════════════════════════════════════════════════
+	-- 🧪 R2 CDN SYNC TEST - Remove after confirming auto-sync works!
+	-- ══════════════════════════════════════════════════════════════════
+	local CardTest = CreateCard("🧪 R2 CDN SYNC TEST", 70, 2)
+	
+	local BtnTest = Instance.new("TextButton", CardTest)
+	BtnTest.Text = "TEST: OFF"
+	BtnTest.Size = UDim2.new(0.94, 0, 0, 35)
+	BtnTest.Position = UDim2.new(0.03, 0, 0, 35)
+	StyleBtn(BtnTest, C_RED)
+	
+	local isTestOn = false
+	BtnTest.MouseButton1Click:Connect(function()
+		isTestOn = not isTestOn
+		BtnTest.Text = "TEST: " .. (isTestOn and "ON ✅" or "OFF")
+		BtnTest.TextColor3 = isTestOn and C_GREEN or C_RED
+		BtnTest.UIStroke.Color = isTestOn and C_GREEN or C_RED
+		
+		if isTestOn then
+			game:GetService("StarterGui"):SetCore("SendNotification", {
+				Title = "🎉 R2 CDN Sync Works!",
+				Text = "File Fun.lua berhasil di-sync dari GitHub ke R2!",
+				Duration = 5
+			})
+		end
+	end)
+	-- ══════════════════════════════════════════════════════════════════
+
 	-- 3. INVISIBLE (Seat Weld Method)
 	local CardInvis = CreateCard(L("invisible"), 85, 3)
 
