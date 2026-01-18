@@ -627,28 +627,27 @@ ${loaderScript}`;
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // CDN INJECTION FOR PC - Inject CDN token for Cloudflare module loading
+    // CDN INJECTION - DISABLED to use Vercel bundle instead
+    // Bundle mode hides module names from HTTP spy (single request)
+    // Re-enable later if CDN bundle endpoint is added
     // ═══════════════════════════════════════════════════════════════
     let cdnInjection = "";
-    if (isCDNEnabled()) {
-      // Bootstrap doesn't have userId yet, so we use a generic token
-      // The actual token will be generated when the loader calls pc-ld-q8r4
-      // For now, just enable CDN with a placeholder that will be replaced
-      const cdnToken = generateCDNToken("bootstrap", "pc");
-
-      if (cdnToken) {
-        cdnInjection = `do
--- [CDN] Cloudflare CDN enabled for PC modules
-local cdnConfig = {}
-cdnConfig.url = "${CDN_BASE_URL}"
-cdnConfig.token = "${cdnToken}"
-cdnConfig.enabled = true
-_G.StarshipCDN = cdnConfig
-end
-`;
-        console.log(`[CDN] Token injected via bootstrap`);
-      }
-    }
+    // CDN disabled - using Vercel bundle for security (hides module names)
+    // if (isCDNEnabled()) {
+    //   const cdnToken = generateCDNToken("bootstrap", "pc");
+    //   if (cdnToken) {
+    //     cdnInjection = `do
+    // -- [CDN] Cloudflare CDN enabled for PC modules
+    // local cdnConfig = {}
+    // cdnConfig.url = "${CDN_BASE_URL}"
+    // cdnConfig.token = "${cdnToken}"
+    // cdnConfig.enabled = true
+    // _G.StarshipCDN = cdnConfig
+    // end
+    // `;
+    //     console.log(`[CDN] Token injected via bootstrap`);
+    //   }
+    // }
 
     // Inject server mode config at the top (before obfuscated code)
     const configuredScript = `-- StarshipCore PC v3.0

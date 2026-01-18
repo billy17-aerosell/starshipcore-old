@@ -904,32 +904,28 @@ function serveLoaderScript(res, config, accessType, userType, userId = null) {
 
     let loaderScript = fs.readFileSync(loaderPath, "utf8");
 
-    // For PC platform: Inject CDN URL if configured
+    // For PC platform: CDN DISABLED to use Vercel bundle mode
+    // Bundle mode hides module names from HTTP spy
     const isPlatformPC = !config.label.includes("Mobile");
 
-    if (isPlatformPC && isCDNEnabled() && userId) {
-      const cdnToken = generateCDNToken(userId, "pc");
-
-      if (cdnToken) {
-        // Inject CDN configuration at the beginning of the script
-        // Using do-end block and explicit assignment for maximum compatibility
-        const cdnInjection = `do
--- [CDN] Cloudflare CDN enabled for PC modules
-local cdnConfig = {}
-cdnConfig.url = "${CDN_BASE_URL}"
-cdnConfig.token = "${cdnToken}"
-cdnConfig.enabled = true
-_G.StarshipCDN = cdnConfig
-print("[CDN] _G.StarshipCDN injected successfully")
-end
-`;
-        loaderScript = cdnInjection + loaderScript;
-        console.log(`[CDN] Token injected for PC user: ${userId}`);
-        console.log(`[CDN] Injection length: ${cdnInjection.length} chars`);
-        console.log(`[CDN] Total script length: ${loaderScript.length} chars`);
-        console.log(`[CDN] Script starts with: ${loaderScript.substring(0, 80)}...`);
-      }
-    }
+    // CDN disabled - using Vercel bundle for security
+    // if (isPlatformPC && isCDNEnabled() && userId) {
+    //   const cdnToken = generateCDNToken(userId, "pc");
+    //   if (cdnToken) {
+    //     const cdnInjection = `do
+    // -- [CDN] Cloudflare CDN enabled for PC modules
+    // local cdnConfig = {}
+    // cdnConfig.url = "${CDN_BASE_URL}"
+    // cdnConfig.token = "${cdnToken}"
+    // cdnConfig.enabled = true
+    // _G.StarshipCDN = cdnConfig
+    // print("[CDN] _G.StarshipCDN injected successfully")
+    // end
+    // `;
+    //     loaderScript = cdnInjection + loaderScript;
+    //     console.log(`[CDN] Token injected for PC user: ${userId}`);
+    //   }
+    // }
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
