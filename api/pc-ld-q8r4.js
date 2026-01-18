@@ -912,12 +912,14 @@ function serveLoaderScript(res, config, accessType, userType, userId = null) {
 
       if (cdnToken) {
         // Inject CDN configuration at the beginning of the script
+        // Using semicolons to ensure proper Lua statement separation
         const cdnInjection = `-- [CDN] Cloudflare CDN enabled for PC modules
 _G.StarshipCDN = {
   url = "${CDN_BASE_URL}",
   token = "${cdnToken}",
   enabled = true
-}
+};
+
 `;
         loaderScript = cdnInjection + loaderScript;
         console.log(`[CDN] Token injected for PC user: ${userId}`);
