@@ -1,3 +1,3 @@
-BUNDLE_KEY=653b0fe08d51fbd3a216dc2cdf2a0687
+BUNDLE_KEY=54da1285497e47d0c12710e5056c2663
 
 Add this to Vercel Environment Variables!
