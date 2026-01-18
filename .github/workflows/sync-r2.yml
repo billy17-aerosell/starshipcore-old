@@ -53,7 +53,9 @@ jobs:
             UPLOAD_ALL=true
           else
             echo "📋 Push trigger detected - uploading CHANGED files only"
-            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- 'data/Modules/*.lua' 'data/Modules/Tabs/*.lua' 'data/StarshipCore.lua' 2>/dev/null || echo "")
+            # Use ** glob pattern for recursive matching
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- 'data/Modules/' 'data/StarshipCore.lua' 2>/dev/null | grep '\.lua$' || echo "")
+            echo "📋 Changed files: $CHANGED_FILES"
             UPLOAD_ALL=false
           fi
           
