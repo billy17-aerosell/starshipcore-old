@@ -626,27 +626,12 @@ ${loaderScript}`;
       loaderScript = loaderScript.slice(1);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // BUNDLE KEY INJECTION - Required for decrypting static bundle
-    // Key is only sent to authenticated users via bootstrap/loader
-    // ═══════════════════════════════════════════════════════════════
-    let bundleKeyInjection = "";
-    const bundleKey = process.env.BUNDLE_KEY || "";
-    if (bundleKey) {
-      bundleKeyInjection = `-- [BUNDLE] Server-side key injection
-_G.StarshipBundleKey = "${bundleKey}"
-`;
-      console.log(`[Bundle] Key injected via bootstrap`);
-    } else {
-      console.warn("[Bundle] BUNDLE_KEY not configured in environment!");
-    }
-
     // Inject server mode config at the top (before obfuscated code)
     const configuredScript = `-- StarshipCore PC v3.0
 _G.StarshipServerMode = true
 _G.StarshipServerURL = "https://starship-core.my.id"
 
-${bundleKeyInjection}${loaderScript}`;
+${loaderScript}`;
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");

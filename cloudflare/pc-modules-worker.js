@@ -1,8 +1,9 @@
 /**
  * Cloudflare Worker - StarshipCore PC Modules CDN
  * 
- * This worker serves PC modules from R2 with token validation.
- * Only authorized requests from Vercel can access the modules.
+ * This worker serves PC assets from R2 (including the bundled file `/b/pc.json`)
+ * with signed token validation.
+ * Only authorized requests (token issued by your Vercel API after auth) can access it.
  * 
  * SETUP:
  * 1. Create this worker in Cloudflare Dashboard

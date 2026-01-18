@@ -906,19 +906,26 @@ function serveLoaderScript(res, config, accessType, userType, userId = null) {
 
     const isPlatformPC = !config.label.includes("Mobile");
 
-    // Inject bundle key for PC users (required to decrypt bundle)
-    if (isPlatformPC) {
-      const bundleKey = process.env.BUNDLE_KEY || "";
-      if (bundleKey) {
-        const keyInjection = `do
--- [BUNDLE] Server-side key injection
-_G.StarshipBundleKey = "${bundleKey}"
+    // NOTE (SECURITY): Do NOT inject BUNDLE_KEY into the loader.
+    // Bundle key is only sent after successful auth via /api/load (signed payload).
+    //
+    // Optional (PC only): Inject Cloudflare CDN signed access token, so the client
+    // can download the *encrypted* bundle from Cloudflare (instead of public Vercel URL).
+    if (isPlatformPC && userId && isCDNEnabled()) {
+      const cdnToken = generateCDNToken(userId, "pc");
+      const cdnBaseUrl = (CDN_BASE_URL || "").replace(/\/+$/, "");
+
+      if (cdnToken && cdnBaseUrl) {
+        const cdnInjection = `do
+-- [CDN] Signed bundle access (token verified by Cloudflare Worker)
+_G.StarshipCDN = {
+  enabled = true,
+  baseUrl = "${cdnBaseUrl}",
+  token = "${cdnToken}"
+}
 end
 `;
-        loaderScript = keyInjection + loaderScript;
-        console.log(`[Bundle] Key injected for user: ${userId}`);
-      } else {
-        console.warn("[Bundle] BUNDLE_KEY not configured in environment!");
+        loaderScript = cdnInjection + loaderScript;
       }
     }
 

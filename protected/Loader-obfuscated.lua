@@ -357,6 +357,11 @@ local function downloadBundleRaw(statusCallback)
 	
 	-- Use pre-generated static bundle (CDN cached, much faster!)
 	local bundleUrl = SERVER_URL .. "/b/pc.json"
+	pcall(function()
+		if _G.StarshipCDN and _G.StarshipCDN.enabled and _G.StarshipCDN.baseUrl and _G.StarshipCDN.token then
+			bundleUrl = tostring(_G.StarshipCDN.baseUrl) .. "/b/pc.json?token=" .. HttpService:UrlEncode(tostring(_G.StarshipCDN.token))
+		end
+	end)
 	
 	if statusCallback then
 		statusCallback("Downloading components...", 0.2)

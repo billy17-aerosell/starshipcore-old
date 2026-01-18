@@ -2,6 +2,10 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/b/pc.json",
+      "destination": "/api/bundle-pc"
+    },
+    {
       "source": "/api/mobile-whitelist-manager",
       "destination": "/api/whitelist-manager?platform=mobile"
     },

@@ -323,6 +323,22 @@ end
 -- Store raw bundle data for later decryption (after auth)
 local RawBundleData = nil
 
+-- Choose bundle URL:
+-- - If Cloudflare CDN signed access is enabled (injected by server after auth),
+--   download bundle from CDN using token.
+-- - Otherwise, fallback to Vercel-hosted bundle.
+local function getBundleUrl()
+	local ok, url = pcall(function()
+		if _G.StarshipCDN and _G.StarshipCDN.enabled and _G.StarshipCDN.baseUrl and _G.StarshipCDN.token then
+			return tostring(_G.StarshipCDN.baseUrl) .. "/b/pc.json?token=" .. HttpService:UrlEncode(tostring(_G.StarshipCDN.token))
+		end
+	end)
+	if ok and url and url ~= "" then
+		return url
+	end
+	return SERVER_URL .. "/b/pc.json"
+end
+
 -- Phase 1: Download bundle (without decrypting)
 local function downloadBundleRaw(statusCallback)
 	if statusCallback then
@@ -330,7 +346,7 @@ local function downloadBundleRaw(statusCallback)
 	end
 	
 	-- Use pre-generated static bundle (CDN cached, much faster!)
-	local bundleUrl = SERVER_URL .. "/b/pc.json"
+	local bundleUrl = getBundleUrl()
 	
 	if statusCallback then
 		statusCallback("Downloading components...", 0.2)
@@ -485,7 +501,7 @@ local function downloadBundle(statusCallback)
 	end
 	
 	-- Use pre-generated static bundle (CDN cached, much faster!)
-	local bundleUrl = SERVER_URL .. "/b/pc.json"
+	local bundleUrl = getBundleUrl()
 	
 	if statusCallback then
 		statusCallback("Downloading components...", 0.2)
