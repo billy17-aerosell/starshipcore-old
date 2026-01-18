@@ -923,6 +923,9 @@ _G.StarshipCDN = {
 `;
         loaderScript = cdnInjection + loaderScript;
         console.log(`[CDN] Token injected for PC user: ${userId}`);
+        console.log(`[CDN] Injection length: ${cdnInjection.length} chars`);
+        console.log(`[CDN] Total script length: ${loaderScript.length} chars`);
+        console.log(`[CDN] Script starts with: ${loaderScript.substring(0, 50)}...`);
       }
     }
 
