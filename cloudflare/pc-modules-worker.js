@@ -10,8 +10,7 @@
  * 2. Bind R2 bucket as "STARSHIP_BUCKET"
  * 3. Add environment variables:
  *    - CDN_SECRET_KEY (same as Vercel)
- *    - UPSTASH_REDIS_REST_URL (from Upstash dashboard)
- *    - UPSTASH_REDIS_REST_TOKEN (from Upstash dashboard)
+ *    - VERCEL_API_URL (e.g., https://starship-core.my.id)
  */
 
 export default {
@@ -71,16 +70,13 @@ export default {
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // SINGLE-USE TOKEN: Verify token exists in Redis, then delete it
+        // SINGLE-USE TOKEN: Verify token via Vercel API (Redis proxy)
         // ═══════════════════════════════════════════════════════════════
-        if (validation.tokenId && env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
-            const tokenKey = `cdn_token:${validation.tokenId}`;
-            
-            // Check if token exists and delete it (atomic GET + DEL)
+        if (validation.tokenId && env.VERCEL_API_URL) {
             const singleUseResult = await verifySingleUseToken(
-                tokenKey,
-                env.UPSTASH_REDIS_REST_URL,
-                env.UPSTASH_REDIS_REST_TOKEN
+                validation.tokenId,
+                env.VERCEL_API_URL,
+                env.CDN_SECRET_KEY
             );
             
             if (!singleUseResult.valid) {
@@ -204,38 +200,37 @@ async function validateToken(token, secretKey) {
 }
 
 /**
- * Verify single-use token exists in Redis and delete it
- * Uses Upstash Redis REST API
+ * Verify single-use token via Vercel API (Redis proxy)
+ * Calls /api/pc-ld-q8r4?action=verify_cdn_token
  */
-async function verifySingleUseToken(tokenKey, redisUrl, redisToken) {
+async function verifySingleUseToken(tokenId, vercelApiUrl, secretKey) {
     try {
-        // Use GETDEL command (atomic get and delete)
-        const response = await fetch(`${redisUrl}/GETDEL/${encodeURIComponent(tokenKey)}`, {
+        const verifyUrl = `${vercelApiUrl}/api/pc-ld-q8r4?action=verify_cdn_token&tokenId=${encodeURIComponent(tokenId)}`;
+        
+        const response = await fetch(verifyUrl, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${redisToken}`
+                'X-Worker-Secret': secretKey
             }
         });
 
         if (!response.ok) {
-            console.error(`Redis error: ${response.status} ${response.statusText}`);
-            // If Redis fails, allow the request (fail-open for availability)
-            // You can change this to fail-close if security is more important
-            return { valid: true, reason: 'Redis unavailable, allowing request' };
+            console.error(`Vercel API error: ${response.status} ${response.statusText}`);
+            // Fail-open for availability
+            return { valid: true, reason: 'API unavailable, allowing request' };
         }
 
         const data = await response.json();
         
-        // GETDEL returns null if key doesn't exist
-        if (data.result === null) {
-            return { valid: false, reason: 'Token already used or invalid' };
+        if (!data.valid) {
+            return { valid: false, reason: data.reason || 'Token already used or invalid' };
         }
 
-        // Token existed and was deleted - valid single-use
-        return { valid: true, tokenData: data.result };
+        // Token verified and consumed
+        return { valid: true, tokenData: data.tokenData };
     } catch (error) {
         console.error(`Single-use token verification error: ${error.message}`);
-        // Fail-open: allow request if Redis is unreachable
+        // Fail-open: allow request if API is unreachable
         return { valid: true, reason: 'Verification error, allowing request' };
     }
 }

@@ -466,6 +466,55 @@ export default async function handler(req, res) {
     return res.status(200).send(content);
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // CDN TOKEN VERIFICATION (Called by Cloudflare Worker)
+  // Single-use token: verify token exists in Redis, then delete it
+  // ══════════════════════════════════════════════════════════════════
+  if (req.query.action === "verify_cdn_token") {
+    const tokenId = req.query.tokenId;
+    const workerSecret = req.headers["x-worker-secret"];
+    
+    // Verify worker secret to prevent unauthorized access
+    const expectedSecret = process.env.CDN_SECRET_KEY;
+    if (!workerSecret || workerSecret !== expectedSecret) {
+      return res.status(401).json({ valid: false, reason: "Unauthorized" });
+    }
+    
+    if (!tokenId) {
+      return res.status(400).json({ valid: false, reason: "Missing tokenId" });
+    }
+    
+    try {
+      const redisClient = await getRedis();
+      if (!redisClient) {
+        // Redis not available - fail-open (allow request)
+        console.log("[CDN Token] Redis unavailable, allowing request");
+        return res.status(200).json({ valid: true, reason: "Redis unavailable" });
+      }
+      
+      const tokenKey = `cdn_token:${tokenId}`;
+      
+      // Get and delete token atomically
+      const tokenData = await redisClient.get(tokenKey);
+      
+      if (!tokenData) {
+        // Token doesn't exist - already used or invalid
+        console.log(`[CDN Token] Token not found: ${tokenId.substring(0, 8)}...`);
+        return res.status(200).json({ valid: false, reason: "Token already used or invalid" });
+      }
+      
+      // Delete the token (single-use)
+      await redisClient.del(tokenKey);
+      console.log(`[CDN Token] Token consumed: ${tokenId.substring(0, 8)}...`);
+      
+      return res.status(200).json({ valid: true, tokenData: JSON.parse(tokenData) });
+    } catch (error) {
+      console.error("[CDN Token] Verification error:", error.message);
+      // Fail-open on error
+      return res.status(200).json({ valid: true, reason: "Verification error" });
+    }
+  }
+
   // Get parameters
   const { key, userId, platform: platformParam, hwid } = req.query;
   const platform = platformParam === "mobile" ? "mobile" : "pc";

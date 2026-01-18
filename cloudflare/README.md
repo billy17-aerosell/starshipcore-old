@@ -5,7 +5,7 @@ Tujuan: file bundle **`/b/pc.json` tidak bisa diakses publik** tanpa token, tapi
 ### Fitur Keamanan:
 - ✅ **Signed Token** - Token di-sign dengan secret key
 - ✅ **Token Expiry** - Token expired dalam 15 menit
-- ✅ **Single-Use Token** - Token hanya bisa dipakai 1x (NEW!)
+- ✅ **Single-Use Token** - Token hanya bisa dipakai 1x
 
 Repo ini sudah support mode ini:
 - Vercel akan meng-inject `_G.StarshipCDN` (baseUrl + token) ke loader **setelah auth**.
@@ -23,10 +23,7 @@ Di Cloudflare Dashboard:
   - **R2 Bucket**: bind sebagai `STARSHIP_BUCKET`
   - **Variables / Secrets**:
     - `CDN_SECRET_KEY` (harus sama persis dengan yang di Vercel)
-    - `UPSTASH_REDIS_REST_URL` (untuk single-use token) *
-    - `UPSTASH_REDIS_REST_TOKEN` (untuk single-use token) *
-
-> \* **Upstash Redis REST credentials** bisa didapat dari [Upstash Console](https://console.upstash.com/) → Database → REST API section.
+    - `VERCEL_API_URL` (URL Vercel, contoh: `https://starship-core.my.id`)
 
 ### 2) Upload bundle ke R2
 
@@ -47,19 +44,7 @@ Di project Vercel:
 
 Setelah itu deploy ulang.
 
-### 4) Set Upstash Redis REST API di Worker
-
-Untuk mengaktifkan **Single-Use Token**:
-
-1. Buka [Upstash Console](https://console.upstash.com/)
-2. Pilih database Redis yang sama dengan Vercel
-3. Scroll ke **REST API** section
-4. Copy:
-   - `UPSTASH_REDIS_REST_URL` (contoh: `https://xxx-xxx.upstash.io`)
-   - `UPSTASH_REDIS_REST_TOKEN` (contoh: `AXxxxx...`)
-5. Tambahkan ke Cloudflare Worker **Settings** → **Variables**
-
-### 5) Cara test cepat
+### 4) Cara test cepat
 
 - Pastikan `CDN_PC_URL` + `CDN_SECRET_KEY` sudah aktif di Vercel.
 - Coba akses direct bundle:
@@ -73,13 +58,29 @@ Untuk mengaktifkan **Single-Use Token**:
 ```
 1. User auth di Vercel → Generate token + simpan ke Redis
 2. User download bundle dengan token
-3. Worker cek Redis: token ada?
-   - Ya → Serve bundle, HAPUS token dari Redis
-   - Tidak → Reject (token sudah dipakai/invalid)
-4. Hacker copy token dari HTTP spy
-5. Hacker coba akses dengan token → GAGAL (token sudah dihapus)
+3. Worker panggil Vercel API: /api/pc-ld-q8r4?action=verify_cdn_token
+4. Vercel cek Redis: token ada?
+   - Ya → Hapus token, return valid=true
+   - Tidak → Return valid=false (token sudah dipakai)
+5. Worker serve bundle (jika valid) atau reject (jika invalid)
+6. Hacker copy token → Worker verify → Redis: token tidak ada → REJECT
 ```
 
-### Behavior jika Redis tidak tersedia
+### Environment Variables Summary
 
-Worker menggunakan **fail-open** policy - jika Redis tidak bisa dihubungi, request tetap diizinkan (untuk availability). Jika ingin **fail-close** (lebih secure tapi bisa down), ubah di worker code.
+**Cloudflare Worker:**
+| Variable | Value |
+|----------|-------|
+| `CDN_SECRET_KEY` | Secret key (sama dengan Vercel) |
+| `VERCEL_API_URL` | `https://starship-core.my.id` |
+
+**Vercel:**
+| Variable | Value |
+|----------|-------|
+| `CDN_SECRET_KEY` | Secret key (sama dengan Worker) |
+| `CDN_PC_URL` | `https://cdn.starship-core.my.id` |
+| `BUNDLE_KEY` | Key untuk decrypt bundle |
+
+### Behavior jika API tidak tersedia
+
+Worker menggunakan **fail-open** policy - jika Vercel API tidak bisa dihubungi, request tetap diizinkan (untuk availability). Jika ingin **fail-close** (lebih secure tapi bisa down), ubah di worker code.
