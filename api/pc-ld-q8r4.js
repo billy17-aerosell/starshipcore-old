@@ -912,20 +912,22 @@ function serveLoaderScript(res, config, accessType, userType, userId = null) {
 
       if (cdnToken) {
         // Inject CDN configuration at the beginning of the script
-        // Using semicolons to ensure proper Lua statement separation
-        const cdnInjection = `-- [CDN] Cloudflare CDN enabled for PC modules
-_G.StarshipCDN = {
-  url = "${CDN_BASE_URL}",
-  token = "${cdnToken}",
-  enabled = true
-};
-
+        // Using do-end block and explicit assignment for maximum compatibility
+        const cdnInjection = `do
+-- [CDN] Cloudflare CDN enabled for PC modules
+local cdnConfig = {}
+cdnConfig.url = "${CDN_BASE_URL}"
+cdnConfig.token = "${cdnToken}"
+cdnConfig.enabled = true
+_G.StarshipCDN = cdnConfig
+print("[CDN] _G.StarshipCDN injected successfully")
+end
 `;
         loaderScript = cdnInjection + loaderScript;
         console.log(`[CDN] Token injected for PC user: ${userId}`);
         console.log(`[CDN] Injection length: ${cdnInjection.length} chars`);
         console.log(`[CDN] Total script length: ${loaderScript.length} chars`);
-        console.log(`[CDN] Script starts with: ${loaderScript.substring(0, 50)}...`);
+        console.log(`[CDN] Script starts with: ${loaderScript.substring(0, 80)}...`);
       }
     }
 
@@ -956,9 +958,9 @@ async function handleVIPWebhook(
   hwidResult = null,
 ) {
   const COOLDOWN_MINUTES = 10;
-  const redisKey = `webhook_cooldown:${platform}:${userId}`;
-  const ipKey = `last_ip:${platform}:${userId}`;
-  const deviceTrackingKey = `devices:${platform}:${userId}`;
+  const redisKey = `webhook_cooldown: ${platform}: ${userId}`;
+  const ipKey = `last_ip: ${platform}: ${userId}`;
+  const deviceTrackingKey = `devices: ${platform}: ${userId}`;
 
   let shouldSendWebhook = false;
   let webhookReason = "Regular Access";
@@ -978,13 +980,13 @@ async function handleVIPWebhook(
         title: `💎 ${config.label} VIP Access Granted`,
         status: "success",
         statusMessage: "✅ Authorized (VIP)",
-        authType: `VIP (${vipUser.type}) - ${config.label}`,
+        authType: `VIP(${vipUser.type}) - ${config.label}`,
         owner: vipUser.username,
         ip: clientIP,
         platform: config.label,
         hwidStatus: "Protected (Redis unavailable)",
         timestamp: timestamp,
-        message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username}\n⚠️ (Rate limiting unavailable)`,
+        message: `✅ ${webhookReason}\n💎 VIP loader delivered to ${vipUser.username}\n⚠️(Rate limiting unavailable)`,
       });
       return;
     }
@@ -1007,7 +1009,7 @@ async function handleVIPWebhook(
         2592000, // 30 days
       );
       console.log(
-        `[${timestamp}] 📱 New device added for ${vipUser.username}: ${clientIP}`,
+        `[${timestamp}] 📱 New device added for ${vipUser.username}: ${clientIP} `,
       );
     }
 
