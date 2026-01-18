@@ -45,33 +45,61 @@ jobs:
         run: |
           echo "🚀 Starting module sync to R2..."
           
-          # Upload main modules to pc/Modules/
-          echo "📦 Uploading Modules..."
+          # Get list of changed files (comparing with previous commit)
+          # For workflow_dispatch (manual trigger), upload all files
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "📋 Manual trigger detected - uploading ALL files"
+            CHANGED_FILES=$(find data/Modules -name "*.lua" -type f)
+            UPLOAD_ALL=true
+          else
+            echo "📋 Push trigger detected - uploading CHANGED files only"
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- 'data/Modules/*.lua' 'data/Modules/Tabs/*.lua' 'data/StarshipCore.lua' 2>/dev/null || echo "")
+            UPLOAD_ALL=false
+          fi
+          
+          if [ -z "$CHANGED_FILES" ] && [ "$UPLOAD_ALL" = "false" ]; then
+            echo "ℹ️ No module files changed in this commit"
+            exit 0
+          fi
+          
+          UPLOAD_COUNT=0
+          
+          # Upload changed main modules
+          echo "📦 Checking Modules..."
           for file in data/Modules/*.lua; do
             if [ -f "$file" ]; then
               filename=$(basename "$file")
-              echo "  → Uploading $filename"
-              wrangler r2 object put "$R2_BUCKET_NAME/pc/Modules/$filename" --file="$file" --content-type="text/plain" --remote
+              if [ "$UPLOAD_ALL" = "true" ] || echo "$CHANGED_FILES" | grep -q "$file"; then
+                echo "  → Uploading $filename"
+                wrangler r2 object put "$R2_BUCKET_NAME/pc/Modules/$filename" --file="$file" --content-type="text/plain" --remote
+                UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
+              fi
             fi
           done
           
-          # Upload Tabs to pc/Modules/Tabs/
-          echo "📦 Uploading Tabs..."
+          # Upload changed Tabs
+          echo "📦 Checking Tabs..."
           for file in data/Modules/Tabs/*.lua; do
             if [ -f "$file" ]; then
               filename=$(basename "$file")
-              echo "  → Uploading Tabs/$filename"
-              wrangler r2 object put "$R2_BUCKET_NAME/pc/Modules/Tabs/$filename" --file="$file" --content-type="text/plain" --remote
+              if [ "$UPLOAD_ALL" = "true" ] || echo "$CHANGED_FILES" | grep -q "$file"; then
+                echo "  → Uploading Tabs/$filename"
+                wrangler r2 object put "$R2_BUCKET_NAME/pc/Modules/Tabs/$filename" --file="$file" --content-type="text/plain" --remote
+                UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
+              fi
             fi
           done
           
-          # Upload main StarshipCore script (optional - if serving from CDN)
+          # Upload StarshipCore if changed
           if [ -f "data/StarshipCore.lua" ]; then
-            echo "📦 Uploading StarshipCore.lua..."
-            wrangler r2 object put "$R2_BUCKET_NAME/pc/StarshipCore.lua" --file="data/StarshipCore.lua" --content-type="text/plain" --remote
+            if [ "$UPLOAD_ALL" = "true" ] || echo "$CHANGED_FILES" | grep -q "data/StarshipCore.lua"; then
+              echo "📦 Uploading StarshipCore.lua..."
+              wrangler r2 object put "$R2_BUCKET_NAME/pc/StarshipCore.lua" --file="data/StarshipCore.lua" --content-type="text/plain" --remote
+              UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
+            fi
           fi
           
-          echo "✅ All modules synced to R2 CDN!"
+          echo "✅ Synced $UPLOAD_COUNT file(s) to R2 CDN!"
 
       - name: Summary
         run: |
