@@ -43,7 +43,7 @@ local TABS = {
 }
 
 -- Dev mode detection (for debug logging)
-local DEV_MODE = false
+local DEV_MODE = true
 
 -- In-memory module storage (no files saved to disk for security!)
 local LoadedModules = {}
@@ -410,9 +410,11 @@ local function downloadBundle(statusCallback)
 			if success and result then
 				LoadedModules[moduleName] = result
 				loadedCount = loadedCount + 1
-			elseif DEV_MODE then
-				warn("[Starship] Failed to load module " .. i)
+			else
+				warn("[Starship] Failed to load module " .. i .. ": " .. tostring(result))
 			end
+		else
+			warn("[Starship] Missing bundle data for module " .. i)
 		end
 		
 		if statusCallback then
@@ -432,9 +434,11 @@ local function downloadBundle(statusCallback)
 			if success and result then
 				LoadedModules["Tabs/" .. tabName] = result
 				loadedCount = loadedCount + 1
-			elseif DEV_MODE then
-				warn("[Starship] Failed to load tab " .. i)
+			else
+				warn("[Starship] Failed to load tab " .. i .. ": " .. tostring(result))
 			end
+		else
+			warn("[Starship] Missing bundle data for tab " .. i)
 		end
 		
 		if statusCallback then
@@ -443,24 +447,22 @@ local function downloadBundle(statusCallback)
 		end
 	end
 	
-	-- Check if all loaded successfully
-	if loadedCount >= totalFiles then
+	-- Store loaded modules in global (even if some failed)
+	getgenv().StarshipModules = LoadedModules
+	
+	if LoadedModules["Animations.lua"] then
+		_G.StarshipAnimDB = LoadedModules["Animations.lua"]
+	end
+	
+	-- Check if enough modules loaded (at least 80%)
+	local minRequired = math.floor(totalFiles * 0.8)
+	if loadedCount >= minRequired then
 		if statusCallback then
-			statusCallback("✅ All components loaded!", 1)
+			statusCallback("✅ Components loaded! [" .. loadedCount .. "/" .. totalFiles .. "]", 1)
 		end
-		
-		-- Store loaded modules in global
-		getgenv().StarshipModules = LoadedModules
-		
-		if LoadedModules["Animations.lua"] then
-			_G.StarshipAnimDB = LoadedModules["Animations.lua"]
-		end
-		
 		return true
 	else
-		if DEV_MODE then
-			warn("[Starship] Only loaded " .. loadedCount .. "/" .. totalFiles)
-		end
+		warn("[Starship] Only loaded " .. loadedCount .. "/" .. totalFiles .. " - minimum required: " .. minRequired)
 		return false
 	end
 end

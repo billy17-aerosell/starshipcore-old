@@ -417,24 +417,22 @@ local function downloadBundle(statusCallback)
 		end
 	end
 	
-	-- Check if all loaded successfully
-	if loadedCount >= totalFiles then
+	-- Store loaded modules in global (even if some failed)
+	getgenv().StarshipModules = LoadedModules
+	
+	if LoadedModules["Animations.lua"] then
+		_G.StarshipAnimDB = LoadedModules["Animations.lua"]
+	end
+	
+	-- Check if enough modules loaded (at least 80%)
+	local minRequired = math.floor(totalFiles * 0.8)
+	if loadedCount >= minRequired then
 		if statusCallback then
-			statusCallback("✅ All components loaded!", 1)
+			statusCallback("✅ Components loaded! [" .. loadedCount .. "/" .. totalFiles .. "]", 1)
 		end
-		
-		-- Store loaded modules in global
-		getgenv().StarshipModules = LoadedModules
-		
-		if LoadedModules["Animations.lua"] then
-			_G.StarshipAnimDB = LoadedModules["Animations.lua"]
-		end
-		
 		return true
 	else
-		if DEV_MODE then
-			warn("[Starship] Only loaded " .. loadedCount .. "/" .. totalFiles)
-		end
+		warn("[Starship] Only loaded " .. loadedCount .. "/" .. totalFiles .. " - minimum required: " .. minRequired)
 		return false
 	end
 end
