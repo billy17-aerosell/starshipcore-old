@@ -98,8 +98,86 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  const { name, user, dev } = req.query;
+  const { name, user, dev, bundle } = req.query;
   const timestamp = new Date().toISOString();
+
+  // ══════════════════════════════════════════════════════════════════
+  // BUNDLE MODE - Return all modules in single encrypted response
+  // SECURITY: Hides individual module names from HTTP spy tools
+  // ══════════════════════════════════════════════════════════════════
+  if (bundle === "true") {
+    console.log(`[${timestamp}] 📦 Bundle requested | User: ${user || "unknown"}`);
+
+    try {
+      const modulesDir = path.join(process.cwd(), "data", "Modules");
+      const tabsDir = path.join(modulesDir, "Tabs");
+
+      const bundleData = {
+        v: 1,
+        t: Date.now(),
+        m: {},
+        tabs: {}
+      };
+
+      const moduleNames = [
+        "Config.lua", "UI.lua", "Intro.lua", "Animations.lua",
+        "Locale.lua", "CloudRecording.lua", "UIComponents.lua",
+        "ConnectionManager.lua", "Changelog.lua"
+      ];
+
+      const tabNames = [
+        "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua",
+        "Fun.lua", "Emotes.lua", "ConfigTab.lua"
+      ];
+
+      // XOR encrypt for bundle
+      const encKey = "S" + bundleData.t.toString(36) + "X";
+
+      function xorEncryptBundle(text, key) {
+        let result = "";
+        for (let i = 0; i < text.length; i++) {
+          result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+        }
+        return Buffer.from(result, "binary").toString("base64");
+      }
+
+      // Load modules
+      for (let i = 0; i < moduleNames.length; i++) {
+        const filePath = path.join(modulesDir, moduleNames[i]);
+        if (fs.existsSync(filePath)) {
+          let content = fs.readFileSync(filePath, "utf8");
+          if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+          bundleData.m["m" + (i + 1)] = xorEncryptBundle(content, encKey);
+        }
+      }
+
+      // Load tabs
+      for (let i = 0; i < tabNames.length; i++) {
+        const filePath = path.join(tabsDir, tabNames[i]);
+        if (fs.existsSync(filePath)) {
+          let content = fs.readFileSync(filePath, "utf8");
+          if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+          bundleData.tabs["t" + (i + 1)] = xorEncryptBundle(content, encKey);
+        }
+      }
+
+      bundleData.k = bundleData.t.toString(36);
+
+      console.log(`[${timestamp}] ✅ Bundle prepared: ${Object.keys(bundleData.m).length} modules, ${Object.keys(bundleData.tabs).length} tabs`);
+
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      return res.status(200).json(bundleData);
+
+    } catch (error) {
+      console.error(`[${timestamp}] ❌ Bundle error:`, error);
+      return res.status(500).json({ error: "BUNDLE_ERROR" });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // INDIVIDUAL MODULE MODE (original behavior)
+  // ══════════════════════════════════════════════════════════════════
 
   // Validate module name
   if (!name) {

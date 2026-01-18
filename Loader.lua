@@ -309,6 +309,136 @@ local function setupFolders()
 	end
 end
 
+-- ══════════════════════════════════════════════════════════════════
+-- BUNDLE LOADING - Single encrypted request for all modules!
+-- SECURITY: Hides individual module names from HTTP spy tools
+-- ══════════════════════════════════════════════════════════════════
+local function downloadBundle(statusCallback)
+	local userId = tostring(game:GetService("Players").LocalPlayer.UserId)
+	local totalFiles = #MODULES + #TABS
+	
+	if statusCallback then
+		statusCallback("Connecting to server...", 0.1)
+	end
+	
+	-- Build bundle URL (uses get-module endpoint with bundle param)
+	local bundleUrl = SERVER_URL .. "/api/get-module?bundle=true&userId=" .. userId
+	
+	if statusCallback then
+		statusCallback("Downloading components...", 0.2)
+	end
+	
+	-- Fetch bundle (single request!)
+	local bundleSuccess, bundleResponse = pcall(function()
+		return game:HttpGet(bundleUrl)
+	end)
+	
+	if not bundleSuccess or not bundleResponse then
+		if DEV_MODE then
+			warn("[Starship] Bundle download failed")
+		end
+		return false
+	end
+	
+	-- Parse bundle JSON
+	local bundleData = nil
+	local parseSuccess = pcall(function()
+		bundleData = HttpService:JSONDecode(bundleResponse)
+	end)
+	
+	if not parseSuccess or not bundleData or not bundleData.m then
+		if DEV_MODE then
+			warn("[Starship] Bundle parse failed")
+		end
+		return false
+	end
+	
+	if statusCallback then
+		statusCallback("Unpacking components...", 0.4)
+	end
+	
+	-- Build decryption key (matches server: 'S' + timestamp.toString(36) + 'X')
+	local encKey = "S" .. (bundleData.k or "") .. "X"
+	
+	-- XOR decrypt function
+	local function xorDecrypt(encoded, key)
+		local decoded = base64Decode(encoded)
+		local result = {}
+		for i = 1, #decoded do
+			local charCode = string.byte(decoded, i)
+			local keyCode = string.byte(key, ((i - 1) % #key) + 1)
+			table.insert(result, string.char(bit32.bxor(charCode, keyCode)))
+		end
+		return table.concat(result)
+	end
+	
+	-- Unpack modules
+	local loadedCount = 0
+	for i, moduleName in ipairs(MODULES) do
+		local key = "m" .. i
+		if bundleData.m[key] then
+			local content = xorDecrypt(bundleData.m[key], encKey)
+			local success, result = pcall(function()
+				return loadstring(content)()
+			end)
+			if success and result then
+				LoadedModules[moduleName] = result
+				loadedCount = loadedCount + 1
+			elseif DEV_MODE then
+				warn("[Starship] Failed to load module " .. i)
+			end
+		end
+		
+		if statusCallback then
+			local progress = 0.4 + (i / #MODULES) * 0.3
+			statusCallback("Loading components... [" .. loadedCount .. "/" .. totalFiles .. "]", progress)
+		end
+	end
+	
+	-- Unpack tabs
+	for i, tabName in ipairs(TABS) do
+		local key = "t" .. i
+		if bundleData.tabs and bundleData.tabs[key] then
+			local content = xorDecrypt(bundleData.tabs[key], encKey)
+			local success, result = pcall(function()
+				return loadstring(content)()
+			end)
+			if success and result then
+				LoadedModules["Tabs/" .. tabName] = result
+				loadedCount = loadedCount + 1
+			elseif DEV_MODE then
+				warn("[Starship] Failed to load tab " .. i)
+			end
+		end
+		
+		if statusCallback then
+			local progress = 0.7 + (i / #TABS) * 0.25
+			statusCallback("Loading components... [" .. loadedCount .. "/" .. totalFiles .. "]", progress)
+		end
+	end
+	
+	-- Check if all loaded successfully
+	if loadedCount >= totalFiles then
+		if statusCallback then
+			statusCallback("✅ All components loaded!", 1)
+		end
+		
+		-- Store loaded modules in global
+		getgenv().StarshipModules = LoadedModules
+		
+		if LoadedModules["Animations.lua"] then
+			_G.StarshipAnimDB = LoadedModules["Animations.lua"]
+		end
+		
+		return true
+	else
+		if DEV_MODE then
+			warn("[Starship] Only loaded " .. loadedCount .. "/" .. totalFiles)
+		end
+		return false
+	end
+end
+
 -- Download and load module directly to memory (no file saved!)
 local function downloadModule(moduleName, userId)
 	-- ══════════════════════════════════════════════════════════════════
@@ -509,14 +639,26 @@ end
 local function downloadModules(statusCallback)
 	local userId = tostring(game:GetService("Players").LocalPlayer.UserId)
 	local totalFiles = #MODULES + #TABS
+	
+	-- ══════════════════════════════════════════════════════════════════
+	-- TRY BUNDLE LOADING FIRST (Single encrypted request)
+	-- Falls back to individual downloads if bundle fails
+	-- ══════════════════════════════════════════════════════════════════
+	
+	local bundleSuccess = downloadBundle(statusCallback)
+	if bundleSuccess then
+		return true
+	end
+	
+	-- Bundle failed, fall back to individual downloads
+	if DEV_MODE then
+		warn("[Starship] Bundle failed, falling back to individual downloads...")
+	end
+	
 	local downloaded = 0
 	local pending = totalFiles
 	
-	-- ══════════════════════════════════════════════════════════════════
-	-- BATCHED PARALLEL LOADING - Limits concurrent requests to avoid
-	-- hitting executor HTTP request limits (some executors cap at ~8-10)
-	-- ══════════════════════════════════════════════════════════════════
-	
+	-- BATCHED PARALLEL LOADING fallback
 	local MAX_CONCURRENT = 4  -- Max concurrent downloads
 	local activeDownloads = 0
 	local loadedCount = 0
