@@ -1841,6 +1841,17 @@ local function main()
 	-- Key was NOT in bundle - only received after successful auth!
 	-- ══════════════════════════════════════════════════════════════════
 	local bundleKey = data.bundleKey
+	
+	-- DEBUG: Log bundleKey status
+	if DEV_MODE then
+		if bundleKey then
+			warn("[Starship] 🔑 bundleKey received from server: length=" .. #bundleKey .. ", preview=" .. bundleKey:sub(1,4) .. "..." .. bundleKey:sub(-4))
+		else
+			warn("[Starship] ❌ bundleKey is NIL in server response!")
+			warn("[Starship] Available keys in data: " .. table.concat((function() local k = {} for key in pairs(data) do table.insert(k, key) end return k end)(), ", "))
+		end
+	end
+	
 	if bundleKey and bundleKey ~= "" then
 		updateStatus("Decrypting components with server key...", 0.75)
 		local bundleDecryptSuccess = decryptBundleWithKey(bundleKey, function(text, progress)
