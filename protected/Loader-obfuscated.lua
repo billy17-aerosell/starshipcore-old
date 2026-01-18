@@ -3,18 +3,44 @@ local SERVER_URL = "https://starship-core.my.id"
 local FOLDER_NAME = "StarshipCore"
 local MODULES_FOLDER = FOLDER_NAME .. "/Modules"
 local TABS_FOLDER = MODULES_FOLDER .. "/Tabs"
+
+-- Decode helper (base64-like simple decode)
+local function _d(s)
+	local b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+	s=s:gsub('[^'..b..'=]','')
+	return (s:gsub('.',function(x)
+		if x=='=' then return '' end
+		local r,f='',(b:find(x)-1)
+		for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
+		return r
+	end):gsub('%d%d%d?%d?%d?%d?%d?%d?',function(x)
+		if #x~=8 then return '' end
+		local c=0 for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
+		return string.char(c)
+	end))
+end
+
+-- Encoded module names
 local MODULES = {
-	"Config.lua",
-	"UI.lua",
-	"Intro.lua",
-	"Animations.lua",
-	"Locale.lua",
-	"CloudRecording.lua",
-	"UIComponents.lua",
-	"ConnectionManager.lua",
-	"Changelog.lua",
+	_d("Q29uZmlnLmx1YQ=="),
+	_d("VUkubHVh"),
+	_d("SW50cm8ubHVh"),
+	_d("QW5pbWF0aW9ucy5sdWE="),
+	_d("TG9jYWxlLmx1YQ=="),
+	_d("Q2xvdWRSZWNvcmRpbmcubHVh"),
+	_d("VUlDb21wb25lbnRzLmx1YQ=="),
+	_d("Q29ubmVjdGlvbk1hbmFnZXIubHVh"),
+	_d("Q2hhbmdlbG9nLmx1YQ=="),
 }
-local TABS = { "Dashboard.lua", "Tools.lua", "Warp.lua", "Helper.lua", "Fun.lua", "Emotes.lua", "ConfigTab.lua" }
+local TABS = {
+	_d("RGFzaGJvYXJkLmx1YQ=="),
+	_d("VG9vbHMubHVh"),
+	_d("V2FycC5sdWE="),
+	_d("SGVscGVyLmx1YQ=="),
+	_d("RnVuLmx1YQ=="),
+	_d("RW1vdGVzLmx1YQ=="),
+	_d("Q29uZmlnVGFiLmx1YQ=="),
+}
 
 -- Dev mode detection (for debug logging)
 local DEV_MODE = false
