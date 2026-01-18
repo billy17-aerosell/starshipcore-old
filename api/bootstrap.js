@@ -21,9 +21,50 @@ const MOBILE_MAINTENANCE = false; // <-- SECURITY: Re-enabled after security fix
 
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 // Import mobile-bootstrap handler for secure mobile loading (no URL exposure)
 import mobileBootstrapHandler from "./mobile-bootstrap.js";
+
+// ═══════════════════════════════════════════════════════════════════
+// CLOUDFLARE CDN CONFIGURATION (PC ONLY)
+// ═══════════════════════════════════════════════════════════════════
+const CDN_SECRET_KEY = process.env.CDN_SECRET_KEY || "";
+const CDN_BASE_URL = process.env.CDN_PC_URL || "";
+const CDN_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Generate signed token for Cloudflare CDN access (PC only)
+ */
+function generateCDNToken(userId, platform) {
+  if (!CDN_SECRET_KEY) {
+    return null;
+  }
+
+  const exp = Date.now() + CDN_TOKEN_EXPIRY_MS;
+  const dataToSign = `${userId}:${platform}:${exp}`;
+
+  const sig = crypto
+    .createHmac("sha256", CDN_SECRET_KEY)
+    .update(dataToSign)
+    .digest("base64");
+
+  const token = Buffer.from(JSON.stringify({
+    userId,
+    platform,
+    exp,
+    sig
+  })).toString("base64");
+
+  return token;
+}
+
+/**
+ * Check if CDN is configured for PC modules
+ */
+function isCDNEnabled() {
+  return CDN_SECRET_KEY && CDN_BASE_URL;
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // REDIS FOR IP BAN SYSTEM
@@ -53,7 +94,7 @@ async function isIPBanned(ip) {
   // Owner IPs are NEVER banned - auto-unban if they were accidentally banned
   if (OWNER_IPS.includes(ip)) {
     console.log(`[IP Ban] 👑 Owner IP detected: ${ip} - skipping ban check`);
-    
+
     // Auto-unban owner IP if it was accidentally banned
     try {
       const redisClient = await getRedis();
@@ -64,14 +105,14 @@ async function isIPBanned(ip) {
     } catch (e) {
       // Ignore errors during auto-unban
     }
-    
+
     return false;
   }
-  
+
   try {
     const redisClient = await getRedis();
     if (!redisClient) return false;
-    
+
     const isBanned = await redisClient.sismember(BANNED_IPS_KEY, ip);
     return isBanned === 1;
   } catch (error) {
@@ -87,14 +128,14 @@ async function banIP(ip, reason) {
     console.log(`[IP Ban] 👑 Cannot ban owner IP: ${ip}`);
     return false;
   }
-  
+
   try {
     const redisClient = await getRedis();
     if (!redisClient) {
       console.log(`[IP Ban] Redis not available, cannot ban ${ip}`);
       return false;
     }
-    
+
     await redisClient.sadd(BANNED_IPS_KEY, ip);
     console.log(`[IP Ban] 🚫 BANNED IP: ${ip} - Reason: ${reason}`);
     return true;
@@ -220,16 +261,16 @@ export default async function handler(req, res) {
         const status = JSON.parse(statusData);
         if (status.status === 'maintenance' || status.status === 'offline') {
           console.log(`[${timestamp}] 🔧 ${platform.toUpperCase()} ${status.status.toUpperCase()} - Blocking access | IP: ${clientIP}`);
-          
+
           res.setHeader("Content-Type", "text/plain; charset=utf-8");
           res.setHeader("X-Status", status.status);
-          
+
           const statusEmoji = status.status === 'maintenance' ? '🔧' : '🔴';
           const statusTitle = status.status === 'maintenance' ? 'Maintenance Mode' : 'System Offline';
-          const statusMessage = status.message || (status.status === 'maintenance' 
+          const statusMessage = status.message || (status.status === 'maintenance'
             ? 'System is under maintenance. Please try again later.'
             : 'System is currently offline. Please try again later.');
-          
+
           const maintenanceScript = `
 -- StarshipCore ${platform === "mobile" ? "Mobile" : "PC"} - ${statusTitle}
 print("[StarshipCore] ${statusEmoji} ${statusTitle}")
@@ -271,10 +312,10 @@ warn("[StarshipCore] ${platform.toUpperCase()} access is temporarily disabled.")
     process.env.VERCEL_ENV === "development" ||
     req.headers.host?.includes("localhost");
   const forceDevMode = req.query.dev === "true" || req.query.dev === "1";
-  
+
   // Force loader mode - use ?loader=true to test obfuscated loader even on localhost
   const forceLoaderMode = req.query.loader === "true" || req.query.loader === "1";
-  
+
   // Force browser check - use ?testBan=true to test auto-ban even on localhost
   const testBanMode = req.query.testBan === "true" || req.query.testBan === "1";
 
@@ -289,7 +330,7 @@ warn("[StarshipCore] ${platform.toUpperCase()} access is temporarily disabled.")
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("X-Mode", "maintenance");
-    
+
     // Return a Lua script that shows maintenance message
     const maintenanceScript = `
 -- StarshipCore Mobile - Maintenance Mode
@@ -339,7 +380,7 @@ warn("[StarshipCore] Mobile access is temporarily disabled for updates.")
   if ((isDev || forceDevMode) && !forceLoaderMode && !testBanMode) {
     // Use non-obfuscated version for dev mode (easier debugging)
     const devScriptFile = config.scriptFileDev || config.scriptFile;
-    
+
     console.log(
       `[${timestamp}] 🛠️ ${platformLabel} DEV MODE - Skipping loader, serving ${devScriptFile} directly | IP: ${clientIP}`,
     );
@@ -542,11 +583,11 @@ ${scriptContent}
   // NO URLs are exposed to the client - loader is served directly
   // This prevents hackers from discovering internal endpoints
   // ═══════════════════════════════════════════════════════════════
-  
+
   try {
     // Use obfuscated loader for production
     const loaderPath = path.join(process.cwd(), "protected", "Loader-obfuscated.lua");
-    
+
     if (!fs.existsSync(loaderPath)) {
       // Fallback to non-obfuscated if obfuscated doesn't exist
       const fallbackPath = path.join(process.cwd(), "Loader.lua");
@@ -554,14 +595,14 @@ ${scriptContent}
         console.error(`[${timestamp}] ❌ PC Loader not found`);
         return res.status(500).send('error("PC Loader not available")');
       }
-      
+
       let loaderScript = fs.readFileSync(fallbackPath, "utf8");
-      
+
       // Remove BOM if present
       if (loaderScript.charCodeAt(0) === 0xfeff) {
         loaderScript = loaderScript.slice(1);
       }
-      
+
       // Inject server mode config at the top
       const configuredScript = `-- StarshipCore PC Loader v3.0 (Secure)
 _G.StarshipServerMode = true
@@ -573,24 +614,49 @@ ${loaderScript}`;
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("X-Bootstrap-Version", "3.0-secure");
       res.setHeader("X-Platform", "pc");
-      
+
       return res.status(200).send(configuredScript);
     }
-    
+
     // Serve obfuscated loader
     let loaderScript = fs.readFileSync(loaderPath, "utf8");
-    
+
     // Remove BOM if present
     if (loaderScript.charCodeAt(0) === 0xfeff) {
       loaderScript = loaderScript.slice(1);
     }
-    
+
+    // ═══════════════════════════════════════════════════════════════
+    // CDN INJECTION FOR PC - Inject CDN token for Cloudflare module loading
+    // ═══════════════════════════════════════════════════════════════
+    let cdnInjection = "";
+    if (isCDNEnabled()) {
+      // Bootstrap doesn't have userId yet, so we use a generic token
+      // The actual token will be generated when the loader calls pc-ld-q8r4
+      // For now, just enable CDN with a placeholder that will be replaced
+      const cdnToken = generateCDNToken("bootstrap", "pc");
+
+      if (cdnToken) {
+        cdnInjection = `do
+-- [CDN] Cloudflare CDN enabled for PC modules
+local cdnConfig = {}
+cdnConfig.url = "${CDN_BASE_URL}"
+cdnConfig.token = "${cdnToken}"
+cdnConfig.enabled = true
+_G.StarshipCDN = cdnConfig
+print("[CDN] _G.StarshipCDN injected from bootstrap")
+end
+`;
+        console.log(`[CDN] Token injected via bootstrap`);
+      }
+    }
+
     // Inject server mode config at the top (before obfuscated code)
     const configuredScript = `-- StarshipCore PC v3.0
 _G.StarshipServerMode = true
 _G.StarshipServerURL = "https://starship-core.my.id"
 
-${loaderScript}`;
+${cdnInjection}${loaderScript}`;
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -598,7 +664,7 @@ ${loaderScript}`;
     res.setHeader("X-Platform", "pc");
 
     return res.status(200).send(configuredScript);
-    
+
   } catch (error) {
     console.error(`[${timestamp}] ❌ Error serving PC loader:`, error);
     return res.status(500).send('error("Server error")');
