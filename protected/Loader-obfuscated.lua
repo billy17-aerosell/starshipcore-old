@@ -43,7 +43,7 @@ local TABS = {
 }
 
 -- Dev mode detection (for debug logging)
-local DEV_MODE = true
+local DEV_MODE = false
 
 -- In-memory module storage (no files saved to disk for security!)
 local LoadedModules = {}
