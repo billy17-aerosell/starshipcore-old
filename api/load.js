@@ -1460,6 +1460,13 @@ async function handlePCSuccess(
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // SERVER-SIDE KEY SYSTEM: Bundle key is NOT stored in bundle!
+  // Key is only sent after successful authentication
+  // This prevents bundle extraction/cracking since key is server-side
+  // ═══════════════════════════════════════════════════════════════════
+  const bundleKey = process.env.BUNDLE_KEY || null;
+  
   // Create response data (XOR encrypted, like mobile style)
   const responseData = {
     status: "success",
@@ -1479,6 +1486,8 @@ async function handlePCSuccess(
     blob: encryptedBase64,
     encType: "xor", // Indicates XOR encryption for client
     announcement: announcement,
+    // SERVER-SIDE KEY: Bundle decryption key (only sent after auth!)
+    bundleKey: bundleKey,
   };
 
   // Sign the payload to prevent tampering (userId bound)
@@ -1537,6 +1546,9 @@ async function servePCScript(res, userId, userData, now, remainingDays) {
   // Encode to Base64
   const base64Blob = encryptedBuffer.toString("base64");
 
+  // SERVER-SIDE KEY: Also include bundle key for file-based whitelist
+  const bundleKey = process.env.BUNDLE_KEY || null;
+  
   return res.status(200).json({
     status: "success",
     role: userData.role || "VIP",
@@ -1546,5 +1558,7 @@ async function servePCScript(res, userId, userData, now, remainingDays) {
     activatedAt: userData.activatedAt || null,
     key: dynamicKey,
     blob: base64Blob,
+    // SERVER-SIDE KEY: Bundle decryption key (only sent after auth!)
+    bundleKey: bundleKey,
   });
 }

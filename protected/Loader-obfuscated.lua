@@ -337,12 +337,20 @@ end
 
 -- ══════════════════════════════════════════════════════════════════
 -- BUNDLE LOADING - Single encrypted request for all modules!
--- SECURITY: Hides individual module names from HTTP spy tools
+-- SECURITY: Key is server-side only (not in bundle file)
 -- Uses pre-generated static bundle (CDN cached) for fast loading
+--
+-- SERVER-SIDE KEY SYSTEM (v2):
+-- Bundle does NOT contain the decryption key!
+-- Key is received from server AFTER authentication succeeds
+-- This prevents bundle extraction since key is server-side only
 -- ══════════════════════════════════════════════════════════════════
-local function downloadBundle(statusCallback)
-	local totalFiles = #MODULES + #TABS
-	
+
+-- Store raw bundle data for later decryption (after auth)
+local RawBundleData = nil
+
+-- Phase 1: Download bundle (without decrypting)
+local function downloadBundleRaw(statusCallback)
 	if statusCallback then
 		statusCallback("Connecting to server...", 0.1)
 	end
@@ -379,12 +387,40 @@ local function downloadBundle(statusCallback)
 		return false
 	end
 	
+	-- Store raw bundle for later decryption
+	RawBundleData = bundleData
+	
 	if statusCallback then
-		statusCallback("Unpacking components...", 0.4)
+		statusCallback("Components downloaded, awaiting authentication...", 0.3)
 	end
 	
-	-- Build decryption key (matches server: 'S' + timestamp.toString(36) + 'X')
-	local encKey = "S" .. (bundleData.k or "") .. "X"
+	return true
+end
+
+-- Phase 2: Decrypt bundle using server-provided key (called after auth)
+local function decryptBundleWithKey(bundleKey, statusCallback)
+	if not RawBundleData then
+		if DEV_MODE then
+			warn("[Starship] No bundle data to decrypt")
+		end
+		return false
+	end
+	
+	if not bundleKey or bundleKey == "" then
+		if DEV_MODE then
+			warn("[Starship] No bundle key provided by server")
+		end
+		return false
+	end
+	
+	local totalFiles = #MODULES + #TABS
+	
+	if statusCallback then
+		statusCallback("Decrypting components...", 0.4)
+	end
+	
+	-- Build decryption key (matches server: 'S' + key + 'X')
+	local encKey = "S" .. bundleKey .. "X"
 	
 	-- XOR decrypt function
 	local function xorDecrypt(encoded, key)
@@ -402,23 +438,20 @@ local function downloadBundle(statusCallback)
 	local loadedCount = 0
 	for i, moduleName in ipairs(MODULES) do
 		local key = "m" .. i
-		if bundleData.m[key] then
-			local content = xorDecrypt(bundleData.m[key], encKey)
+		if RawBundleData.m[key] then
+			local content = xorDecrypt(RawBundleData.m[key], encKey)
 			local func, loadErr = loadstring(content)
 			if func then
 				local success, result = pcall(func)
 				if success and result then
 					LoadedModules[moduleName] = result
 					loadedCount = loadedCount + 1
-				else
+				elseif DEV_MODE then
 					warn("[Starship] Execute error module " .. i .. ": " .. tostring(result))
 				end
-			else
+			elseif DEV_MODE then
 				warn("[Starship] Syntax error module " .. i .. ": " .. tostring(loadErr))
-				warn("[Starship] First 100 chars: " .. content:sub(1, 100))
 			end
-		else
-			warn("[Starship] Missing bundle data for module " .. i)
 		end
 		
 		if statusCallback then
@@ -430,23 +463,20 @@ local function downloadBundle(statusCallback)
 	-- Unpack tabs
 	for i, tabName in ipairs(TABS) do
 		local key = "t" .. i
-		if bundleData.tabs and bundleData.tabs[key] then
-			local content = xorDecrypt(bundleData.tabs[key], encKey)
+		if RawBundleData.tabs and RawBundleData.tabs[key] then
+			local content = xorDecrypt(RawBundleData.tabs[key], encKey)
 			local func, loadErr = loadstring(content)
 			if func then
 				local success, result = pcall(func)
 				if success and result then
 					LoadedModules["Tabs/" .. tabName] = result
 					loadedCount = loadedCount + 1
-				else
+				elseif DEV_MODE then
 					warn("[Starship] Execute error tab " .. i .. ": " .. tostring(result))
 				end
-			else
+			elseif DEV_MODE then
 				warn("[Starship] Syntax error tab " .. i .. ": " .. tostring(loadErr))
-				warn("[Starship] First 100 chars: " .. content:sub(1, 100))
 			end
-		else
-			warn("[Starship] Missing bundle data for tab " .. i)
 		end
 		
 		if statusCallback then
@@ -455,11 +485,14 @@ local function downloadBundle(statusCallback)
 		end
 	end
 	
+	-- Clear raw bundle data (security: don't keep encrypted data in memory)
+	RawBundleData = nil
+	
 	-- Store loaded modules in global (even if some failed)
 	getgenv().StarshipModules = LoadedModules
 	
-	if LoadedModules["Animations.lua"] then
-		_G.StarshipAnimDB = LoadedModules["Animations.lua"]
+	if LoadedModules[MODULES[4]] then -- Animations.lua (encoded)
+		_G.StarshipAnimDB = LoadedModules[MODULES[4]]
 	end
 	
 	-- Check if enough modules loaded (at least 80%)
@@ -475,25 +508,11 @@ local function downloadBundle(statusCallback)
 	end
 end
 
-
+-- Legacy function (for backward compatibility if needed)
 local function downloadModules(statusCallback)
-	-- ══════════════════════════════════════════════════════════════════
-	-- BUNDLE LOADING ONLY - No individual downloads allowed!
-	-- SECURITY: Prevents module names from appearing in HTTP spy
-	-- ══════════════════════════════════════════════════════════════════
-	
-	local bundleSuccess = downloadBundle(statusCallback)
-	if bundleSuccess then
-		return true
-	end
-	
-	-- Bundle failed - DO NOT fall back to individual downloads!
-	-- This prevents hackers from seeing module names in HTTP spy
-	if statusCallback then
-		statusCallback("❌ Failed to load components", 1)
-	end
-	
-	warn("[Starship] Bundle loading failed. Please try again.")
+	-- This should not be called directly anymore
+	-- Use downloadBundleRaw + decryptBundleWithKey instead
+	warn("[Starship] Legacy downloadModules called - use two-phase loading instead")
 	return false
 end
 
@@ -1397,16 +1416,31 @@ local function main()
 	setupFolders()
 	task.wait(0.2)
 
-	-- 2. Download Modules (Tetap dari host lama atau bisa dipindah nanti)
-	updateStatus("Updating modules...", 0.2)
-	downloadModules(function(text, progress)
-		updateStatus(text, 0.2 + (progress * 0.3))
+	-- ══════════════════════════════════════════════════════════════════
+	-- SERVER-SIDE KEY SYSTEM v2: Two-Phase Loading
+	-- Phase 1: Download bundle (without key/decryption)
+	-- Phase 2: Auth -> Get bundleKey from server -> Decrypt
+	-- This prevents bundle cracking since key is server-side only!
+	-- ══════════════════════════════════════════════════════════════════
+	
+	-- 2. Phase 1: Download Bundle (encrypted, no key yet)
+	updateStatus("Downloading components...", 0.2)
+	local bundleDownloaded = downloadBundleRaw(function(text, progress)
+		updateStatus(text, 0.2 + (progress * 0.2))
 	end)
+	
+	if not bundleDownloaded then
+		if loaderGui then
+			loaderGui:Destroy()
+		end
+		showError("Failed to download components. Please try again.")
+		return
+	end
 
 	-- 3. Secure Login & Download Script
 	-- 🔒 Auto-detect User ID (cannot be hardcoded by users!)
-	updateStatus("Authenticating with Secure Server...", 0.6)
-	task.wait(0.5)
+	updateStatus("Authenticating with Secure Server...", 0.45)
+	task.wait(0.3)
 
 	-- Auto-detect userId from current logged-in player
 	local userId = tostring(game:GetService("Players").LocalPlayer.UserId)
@@ -1454,7 +1488,7 @@ local function main()
 		end
 	end -- Close CDN check if-else
 
-	-- STEP 2: Now call /api/load to get the encrypted script (with HWID)
+	-- STEP 2: Now call /api/load to get the encrypted script + bundleKey (with HWID)
 	local targetUrl = SERVER_URL .. "/api/load?user=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
 
 	local success, response = pcall(function()
@@ -1546,6 +1580,37 @@ local function main()
 		Duration = data.duration or "LIFETIME",
 		Expiry = data.expiry, -- Timestamp expiry (bisa nil jika LIFETIME)
 	}
+
+	-- ══════════════════════════════════════════════════════════════════
+	-- SERVER-SIDE KEY: Phase 2 - Decrypt bundle with key from server
+	-- Key was NOT in bundle - only received after successful auth!
+	-- ══════════════════════════════════════════════════════════════════
+	local bundleKey = data.bundleKey
+	if bundleKey and bundleKey ~= "" then
+		updateStatus("Decrypting components with server key...", 0.82)
+		local decryptSuccess = decryptBundleWithKey(bundleKey, function(text, progress)
+			updateStatus(text, 0.82 + (progress * 0.08))
+		end)
+		
+		if not decryptSuccess then
+			if loaderGui then
+				loaderGui:Destroy()
+			end
+			showError("Failed to decrypt components. Invalid server key.")
+			return
+		end
+		
+		if DEV_MODE then
+			warn("[Starship] ✅ Bundle decrypted with server-side key")
+		end
+	else
+		-- No bundleKey from server - this shouldn't happen in production
+		if loaderGui then
+			loaderGui:Destroy()
+		end
+		showError("Security Error: Bundle key not provided by server")
+		return
+	end
 
 	-- ══════════════════════════════════════════════════════════════════
 	-- WATERMARK SYSTEM: Embed unique user identifier for leak tracing
@@ -1677,8 +1742,8 @@ local function main()
 	-- CHANGELOG CHECK: Show update modal BEFORE main UI loads
 	-- User must dismiss changelog before main script runs
 	-- ══════════════════════════════════════════════════════════════════
-	if LoadedModules["Changelog.lua"] then
-		local changelogModule = LoadedModules["Changelog.lua"]
+	if LoadedModules[MODULES[9]] then -- Changelog.lua (encoded)
+		local changelogModule = LoadedModules[MODULES[9]]
 
 		-- Fetch changelog data
 		local changelogData = changelogModule.FetchChangelog()

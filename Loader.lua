@@ -313,7 +313,170 @@ end
 -- BUNDLE LOADING - Single encrypted request for all modules!
 -- SECURITY: Hides individual module names from HTTP spy tools
 -- Uses pre-generated static bundle (CDN cached) for fast loading
+-- 
+-- SERVER-SIDE KEY SYSTEM (v2):
+-- Bundle does NOT contain the decryption key!
+-- Key is received from server AFTER authentication succeeds
+-- This prevents bundle extraction since key is server-side only
 -- ══════════════════════════════════════════════════════════════════
+
+-- Store raw bundle data for later decryption (after auth)
+local RawBundleData = nil
+
+-- Phase 1: Download bundle (without decrypting)
+local function downloadBundleRaw(statusCallback)
+	if statusCallback then
+		statusCallback("Connecting to server...", 0.1)
+	end
+	
+	-- Use pre-generated static bundle (CDN cached, much faster!)
+	local bundleUrl = SERVER_URL .. "/b/pc.json"
+	
+	if statusCallback then
+		statusCallback("Downloading components...", 0.2)
+	end
+	
+	-- Fetch bundle (single request!)
+	local bundleSuccess, bundleResponse = pcall(function()
+		return game:HttpGet(bundleUrl)
+	end)
+	
+	if not bundleSuccess or not bundleResponse then
+		if DEV_MODE then
+			warn("[Starship] Bundle download failed")
+		end
+		return false
+	end
+	
+	-- Parse bundle JSON
+	local bundleData = nil
+	local parseSuccess = pcall(function()
+		bundleData = HttpService:JSONDecode(bundleResponse)
+	end)
+	
+	if not parseSuccess or not bundleData or not bundleData.m then
+		if DEV_MODE then
+			warn("[Starship] Bundle parse failed")
+		end
+		return false
+	end
+	
+	-- Store raw bundle for later decryption
+	RawBundleData = bundleData
+	
+	if statusCallback then
+		statusCallback("Components downloaded, awaiting authentication...", 0.3)
+	end
+	
+	return true
+end
+
+-- Phase 2: Decrypt bundle using server-provided key (called after auth)
+local function decryptBundleWithKey(bundleKey, statusCallback)
+	if not RawBundleData then
+		if DEV_MODE then
+			warn("[Starship] No bundle data to decrypt")
+		end
+		return false
+	end
+	
+	if not bundleKey or bundleKey == "" then
+		if DEV_MODE then
+			warn("[Starship] No bundle key provided by server")
+		end
+		return false
+	end
+	
+	local totalFiles = #MODULES + #TABS
+	
+	if statusCallback then
+		statusCallback("Decrypting components...", 0.4)
+	end
+	
+	-- Build decryption key (matches server: 'S' + key + 'X')
+	local encKey = "S" .. bundleKey .. "X"
+	
+	-- XOR decrypt function
+	local function xorDecrypt(encoded, key)
+		local decoded = base64Decode(encoded)
+		local result = {}
+		for i = 1, #decoded do
+			local charCode = string.byte(decoded, i)
+			local keyCode = string.byte(key, ((i - 1) % #key) + 1)
+			table.insert(result, string.char(bit32.bxor(charCode, keyCode)))
+		end
+		return table.concat(result)
+	end
+	
+	-- Unpack modules
+	local loadedCount = 0
+	for i, moduleName in ipairs(MODULES) do
+		local key = "m" .. i
+		if RawBundleData.m[key] then
+			local content = xorDecrypt(RawBundleData.m[key], encKey)
+			local success, result = pcall(function()
+				return loadstring(content)()
+			end)
+			if success and result then
+				LoadedModules[moduleName] = result
+				loadedCount = loadedCount + 1
+			elseif DEV_MODE then
+				warn("[Starship] Failed to load module " .. i)
+			end
+		end
+		
+		if statusCallback then
+			local progress = 0.4 + (i / #MODULES) * 0.3
+			statusCallback("Loading components... [" .. loadedCount .. "/" .. totalFiles .. "]", progress)
+		end
+	end
+	
+	-- Unpack tabs
+	for i, tabName in ipairs(TABS) do
+		local key = "t" .. i
+		if RawBundleData.tabs and RawBundleData.tabs[key] then
+			local content = xorDecrypt(RawBundleData.tabs[key], encKey)
+			local success, result = pcall(function()
+				return loadstring(content)()
+			end)
+			if success and result then
+				LoadedModules["Tabs/" .. tabName] = result
+				loadedCount = loadedCount + 1
+			elseif DEV_MODE then
+				warn("[Starship] Failed to load tab " .. i)
+			end
+		end
+		
+		if statusCallback then
+			local progress = 0.7 + (i / #TABS) * 0.25
+			statusCallback("Loading components... [" .. loadedCount .. "/" .. totalFiles .. "]", progress)
+		end
+	end
+	
+	-- Clear raw bundle data (security: don't keep encrypted data in memory)
+	RawBundleData = nil
+	
+	-- Store loaded modules in global (even if some failed)
+	getgenv().StarshipModules = LoadedModules
+	
+	if LoadedModules["Animations.lua"] then
+		_G.StarshipAnimDB = LoadedModules["Animations.lua"]
+	end
+	
+	-- Check if enough modules loaded (at least 80%)
+	local minRequired = math.floor(totalFiles * 0.8)
+	if loadedCount >= minRequired then
+		if statusCallback then
+			statusCallback("✅ Components loaded! [" .. loadedCount .. "/" .. totalFiles .. "]", 1)
+		end
+		return true
+	else
+		warn("[Starship] Only loaded " .. loadedCount .. "/" .. totalFiles .. " - minimum required: " .. minRequired)
+		return false
+	end
+end
+
+-- Legacy compatibility function (calls new two-phase system)
 local function downloadBundle(statusCallback)
 	local totalFiles = #MODULES + #TABS
 	
@@ -1359,16 +1522,31 @@ local function main()
 	setupFolders()
 	task.wait(0.2)
 
-	-- 2. Download Modules (Tetap dari host lama atau bisa dipindah nanti)
-	updateStatus("Updating modules...", 0.2)
-	downloadModules(function(text, progress)
-		updateStatus(text, 0.2 + (progress * 0.3))
+	-- ══════════════════════════════════════════════════════════════════
+	-- SERVER-SIDE KEY SYSTEM v2: Two-Phase Loading
+	-- Phase 1: Download bundle (without key/decryption)
+	-- Phase 2: Auth -> Get bundleKey from server -> Decrypt
+	-- This prevents bundle cracking since key is server-side only!
+	-- ══════════════════════════════════════════════════════════════════
+	
+	-- 2. Phase 1: Download Bundle (encrypted, no key yet)
+	updateStatus("Downloading components...", 0.2)
+	local bundleDownloaded = downloadBundleRaw(function(text, progress)
+		updateStatus(text, 0.2 + (progress * 0.2))
 	end)
+	
+	if not bundleDownloaded then
+		if loaderGui then
+			loaderGui:Destroy()
+		end
+		showError("Failed to download components. Please try again.")
+		return
+	end
 
 	-- 3. Secure Login & Download Script
 	-- 🔒 Auto-detect User ID (cannot be hardcoded by users!)
-	updateStatus("Authenticating with Secure Server...", 0.6)
-	task.wait(0.5)
+	updateStatus("Authenticating with Secure Server...", 0.45)
+	task.wait(0.3)
 
 	-- Auto-detect userId from current logged-in player
 	local userId = tostring(game:GetService("Players").LocalPlayer.UserId)
@@ -1416,7 +1594,7 @@ local function main()
 		end
 	end -- Close CDN check if-else
 
-	-- STEP 2: Now call /api/load to get the encrypted script (with HWID)
+	-- STEP 2: Now call /api/load to get the encrypted script + bundleKey (with HWID)
 	local targetUrl = SERVER_URL .. "/api/load?user=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
 
 	local success, response = pcall(function()
@@ -1508,6 +1686,39 @@ local function main()
 		Duration = data.duration or "LIFETIME",
 		Expiry = data.expiry, -- Timestamp expiry (bisa nil jika LIFETIME)
 	}
+
+	-- ══════════════════════════════════════════════════════════════════
+	-- SERVER-SIDE KEY: Phase 2 - Decrypt bundle with key from server
+	-- Key was NOT in bundle - only received after successful auth!
+	-- ══════════════════════════════════════════════════════════════════
+	local bundleKey = data.bundleKey
+	if bundleKey and bundleKey ~= "" then
+		updateStatus("Decrypting components with server key...", 0.82)
+		local decryptSuccess = decryptBundleWithKey(bundleKey, function(text, progress)
+			updateStatus(text, 0.82 + (progress * 0.08))
+		end)
+		
+		if not decryptSuccess then
+			if loaderGui then
+				loaderGui:Destroy()
+			end
+			showError("Failed to decrypt components. Invalid server key.")
+			return
+		end
+		
+		if DEV_MODE then
+			warn("[Starship] ✅ Bundle decrypted with server-side key")
+		end
+	else
+		-- Fallback: No bundleKey from server (legacy or not configured)
+		-- Try using legacy downloadModules
+		if DEV_MODE then
+			warn("[Starship] ⚠️ No bundleKey from server, using legacy module loading")
+		end
+		downloadModules(function(text, progress)
+			updateStatus(text, 0.82 + (progress * 0.08))
+		end)
+	end
 
 	-- ══════════════════════════════════════════════════════════════════
 	-- WATERMARK SYSTEM: Embed unique user identifier for leak tracing
