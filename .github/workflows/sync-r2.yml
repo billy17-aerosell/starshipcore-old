@@ -51,7 +51,7 @@ jobs:
             if [ -f "$file" ]; then
               filename=$(basename "$file")
               echo "  → Uploading $filename"
-              wrangler r2 object put "$R2_BUCKET_NAME/pc/Modules/$filename" --file="$file" --content-type="text/plain"
+              wrangler r2 object put "$R2_BUCKET_NAME/pc/Modules/$filename" --file="$file" --content-type="text/plain" --remote
             fi
           done
           
@@ -61,14 +61,14 @@ jobs:
             if [ -f "$file" ]; then
               filename=$(basename "$file")
               echo "  → Uploading Tabs/$filename"
-              wrangler r2 object put "$R2_BUCKET_NAME/pc/Modules/Tabs/$filename" --file="$file" --content-type="text/plain"
+              wrangler r2 object put "$R2_BUCKET_NAME/pc/Modules/Tabs/$filename" --file="$file" --content-type="text/plain" --remote
             fi
           done
           
           # Upload main StarshipCore script (optional - if serving from CDN)
           if [ -f "data/StarshipCore.lua" ]; then
             echo "📦 Uploading StarshipCore.lua..."
-            wrangler r2 object put "$R2_BUCKET_NAME/pc/StarshipCore.lua" --file="data/StarshipCore.lua" --content-type="text/plain"
+            wrangler r2 object put "$R2_BUCKET_NAME/pc/StarshipCore.lua" --file="data/StarshipCore.lua" --content-type="text/plain" --remote
           fi
           
           echo "✅ All modules synced to R2 CDN!"
