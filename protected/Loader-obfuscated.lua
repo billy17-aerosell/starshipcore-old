@@ -315,6 +315,16 @@ local function downloadModule(moduleName, userId)
 	-- CDN LOADING (Cloudflare) - Injected by loader for PC
 	-- Reduces Vercel bandwidth by loading from Cloudflare CDN
 	-- ══════════════════════════════════════════════════════════════════
+	
+	-- DEBUG: Check if CDN config exists
+	if DEV_MODE then
+		if _G.StarshipCDN then
+			warn("[Starship] CDN Config found! enabled=" .. tostring(_G.StarshipCDN.enabled))
+		else
+			warn("[Starship] ❌ _G.StarshipCDN is nil - CDN not injected!")
+		end
+	end
+	
 	if _G.StarshipCDN and _G.StarshipCDN.enabled then
 		local cdnUrl = _G.StarshipCDN.url
 		local cdnToken = _G.StarshipCDN.token
