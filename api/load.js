@@ -84,14 +84,14 @@ async function checkEventAccess(userId) {
     console.log("[Event Check] EVENT_CODE_API not configured, skipping");
     return { hasAccess: false };
   }
-  
+
   try {
     const apiUrl = `${EVENT_CODE_API}?action=check&userId=${userId}`;
     console.log(`[Event Check] Calling: ${apiUrl}`);
-    
+
     const response = await fetch(apiUrl);
     const data = await response.json();
-    
+
     console.log(`[Event Check] Response for ${userId}:`, JSON.stringify(data));
 
     if (data.success && data.hasAccess) {
@@ -121,21 +121,21 @@ function shouldSendWebhook(userId, type = "access") {
   const key = `${userId}:${type}`;
   const lastSent = webhookRateLimit.get(key);
   const now = Date.now();
-  
+
   if (lastSent && (now - lastSent) < WEBHOOK_COOLDOWN_MS) {
     console.log(`[Webhook] Rate limited for ${key} (cooldown: ${Math.ceil((WEBHOOK_COOLDOWN_MS - (now - lastSent)) / 1000)}s remaining)`);
     return false;
   }
-  
+
   webhookRateLimit.set(key, now);
-  
+
   // Clean up old entries (older than 10 minutes)
   for (const [k, v] of webhookRateLimit.entries()) {
     if (now - v > 10 * 60 * 1000) {
       webhookRateLimit.delete(k);
     }
   }
-  
+
   return true;
 }
 
@@ -290,8 +290,8 @@ async function validateHWID(userId, platform, hwid, username) {
     return { valid: true, reason: "HWID matched" };
   } else {
     // Different HWID - REJECT
-    return { 
-      valid: false, 
+    return {
+      valid: false,
       reason: "HWID mismatch",
       storedHWID: storedData.hwid.substring(0, 8) + "...",
       providedHWID: hwid.substring(0, 8) + "...",
@@ -581,14 +581,14 @@ export default async function handler(req, res) {
   // === SECURITY v3.0: VERIFY TOKEN (Server-Side Verification) ===
   if (action === "verify") {
     const { userId, timestamp, nonce, token } = req.query;
-    
+
     if (!userId || !timestamp || !nonce || !token) {
       return res.status(400).json({ valid: false, error: "MISSING_PARAMS" });
     }
 
     const ts = parseInt(timestamp, 10);
     const result = verifyTokenFromClient(userId, ts, nonce, token);
-    
+
     return res.status(200).json(result);
   }
 
@@ -609,9 +609,9 @@ export default async function handler(req, res) {
     const success = await resetHWID(targetUserId, targetPlatform);
     if (success) {
       console.log(`[HWID] Admin reset HWID for ${targetUserId} (${targetPlatform})`);
-      return res.status(200).json({ 
-        success: true, 
-        message: `HWID reset for user ${targetUserId} (${targetPlatform})` 
+      return res.status(200).json({
+        success: true,
+        message: `HWID reset for user ${targetUserId} (${targetPlatform})`
       });
     } else {
       return res.status(500).json({ success: false, message: "Failed to reset HWID" });
@@ -622,7 +622,7 @@ export default async function handler(req, res) {
   if (action === "check_announcement") {
     const checkUserId = req.query.userId;
     const checkPlatform = req.query.platform || "pc";
-    
+
     if (!checkUserId) {
       return res.status(400).json({ error: "Missing userId" });
     }
@@ -635,7 +635,7 @@ export default async function handler(req, res) {
 
       const checkConfig = PLATFORM_CONFIG[checkPlatform];
       const whitelistData = await redisClient.get(checkConfig.whitelistKey);
-      
+
       if (!whitelistData) {
         return res.status(200).json({ success: true, announcement: null });
       }
@@ -653,7 +653,7 @@ export default async function handler(req, res) {
       // Clear the announcement after retrieving it
       delete whitelist[checkUserId].pendingAnnouncement;
       await redisClient.set(checkConfig.whitelistKey, JSON.stringify(whitelist));
-      
+
       console.log(`[${timestamp}] 📢 Announcement delivered and cleared for PC ${checkUserId}`);
 
       return res.status(200).json({
@@ -683,10 +683,10 @@ export default async function handler(req, res) {
       const redisClient = await getRedis();
       if (redisClient) {
         const mobileWhitelist = await getWhitelistFromRedis(config.whitelistKey);
-        
+
         if (mobileWhitelist && mobileWhitelist[userId]) {
           const user = mobileWhitelist[userId];
-          
+
           // Check if suspended
           if (user.status === "suspended") {
             return res.status(200).json({
@@ -696,7 +696,7 @@ export default async function handler(req, res) {
               hasAccess: false
             });
           }
-          
+
           // Check if expired - but also check event access first!
           if (user.expiresAt && new Date(user.expiresAt) < new Date()) {
             // VIP expired - check if event system is active AND user has event access
@@ -716,7 +716,7 @@ export default async function handler(req, res) {
                 });
               }
             }
-            
+
             // No event access, return expired
             const expiryDate = new Date(user.expiresAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
             return res.status(200).json({
@@ -727,17 +727,17 @@ export default async function handler(req, res) {
               isEventActive: isEventActive
             });
           }
-          
+
           // User is VIP and Active - return isBanned:false for periodic check
           // But hasAccess:false so mobile-loader proceeds to VIP auth flow (not event flow)
-            return res.status(200).json({
-              success: true,
-              isBanned: false,
-              hasAccess: false,  // VIP should use VIP auth, not event auth
-              isVIP: true,
-              message: "Active VIP - use VIP auth flow",
-              isEventActive: isEventActive
-            });
+          return res.status(200).json({
+            success: true,
+            isBanned: false,
+            hasAccess: false,  // VIP should use VIP auth, not event auth
+            isVIP: true,
+            message: "Active VIP - use VIP auth flow",
+            isEventActive: isEventActive
+          });
         }
       }
     } catch (e) {
@@ -745,9 +745,9 @@ export default async function handler(req, res) {
     }
 
     if (!isEventActive) {
-      return res.status(200).json({ 
-        success: false, 
-        hasAccess: false, 
+      return res.status(200).json({
+        success: false,
+        hasAccess: false,
         message: "Event system is currently disabled",
         isEventActive: false
       });
@@ -757,7 +757,7 @@ export default async function handler(req, res) {
     if (!EVENT_CODE_API) {
       return res.status(200).json({ success: false, hasAccess: false, message: "Event system not configured" });
     }
-    
+
     try {
       const apiUrl = `${EVENT_CODE_API}?action=check&userId=${userId}`;
       const response = await fetch(apiUrl);
@@ -772,8 +772,8 @@ export default async function handler(req, res) {
   if (action === "redeem") {
     // Check if event system is active globally
     if (!isEventActive) {
-      return res.status(200).json({ 
-        success: false, 
+      return res.status(200).json({
+        success: false,
         message: "Event system is currently disabled",
         isEventActive: isEventActive
       });
@@ -783,21 +783,21 @@ export default async function handler(req, res) {
     if (!EVENT_CODE_API) {
       return res.status(200).json({ success: false, message: "Event system not configured", isEventActive: isEventActive });
     }
-    
+
     if (!code) {
       return res.status(200).json({ success: false, message: "Kode tidak boleh kosong" });
     }
-    
+
     try {
       const apiUrl = `${EVENT_CODE_API}?action=redeem&code=${encodeURIComponent(code)}&userId=${userId}&username=${encodeURIComponent(username || "Unknown")}`;
       const response = await fetch(apiUrl);
       const data = await response.json();
-      
+
       // Log and send Discord webhook
       if (data.success) {
         // SUCCESS: Always send webhook (Important!)
         console.log(`[${timestamp}] 🎟️ EVENT CODE REDEEMED - User: ${username} (${userId}) | Code: ${code} | IP: ${clientIP}`);
-        
+
         await sendDiscordLog({
           title: "🎟️ Event Code Redeemed Successfully",
           status: "success",
@@ -814,7 +814,7 @@ export default async function handler(req, res) {
         // FAILURE: Rate limit to prevent spam
         if (shouldSendWebhook(userId, "redeem_fail")) {
           console.log(`[${timestamp}] ❌ EVENT CODE FAILED - User: ${username} (${userId}) | Code: ${code} | Reason: ${data.message}`);
-          
+
           await sendDiscordLog({
             title: "❌ Event Code Failed",
             status: "blocked",
@@ -831,7 +831,7 @@ export default async function handler(req, res) {
           console.log(`[${timestamp}] 🔇 Webhook skipped (Rate Limited) - User: ${userId} | Action: Redeem Fail`);
         }
       }
-      
+
       return res.status(200).json(data);
     } catch (error) {
       console.error("[Event Redeem] Error:", error.message);
@@ -895,7 +895,7 @@ export default async function handler(req, res) {
           console.log(
             `[${timestamp}] 🚫 HWID MISMATCH - UserID: ${userId} (${vipUser.username}) | Reason: ${hwidResult.reason} | IP: ${clientIP}`,
           );
-          
+
           // Send Discord alert for HWID mismatch
           if (shouldSendWebhook(userId, "hwid_mismatch")) {
             await sendDiscordLog({
@@ -910,7 +910,7 @@ export default async function handler(req, res) {
               message: `⚠️ **Possible account sharing detected!**\n\n**Reason:** ${hwidResult.reason}\n**Stored HWID:** ${hwidResult.storedHWID || "N/A"}\n**Provided HWID:** ${hwidResult.providedHWID || "N/A"}\n**Registered:** ${hwidResult.registeredAt || "N/A"}`,
             });
           }
-          
+
           return res.status(200).json({
             status: "denied",
             message: "Device tidak dikenali. Hubungi admin untuk reset HWID.",
@@ -1052,12 +1052,12 @@ export default async function handler(req, res) {
       // If user has event access for mobile, allow them even if they have PC license
       if (platform === "mobile") {
         const eventAccess = await checkEventAccess(userId);
-        
+
         if (eventAccess.hasAccess) {
           console.log(
             `[${timestamp}] 🎟️ EVENT ACCESS GRANTED (PC user with event code) - ${platformLabel} - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
           );
-          
+
           return res.status(200).json({
             status: "success",
             platform: "mobile",
@@ -1262,12 +1262,12 @@ export default async function handler(req, res) {
     if (platform === "mobile") {
       if (isEventActive) {
         const eventAccess = await checkEventAccess(userId);
-        
+
         if (eventAccess.hasAccess) {
           console.log(
             `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - ${platformLabel} - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
           );
-          
+
           // Only send webhook if not rate limited (prevents spam on script re-run)
           if (shouldSendWebhook(userId, "event_access")) {
             await sendDiscordLog({
@@ -1282,7 +1282,7 @@ export default async function handler(req, res) {
               message: `✅ Event access granted\nExpires: ${eventAccess.expiresAt}\nRemaining: ${eventAccess.remainingDays} days`,
             });
           }
-          
+
           // Return success for mobile event access
           return res.status(200).json({
             status: "success",
@@ -1346,14 +1346,14 @@ async function handleMobileSuccess(
   // Note: Device limit has been replaced by HWID binding
   // Device tracking kept for logging purposes only
 
-    // Send VIP Access webhook with rate limiting (skip for OWNER)
+  // Send VIP Access webhook with rate limiting (skip for OWNER)
   const isOwner = mobileUser.type === "OWNER";
   if (!isOwner) {
     // Rate limiting - check cooldown
     const COOLDOWN_MINUTES = 10;
     const cooldownKey = `webhook_cooldown:mobile:${userId}`;
     let shouldSendWebhook = true;
-    
+
     try {
       const redisClient = await getRedis();
       if (redisClient) {
@@ -1369,7 +1369,7 @@ async function handleMobileSuccess(
     } catch (e) {
       // Redis error - send anyway
     }
-    
+
     if (shouldSendWebhook) {
       await sendDiscordLog({
         title: "Mobile VIP Access Granted",
@@ -1383,21 +1383,21 @@ async function handleMobileSuccess(
         timestamp: timestamp,
         message: "Mobile VIP access granted - Duration: " + (mobileUser.expiresAt ? remainingDays + " days" : "LIFETIME"),
       });
-      
+
       // Update cooldown
       try {
         const redisClient = await getRedis();
         if (redisClient) {
           await redisClient.set(cooldownKey, Date.now().toString(), "EX", 86400);
         }
-      } catch (e) {}
+      } catch (e) { }
     }
   }
   // Check for pending announcement (compensation, etc.)
   let announcement = null;
   if (mobileUser.pendingAnnouncement) {
     announcement = mobileUser.pendingAnnouncement;
-    
+
     // Clear the announcement after sending (async, don't wait)
     try {
       const redisClient = await getRedis();
@@ -1436,10 +1436,10 @@ async function handleMobileSuccess(
 
   // Sign the payload to prevent tampering (userId bound)
   const signedPayload = createSecurePayload(responseData, userId);
-  
+
   // Add honeypot to catch crackers
   const honeypot = generateHoneypot();
-  
+
   return res.status(200).json({
     ...signedPayload,
     ...honeypot, // Trap for bypass attempts
@@ -1485,10 +1485,10 @@ async function handlePCSuccess(
   // ENCRYPTION: Using XOR for maximum executor compatibility
   // Security is maintained via Server-Side Token Verification
   // ═══════════════════════════════════════════════════════════════════
-  
+
   // Generate dynamic XOR key (64 chars hex = 32 bytes)
   const dynamicKey = crypto.randomBytes(32).toString('hex');
-  
+
   // XOR encrypt the script (working with raw bytes to preserve UTF-8)
   const scriptBytes = scriptBuffer; // Already a Buffer (bytes)
   const encryptedBytes = Buffer.alloc(scriptBytes.length);
@@ -1503,7 +1503,7 @@ async function handlePCSuccess(
   let announcement = null;
   if (vipUser.pendingAnnouncement) {
     announcement = vipUser.pendingAnnouncement;
-    
+
     // Clear the announcement after sending
     try {
       const redisClient = await getRedis();
@@ -1529,7 +1529,14 @@ async function handlePCSuccess(
   // This prevents bundle extraction/cracking since key is server-side
   // ═══════════════════════════════════════════════════════════════════
   const bundleKey = process.env.BUNDLE_KEY || null;
-  
+
+  // Debug: Check if BUNDLE_KEY is configured
+  if (!bundleKey) {
+    console.warn(`[${timestamp}] ⚠️ BUNDLE_KEY not configured in environment variables!`);
+  } else {
+    console.log(`[${timestamp}] 🔑 BUNDLE_KEY configured: length=${bundleKey.length}, preview=${bundleKey.substring(0, 4)}...${bundleKey.substring(bundleKey.length - 4)}`);
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // CDN CONFIG: Generate signed token for Cloudflare CDN access
   // Token allows downloading encrypted bundle from CDN after auth
@@ -1546,7 +1553,7 @@ async function handlePCSuccess(
       console.log(`[CDN] Single-use token generated for PC user: ${userId}`);
     }
   }
-  
+
   // Create response data (XOR encrypted, like mobile style)
   const responseData = {
     status: "success",
@@ -1574,10 +1581,10 @@ async function handlePCSuccess(
 
   // Sign the payload to prevent tampering (userId bound)
   const signedPayload = createSecurePayload(responseData, userId);
-  
+
   // Add honeypot to catch crackers
   const honeypot = generateHoneypot();
-  
+
   return res.status(200).json({
     ...signedPayload,
     ...honeypot,
@@ -1630,7 +1637,12 @@ async function servePCScript(res, userId, userData, now, remainingDays) {
 
   // SERVER-SIDE KEY: Also include bundle key for file-based whitelist
   const bundleKey = process.env.BUNDLE_KEY || null;
-  
+
+  // Debug: Check if BUNDLE_KEY is configured
+  if (!bundleKey) {
+    console.warn(`[servePCScript] ⚠️ BUNDLE_KEY not configured in environment variables!`);
+  }
+
   // CDN CONFIG: Generate signed token for Cloudflare CDN access
   let cdnConfig = null;
   if (isCDNEnabled()) {
@@ -1644,7 +1656,7 @@ async function servePCScript(res, userId, userData, now, remainingDays) {
       console.log(`[CDN] Single-use token generated for PC user (file-based): ${userId}`);
     }
   }
-  
+
   return res.status(200).json({
     status: "success",
     role: userData.role || "VIP",

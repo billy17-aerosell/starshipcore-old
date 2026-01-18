@@ -526,6 +526,14 @@ local function decryptBundleWithKey(bundleKey, statusCallback)
 		statusCallback("Decrypting components...", 0.4)
 	end
 	
+	-- Debug: Log key info (partial for security)
+	if DEV_MODE then
+		local keyLen = #bundleKey
+		local keyPreview = bundleKey:sub(1, 4) .. "..." .. bundleKey:sub(-4)
+		warn("[Starship] Bundle key received: length=" .. keyLen .. ", preview=" .. keyPreview)
+		warn("[Starship] RawBundleData.v=" .. tostring(RawBundleData.v) .. ", modules=" .. tostring(RawBundleData.m and "exists" or "nil"))
+	end
+	
 	-- Build decryption key (matches server: 'S' + key + 'X')
 	local encKey = "S" .. bundleKey .. "X"
 	
@@ -610,7 +618,11 @@ local function decryptBundleWithKey(bundleKey, statusCallback)
 		end
 		return true
 	else
-		warn("[Starship] Only loaded " .. loadedCount .. "/" .. totalFiles .. " - minimum required: " .. minRequired)
+		warn("[Starship] ❌ DECRYPTION FAILED: Only loaded " .. loadedCount .. "/" .. totalFiles .. " - minimum required: " .. minRequired)
+		if loadedCount == 0 then
+			warn("[Starship] ⚠️ 0 modules loaded - this usually means BUNDLE_KEY mismatch!")
+			warn("[Starship] Check if Vercel BUNDLE_KEY matches the key used to generate the bundle.")
+		end
 		return false
 	end
 end
