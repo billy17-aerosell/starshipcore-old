@@ -1,4 +1,4 @@
--- Fun Tab Module (Updated: 2026-01-18 08:26)
+-- Fun Tab Module (Updated: 2026-01-18 17:05 - TEST UPDATE REMOVED)
 local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandlers, RegisterTheme)
 	local Players = game:GetService("Players")
 	local RunService = game:GetService("RunService")
@@ -1048,31 +1048,6 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		end
 	end)
 
-	-- ═══════════════════════════════════════════════════════════════
-	-- TEST CARD - For testing bundle update (can be removed later)
-	-- Added: 2026-01-18 - Testing R2 auto-update
-	-- ═══════════════════════════════════════════════════════════════
-	local CardTest = CreateCard("🧪 TEST UPDATE - R2 Sync", 70, 5)
-	
-	local TestToggleEnabled = false
-	local TestToggleBtn = Instance.new("TextButton", CardTest)
-	TestToggleBtn.Text = "🔴 TEST TOGGLE: OFF"
-	TestToggleBtn.Size = UDim2.new(0.94, 0, 0, 35)
-	TestToggleBtn.Position = UDim2.new(0.03, 0, 0, 30)
-	StyleBtn(TestToggleBtn, C_ACCENT)
-	
-	TestToggleBtn.MouseButton1Click:Connect(function()
-		TestToggleEnabled = not TestToggleEnabled
-		if TestToggleEnabled then
-			TestToggleBtn.Text = "🟢 TEST TOGGLE: ON"
-			TestToggleBtn.TextColor3 = C_GREEN
-			print("[StarshipCore] ✅ Test toggle enabled! R2 bundle updated successfully!")
-		else
-			TestToggleBtn.Text = "🔴 TEST TOGGLE: OFF"
-			TestToggleBtn.TextColor3 = C_ACCENT
-			print("[StarshipCore] ❌ Test toggle disabled")
-		end
-	end)
 
 	-- 6. FRIENDS IN SERVER (Click player to see their friends)
 	local CardFriends = CreateCard("👥 " .. L("friends_in_server"), 85, 6)
