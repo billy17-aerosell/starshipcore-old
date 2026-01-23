@@ -105,33 +105,33 @@ local function RoundNum(num, decimals)
 	return math.floor(num * mult + 0.5) / mult
 end
 
--- Optimize a single frame for mobile
+-- Optimize a single frame for mobile (3 decimal precision for smoother playback)
 local function OptimizeFrame(frame)
 	local optimized = {}
 
-	-- Keep timestamp with 2 decimal precision
-	optimized.t = RoundNum(frame.t, 2)
+	-- Keep timestamp with 3 decimal precision
+	optimized.t = RoundNum(frame.t, 3)
 
-	-- Position: reduce to 1 decimal (studs precision is enough)
+	-- Position: 3 decimal precision (smoother movement)
 	if frame.pos then
 		optimized.pos = {
-			x = RoundNum(frame.pos.x, 1),
-			y = RoundNum(frame.pos.y, 1),
-			z = RoundNum(frame.pos.z, 1),
+			x = RoundNum(frame.pos.x, 3),
+			y = RoundNum(frame.pos.y, 3),
+			z = RoundNum(frame.pos.z, 3),
 		}
 	end
 
-	-- Rotation: reduce to 1 decimal
+	-- Rotation: 3 decimal precision
 	if frame.rot then
-		optimized.rot = RoundNum(frame.rot, 1)
+		optimized.rot = RoundNum(frame.rot, 3)
 	end
 
-	-- Velocity: reduce to 1 decimal
+	-- Velocity: 3 decimal precision
 	if frame.vel then
 		optimized.vel = {
-			x = RoundNum(frame.vel.x, 1),
-			y = RoundNum(frame.vel.y, 1),
-			z = RoundNum(frame.vel.z, 1),
+			x = RoundNum(frame.vel.x, 3),
+			y = RoundNum(frame.vel.y, 3),
+			z = RoundNum(frame.vel.z, 3),
 		}
 	end
 
@@ -147,17 +147,17 @@ local function OptimizeFrame(frame)
 		optimized.air = frame.air
 	end
 
-	-- HipHeight: reduce precision
+	-- HipHeight: 3 decimal precision
 	if frame.hh then
-		optimized.hh = RoundNum(frame.hh, 1)
+		optimized.hh = RoundNum(frame.hh, 3)
 	end
 
-	-- MoveDirection: reduce precision
+	-- MoveDirection: 3 decimal precision
 	if frame.md then
 		optimized.md = {
-			x = RoundNum(frame.md.x, 2),
-			y = RoundNum(frame.md.y, 2),
-			z = RoundNum(frame.md.z, 2),
+			x = RoundNum(frame.md.x, 3),
+			y = RoundNum(frame.md.y, 3),
+			z = RoundNum(frame.md.z, 3),
 		}
 	end
 
@@ -172,7 +172,7 @@ local function OptimizeFrame(frame)
 	return optimized
 end
 
--- Optimize entire recording for mobile
+-- Optimize entire recording for mobile (keeps 60fps for smoother playback)
 local function OptimizeForMobile(recordingData)
 	if not recordingData or not recordingData.Frames or #recordingData.Frames == 0 then
 		return recordingData
@@ -181,8 +181,8 @@ local function OptimizeForMobile(recordingData)
 	local originalFrameCount = #recordingData.Frames
 	local optimizedFrames = {}
 
-	-- Skip every other frame (60fps -> 30fps)
-	for i = 1, originalFrameCount, 2 do
+	-- Keep all frames (60fps) for smoother playback
+	for i = 1, originalFrameCount do
 		local frame = recordingData.Frames[i]
 		local optimized = OptimizeFrame(frame)
 		table.insert(optimizedFrames, optimized)
@@ -191,7 +191,7 @@ local function OptimizeForMobile(recordingData)
 	local result = {
 		Frames = optimizedFrames,
 		Mode = recordingData.Mode,
-		FPS = 30, -- Now 30fps
+		FPS = recordingData.FPS or 60, -- Keep original FPS (60fps)
 		RigType = recordingData.RigType,
 		-- Skip other metadata that's not essential
 	}
@@ -199,10 +199,8 @@ local function OptimizeForMobile(recordingData)
 	if DEV_MODE then
 		print(
 			string.format(
-				"[CloudRecording] Optimized: %d -> %d frames (%.1f%% reduction)",
-				originalFrameCount,
-				#optimizedFrames,
-				(1 - #optimizedFrames / originalFrameCount) * 100
+				"[CloudRecording] Optimized: %d frames with 3-decimal precision",
+				#optimizedFrames
 			)
 		)
 	end

@@ -796,7 +796,7 @@ local S = {
 	lastAirState = nil,
 	isRespawnOnEnd = false,
 	isLiveSmoothing = false,
-	liveSmoothingStrength = 4,
+	liveSmoothingStrength = 6,
 	isPositionBasedPlayback = true, -- New: smoother position-following mode (default ON)
 	isBinding = false,
 	isAutoCloudSync = false, -- NEW: Auto-sync merged files to cloud
@@ -1000,6 +1000,14 @@ local function DeepCopy(orig)
 	return copy
 end
 
+-- --- HELPER FUNCTIONS (Moved up for OptimizeFrame) ---
+local function CFToTbl(cf)
+	return { cf:GetComponents() }
+end
+local function TblToCF(t)
+	return CFrame.new(unpack(t))
+end
+
 -- ═══════════════════════════════════════════════════════════════════
 -- MERGE OPTIMIZATION - Reduce file size by 50-70%
 -- ═══════════════════════════════════════════════════════════════════
@@ -1014,7 +1022,7 @@ local function RoundNum(num, decimals)
 end
 
 -- Optimize a single frame (reduce precision, remove heavy data)
-local function OptimizeFrame(frame)
+local function OptimizeFrame(frame, forceSimple)
 	local optimized = {}
 
 	-- Keep timestamp with 2 decimal precision
@@ -1069,7 +1077,25 @@ local function OptimizeFrame(frame)
 
 	-- Standard mode (r) - keep CFrame data
 	if frame.r then
-		optimized.r = frame.r
+		if forceSimple then
+			-- Convert r to pos/rot if missing (Flexible Mode conversion)
+			if not optimized.pos then
+				local cf = TblToCF(frame.r)
+				optimized.pos = {
+					x = RoundNum(cf.Position.X, 1),
+					y = RoundNum(cf.Position.Y, 1),
+					z = RoundNum(cf.Position.Z, 1),
+				}
+			end
+			if not optimized.rot then
+				local cf = TblToCF(frame.r)
+				local _, y, _ = cf:ToOrientation()
+				optimized.rot = RoundNum(math.deg(y), 1)
+			end
+			-- Do NOT keep r in simple mode
+		else
+			optimized.r = frame.r
+		end
 	end
 
 	-- Shiftlock / Camera data (keep for accurate playback)
@@ -1098,7 +1124,7 @@ local function OptimizeFrame(frame)
 end
 
 -- Optimize entire merged recording (reduce frames & precision)
-local function OptimizeMergedData(recordingData)
+local function OptimizeMergedData(recordingData, forceSimple)
 	if not recordingData or not recordingData.Frames or #recordingData.Frames == 0 then
 		return recordingData
 	end
@@ -1109,7 +1135,7 @@ local function OptimizeMergedData(recordingData)
 	-- Skip every other frame (60fps -> 30fps) + optimize each frame
 	for i = 1, originalFrameCount, 2 do
 		local frame = recordingData.Frames[i]
-		local optimized = OptimizeFrame(frame)
+		local optimized = OptimizeFrame(frame, forceSimple)
 		table.insert(optimizedFrames, optimized)
 
 		-- Yield occasionally to prevent freeze
@@ -1121,7 +1147,7 @@ local function OptimizeMergedData(recordingData)
 	local result = {
 		Frames = optimizedFrames,
 		FPS = 30, -- Now 30fps (was 60)
-		Mode = recordingData.Mode,
+		Mode = forceSimple and "Flexible" or recordingData.Mode, -- Force Flexible mode if simplified
 		RigType = recordingData.RigType,
 	}
 
@@ -1850,12 +1876,7 @@ end
 -- WHITELIST SYSTEM UI (Firebase - UserId based)
 
 -- --- HELPER FUNCTIONS ---
-local function CFToTbl(cf)
-	return { cf:GetComponents() }
-end
-local function TblToCF(t)
-	return CFrame.new(unpack(t))
-end
+
 
 -- --- PATH VARIABLES ---
 local PathContainer = nil
@@ -2911,7 +2932,16 @@ local function SaveRecording(fn)
 		end
 
 		local filePath = path .. "/" .. fn .. ".json"
-		local jsonData = HttpService:JSONEncode(recordedData)
+		
+		-- Apply optimization if enabled (Simple Mode)
+		local dataToSave = recordedData
+		if S.isOptimizeMerge then
+			-- Use the optimization logic to create a simplified version
+			-- forceSimple = true ensures we strip CFrame/Joints and convert to Pos/Rot
+			dataToSave = OptimizeMergedData(recordedData, true)
+		end
+		
+		local jsonData = HttpService:JSONEncode(dataToSave)
 
 		if not jsonData then
 			error("JSONEncode returned nil")
@@ -4219,7 +4249,7 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 
 					-- Light position correction to stay on path while allowing natural movement
 					local currentPos = r.Position
-					local positionBlend = 0.3 -- More natural movement, less strict positioning
+					local positionBlend = 0.5 -- More natural movement, less strict positioning
 					local smoothPos = currentPos:Lerp(targetPos, positionBlend)
 
 					if type(targetYaw) == "number" then
@@ -4290,16 +4320,31 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 							r.CFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
 							r.AssemblyLinearVelocity = vel
 						else
-							-- Smoothly move to target position
+							-- AIR PHYSICS IMPROVEMENT (Fix for 30FPS "framey" look)
+							-- Instead of forcing CFrame (which fights physics), guide with Velocity
+							local targetVel = smoothVel or vel
+							
+							-- Calculate position error
 							local currentPos = r.Position
-							local posBlend = math.clamp(0.5 * playbackSpeed, 0.3, 0.9)
-							local newPos = currentPos:Lerp(targetPos, posBlend)
-							r.CFrame = CFrame.new(newPos) * r.CFrame.Rotation
-
-							-- Use RECORDED velocity for animation (not calculated)
-							local recordedVelY = fA.velVector and fA.velVector.Y or (fA.vel and fA.vel.y or 0)
-							local horizVel = (targetPos - currentPos) * 10 * playbackSpeed
-							r.AssemblyLinearVelocity = Vector3.new(horizVel.X, recordedVelY * playbackSpeed, horizVel.Z)
+							local posDiff = targetPos - currentPos
+							
+							-- Apply gentle correction force (spring-like)
+							-- Weaker than ground correction to allow natural arcs
+							local correctionStrength = 5 
+							local correctionVel = posDiff * correctionStrength
+							
+							-- Combine: Interpolated Velocity + Correction
+							-- This ensures we follow the smooth Catmull-Rom curve of velocity
+							local finalVel = targetVel + correctionVel
+							
+							-- Apply velocity directly
+							r.AssemblyLinearVelocity = finalVel
+							
+							-- Anti-Drift: Only snap CFrame if we drift too far
+							if posDiff.Magnitude > 2 then
+								local snapPos = currentPos:Lerp(targetPos, 0.2)
+								r.CFrame = CFrame.new(snapPos) * r.CFrame.Rotation
+							end
 						end
 					-- LANDING FIX: When just landed, use higher blend factor for more responsive ground contact
 					-- But don't use separate handling - let normal ground movement code handle it
@@ -4350,7 +4395,7 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 
 								-- Calculate target velocity that will move us toward the path
 								-- Use stronger multiplier for tighter path following
-								local correctionStrength = math.clamp(distance * 8, 0, 50) -- Stronger correction
+								local correctionStrength = math.clamp(distance * 6, 0, 50) -- Smoother correction (was 8)
 								local correctionVel = distance > 0.01 and (posDiff.Unit * correctionStrength)
 									or Vector3.new(0, 0, 0)
 
@@ -4359,7 +4404,7 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 								local finalVel = targetVel + correctionVel
 
 								-- Apply velocity (this allows physics and animations to work properly)
-								r.AssemblyLinearVelocity = currentVel:Lerp(finalVel, 0.85)
+								r.AssemblyLinearVelocity = currentVel:Lerp(finalVel, 0.6) -- Smoother velocity blend (was 0.85)
 
 								-- Only snap position if WAY off (fallback safety)
 								if distance > 8 then
