@@ -5,49 +5,49 @@
     {
       "version": "1.5.3",
       "date": "2026-01-27",
-      "title": "Peningkatan Stabilitas & Deteksi Item",
+      "title": "Stability & Item Detection Update",
       "changes": [
-        "Recording lama tetap bisa dimainkan meskipun item di game berubah nama",
-        "Sistem deteksi item sekarang jauh lebih pintar dan akurat",
-        "Memperbaiki masalah item tidak terbaca karena perbedaan penulisan nama",
-        "Penyelarasan sistem agar lebih stabil dan seragam dengan versi mobile",
-        "Tampilan log konsol sekarang lebih bersih dan rapi"
+        "Old recordings now work even if game items are renamed",
+        "Smarter and more accurate item detection system",
+        "Fixed issues where items weren't recognized due to naming differences",
+        "System synchronization for better stability and consistency with mobile",
+        "Cleaner and more organized console output"
       ]
     },
     {
       "version": "1.5.2",
       "date": "2026-01-14",
-      "title": "Perbaikan Tool & Playback",
+      "title": "Tool & Playback Fixes",
       "changes": [
-        "Memperbaiki masalah kecepatan saat menggunakan item",
-        "Memperbaiki fitur pause/resume yang sempat macet",
-        "Deteksi item yang lebih responsif",
-        "Perbaikan error saat registrasi",
-        "Pengalaman playback yang lebih mulus",
-        "Memperbaiki penyimpanan checkpoint",
-        "Karakter sekarang berjalan lebih alami ke titik awal",
-        "Gerakan di tangga dan air lebih lancar",
-        "Peningkatan stabilitas secara keseluruhan"
+        "Fixed speed issues when using items",
+        "Fixed pause/resume functionality",
+        "More responsive item detection",
+        "Fixed registration errors",
+        "Smoother playback experience",
+        "Fixed checkpoint saving issues",
+        "Character now walks naturally to starting points",
+        "Smoother movement on ladders and in water",
+        "Overall stability improvements"
       ]
     },
     {
       "version": "1.5.1",
       "date": "2026-01-10",
-      "title": "Fitur Morph Avatar",
+      "title": "Morph Avatar Feature",
       "changes": [
-        "Penambahan fitur ganti wujud (Morph Avatar)",
-        "Pratinjau tampilan karakter secara langsung",
-        "Tombol reset karakter"
+        "Added Morph Avatar feature",
+        "Live character preview",
+        "Reset character button"
       ]
     },
     {
       "version": "1.5.0",
       "date": "2026-01-10",
-      "title": "Update Visual & Jalur",
+      "title": "Visual & Path Update",
       "changes": [
-        "Smart Resume: Berjalan otomatis ke titik lanjut",
-        "Tampilan garis jalur yang lebih halus",
-        "Memperbaiki masalah karakter tersangkut"
+        "Smart Resume: Automatically walks to the next point",
+        "Smoother path line display",
+        "Fixed character getting stuck issues"
       ]
     }
   ]

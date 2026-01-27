@@ -5,48 +5,48 @@
         {
             "version": "1.2.3",
             "date": "2026-01-27",
-            "title": "Update Performa & Fitur Otomatis",
+            "title": "Performance & Automation Update",
             "changes": [
-                "Peningkatan performa mesin agar gerakan lebih mulus dan ringan",
-                "Fitur otomatis agar item tetap terbaca meskipun ada update dari game",
-                "Loading recording cloud sekarang jauh lebih cepat (hanya perlu download sekali)",
-                "Semua kontrol (Kecepatan, God Mode, dll) sekarang lebih responsif",
-                "Perbaikan sistem deteksi item agar tidak salah ambil",
-                "Tampilan awal lebih bersih (Garis jalur sekarang mati secara default)",
-                "Penggunaan memori lebih hemat, sangat cocok untuk HP spek rendah",
-                "Menghapus pesan-pesan tidak penting agar tidak menyebabkan lag"
+                "Performance boost for smoother and lighter movement",
+                "Automatic item recognition even after game updates",
+                "Much faster cloud recording loads (only needs to download once)",
+                "All controls (Speed, God Mode, etc.) are now more responsive",
+                "Improved item detection to prevent incorrect selection",
+                "Cleaner interface (Path lines are now off by default)",
+                "Optimized for low-end devices with better memory usage",
+                "Removed unnecessary messages to reduce lag"
             ]
         },
         {
             "version": "1.2.2",
             "date": "2026-01-14",
-            "title": "Perbaikan UI & Playback",
+            "title": "UI & Playback Fixes",
             "changes": [
-                "Memperbaiki fitur pause/resume yang tidak berjalan normal",
-                "Tampilan UI lebih bersih dan klasik",
-                "Perbaikan tampilan nama peran (Role)",
-                "Memperbaiki error batas registrasi lokal",
-                "Optimasi pengaturan data cloud",
-                "Penambahan pengaturan transparansi background",
-                "Perbaikan daftar tema yang lebih dinamis",
-                "Indigo sekarang menjadi tema default",
-                "Tombol ganti tema di bagian atas",
-                "Update link Discord terbaru",
-                "Perbaikan karakter judul jendela",
-                "Peningkatan stabilitas sistem"
+                "Fixed pause/resume playback issues",
+                "Cleaner and more classic UI look",
+                "Fixed role display formatting",
+                "Fixed local registration limit errors",
+                "Optimized cloud data management",
+                "Added background transparency settings",
+                "Fixed dynamic theme list",
+                "Indigo set as default theme",
+                "Added theme switch button to topbar",
+                "Updated Discord link",
+                "Fixed window title characters",
+                "Overall system stability improvements"
             ]
         },
         {
             "version": "1.2.1",
             "date": "2026-01-10",
-            "title": "Update Inti Mobile",
+            "title": "Mobile Core Update",
             "changes": [
-                "Morph Avatar: Berubah menjadi pemain lain dengan pratinjau",
-                "Warp: Sistem titik teleportasi baru",
-                "Smart Resume: Melanjutkan playback dengan lebih halus",
-                "Peningkatan akurasi visual garis jalur",
-                "Optimasi sistem inti",
-                "Update Track: MT Yayakin dan MT Velora"
+                "Morph Avatar: Change into other players with preview",
+                "Warp: New teleport waypoint system",
+                "Smart Resume: Smoother playback resumption",
+                "Enhanced path visualization precision",
+                "Core system optimizations",
+                "Updated Track: MT Yayakin and MT Velora"
             ]
         }
     ]
