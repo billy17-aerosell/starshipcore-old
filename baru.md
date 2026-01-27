@@ -94,36 +94,19 @@
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
 
 # ✦ STARSHIP CORE | CHANGELOG
-@everyone **PC Version 1.5.4**
+@everyone **PC Version 1.5.3**
 Download the latest update from the link below:
 https://dsc.gg/starshipcore
 
 ```text
-STARSHIP CORE UPDATE FOR version-1.5.4
+STARSHIP CORE UPDATE FOR version-1.5.3
 
-Movement & Physics
-- [+] More responsive landing with zero delay
-- [+] Improved ground detection accuracy
-- [+] Fixed character floating when touching ground
-- [+] Fixed automatic replay (Loop) system
-- [+] Fixed character not walking to start point
-- [+] Character now walks to last point when resuming (Smart Resume)
-- [+] Smoother and more precise path visuals
-- [+] Fixed character getting stuck during auto-walk
-
-Features & Items
-- [+] Character Morph feature with live preview
-- [+] Reset character appearance button
-- [+] Smarter and more accurate item detection
-- [+] Unified item usage across all modes
-- [+] Auto data saving & cleaner file management
-- [+] Added security for item handling
-
-Performance & UI
-- [+] Fixed errors during long play sessions
-- [+] Faster and more stable loading process
-- [+] Improved menu & interface stability
-- [+] Fixed system notifications & warnings
+Stability & Item Detection
+- [+] Old recordings now work even if game items are renamed
+- [+] Smarter and more accurate item detection system
+- [+] Fixed issues where items weren't recognized due to naming differences
+- [+] System synchronization for better stability and consistency with mobile
+- [+] Cleaner and more organized console output
 ```
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
@@ -135,26 +118,15 @@ https://dsc.gg/starshipcore
 ```text
 STARSHIP MOBILE UPDATE FOR version-1.2.3
 
-Movement & Physics
-- [+] Ported smooth landing system from PC version
-- [+] Fixed pause & resume playback issues
-- [+] Smoother character movement when resuming
-- [+] More precise path display on mobile screens
-
-Features & UI
-- [+] Character Morph with live preview support
-- [+] New simplified waypoint system (Warp)
-- [+] Background transparency slider in Settings
-- [+] Fixed role display (MOBILE VIP)
-- [+] Dynamic and automated theme list
-- [+] Set Indigo as default theme
-- [+] Quick theme switch button on top bar
-
-General & Performance
-- [+] Fixed errors during long script execution
-- [+] Optimized cloud data storage management
-- [+] More comfortable and responsive touch controls
-- [+] Improved mobile performance & secure access
+Performance & Automation
+- [+] Performance boost for smoother and lighter movement
+- [+] Automatic item recognition even after game updates
+- [+] Much faster cloud recording loads (only needs to download once)
+- [+] All controls (Speed, God Mode, etc.) are now more responsive
+- [+] Improved item detection to prevent incorrect selection
+- [+] Cleaner interface (Path lines are now off by default)
+- [+] Optimized for low-end devices with better memory usage
+- [+] Removed unnecessary messages to reduce lag
 ```
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
