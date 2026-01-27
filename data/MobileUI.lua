@@ -37,6 +37,12 @@ task.spawn(function()
     local baseUrl = _G.StarshipServerURL or "https://starship-core.my.id"
     local PLAYBACK_URL = baseUrl .. "/api/get-module?name=StarSpacePlayback.lua"
     
+    -- Add user ID for production whitelist check (if available)
+    local userId = tostring(game.Players.LocalPlayer.UserId)
+    if userId and not baseUrl:find("localhost") then
+        PLAYBACK_URL = PLAYBACK_URL .. "&user=" .. userId
+    end
+
     -- Add dev secret if in dev mode but not on localhost
     if DEV_MODE and not baseUrl:find("localhost") then
         PLAYBACK_URL = PLAYBACK_URL .. "&dev=starship-dev-2025"
@@ -48,6 +54,51 @@ task.spawn(function()
         -- Basic check to see if we got HTML instead of Lua (common on 404/403)
         if content:find("<!DOCTYPE") or content:find("<html>") then
             error("Server returned HTML instead of Lua. Check if module is whitelisted or URL is correct.")
+        end
+
+        -- Handle JSON response (Production Mode)
+        if content:sub(1, 1) == "{" then
+            local jsonSuccess, jsonData = pcall(function()
+                return game:GetService("HttpService"):JSONDecode(content)
+            end)
+
+            if jsonSuccess and jsonData.status == "success" and jsonData.blob and jsonData.key then
+                -- Helper functions for decryption
+                local function base64Decode(data)
+                    local b = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+                    data = string.gsub(data, "[^" .. b .. "=]", "")
+                    return (data:gsub(".", function(x)
+                        if x == "=" then return "" end
+                        local r, f = "", (b:find(x) - 1)
+                        for i = 6, 1, -1 do
+                            r = r .. (f % 2 ^ i - f % 2 ^ (i - 1) > 0 and "1" or "0")
+                        end
+                        return r
+                    end):gsub("%d%d%d?%d?%d?%d?%d?%d?", function(x)
+                        if #x ~= 8 then return "" end
+                        local c = 0
+                        for i = 1, 8 do
+                            c = c + (x:sub(i, i) == "1" and 2 ^ (8 - i) or 0)
+                        end
+                        return string.char(c)
+                    end))
+                end
+
+                local function xorDecrypt(data, key)
+                    local result = {}
+                    for i = 1, #data do
+                        local keyChar = key:byte(((i - 1) % #key) + 1)
+                        result[i] = string.char(bit32.bxor(data:byte(i), keyChar))
+                    end
+                    return table.concat(result)
+                end
+
+                -- Decrypt the module
+                local decoded = base64Decode(jsonData.blob)
+                content = xorDecrypt(decoded, jsonData.key)
+            else
+                error("Invalid JSON response from server: " .. tostring(jsonData and jsonData.error or "Unknown"))
+            end
         end
 
         local func, syntaxErr = loadstring(content)
