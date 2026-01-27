@@ -4294,6 +4294,20 @@ local PlaybackState = {
 	TOOL_THROTTLE_INTERVAL = 0.1,
 }
 
+-- Sync PlaybackState with StarSpace module
+task.spawn(function()
+    while true do
+        if StarSpacePlaybackLoaded and _G.StarSpace and _G.StarSpace.GetPlaybackState then
+            local state = _G.StarSpace.GetPlaybackState()
+            PlaybackState.isPlaying = state.isPlaying
+            PlaybackState.isPaused = state.isPaused
+            PlaybackState.currentTime = state.currentTime
+            PlaybackState.totalDuration = state.totalDuration
+        end
+        task.wait(0.1)
+    end
+end)
+
 -- Smoothing Settings
 local SMOOTH_SETTINGS = {
 	LiveSmoothingEnabled = true,
@@ -6688,14 +6702,28 @@ local function ToggleMiniPlayer(state)
 
 			if PlaybackState.isPlaying and not PlaybackState.isPaused then
 				-- Pause
-				PausePlayback()
+				if StarSpacePlaybackLoaded and _G.StarSpace and _G.StarSpace.PausePlayback then
+					_G.StarSpace.PausePlayback()
+				else
+					PausePlayback()
+				end
 				playBtn.Text = "▶"
 				isPlaying = false
 			else
 				-- Play - Use StarSpacePlayback module if available
 				if StarSpacePlaybackLoaded and _G.StarSpace and _G.StarSpace.LoadRecording then
 					-- Use the new playback engine
-					_G.StarSpace.LoadRecording(selectedFile)
+					if PlaybackState.isPlaying and PlaybackState.isPaused then
+						-- Resume if already playing but paused
+						if _G.StarSpace.ResumePlayback then
+							_G.StarSpace.ResumePlayback()
+						else
+							_G.StarSpace.TogglePlayback()
+						end
+					else
+						-- Start fresh
+						_G.StarSpace.LoadRecording(selectedFile)
+					end
 				else
 					-- Fallback to local PlayRecording
 					PlayRecording(selectedFile)

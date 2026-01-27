@@ -1584,3 +1584,38 @@ function _G.StarSpace.TogglePlayback()
         end
     end
 end
+
+function _G.StarSpace.PausePlayback()
+    if isPlaying and not isPaused then
+        isPaused = true
+        
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChild("Humanoid")
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        
+        if hum then 
+            hum:Move(Vector3.zero)
+            hum.AutoRotate = true
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+        end
+        if root then
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+            local att = root:FindFirstChild("PlaybackAtt")
+            if att then att:Destroy() end
+            local ao = root:FindFirstChild("PlaybackAO")
+            if ao then ao:Destroy() end
+        end
+        
+        if UI and UI.Slide then
+            UI.Slide("Playback", "Paused")
+        end
+    end
+end
+
+function _G.StarSpace.ResumePlayback()
+    if isPlaying and isPaused then
+        -- Use the existing TogglePlayback logic for smart resume
+        _G.StarSpace.TogglePlayback()
+    end
+end
