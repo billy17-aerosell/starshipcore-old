@@ -55,7 +55,7 @@ local toolState = {
 }
 
 -- Path Visualization (PREMIUM ENHANCED)
-local showPath = true
+local showPath = false
 local pathVisualsFolder = nil
 local pathAnimationConnection = nil
 local currentPositionMarker = nil
