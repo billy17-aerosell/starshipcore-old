@@ -5,80 +5,49 @@
     {
       "version": "1.5.3",
       "date": "2026-01-27",
-      "title": "Tool Alias System & Engine Synchronization",
+      "title": "Peningkatan Stabilitas & Deteksi Item",
       "changes": [
-        "Added Tool Alias system for backward compatibility with game updates",
-        "Improved tool matching with handle color and config validation",
-        "Added Fuzzy Matching (Case-Insensitive) for tools",
-        "Synchronized playback engine with Mobile version",
-        "Cleaned up console output"
+        "Recording lama tetap bisa dimainkan meskipun item di game berubah nama",
+        "Sistem deteksi item sekarang jauh lebih pintar dan akurat",
+        "Memperbaiki masalah item tidak terbaca karena perbedaan penulisan nama",
+        "Penyelarasan sistem agar lebih stabil dan seragam dengan versi mobile",
+        "Tampilan log konsol sekarang lebih bersih dan rapi"
       ]
     },
     {
       "version": "1.5.2",
       "date": "2026-01-14",
-      "title": "Tool Equip & Playback Fix, Performance & Stability",
+      "title": "Perbaikan Tool & Playback",
       "changes": [
-        "Fixed speed issue when equipping tools",
-        "Fixed pause/resume not working",
-        "Smarter tool detection",
-        "Fixed register error",
-        "Smoother playback experience",
-        "Fixed checkpoint not saving properly",
-        "Character walks naturally to starting point",
-        "Better ladder and water movement",
-        "Overall stability improvements"
+        "Memperbaiki masalah kecepatan saat menggunakan item",
+        "Memperbaiki fitur pause/resume yang sempat macet",
+        "Deteksi item yang lebih responsif",
+        "Perbaikan error saat registrasi",
+        "Pengalaman playback yang lebih mulus",
+        "Memperbaiki penyimpanan checkpoint",
+        "Karakter sekarang berjalan lebih alami ke titik awal",
+        "Gerakan di tangga dan air lebih lancar",
+        "Peningkatan stabilitas secara keseluruhan"
       ]
     },
     {
       "version": "1.5.1",
       "date": "2026-01-10",
-      "title": "Morph Avatar",
+      "title": "Fitur Morph Avatar",
       "changes": [
-        "Added Morph Avatar feature",
-        "Live avatar preview",
-        "Reset Avatar button"
+        "Penambahan fitur ganti wujud (Morph Avatar)",
+        "Pratinjau tampilan karakter secara langsung",
+        "Tombol reset karakter"
       ]
     },
     {
       "version": "1.5.0",
       "date": "2026-01-10",
-      "title": "Pathfinding & Visuals Update",
+      "title": "Update Visual & Jalur",
       "changes": [
-        "Smart Resume: Walk to resume point",
-        "Smoother path visualization",
-        "Fixed stuck issues"
-      ]
-    },
-    {
-      "version": "1.4.0",
-      "date": "2026-01-04",
-      "title": "What's New",
-      "changes": [
-        "Improved loading",
-        "Performance boost",
-        "Enhanced stability",
-        "UI improvements"
-      ]
-    },
-    {
-      "version": "1.3.0",
-      "date": "2026-01-01",
-      "title": "Update",
-      "changes": [
-        "Better accuracy",
-        "Improved warnings",
-        "Quality improvements"
-      ]
-    },
-    {
-      "version": "1.2.0",
-      "date": "2025-12-28",
-      "title": "New Features",
-      "changes": [
-        "Cloud sync",
-        "Security enhancements",
-        "Better file management"
+        "Smart Resume: Berjalan otomatis ke titik lanjut",
+        "Tampilan garis jalur yang lebih halus",
+        "Memperbaiki masalah karakter tersangkut"
       ]
     }
   ]

@@ -5,81 +5,48 @@
         {
             "version": "1.2.3",
             "date": "2026-01-27",
-            "title": "StarSpace Engine v2.0 & Tool Aliases",
+            "title": "Update Performa & Fitur Otomatis",
             "changes": [
-                "Integrated StarSpace Playback Engine v2.0 for superior performance",
-                "Added Tool Alias system to handle game updates automatically",
-                "Added Local Cache for Cloud Recordings (Instant loading after first download)",
-                "Fully synchronized all playback controls (Speed, God Mode, Path, etc.)",
-                "Improved tool matching (Color, Config, and Fuzzy matching)",
-                "Disabled Path Visualization by default for cleaner start",
-                "Optimized memory management during recording loads",
-                "Cleaned up console logs for better performance"
+                "Peningkatan performa mesin agar gerakan lebih mulus dan ringan",
+                "Fitur otomatis agar item tetap terbaca meskipun ada update dari game",
+                "Loading recording cloud sekarang jauh lebih cepat (hanya perlu download sekali)",
+                "Semua kontrol (Kecepatan, God Mode, dll) sekarang lebih responsif",
+                "Perbaikan sistem deteksi item agar tidak salah ambil",
+                "Tampilan awal lebih bersih (Garis jalur sekarang mati secara default)",
+                "Penggunaan memori lebih hemat, sangat cocok untuk HP spek rendah",
+                "Menghapus pesan-pesan tidak penting agar tidak menyebabkan lag"
             ]
         },
         {
             "version": "1.2.2",
             "date": "2026-01-14",
-            "title": "UI & Playback Fix",
+            "title": "Perbaikan UI & Playback",
             "changes": [
-                "Fixed pause/resume playback not working properly",
-                "Cleaner UI: Removed excessive emojis for classic look",
-                "Fixed role display (MOBILE_VIP now shows as MOBILE VIP)",
-                "Fixed local register limit error",
-                "Optimized cloud recording state management",
-                "Added Background Transparency slider in Settings",
-                "Fixed theme dropdown with dynamic theme list",
-                "Set Indigo as default theme",
-                "Added topbar theme switch button",
-                "Updated Discord link to dsc.gg/starshipcore",
-                "Fixed window title invalid characters",
-                "Improved overall stability"
+                "Memperbaiki fitur pause/resume yang tidak berjalan normal",
+                "Tampilan UI lebih bersih dan klasik",
+                "Perbaikan tampilan nama peran (Role)",
+                "Memperbaiki error batas registrasi lokal",
+                "Optimasi pengaturan data cloud",
+                "Penambahan pengaturan transparansi background",
+                "Perbaikan daftar tema yang lebih dinamis",
+                "Indigo sekarang menjadi tema default",
+                "Tombol ganti tema di bagian atas",
+                "Update link Discord terbaru",
+                "Perbaikan karakter judul jendela",
+                "Peningkatan stabilitas sistem"
             ]
         },
         {
             "version": "1.2.1",
             "date": "2026-01-10",
-            "title": "Mobile Core Update",
+            "title": "Update Inti Mobile",
             "changes": [
-                "Morph Avatar: Morph into any player with live preview",
-                "Warp: New teleport waypoint system",
-                "Smart Resume: Smoother playback resumption",
-                "Enhanced path visualization precision",
-                "Core system optimizations",
-                "Updated Track: MT Yayakin and MT Velora"
-            ]
-        },
-        {
-            "version": "1.2.0",
-            "date": "2026-01-10",
-            "title": "Mobile Core Update",
-            "changes": [
-                "Smart Resume: Smoother playback resumption",
-                "Enhanced path visualization precision",
-                "Core system optimizations",
-                "Improved stability"
-            ]
-        },
-        {
-            "version": "1.1.0",
-            "date": "2026-01-10",
-            "title": "Mobile Update",
-            "changes": [
-                "New changelog popup",
-                "Improved touch controls",
-                "Better mobile performance",
-                "UI optimizations for mobile"
-            ]
-        },
-        {
-            "version": "1.0.0",
-            "date": "2026-01-08",
-            "title": "Initial Release",
-            "changes": [
-                "Mobile version launch",
-                "Touch-friendly interface",
-                "Cloud recordings support",
-                "Secure authentication"
+                "Morph Avatar: Berubah menjadi pemain lain dengan pratinjau",
+                "Warp: Sistem titik teleportasi baru",
+                "Smart Resume: Melanjutkan playback dengan lebih halus",
+                "Peningkatan akurasi visual garis jalur",
+                "Optimasi sistem inti",
+                "Update Track: MT Yayakin dan MT Velora"
             ]
         }
     ]
