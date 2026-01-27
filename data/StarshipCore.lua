@@ -3247,6 +3247,12 @@ do
 		local currentTool = char:FindFirstChildOfClass("Tool")
 		local currentToolName = currentTool and currentTool.Name or nil
 
+		-- Apply Tool Alias if exists (GLOBAL)
+		if recordedToolName and _G.StarSpace and _G.StarSpace.ToolAliases and _G.StarSpace.ToolAliases[recordedToolName] then
+			-- print("[Starship] Using Tool Alias: " .. recordedToolName .. " -> " .. _G.StarSpace.ToolAliases[recordedToolName])
+			recordedToolName = _G.StarSpace.ToolAliases[recordedToolName]
+		end
+
 		-- CASE 1: No tool recorded, but player has tool equipped → unequip
 		if not recordedToolName then
 			if currentTool then
@@ -3314,12 +3320,73 @@ do
 			toolToEquip = backpack:FindFirstChild(recordedToolName)
 		end
 
+		-- Priority 5: Fuzzy Match (Case Insensitive) - NEW
+		if not toolToEquip then
+			for _, tool in pairs(backpack:GetChildren()) do
+				if tool:IsA("Tool") and tool.Name:lower() == recordedToolName:lower() then
+					toolToEquip = tool
+					break
+				end
+			end
+		end
+
 		-- Only equip if we found a tool AND it's different from current
 		if toolToEquip and toolToEquip:IsA("Tool") and toolToEquip ~= currentTool then
 			_G.StarshipToolState.lastEquippedTool = toolToEquip
 			hum:EquipTool(toolToEquip)
 		end
 	end
+end
+
+-- Helper: Validate if player has required tools
+local function ValidateTools(frames)
+	local missingTools = {}
+	local checkedTools = {}
+	local backpack = LocalPlayer:FindFirstChild("Backpack")
+	local char = LocalPlayer.Character
+	local currentTool = char and char:FindFirstChildOfClass("Tool")
+	
+	-- 1. Collect all unique tools used in recording
+	for _, f in ipairs(frames) do
+		if f.tool and not checkedTools[f.tool] then
+			checkedTools[f.tool] = true
+			
+			-- Check if tool exists (Exact, Alias, or Fuzzy)
+			local found = false
+			local targetName = f.tool
+			
+			-- Apply Alias
+			if _G.StarSpace and _G.StarSpace.ToolAliases and _G.StarSpace.ToolAliases[targetName] then
+				targetName = _G.StarSpace.ToolAliases[targetName]
+			end
+			
+			-- Check Backpack
+			if backpack then
+				if backpack:FindFirstChild(targetName) then found = true end
+				if not found then
+					-- Fuzzy check backpack
+					for _, t in pairs(backpack:GetChildren()) do
+						if t:IsA("Tool") and t.Name:lower() == targetName:lower() then
+							found = true
+							break
+						end
+					end
+				end
+			end
+			
+			-- Check Equipped
+			if not found and currentTool then
+				if currentTool.Name == targetName then found = true end
+				if not found and currentTool.Name:lower() == targetName:lower() then found = true end
+			end
+			
+			if not found then
+				table.insert(missingTools, f.tool .. (targetName ~= f.tool and " (-> " .. targetName .. ")" or ""))
+			end
+		end
+	end
+	
+	return missingTools
 end
 
 local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
@@ -3366,6 +3433,46 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 			-- Re-process after smoothing (smoothing may change values)
 			framesToPlay = PreprocessFrames(framesToPlay)
 			ShowToast(L("live_smoothing"), L("applied_smoothing", liveSmoothingStrength), "info", 2)
+		end
+		
+		-- TOOL VALIDATION (New Feature)
+		local missing = ValidateTools(framesToPlay)
+		if #missing > 0 then
+			ShowLoadingModal(false)
+			local msg = "Missing Tools:\n"
+			for i, t in ipairs(missing) do
+				if i > 5 then msg = msg .. "...and " .. (#missing - 5) .. " more" break end
+				msg = msg .. "- " .. t .. "\n"
+			end
+			msg = msg .. "\nPlay anyway?"
+			
+			local confirmed = false
+			local waiting = true
+			
+			if ShowConfirm then
+				ShowConfirm("MISSING TOOLS", msg, function()
+					confirmed = true
+					waiting = false
+				end, function() -- Cancel callback (if supported) or just rely on waiting
+					waiting = false
+				end)
+			else
+				-- Fallback if no confirm dialog
+				warn("[Starship] Missing tools: " .. table.concat(missing, ", "))
+				confirmed = true
+				waiting = false
+			end
+			
+			-- Wait for user response
+			while waiting do task.wait(0.1) end
+			
+			if not confirmed then
+				ShowToast("Cancelled", "Playback cancelled", "warning", 2)
+				return
+			end
+			
+			-- Show loading again if confirmed
+			ShowLoadingModal(true, L("loading_playback"), 0.5)
 		end
 
 		-- CROSS-RIG SUPPORT: Preserve metadata from recording alongside frames
@@ -11721,3 +11828,46 @@ task.spawn(function()
 		end
 	end
 end)
+
+-- ==========================================
+-- TOOL ALIAS SYSTEM (GLOBAL)
+-- ==========================================
+if not _G.StarSpace then _G.StarSpace = {} end
+
+-- Table to store tool name mappings (Old Name -> New Name)
+-- This is shared globally so any module can access it
+_G.StarSpace.ToolAliases = {
+    -- Example: ["OldSword"] = "NewSword",
+    -- ANDA BISA MENAMBAHKAN ALIAS LANGSUNG DI SINI:
+    ["Speed Coil"] = "Speed Coil 2",
+    ["Gravity Coil"] = "Gravity Coil 2",
+    ["Fusion Coil"] = "Fusion Coil 2",
+}
+
+-- Auto-load aliases from config file
+task.spawn(function()
+    local CONFIG_PATH = "StarshipCore/StarshipConfigs/ToolAliases.json"
+    if isfile and isfile(CONFIG_PATH) then
+        local success, content = pcall(readfile, CONFIG_PATH)
+        if success and content then
+            local data = game:GetService("HttpService"):JSONDecode(content)
+            if data then
+                for k, v in pairs(data) do
+                    _G.StarSpace.ToolAliases[k] = v
+                end
+                if DEV_MODE then
+                    warn("[Starship] Loaded " .. 0 .. " tool aliases from config") -- Count logic is complex in one line, skipping count log
+                    warn("[Starship] Tool Aliases Loaded!")
+                end
+            end
+        end
+    end
+end)
+
+-- API to register tool aliases
+function _G.StarSpace.RegisterToolAlias(oldName, newName)
+    _G.StarSpace.ToolAliases[oldName] = newName
+    if DEV_MODE then
+        warn("[Starship] Registered Tool Alias: " .. oldName .. " -> " .. newName)
+    end
+end
