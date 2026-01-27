@@ -84,7 +84,13 @@ end
 
 -- Initialize _G.StarSpace early
 if not _G.StarSpace then _G.StarSpace = {} end
-_G.StarSpace.ToolAliases = _G.StarSpace.ToolAliases or {}
+
+-- Table to store tool name mappings (Old Name -> New Name)
+_G.StarSpace.ToolAliases = _G.StarSpace.ToolAliases or {
+    ["Speed Coil"] = "Speed Coil 2",
+    ["Gravity Coil"] = "Gravity Coil 2",
+    ["Fusion Coil"] = "Fusion Coil 2",
+}
 
 -- Function to clear path visualization
 local function ClearPlaybackPath()
@@ -732,6 +738,16 @@ local function UpdateToolEquip(char, recordedToolName, recordedToolTip, recorded
     -- Priority 4: Fallback to name-only match
     if not toolToEquip then
         toolToEquip = backpack:FindFirstChild(recordedToolName)
+    end
+    
+    -- Priority 5: Fuzzy Match (Case Insensitive)
+    if not toolToEquip then
+        for _, tool in pairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") and tool.Name:lower() == recordedToolName:lower() then
+                toolToEquip = tool
+                break
+            end
+        end
     end
     
     -- Only equip if we found a tool AND it's different from current
