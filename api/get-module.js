@@ -87,6 +87,7 @@ const ALLOWED_MODULES = [
   "Tabs/Fun.lua",
   "Tabs/Emotes.lua",
   "Tabs/ConfigTab.lua",
+  "StarSpacePlayback.lua",
 ];
 
 // Owner ID - always has access without whitelist check

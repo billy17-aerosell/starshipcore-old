@@ -34,9 +34,28 @@ _G.Xan = {
 -- Load StarSpacePlayback module
 local StarSpacePlaybackLoaded = false
 task.spawn(function()
-    local PLAYBACK_URL = (_G.StarshipServerURL or "https://starship-core.my.id") .. "/data/StarSpacePlayback.lua"
+    local baseUrl = _G.StarshipServerURL or "https://starship-core.my.id"
+    local PLAYBACK_URL = baseUrl .. "/api/get-module?name=StarSpacePlayback.lua"
+    
+    -- Add dev secret if in dev mode but not on localhost
+    if DEV_MODE and not baseUrl:find("localhost") then
+        PLAYBACK_URL = PLAYBACK_URL .. "&dev=starship-dev-2025"
+    end
+
     local success, err = pcall(function()
-        loadstring(game:HttpGet(PLAYBACK_URL))()
+        local content = game:HttpGet(PLAYBACK_URL)
+        
+        -- Basic check to see if we got HTML instead of Lua (common on 404/403)
+        if content:find("<!DOCTYPE") or content:find("<html>") then
+            error("Server returned HTML instead of Lua. Check if module is whitelisted or URL is correct.")
+        end
+
+        local func, syntaxErr = loadstring(content)
+        if func then
+            func()
+        else
+            error("Syntax Error: " .. tostring(syntaxErr))
+        end
     end)
     if success then
         StarSpacePlaybackLoaded = true
