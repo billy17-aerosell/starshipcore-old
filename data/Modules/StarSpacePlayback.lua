@@ -54,75 +54,344 @@ local toolState = {
     lastEquippedTool = nil
 }
 
--- Path Visualization
-local showPath = true  -- Enable/disable path visualization
-local pathParts = {}   -- Store path beam parts
-local PATH_COLOR = Color3.fromRGB(100, 200, 255)  -- Light blue
-local PATH_SEGMENT_STEP = 5  -- Draw path every N frames for performance
+-- Path Visualization (PREMIUM ENHANCED)
+local showPath = true
+local pathVisualsFolder = nil
+local pathAnimationConnection = nil
+local currentPositionMarker = nil
+
+-- Premium gradient colors (Green → Cyan → Blue → Purple → Pink)
+local PATH_GRADIENT_COLORS = {
+    Color3.fromRGB(34, 197, 94), -- Emerald Green (Start)
+    Color3.fromRGB(6, 182, 212), -- Cyan
+    Color3.fromRGB(59, 130, 246), -- Blue
+    Color3.fromRGB(139, 92, 246), -- Purple
+    Color3.fromRGB(236, 72, 153), -- Pink (End)
+}
+
+-- Interpolate between gradient colors based on progress (0-1)
+local function GetGradientColor(progress)
+    local numColors = #PATH_GRADIENT_COLORS
+    local scaledProgress = progress * (numColors - 1)
+    local colorIndex = math.floor(scaledProgress) + 1
+    local colorAlpha = scaledProgress - math.floor(scaledProgress)
+
+    local startColor = PATH_GRADIENT_COLORS[math.clamp(colorIndex, 1, numColors)]
+    local endColor = PATH_GRADIENT_COLORS[math.clamp(colorIndex + 1, 1, numColors)]
+
+    return startColor:Lerp(endColor, colorAlpha)
+end
 
 -- Initialize _G.StarSpace early
 if not _G.StarSpace then _G.StarSpace = {} end
 
--- Function to clear path visualization (robust - also cleans workspace)
+-- Function to clear path visualization
 local function ClearPlaybackPath()
-    -- Clear from our cache
-    for _, part in ipairs(pathParts) do
-        pcall(function() part:Destroy() end)
+    if pathAnimationConnection then
+        pathAnimationConnection:Disconnect()
+        pathAnimationConnection = nil
     end
-    pathParts = {}
+    if currentPositionMarker then
+        currentPositionMarker:Destroy()
+        currentPositionMarker = nil
+    end
+    if pathVisualsFolder then
+        pathVisualsFolder:Destroy()
+        pathVisualsFolder = nil
+    end
     
-    -- Also clean up any orphaned path parts in workspace
+    -- Clean up any orphaned path parts in workspace
     for _, obj in pairs(workspace:GetChildren()) do
-        if obj.Name == "PlaybackPath" and obj:IsA("Part") then
+        if (obj.Name == "StarshipPathVisuals" or obj.Name == "PlaybackPath") then
             pcall(function() obj:Destroy() end)
         end
     end
-    
-    print("[StarSpacePlayback] Path cleared")
 end
 
 -- Function to draw the full path visualization
 local function DrawPlaybackPath(frames)
-    -- Clear existing path first
     ClearPlaybackPath()
     
     if not showPath then return end
     if not frames or #frames < 2 then return end
-    
-    local step = math.max(1, math.floor(#frames / 500))  -- Max ~500 segments for performance
-    if step < PATH_SEGMENT_STEP then step = PATH_SEGMENT_STEP end
-    
-    local lastPos = nil
-    
-    for i = 1, #frames, step do
+
+    pathVisualsFolder = Instance.new("Folder")
+    pathVisualsFolder.Name = "StarshipPathVisuals"
+    pathVisualsFolder.Parent = workspace
+
+    local nodesFolder = Instance.new("Folder")
+    nodesFolder.Name = "Nodes"
+    nodesFolder.Parent = pathVisualsFolder
+
+    local beamsFolder = Instance.new("Folder")
+    beamsFolder.Name = "Beams"
+    beamsFolder.Parent = pathVisualsFolder
+
+    local markersFolder = Instance.new("Folder")
+    markersFolder.Name = "Markers"
+    markersFolder.Parent = pathVisualsFolder
+
+    -- Collect all valid positions first
+    local positions = {}
+    for i = 1, #frames do
         local f = frames[i]
         local pos = f.posVector or (f.pos and Vector3.new(f.pos.x, f.pos.y, f.pos.z))
-        
-        if pos and lastPos then
-            local dist = (pos - lastPos).Magnitude
-            if dist > 0.5 and dist < 2000 then  -- Skip tiny or huge jumps (increased threshold for speed runs)
-                local mid = (lastPos + pos) / 2
-                
-                local part = Instance.new("Part")
-                part.Name = "PlaybackPath"
-                part.Anchored = true
-                part.CanCollide = false
-                part.CastShadow = false
-                part.Material = Enum.Material.Neon
-                part.Color = PATH_COLOR
-                part.Size = Vector3.new(0.2, 0.2, dist)
-                part.CFrame = CFrame.lookAt(mid, pos)
-                part.Transparency = 0.4
-                part.Parent = workspace
-                
-                table.insert(pathParts, part)
+        if pos then
+            table.insert(positions, { pos = pos, index = i })
+        end
+    end
+
+    if #positions < 2 then return end
+
+    -- Optimization: Limit to ~500 points for performance
+    local totalPoints = #positions
+    local step = math.max(1, math.floor(totalPoints / 500))
+    local filteredPositions = {}
+    local lastPos = nil
+    local minDistance = 1.0
+
+    for i = 1, totalPoints, step do
+        local posData = positions[i]
+        if not lastPos or (posData.pos - lastPos).Magnitude > minDistance then
+            posData.progress = (i - 1) / math.max(1, totalPoints - 1)
+            table.insert(filteredPositions, posData)
+            lastPos = posData.pos
+        end
+    end
+
+    -- Always include last position
+    local lastPosData = positions[totalPoints]
+    lastPosData.progress = 1
+    if #filteredPositions > 0 and (filteredPositions[#filteredPositions].pos - lastPosData.pos).Magnitude > 0.1 then
+        table.insert(filteredPositions, lastPosData)
+    end
+
+    -- Draw nodes and beams
+    local prevPart = nil
+    for i, posData in ipairs(filteredPositions) do
+        local pos = posData.pos
+        local progress = posData.progress
+        local color = GetGradientColor(progress)
+
+        local node = Instance.new("Part")
+        node.Name = "PathNode_" .. i
+        node.Size = Vector3.new(0.3, 0.3, 0.3)
+        node.Shape = Enum.PartType.Ball
+        node.Color = color
+        node.Material = Enum.Material.Neon
+        node.Transparency = 0.3
+        node.Anchored = true
+        node.CanCollide = false
+        node.CanQuery = false
+        node.CastShadow = false
+        node.Position = pos
+        node.Parent = nodesFolder
+
+        if prevPart then
+            local distance = (pos - prevPart.Position).Magnitude
+            if distance > 0.1 then
+                local midpoint = (pos + prevPart.Position) / 2
+                local beam = Instance.new("Part")
+                beam.Name = "PathBeam_" .. i
+                beam.Size = Vector3.new(0.1, 0.1, distance)
+                beam.Shape = Enum.PartType.Block
+                beam.Color = color:Lerp(GetGradientColor(filteredPositions[i - 1].progress), 0.5)
+                beam.Material = Enum.Material.Neon
+                beam.Transparency = 0.5
+                beam.Anchored = true
+                beam.CanCollide = false
+                beam.CanQuery = false
+                beam.CastShadow = false
+                beam.CFrame = CFrame.lookAt(midpoint, pos)
+                beam.Parent = beamsFolder
             end
         end
-        
-        lastPos = pos
+        prevPart = node
     end
-    
-    print("[StarSpacePlayback] Path visualization: " .. #pathParts .. " segments")
+
+    -- START MARKER
+    if #filteredPositions > 0 then
+        local startPos = filteredPositions[1].pos
+        local startMarker = Instance.new("Part")
+        startMarker.Name = "StartMarker"
+        startMarker.Size = Vector3.new(1.2, 1.2, 1.2)
+        startMarker.Shape = Enum.PartType.Ball
+        startMarker.Color = Color3.fromRGB(34, 197, 94)
+        startMarker.Material = Enum.Material.Neon
+        startMarker.Anchored = true
+        startMarker.CanCollide = false
+        startMarker.Position = startPos + Vector3.new(0, 0.5, 0)
+        startMarker.Parent = markersFolder
+
+        local startBillboard = Instance.new("BillboardGui")
+        startBillboard.Size = UDim2.new(0, 60, 0, 40)
+        startBillboard.StudsOffset = Vector3.new(0, 2, 0)
+        startBillboard.AlwaysOnTop = true
+        startBillboard.Parent = startMarker
+
+        local startText = Instance.new("TextLabel")
+        startText.Size = UDim2.new(1, 0, 1, 0)
+        startText.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+        startText.BackgroundTransparency = 0.2
+        startText.Text = "▶ START"
+        startText.TextColor3 = Color3.new(1, 1, 1)
+        startText.TextScaled = true
+        startText.Font = Enum.Font.SourceSansBold
+        startText.Parent = startBillboard
+        Instance.new("UICorner", startText).CornerRadius = UDim.new(0.3, 0)
+
+        local startRing = Instance.new("Part")
+        startRing.Name = "StartRing"
+        startRing.Size = Vector3.new(2.5, 0.1, 2.5)
+        startRing.Shape = Enum.PartType.Cylinder
+        startRing.Color = Color3.fromRGB(34, 197, 94)
+        startRing.Material = Enum.Material.Neon
+        startRing.Transparency = 0.5
+        startRing.Anchored = true
+        startRing.CanCollide = false
+        startRing.CFrame = CFrame.new(startPos) * CFrame.Angles(0, 0, math.rad(90))
+        startRing.Parent = markersFolder
+    end
+
+    -- END MARKER
+    if #filteredPositions > 1 then
+        local endPos = filteredPositions[#filteredPositions].pos
+        local endMarker = Instance.new("Part")
+        endMarker.Name = "EndMarker"
+        endMarker.Size = Vector3.new(1.2, 1.2, 1.2)
+        endMarker.Shape = Enum.PartType.Ball
+        endMarker.Color = Color3.fromRGB(239, 68, 68)
+        endMarker.Material = Enum.Material.Neon
+        endMarker.Anchored = true
+        endMarker.CanCollide = false
+        endMarker.Position = endPos + Vector3.new(0, 0.5, 0)
+        endMarker.Parent = markersFolder
+
+        local endBillboard = Instance.new("BillboardGui")
+        endBillboard.Size = UDim2.new(0, 60, 0, 40)
+        endBillboard.StudsOffset = Vector3.new(0, 2, 0)
+        endBillboard.AlwaysOnTop = true
+        endBillboard.Parent = endMarker
+
+        local endText = Instance.new("TextLabel")
+        endText.Size = UDim2.new(1, 0, 1, 0)
+        endText.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
+        endText.BackgroundTransparency = 0.2
+        endText.Text = "⏹ END"
+        endText.TextColor3 = Color3.new(1, 1, 1)
+        endText.TextScaled = true
+        endText.Font = Enum.Font.SourceSansBold
+        endText.Parent = endBillboard
+        Instance.new("UICorner", endText).CornerRadius = UDim.new(0.3, 0)
+
+        local endRing = Instance.new("Part")
+        endRing.Name = "EndRing"
+        endRing.Size = Vector3.new(2.5, 0.1, 2.5)
+        endRing.Shape = Enum.PartType.Cylinder
+        endRing.Color = Color3.fromRGB(239, 68, 68)
+        endRing.Material = Enum.Material.Neon
+        endRing.Transparency = 0.5
+        endRing.Anchored = true
+        endRing.CanCollide = false
+        endRing.CFrame = CFrame.new(endPos) * CFrame.Angles(0, 0, math.rad(90))
+        endRing.Parent = markersFolder
+    end
+
+    -- DIRECTION ARROWS
+    local arrowStep = math.max(1, math.floor(#filteredPositions / 15))
+    for i = arrowStep + 1, #filteredPositions - 1, arrowStep do
+        local currPos = filteredPositions[i].pos
+        local nextPos = filteredPositions[math.min(i + 1, #filteredPositions)].pos
+        local direction = (nextPos - currPos)
+        if direction.Magnitude > 0.5 then
+            direction = direction.Unit
+            local arrowColor = GetGradientColor(filteredPositions[i].progress)
+            local arrow = Instance.new("Part")
+            arrow.Name = "Arrow_" .. i
+            arrow.Size = Vector3.new(0.5, 0.5, 0.5)
+            arrow.Shape = Enum.PartType.Ball
+            arrow.Color = arrowColor
+            arrow.Material = Enum.Material.Neon
+            arrow.Transparency = 0.2
+            arrow.Anchored = true
+            arrow.CanCollide = false
+            arrow.Position = currPos + Vector3.new(0, 0.3, 0)
+            arrow.Parent = markersFolder
+
+            local arrowBB = Instance.new("BillboardGui")
+            arrowBB.Size = UDim2.new(0, 30, 0, 30)
+            arrowBB.StudsOffset = Vector3.new(0, 0.8, 0)
+            arrowBB.AlwaysOnTop = true
+            arrowBB.Parent = arrow
+
+            local arrowIcon = Instance.new("TextLabel")
+            arrowIcon.Size = UDim2.new(1, 0, 1, 0)
+            arrowIcon.BackgroundTransparency = 1
+            arrowIcon.Text = "➤"
+            arrowIcon.TextColor3 = arrowColor
+            arrowIcon.TextScaled = true
+            arrowIcon.Font = Enum.Font.SourceSansBold
+            arrowIcon.Rotation = math.deg(math.atan2(direction.X, direction.Z))
+            arrowIcon.Parent = arrowBB
+        end
+    end
+
+    -- ANIMATION
+    local animTime = 0
+    pathAnimationConnection = RunService.Heartbeat:Connect(function(dt)
+        if not pathVisualsFolder or not pathVisualsFolder.Parent then
+            if pathAnimationConnection then pathAnimationConnection:Disconnect() end
+            return
+        end
+        animTime = animTime + dt
+
+        local startMarker = markersFolder:FindFirstChild("StartMarker")
+        if startMarker then
+            local pulse = 0.9 + 0.1 * math.sin(animTime * 3)
+            startMarker.Size = Vector3.new(1.2 * pulse, 1.2 * pulse, 1.2 * pulse)
+        end
+
+        local endMarker = markersFolder:FindFirstChild("EndMarker")
+        if endMarker then
+            local pulse = 0.9 + 0.1 * math.sin(animTime * 3 + math.pi)
+            endMarker.Size = Vector3.new(1.2 * pulse, 1.2 * pulse, 1.2 * pulse)
+        end
+
+        local startRing = markersFolder:FindFirstChild("StartRing")
+        if startRing then
+            startRing.CFrame = CFrame.new(startRing.Position) * CFrame.Angles(0, animTime * 0.5, math.rad(90))
+        end
+
+        local endRing = markersFolder:FindFirstChild("EndRing")
+        if endRing then
+            endRing.CFrame = CFrame.new(endRing.Position) * CFrame.Angles(0, -animTime * 0.5, math.rad(90))
+        end
+
+        if isPlaying then
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                if not currentPositionMarker or not currentPositionMarker.Parent then
+                    currentPositionMarker = Instance.new("Part")
+                    currentPositionMarker.Name = "CurrentPosMarker"
+                    currentPositionMarker.Size = Vector3.new(1.5, 0.1, 1.5)
+                    currentPositionMarker.Shape = Enum.PartType.Cylinder
+                    currentPositionMarker.Color = Color3.fromRGB(250, 204, 21)
+                    currentPositionMarker.Material = Enum.Material.Neon
+                    currentPositionMarker.Transparency = 0.3
+                    currentPositionMarker.Anchored = true
+                    currentPositionMarker.CanCollide = false
+                    currentPositionMarker.Parent = markersFolder
+                end
+                local ringSize = 1.5 + 0.3 * math.sin(animTime * 5)
+                currentPositionMarker.Size = Vector3.new(ringSize, 0.1, ringSize)
+                currentPositionMarker.CFrame = CFrame.new(hrp.Position - Vector3.new(0, 2.5, 0)) * CFrame.Angles(0, 0, math.rad(90))
+            end
+        elseif currentPositionMarker then
+            currentPositionMarker:Destroy()
+            currentPositionMarker = nil
+        end
+    end)
 end
 
 -- API to toggle path
