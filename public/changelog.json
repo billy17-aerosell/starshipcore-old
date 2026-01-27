@@ -1,7 +1,19 @@
 {
-  "currentVersion": "1.5.2",
-  "lastUpdated": "2026-01-17",
+  "currentVersion": "1.5.3",
+  "lastUpdated": "2026-01-27",
   "updates": [
+    {
+      "version": "1.5.3",
+      "date": "2026-01-27",
+      "title": "Tool Alias System & Engine Synchronization",
+      "changes": [
+        "Added Tool Alias system for backward compatibility with game updates",
+        "Improved tool matching with handle color and config validation",
+        "Added Fuzzy Matching (Case-Insensitive) for tools",
+        "Synchronized playback engine with Mobile version",
+        "Cleaned up console output"
+      ]
+    },
     {
       "version": "1.5.2",
       "date": "2026-01-14",

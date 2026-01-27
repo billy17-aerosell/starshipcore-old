@@ -1,7 +1,22 @@
 {
-    "currentVersion": "1.2.2",
-    "lastUpdated": "2026-01-17",
+    "currentVersion": "1.2.3",
+    "lastUpdated": "2026-01-27",
     "updates": [
+        {
+            "version": "1.2.3",
+            "date": "2026-01-27",
+            "title": "StarSpace Engine v2.0 & Tool Aliases",
+            "changes": [
+                "Integrated StarSpace Playback Engine v2.0 for superior performance",
+                "Added Tool Alias system to handle game updates automatically",
+                "Added Local Cache for Cloud Recordings (Instant loading after first download)",
+                "Fully synchronized all playback controls (Speed, God Mode, Path, etc.)",
+                "Improved tool matching (Color, Config, and Fuzzy matching)",
+                "Disabled Path Visualization by default for cleaner start",
+                "Optimized memory management during recording loads",
+                "Cleaned up console logs for better performance"
+            ]
+        },
         {
             "version": "1.2.2",
             "date": "2026-01-14",
