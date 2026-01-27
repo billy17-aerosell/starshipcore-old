@@ -84,6 +84,7 @@ end
 
 -- Initialize _G.StarSpace early
 if not _G.StarSpace then _G.StarSpace = {} end
+_G.StarSpace.ToolAliases = _G.StarSpace.ToolAliases or {}
 
 -- Function to clear path visualization
 local function ClearPlaybackPath()
@@ -612,34 +613,50 @@ local function FindFrameIndex(frames, time, hint)
 end
 -- ==== TOOL HANDLING ====
 
-local function ColorMatches(tool, recordedColor)
-    if not recordedColor then return true end
+local function ColorMatches(tool, targetColor)
+    if not targetColor then return true end
     local handle = tool:FindFirstChild("Handle")
-    if handle and handle:IsA("BasePart") then
-        local currentColor = handle.BrickColor.Name
-        return currentColor == recordedColor
+    if not handle or not handle:IsA("BasePart") then return true end
+    
+    -- Support both BrickColor name (string) and RGB (table)
+    if type(targetColor) == "string" then
+        return handle.BrickColor.Name == targetColor
+    elseif type(targetColor) == "table" and targetColor.r then
+        local tolerance = 0.05
+        return math.abs(handle.Color.R - targetColor.r) < tolerance
+            and math.abs(handle.Color.G - targetColor.g) < tolerance
+            and math.abs(handle.Color.B - targetColor.b) < tolerance
     end
     return true
 end
 
-local function ConfigMatches(tool, recordedConfig)
-    if not recordedConfig then return true end
-    -- Check for common config values stored in tool
+local function ConfigMatches(tool, targetConfig)
+    if not targetConfig then return true end
     local config = tool:FindFirstChild("Configuration") or tool:FindFirstChild("Config")
-    if config then
-        for key, expectedValue in pairs(recordedConfig) do
-            local valObj = config:FindFirstChild(key)
-            if valObj and valObj:IsA("ValueBase") then
-                if valObj.Value ~= expectedValue then
-                    return false
-                end
-            end
+    if not config then return false end
+    
+    for name, value in pairs(targetConfig) do
+        local child = config:FindFirstChild(name)
+        if child and (child:IsA("ValueBase")) then
+            if child.Value ~= value then return false end
+        else
+            return false
         end
     end
     return true
 end
 
 local function UpdateToolEquip(char, recordedToolName, recordedToolTip, recordedToolColor, recordedToolConfig)
+    if not char then return end
+    
+    -- Apply Tool Aliases if they exist
+    if recordedToolName and _G.StarSpace and _G.StarSpace.ToolAliases then
+        local alias = _G.StarSpace.ToolAliases[recordedToolName]
+        if alias then
+            recordedToolName = alias
+        end
+    end
+    
     if not char then return end
     
     -- Throttle tool changes
