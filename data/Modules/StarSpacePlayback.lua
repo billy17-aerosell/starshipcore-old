@@ -621,29 +621,60 @@ end
 
 function _G.StarSpace.LoadRecording(pathOrName)
     print("[StarSpacePlayback] LoadRecording: " .. tostring(pathOrName))
-    local filePath = pathOrName
-    if not isfile(filePath) then
-        local commonPaths = {
-            "StarSpace/StarSpace-Recording/" .. pathOrName,
-            "StarSpace/StarshipMerger/" .. pathOrName,
-            "StarSpace/" .. pathOrName,
-            pathOrName
-        }
-        for _, p in ipairs(commonPaths) do
-            if isfile(p) then filePath = p break end
+    
+    local data = nil
+    local isCloud = (type(pathOrName) == "string" and pathOrName:sub(1, 6) == "CLOUD:")
+    
+    if isCloud then
+        -- Handle Cloud Recording
+        if _G.StarshipCloud and _G.StarshipCloud.RecordingData then
+            data = _G.StarshipCloud.RecordingData
+            print("[StarSpacePlayback] Using loaded cloud data")
+        else
+            if UI and UI.Slide then
+                UI.Slide("Error", "Cloud data not found!")
+            end
+            return
         end
+    else
+        -- Handle Local File
+        local filePath = pathOrName
+        if not isfile(filePath) then
+            local commonPaths = {
+                "StarSpace/StarSpace-Recording/" .. pathOrName,
+                "StarSpace/StarshipMerger/" .. pathOrName,
+                "StarSpace/" .. pathOrName,
+                pathOrName
+            }
+            for _, p in ipairs(commonPaths) do
+                if isfile(p) then filePath = p break end
+            end
+        end
+        
+        if not isfile(filePath) then
+            if UI and UI.Slide then
+                UI.Slide("Error", "File not found: " .. pathOrName)
+            end
+            return
+        end
+
+        local success, content = pcall(readfile, filePath)
+        if not success or not content then 
+            if UI and UI.Slide then UI.Slide("Error", "Failed to read file") end
+            return 
+        end
+        
+        local success2, decoded = pcall(function() return HttpService:JSONDecode(content) end)
+        if not success2 or not decoded then
+            if UI and UI.Slide then UI.Slide("Error", "Failed to decode JSON") end
+            return
+        end
+        data = decoded
     end
     
-    if not isfile(filePath) then
-        if UI and UI.Slide then
-            UI.Slide("Error", "File not found: " .. pathOrName)
-        end
-        return
-    end
-    
-    -- Skip reloading if same file is already loaded
+    -- Skip reloading if same file/cloud ID is already loaded
     if currentPlaybackFile == pathOrName and currentFrameData then
-        print("[StarSpacePlayback] File already loaded, skipping reload.")
+        print("[StarSpacePlayback] Already loaded, skipping reload.")
         
         -- Stop existing loop before restarting
         if playbackConnection then playbackConnection:Disconnect() end
@@ -662,20 +693,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
             if playbackConnection then playbackConnection:Disconnect() end
         end
         
-        local success, content = pcall(readfile, filePath)
-        if not success or not content then 
-            if UI and UI.Slide then UI.Slide("Error", "Failed to read file") end
-            return 
-        end
-        
-        local success2, data = pcall(function() return HttpService:JSONDecode(content) end)
-        if not success2 or not data then
-            if UI and UI.Slide then UI.Slide("Error", "Failed to decode JSON") end
-            return
-        end
-        
         local frames = NormalizeFrames(data.Frames or data)
-        
         frames = PreprocessFrames(frames)
         
         if #frames > 0 then
