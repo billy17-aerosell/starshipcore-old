@@ -289,7 +289,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Check Redis whitelist first
+    // Check Redis whitelist first (PC)
     let isWhitelisted = false;
     let userData = null;
 
@@ -314,7 +314,34 @@ export default async function handler(req, res) {
       }
     }
 
-    // Fallback to file-based whitelist
+    // Check Redis Mobile Whitelist if not found in PC whitelist
+    if (!isWhitelisted) {
+      try {
+        const redisClient = await getRedis();
+        if (redisClient) {
+          const mobileData = await redisClient.get("starship:mobile_whitelist");
+          const mobileWhitelist = mobileData ? JSON.parse(mobileData) : null;
+
+          if (mobileWhitelist && mobileWhitelist[user]) {
+            userData = mobileWhitelist[user];
+            if (userData.status === "active") {
+              if (userData.expiresAt) {
+                const expiryDate = new Date(userData.expiresAt);
+                if (expiryDate.getTime() / 1000 >= now) {
+                  isWhitelisted = true;
+                }
+              } else {
+                isWhitelisted = true;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Redis mobile whitelist check error:", e.message);
+      }
+    }
+
+    // Fallback to file-based whitelist (PC)
     if (!isWhitelisted) {
       const fileWhitelist = getWhitelistFromFile();
 
@@ -329,6 +356,54 @@ export default async function handler(req, res) {
         } else {
           isWhitelisted = true;
         }
+      }
+    }
+
+    // Fallback to file-based whitelist (Mobile)
+    if (!isWhitelisted) {
+      try {
+        const mobileKeysPath = path.join(process.cwd(), "data", "mobile-keys.json");
+        if (fs.existsSync(mobileKeysPath)) {
+          const mobileKeysData = JSON.parse(fs.readFileSync(mobileKeysPath, "utf8"));
+          const mobileFileWhitelist = mobileKeysData.whitelist || {};
+
+          if (mobileFileWhitelist[user]) {
+            userData = mobileFileWhitelist[user];
+            if (userData.status === "active") {
+              if (userData.expiresAt) {
+                const expiryDate = new Date(userData.expiresAt);
+                if (expiryDate.getTime() / 1000 >= now) {
+                  isWhitelisted = true;
+                }
+              } else {
+                isWhitelisted = true;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("File mobile whitelist check error:", e.message);
+      }
+    }
+
+    // Check Event Access if not found in any whitelist
+    if (!isWhitelisted) {
+      try {
+        const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
+        const isEventSystemActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
+
+        if (EVENT_CODE_API && isEventSystemActive) {
+          const apiUrl = `${EVENT_CODE_API}?action=check&userId=${user}`;
+          const response = await fetch(apiUrl);
+          const eventData = await response.json();
+
+          if (eventData.success && eventData.hasAccess) {
+            isWhitelisted = true;
+            console.log(`[${timestamp}] 🎟️ Event access granted for User: ${user} to Module: ${name}`);
+          }
+        }
+      } catch (e) {
+        console.error("Event access check error:", e.message);
       }
     }
 
