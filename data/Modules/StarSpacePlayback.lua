@@ -728,7 +728,7 @@ end
 
 if not _G.StarSpace then _G.StarSpace = {} end
 
-print("[StarSpacePlayback] v2.0 Loaded!")
+-- print("[StarSpacePlayback] v2.0 Loaded!")
 
 function _G.StarSpace.GetPlaybackState()
     return {
@@ -889,7 +889,7 @@ local function FindNearestFrame(frames, rPos)
 end
 
 function _G.StarSpace.LoadRecording(pathOrName)
-    print("[StarSpacePlayback] LoadRecording: " .. tostring(pathOrName))
+    -- print("[StarSpacePlayback] LoadRecording: " .. tostring(pathOrName))
     
     local data = nil
     local isCloud = (type(pathOrName) == "string" and pathOrName:sub(1, 6) == "CLOUD:")
@@ -898,7 +898,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
         -- Handle Cloud Recording
         if _G.StarshipCloud and _G.StarshipCloud.RecordingData then
             data = _G.StarshipCloud.RecordingData
-            print("[StarSpacePlayback] Using loaded cloud data")
+            -- print("[StarSpacePlayback] Using loaded cloud data")
         else
             if UI and UI.Slide then
                 UI.Slide("Error", "Cloud data not found!")
@@ -943,7 +943,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
     
     -- Skip reloading if same file/cloud ID is already loaded
     if currentPlaybackFile == pathOrName and currentFrameData then
-        print("[StarSpacePlayback] Already loaded, skipping reload.")
+        -- print("[StarSpacePlayback] Already loaded, skipping reload.")
         
         -- Stop existing loop before restarting
         if playbackConnection then playbackConnection:Disconnect() end
@@ -986,7 +986,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
     
     local frames = currentFrameData
     if not frames or #frames == 0 then 
-        print("[StarSpacePlayback] Error: No frames to play!")
+        -- print("[StarSpacePlayback] Error: No frames to play!")
         return 
     end
     
@@ -1007,13 +1007,13 @@ function _G.StarSpace.LoadRecording(pathOrName)
     local h = char and char:FindFirstChild("Humanoid")
     
     if not r or not h then 
-        print("[StarSpacePlayback] Error: Character or RootPart not found!")
+        -- print("[StarSpacePlayback] Error: Character or RootPart not found!")
         return 
     end
     
     -- Set isPlaying to true for Travel Phase
     isPlaying = true
-    print("[StarSpacePlayback] isPlaying set to true. Starting Smart Start logic...")
+    -- print("[StarSpacePlayback] isPlaying set to true. Starting Smart Start logic...")
     
     -- ========================================
     -- SMART START: Find nearest point on path
@@ -1084,7 +1084,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
     
     -- Auto-detect RigType from recording data
     local recordedRigType = currentPlaybackMetadata and currentPlaybackMetadata.RigType
-    print("[StarSpacePlayback] Detected Recorded RigType: " .. tostring(recordedRigType))
+    -- print("[StarSpacePlayback] Detected Recorded RigType: " .. tostring(recordedRigType))
     
     if not recordedRigType then
         local firstFrame = frames[1]
@@ -1151,7 +1151,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
     
     -- Log Cross-Rig info
     if recordedRigType ~= playbackRigType then
-        print(string.format("[StarSpacePlayback] Cross-Rig: %s → %s (Offset: %.2f)", recordedRigType, playbackRigType, crossRigHeightOffset))
+        -- print(string.format("[StarSpacePlayback] Cross-Rig: %s → %s (Offset: %.2f)", recordedRigType, playbackRigType, crossRigHeightOffset))
         if UI and UI.Slide then
             UI.Slide("Cross-Rig Playback", string.format("Recorded: %s → Playing: %s", recordedRigType, playbackRigType))
         end
@@ -1272,7 +1272,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
     end -- end skipTravelPhase check
     
     -- ==== MAIN PLAYBACK LOOP ====
-    print("[StarSpacePlayback] Starting Heartbeat loop...")
+    -- print("[StarSpacePlayback] Starting Heartbeat loop...")
     isPlaying = true -- Set to true ONLY now
     
     playbackConnection = RunService.Heartbeat:Connect(function(dt)
@@ -1688,7 +1688,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
     end)
         
         if not success then
-            print("[StarSpacePlayback] LOOP ERROR: " .. tostring(err))
+            -- print("[StarSpacePlayback] LOOP ERROR: " .. tostring(err))
             isPlaying = false
             if playbackConnection then playbackConnection:Disconnect() end
         end
@@ -1697,7 +1697,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
     if UI and UI.Slide then
         UI.Slide("Playback", "Playing: " .. pathOrName)
     end
-    print("[StarSpacePlayback] Playback started successfully.")
+    -- print("[StarSpacePlayback] Playback started successfully.")
 end
 
 function _G.StarSpace.StopPlaybackLegacy(silent)
