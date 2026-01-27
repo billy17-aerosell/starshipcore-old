@@ -1547,10 +1547,17 @@ local function ColorMatches(tool, targetColor)
 	if not targetColor then return true end
 	local handle = tool:FindFirstChild("Handle")
 	if not handle or not handle:IsA("BasePart") then return true end
-	local tolerance = 0.05
-	return math.abs(handle.Color.R - targetColor.r) < tolerance
-		and math.abs(handle.Color.G - targetColor.g) < tolerance
-		and math.abs(handle.Color.B - targetColor.b) < tolerance
+	
+	-- Support both BrickColor name (string) and RGB (table)
+	if type(targetColor) == "string" then
+		return handle.BrickColor.Name == targetColor
+	elseif type(targetColor) == "table" and targetColor.r then
+		local tolerance = 0.05
+		return math.abs(handle.Color.R - targetColor.r) < tolerance
+			and math.abs(handle.Color.G - targetColor.g) < tolerance
+			and math.abs(handle.Color.B - targetColor.b) < tolerance
+	end
+	return true
 end
 
 -- Helper: Check if config values match
@@ -1558,9 +1565,10 @@ local function ConfigMatches(tool, targetConfig)
 	if not targetConfig then return true end
 	local config = tool:FindFirstChild("Configuration") or tool:FindFirstChild("Config")
 	if not config then return false end
+	
 	for name, value in pairs(targetConfig) do
 		local child = config:FindFirstChild(name)
-		if child and (child:IsA("NumberValue") or child:IsA("IntValue")) then
+		if child and (child:IsA("ValueBase")) then
 			if child.Value ~= value then return false end
 		else
 			return false

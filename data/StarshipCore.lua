@@ -127,6 +127,39 @@ local C_MAIN, C_SIDE, C_ACCENT, C_TEXT, C_TEXT_DIM, C_ITEM, C_RED, C_YELLOW, C_G
 -- Make CurrentColors accessible globally for theme updates
 _G.StarshipColors = CurrentColors
 
+-- ==========================================
+-- TOOL ALIAS SYSTEM (GLOBAL)
+-- ==========================================
+if not _G.StarSpace then _G.StarSpace = {} end
+
+-- Table to store tool name mappings (Old Name -> New Name)
+_G.StarSpace.ToolAliases = {
+    ["Speed Coil"] = "Speed Coil 2",
+    ["Gravity Coil"] = "Gravity Coil 2",
+    ["Fusion Coil"] = "Fusion Coil 2",
+}
+
+-- Auto-load aliases from config file
+task.spawn(function()
+    local CONFIG_PATH = "StarshipCore/StarshipConfigs/ToolAliases.json"
+    if isfile and isfile(CONFIG_PATH) then
+        local success, content = pcall(readfile, CONFIG_PATH)
+        if success and content then
+            local data = game:GetService("HttpService"):JSONDecode(content)
+            if data then
+                for k, v in pairs(data) do
+                    _G.StarSpace.ToolAliases[k] = v
+                end
+            end
+        end
+    end
+end)
+
+-- API to register tool aliases
+function _G.StarSpace.RegisterToolAlias(oldName, newName)
+    _G.StarSpace.ToolAliases[oldName] = newName
+end
+
 -- Mobile Detection & Responsive System (consolidated to reduce local count)
 
 do
@@ -3211,10 +3244,17 @@ do
 		if not targetColor then return true end
 		local handle = tool:FindFirstChild("Handle")
 		if not handle or not handle:IsA("BasePart") then return true end
-		local tolerance = 0.05
-		return math.abs(handle.Color.R - targetColor.r) < tolerance
-			and math.abs(handle.Color.G - targetColor.g) < tolerance
-			and math.abs(handle.Color.B - targetColor.b) < tolerance
+		
+		-- Support both BrickColor name (string) and RGB (table)
+		if type(targetColor) == "string" then
+			return handle.BrickColor.Name == targetColor
+		elseif type(targetColor) == "table" and targetColor.r then
+			local tolerance = 0.05
+			return math.abs(handle.Color.R - targetColor.r) < tolerance
+				and math.abs(handle.Color.G - targetColor.g) < tolerance
+				and math.abs(handle.Color.B - targetColor.b) < tolerance
+		end
+		return true
 	end
 
 	-- Helper: Check if config values match
@@ -3222,9 +3262,10 @@ do
 		if not targetConfig then return true end
 		local config = tool:FindFirstChild("Configuration") or tool:FindFirstChild("Config")
 		if not config then return false end
+		
 		for name, value in pairs(targetConfig) do
 			local child = config:FindFirstChild(name)
-			if child and (child:IsA("NumberValue") or child:IsA("IntValue")) then
+			if child and (child:IsA("ValueBase")) then
 				if child.Value ~= value then return false end
 			else
 				return false
@@ -11829,45 +11870,4 @@ task.spawn(function()
 	end
 end)
 
--- ==========================================
--- TOOL ALIAS SYSTEM (GLOBAL)
--- ==========================================
-if not _G.StarSpace then _G.StarSpace = {} end
-
--- Table to store tool name mappings (Old Name -> New Name)
--- This is shared globally so any module can access it
-_G.StarSpace.ToolAliases = {
-    -- Example: ["OldSword"] = "NewSword",
-    -- ANDA BISA MENAMBAHKAN ALIAS LANGSUNG DI SINI:
-    ["Speed Coil"] = "Speed Coil 2",
-    ["Gravity Coil"] = "Gravity Coil 2",
-    ["Fusion Coil"] = "Fusion Coil 2",
-}
-
--- Auto-load aliases from config file
-task.spawn(function()
-    local CONFIG_PATH = "StarshipCore/StarshipConfigs/ToolAliases.json"
-    if isfile and isfile(CONFIG_PATH) then
-        local success, content = pcall(readfile, CONFIG_PATH)
-        if success and content then
-            local data = game:GetService("HttpService"):JSONDecode(content)
-            if data then
-                for k, v in pairs(data) do
-                    _G.StarSpace.ToolAliases[k] = v
-                end
-                if DEV_MODE then
-                    warn("[Starship] Loaded " .. 0 .. " tool aliases from config") -- Count logic is complex in one line, skipping count log
-                    warn("[Starship] Tool Aliases Loaded!")
-                end
-            end
-        end
-    end
-end)
-
--- API to register tool aliases
-function _G.StarSpace.RegisterToolAlias(oldName, newName)
-    _G.StarSpace.ToolAliases[oldName] = newName
-    if DEV_MODE then
-        warn("[Starship] Registered Tool Alias: " .. oldName .. " -> " .. newName)
-    end
-end
+-- End of StarshipCore.lua
