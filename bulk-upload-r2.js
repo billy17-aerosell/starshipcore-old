@@ -102,13 +102,13 @@ function getJsonFiles(dir, files = []) {
   if (!fs.existsSync(dir)) {
     return files;
   }
-  
+
   const items = fs.readdirSync(dir);
-  
+
   for (const item of items) {
     const fullPath = path.join(dir, item);
     const stat = fs.statSync(fullPath);
-    
+
     if (stat.isDirectory()) {
       // Recurse into subdirectories
       getJsonFiles(fullPath, files);
@@ -116,7 +116,7 @@ function getJsonFiles(dir, files = []) {
       files.push(fullPath);
     }
   }
-  
+
   return files;
 }
 
@@ -131,7 +131,7 @@ function parseArgs(args) {
     verbose: false,
     userId: "bulk-upload",
   };
-  
+
   for (const arg of args) {
     if (arg === "--dry-run") {
       options.dryRun = true;
@@ -145,7 +145,7 @@ function parseArgs(args) {
       options.folder = arg;
     }
   }
-  
+
   return options;
 }
 
@@ -161,7 +161,7 @@ function validateRecording(data) {
       recordingData: data.data,
     };
   }
-  
+
   // Check if it's direct format
   if (data.Frames && Array.isArray(data.Frames)) {
     return {
@@ -170,7 +170,7 @@ function validateRecording(data) {
       recordingData: data,
     };
   }
-  
+
   return {
     valid: false,
     error: "Missing 'Frames' array in recording data",
@@ -191,7 +191,7 @@ class BulkUploader {
       failed: 0,
       totalBytes: 0,
     };
-    
+
     // Initialize R2 client
     this.r2Client = new S3Client({
       region: "auto",
@@ -201,49 +201,49 @@ class BulkUploader {
         secretAccessKey: R2_CONFIG.SECRET_ACCESS_KEY,
       },
     });
-    
+
     this.existingFiles = new Set();
   }
-  
+
   /**
    * Get list of existing recordings in R2
    */
   async loadExistingFiles() {
     try {
       console.log("📂 Checking existing files in R2...");
-      
+
       const result = await this.r2Client.send(
         new ListObjectsV2Command({
           Bucket: R2_CONFIG.BUCKET_NAME,
           Prefix: "recordings/",
         })
       );
-      
+
       if (result.Contents) {
         for (const item of result.Contents) {
           const name = item.Key.replace("recordings/", "").replace(".json", "");
           this.existingFiles.add(name);
         }
       }
-      
+
       console.log(`   Found ${this.existingFiles.size} existing recordings\n`);
     } catch (error) {
       console.error("⚠️  Warning: Could not list existing files:", error.message);
     }
   }
-  
+
   /**
    * Upload a single recording file
    */
   async uploadFile(filePath) {
     const fileName = path.basename(filePath, ".json");
     const sanitizedName = sanitizeName(fileName);
-    
+
     try {
       // Read file content
       const content = fs.readFileSync(filePath, "utf-8");
       const data = JSON.parse(content);
-      
+
       // Validate recording
       const validation = validateRecording(data);
       if (!validation.valid) {
@@ -251,10 +251,10 @@ class BulkUploader {
         this.stats.failed++;
         return false;
       }
-      
+
       const recordingData = validation.recordingData;
       const recordingName = validation.name || fileName;
-      
+
       // Check if already exists
       if (this.existingFiles.has(sanitizedName) && !this.options.overwrite) {
         if (this.options.verbose) {
@@ -263,13 +263,13 @@ class BulkUploader {
         this.stats.skipped++;
         return false;
       }
-      
+
       // Calculate metadata
       const frameCount = recordingData.Frames.length;
       const duration = recordingData.Frames[recordingData.Frames.length - 1]?.t || 0;
       const mode = recordingData.Mode || "Standard";
       const timestamp = new Date().toISOString();
-      
+
       // Prepare upload object
       const uploadObject = {
         id: sanitizedName,
@@ -284,10 +284,10 @@ class BulkUploader {
         updatedAt: timestamp,
         data: recordingData,
       };
-      
+
       const uploadContent = JSON.stringify(uploadObject);
       const contentSize = Buffer.byteLength(uploadContent, "utf-8");
-      
+
       if (this.options.dryRun) {
         console.log(`   📋 WOULD UPLOAD: ${fileName}`);
         console.log(`      → Name: ${recordingName}`);
@@ -297,10 +297,10 @@ class BulkUploader {
         this.stats.totalBytes += contentSize;
         return true;
       }
-      
+
       // Upload to R2
       const key = `recordings/${sanitizedName}.json`;
-      
+
       await this.r2Client.send(
         new PutObjectCommand({
           Bucket: R2_CONFIG.BUCKET_NAME,
@@ -315,23 +315,23 @@ class BulkUploader {
           },
         })
       );
-      
+
       console.log(`   ✅ UPLOADED: ${fileName} (${formatBytes(contentSize)})`);
       if (this.options.verbose) {
         console.log(`      → Frames: ${frameCount}, Duration: ${formatDuration(duration)}, Mode: ${mode}`);
       }
-      
+
       this.stats.uploaded++;
       this.stats.totalBytes += contentSize;
       return true;
-      
+
     } catch (error) {
       console.log(`   ❌ FAILED: ${fileName} - ${error.message}`);
       this.stats.failed++;
       return false;
     }
   }
-  
+
   /**
    * Run the bulk upload process
    */
@@ -339,7 +339,7 @@ class BulkUploader {
     console.log("\n╔══════════════════════════════════════════════════════════╗");
     console.log("║        🚀 STARSHIP BULK UPLOAD TO R2 CLOUD 🚀            ║");
     console.log("╚══════════════════════════════════════════════════════════╝\n");
-    
+
     // Check folder exists
     const folderPath = path.resolve(this.options.folder);
     if (!fs.existsSync(folderPath)) {
@@ -347,42 +347,42 @@ class BulkUploader {
       console.log(`\n💡 Create the folder and add your .json recording files, then run again.`);
       process.exit(1);
     }
-    
+
     console.log(`📁 Source folder: ${folderPath}`);
     console.log(`👤 User ID: ${this.options.userId}`);
     console.log(`🔧 Options: ${this.options.dryRun ? "DRY-RUN " : ""}${this.options.overwrite ? "OVERWRITE " : ""}${this.options.verbose ? "VERBOSE" : ""}\n`);
-    
+
     // Get all JSON files
     const files = getJsonFiles(folderPath);
     this.stats.total = files.length;
-    
+
     if (files.length === 0) {
       console.log("⚠️  No .json files found in the folder!");
       console.log(`\n💡 Add your recording .json files to: ${folderPath}`);
       process.exit(0);
     }
-    
+
     console.log(`📊 Found ${files.length} JSON files to process\n`);
-    
+
     // Load existing files (to check for duplicates)
     if (!this.options.overwrite) {
       await this.loadExistingFiles();
     }
-    
+
     // Process each file
     console.log("🔄 Processing files...\n");
-    
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const progress = `[${i + 1}/${files.length}]`;
-      
+
       if (this.options.verbose) {
         console.log(`${progress} Processing: ${path.relative(folderPath, file)}`);
       }
-      
+
       await this.uploadFile(file);
     }
-    
+
     // Print summary
     console.log("\n╔══════════════════════════════════════════════════════════╗");
     console.log("║                    📊 UPLOAD SUMMARY                      ║");
@@ -392,12 +392,12 @@ class BulkUploader {
     console.log(`   ⏭️  Skipped:           ${this.stats.skipped}`);
     console.log(`   ❌ Failed:            ${this.stats.failed}`);
     console.log(`   📦 Total size:        ${formatBytes(this.stats.totalBytes)}`);
-    
+
     if (this.options.dryRun) {
       console.log("\n⚠️  DRY-RUN MODE: No files were actually uploaded!");
       console.log("   Remove --dry-run flag to perform actual upload.");
     }
-    
+
     console.log("\n✨ Done!\n");
   }
 }
@@ -408,7 +408,7 @@ class BulkUploader {
 
 async function main() {
   const args = process.argv.slice(2);
-  
+
   // Show help
   if (args.includes("--help") || args.includes("-h")) {
     console.log(`
@@ -442,7 +442,7 @@ FILE FORMAT:
 `);
     process.exit(0);
   }
-  
+
   const options = parseArgs(args);
   const uploader = new BulkUploader(options);
   await uploader.run();
