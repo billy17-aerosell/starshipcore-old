@@ -6883,6 +6883,12 @@ function CreatePlaybackControls()
 		Value = false,
 		Callback = function(state)
 			isPathVisualsEnabled = state
+			
+			-- Sync with StarSpacePlayback module
+			if _G.StarSpace and _G.StarSpace.SetShowPath then
+				_G.StarSpace.SetShowPath(state)
+			end
+
 			if state then
 				if PlaybackState.frameData then
 					DrawPath(PlaybackState.frameData)
@@ -6900,6 +6906,11 @@ function CreatePlaybackControls()
 		Step = 0.1,
 		Callback = function(val)
 			PlaybackState.speed = val
+			
+			-- Sync with StarSpacePlayback module
+			if _G.StarSpace and _G.StarSpace.SetSpeed then
+				_G.StarSpace.SetSpeed(val)
+			end
 		end,
 	})
 
@@ -6909,6 +6920,12 @@ function CreatePlaybackControls()
 		Value = false,
 		Callback = function(state)
 			PlaybackState.respawnOnEnd = state
+			
+			-- Sync with StarSpacePlayback module
+			if _G.StarSpace and _G.StarSpace.SetRespawnOnEnd then
+				_G.StarSpace.SetRespawnOnEnd(state)
+			end
+
 			WindUI:Notify({
 				Title = "Respawn",
 				Content = state and "Will respawn on end" or "Will NOT respawn",
@@ -6950,6 +6967,11 @@ function CreatePlaybackControls()
 		Value = false,
 		Callback = function(state)
 			isGodMode = state
+			
+			-- Sync with StarSpacePlayback module
+			if _G.StarSpace and _G.StarSpace.SetGodMode then
+				_G.StarSpace.SetGodMode(state)
+			end
 			
 			if state then
 				-- Start god mode loop
