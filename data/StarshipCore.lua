@@ -1034,6 +1034,36 @@ local function DeepCopy(orig)
 end
 
 -- --- HELPER FUNCTIONS (Moved up for OptimizeFrame) ---
+local function GetInstancePath(obj)
+	local path = obj.Name
+	local parent = obj.Parent
+	while parent and parent ~= game do
+		path = parent.Name .. "." .. path
+		parent = parent.Parent
+	end
+	return path
+end
+
+local function GetInstanceByPath(path)
+	local parts = string.split(path, ".")
+	local current = game
+	for _, name in ipairs(parts) do
+		local nextObj = current:FindFirstChild(name)
+		if not nextObj then
+			-- Try to find by class if name fails (common for anonymous objects)
+			for _, child in pairs(current:GetChildren()) do
+				if child.Name == name then
+					nextObj = child
+					break
+				end
+			end
+		end
+		if not nextObj then return nil end
+		current = nextObj
+	end
+	return current
+end
+
 local function CFToTbl(cf)
 	return { cf:GetComponents() }
 end
@@ -2653,6 +2683,40 @@ local function StartRecording()
 	S.waitingForTeleport = false -- Clear teleport waiting state
 	S.pendingLoopSave = nil
 	S.recordingStartPosition = r.Position -- Save starting position for loop detection
+	
+	-- INTERACTION RECORDING
+	S.pendingInteractions = {}
+	if Connections.InteractionRecord then Connections.InteractionRecord:Disconnect() end
+	Connections.InteractionRecord = game:GetService("ProximityPromptService").PromptTriggered:Connect(function(prompt, player)
+		if player == LocalPlayer and isRecording then
+			table.insert(S.pendingInteractions, {
+				type = "ProximityPrompt",
+				path = GetInstancePath(prompt)
+			})
+		end
+	end)
+	
+	-- ClickDetector Recording (Hooking MouseClick)
+	-- Note: This only works for ClickDetectors that exist when recording starts or are added during
+	local function hookClickDetector(cd)
+		if not cd:IsA("ClickDetector") then return end
+		local conn = cd.MouseClick:Connect(function(player)
+			if player == LocalPlayer and isRecording then
+				table.insert(S.pendingInteractions, {
+					type = "ClickDetector",
+					path = GetInstancePath(cd)
+				})
+			end
+		end)
+		table.insert(ThemeObjects, { Object = conn, Property = "Disconnect", Type = "Cleanup" }) -- Abuse ThemeObjects for cleanup
+	end
+	
+	for _, cd in pairs(workspace:GetDescendants()) do
+		if cd:IsA("ClickDetector") then hookClickDetector(cd) end
+	end
+	table.insert(Connections, workspace.DescendantAdded:Connect(function(d)
+		if d:IsA("ClickDetector") then hookClickDetector(d) end
+	end))
 
 	-- CROSS-RIG SUPPORT: Detect and save RigType & height metadata
 	local h = c:FindFirstChild("Humanoid")
@@ -2844,6 +2908,12 @@ local function StartRecording()
 		end
 
 		table.insert(recordedData.Frames, fd)
+		
+		-- Attach pending interactions to the last frame
+		if #S.pendingInteractions > 0 then
+			fd.interacts = S.pendingInteractions
+			S.pendingInteractions = {}
+		end
 
 		-- Always draw path while recording
 		if isRecording then
@@ -4446,6 +4516,22 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 							-- Recording says Freefall, we're on ground, and velocity is downward - force landing
 							justLanded = true
 							isInAir = false -- Override for this frame
+						end
+					end
+					
+					-- INTERACTION PLAYBACK
+					if fA.interacts then
+						for _, interact in ipairs(fA.interacts) do
+							task.spawn(function()
+								local obj = GetInstanceByPath(interact.path)
+								if obj then
+									if interact.type == "ProximityPrompt" and fireproximityprompt then
+										fireproximityprompt(obj)
+									elseif interact.type == "ClickDetector" and fireclickdetector then
+										fireclickdetector(obj)
+									end
+								end
+							end)
 						end
 					end
 					

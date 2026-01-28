@@ -839,7 +839,13 @@ function _G.StarSpace.StopPlayback(silent)
     
     if hum then
         hum.AutoRotate = true
-        hum:Move(Vector3.zero)
+        -- CARRY PRESERVATION: Skip stopping animations when ForceCarryMode is ON
+        if not _G.StarshipForceCarryMode then
+            for _, t in pairs(hum:GetPlayingAnimationTracks()) do
+                t:Stop()
+            end
+            hum:Move(Vector3.zero)
+        end
     end
     
     -- Only show notification if not silent (check both parameter and flag)
@@ -1191,8 +1197,9 @@ function _G.StarSpace.LoadRecording(pathOrName)
     end
     
     -- Restart Animate script for proper animation (R6 compatibility)
+    -- CARRY PRESERVATION: Skip Animate restart when ForceCarryMode is ON
     local animScript = char:FindFirstChild("Animate")
-    if animScript then
+    if animScript and not _G.StarshipForceCarryMode then
         animScript.Disabled = true
         task.wait(0.05)
         animScript.Disabled = false
@@ -1235,7 +1242,8 @@ function _G.StarSpace.LoadRecording(pathOrName)
             if dist > 5 and dist < 150 then
             -- Walk to start position naturally
             r.Anchored = false
-            if animScript then animScript.Disabled = false end
+            -- CARRY PRESERVATION: Skip enabling Animate if ForceCarryMode is ON (assume it's already in right state)
+            if animScript and not _G.StarshipForceCarryMode then animScript.Disabled = false end
             h.AutoRotate = true
             
             if UI and UI.Slide then
