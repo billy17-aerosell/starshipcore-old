@@ -2002,6 +2002,156 @@
         </div>
     </div>
 
+    <!-- DM Modal for PC VIP & Bundle -->
+    <div class="modal-overlay dm-modal-overlay" id="dm-modal" style="display: none;">
+        <div class="modal-content dm-modal-content">
+            <div class="modal-header dm-modal-header">
+                <h3 data-i18n="dm_modal_title">📩 Pembelian via DM</h3>
+                <button class="modal-close" onclick="closeDmModal()">&times;</button>
+            </div>
+            <div class="modal-body dm-modal-body">
+                <div class="dm-icon">💻</div>
+                <h4 class="dm-platform" id="dm-modal-platform">PC VIP</h4>
+                <p class="dm-price" id="dm-modal-price">Rp 250.000</p>
+
+                <div class="dm-notice">
+                    <p data-i18n="dm_modal_desc">⚠️ Paket ini tidak bisa dibeli langsung dari website.</p>
+                </div>
+
+                <p class="dm-instruction" data-i18n="dm_modal_instruction">
+                    Untuk membeli paket ini, silakan hubungi admin via DM Discord:
+                </p>
+
+                <div class="dm-contact discord-contact">
+                    <span class="dm-dc-icon">💬</span>
+                    <span class="dm-dc-username">@bee._95</span>
+                </div>
+            </div>
+            <div class="modal-footer dm-modal-footer">
+                <button class="modal-btn secondary" onclick="closeDmModal()" data-i18n="dm_modal_close">Tutup</button>
+                <button class="modal-btn primary dm-btn" onclick="openDiscordDm()" data-i18n="dm_modal_btn">💬 DM
+                    @bee._95</button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* DM Modal Styles */
+        .dm-modal-content {
+            max-width: 450px;
+        }
+
+        .dm-modal-header {
+            background: linear-gradient(135deg, var(--accent-2), #9c27b0);
+        }
+
+        .dm-modal-body {
+            text-align: center;
+            padding: 30px 25px;
+        }
+
+        .dm-icon {
+            font-size: 4rem;
+            margin-bottom: 15px;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        .dm-platform {
+            font-size: 1.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            letter-spacing: -0.02em;
+        }
+
+        .dm-price {
+            font-family: 'Space Mono', monospace;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--accent-2);
+            background: var(--bg-alt);
+            display: inline-block;
+            padding: 8px 20px;
+            border: var(--border);
+            margin-bottom: 20px;
+        }
+
+        .dm-notice {
+            background: #fff3e0;
+            border: 3px solid #e65100;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        body.dark-mode .dm-notice {
+            background: rgba(230, 81, 0, 0.2);
+        }
+
+        .dm-notice p {
+            margin: 0;
+            font-weight: 600;
+            color: #e65100;
+        }
+
+        .dm-instruction {
+            font-size: 0.95rem;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .dm-contact {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 18px 30px;
+            border: var(--border);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .dm-contact.discord-contact {
+            background: linear-gradient(135deg, #5865F2, #7289DA);
+        }
+
+        .dm-dc-icon {
+            font-size: 1.8rem;
+        }
+
+        .dm-dc-username {
+            font-family: 'Space Mono', monospace;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--white);
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .dm-btn {
+            background: linear-gradient(135deg, #5865F2, #7289DA) !important;
+            color: white !important;
+        }
+
+        .dm-btn:hover {
+            transform: translate(-2px, -2px) scale(1.02) !important;
+            box-shadow: var(--shadow-hover) !important;
+        }
+
+        .dm-modal-footer {
+            background: var(--bg-alt);
+        }
+    </style>
+
     <style>
         /* Modal Styles */
         .modal-overlay {
@@ -2257,6 +2407,11 @@
                 bundle_name: 'Paket Bundle',
                 bundle_desc: 'Dapatkan akses Mobile + PC sekaligus',
                 bundle_price: 'Selamanya <strong>Rp 300K</strong>',
+                dm_modal_title: 'Pembelian via DM',
+                dm_modal_desc: 'Paket ini tidak bisa dibeli langsung dari website.',
+                dm_modal_instruction: 'Untuk membeli paket ini, silakan hubungi admin via DM Discord:',
+                dm_modal_btn: '💬 DM @bee._95',
+                dm_modal_close: 'Tutup',
                 select_duration: 'Pilih Durasi',
                 select_duration_desc: 'Berapa lama Anda butuh akses VIP?',
                 enter_roblox: 'Masukkan Akun Roblox',
@@ -2318,6 +2473,11 @@
                 bundle_name: 'Bundle Pack',
                 bundle_desc: 'Get both Mobile + PC access combined',
                 bundle_price: 'Lifetime <strong>Rp 300K</strong>',
+                dm_modal_title: 'Purchase via DM',
+                dm_modal_desc: 'This package cannot be purchased directly from the website.',
+                dm_modal_instruction: 'To purchase this package, please contact admin via Discord DM:',
+                dm_modal_btn: '💬 DM @bee._95',
+                dm_modal_close: 'Close',
                 select_duration: 'Select Duration',
                 select_duration_desc: 'How long do you need VIP access?',
                 enter_roblox: 'Enter Roblox Account',
@@ -2455,6 +2615,12 @@
 
         // ============ PLATFORM SELECTION ============
         function selectPlatform(platform) {
+            // Check if PC VIP or Bundle - redirect to DM modal
+            if (platform === 'pc' || platform === 'bundle') {
+                showDmModal(platform);
+                return;
+            }
+
             selectedPlatform = platform;
             selectedDuration = null;
 
@@ -2474,6 +2640,42 @@
                 document.getElementById('section-duration').scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 100);
         }
+
+        // ============ DM MODAL FOR PC VIP & BUNDLE ============
+        function showDmModal(platform) {
+            const platformData = PRICING[platform];
+            const priceText = platform === 'pc' ? 'Rp 250.000' : 'Rp 300.000';
+
+            document.getElementById('dm-modal-platform').textContent = platformData.name;
+            document.getElementById('dm-modal-price').textContent = priceText;
+            document.getElementById('dm-modal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeDmModal() {
+            document.getElementById('dm-modal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        function openDiscordDm() {
+            // Open Discord - user should DM @bee._95
+            window.open('https://discord.gg/ftmA7BheTc', '_blank');
+            closeDmModal();
+        }
+
+        // Close DM modal on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeDmModal();
+            }
+        });
+
+        // Close DM modal on backdrop click
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'dm-modal') {
+                closeDmModal();
+            }
+        });
 
         function renderDurations(platform) {
             const grid = document.getElementById('duration-grid');
