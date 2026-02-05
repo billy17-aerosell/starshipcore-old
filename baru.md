@@ -111,22 +111,18 @@ Stability & Item Detection
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
 
-@everyone **Mobile Version 1.2.3**
-Join our community for mobile support:
-https://dsc.gg/starshipcore
+STARSHIP MOBILE UPDATE FOR version-1.2.4
 
-```text
-STARSHIP MOBILE UPDATE FOR version-1.2.3
-
-Performance & Automation
-- [+] Performance boost for smoother and lighter movement
-- [+] Automatic item recognition even after game updates
-- [+] Much faster cloud recording loads (only needs to download once)
-- [+] All controls (Speed, God Mode, etc.) are now more responsive
-- [+] Improved item detection to prevent incorrect selection
-- [+] Cleaner interface (Path lines are now off by default)
-- [+] Optimized for low-end devices with better memory usage
-- [+] Removed unnecessary messages to reduce lag
+Easier Route Switching
+- [+] Switch routes instantly without turning off player first
+- [+] Old route stops automatically when you pick a new one
+- [+] Now shows a notification when route is switched
+- [+] Path lines are now super detailed and follow the exact route
+- [+] Long routes no longer cause any lag
+- [+] Cleaner and smaller path visuals
+- [+] Improved Mini Player UI
+- [+] Show Vip Time Remaining on Tab Account
+- [+] Memory Improve For Device
 ```
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯

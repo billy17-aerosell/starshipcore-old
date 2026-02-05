@@ -1727,13 +1727,23 @@ DashboardTab:Paragraph({
 -- ══════════════════════════════════════════════════════════════════
 -- SESSION DATA & HELPERS
 -- ══════════════════════════════════════════════════════════════════
+-- Try to find session data from multiple sources
+local sessionData = _G.sessionData
+if not sessionData and getgenv and getgenv().StarshipSession then
+	sessionData = getgenv().StarshipSession
+end
+
 -- Mock session data for development/testing (will be overridden by real data in production)
-local sessionData = _G.sessionData or {
-	Role = "VIP Mobile",
-	Duration = "30 days", -- Change this to test: "7 days", "24 hours", "Lifetime", etc
-	UserId = LocalPlayer.UserId,
-	Username = LocalPlayer.Name,
-}
+if not sessionData then
+	-- DEV MODE: Use mock data since no global session found
+	-- IMPORTANT: In production, ensure _G.sessionData or StarshipSession is set!
+	sessionData = {
+		Role = "VIP Mobile",
+		Duration = "30 days", -- Change this to test: "7 days", "24 hours", "Lifetime"
+		UserId = LocalPlayer.UserId,
+		Username = LocalPlayer.Name,
+	}
+end
 
 -- Helper function to format role names
 local function FormatRole(role)
@@ -1801,7 +1811,17 @@ local function FormatTimeRemaining(seconds)
 end
 
 -- Calculate VIP expiry time
-vipExpiryTime = ParseVIPExpiry(sessionData.Duration)
+-- Calculate VIP expiry time
+-- Fix: Prioritize absolute 'Expiry' timestamp from loader over relative 'Duration' string
+if sessionData.Expiry and type(sessionData.Expiry) == "number" then
+	vipExpiryTime = sessionData.Expiry
+elseif sessionData.Expiry and type(sessionData.Expiry) == "string" and tonumber(sessionData.Expiry) then
+    -- Handle string timestamp if passed as string
+	vipExpiryTime = tonumber(sessionData.Expiry)
+else
+	-- Fallback: Calculate from duration string (Warning: This resets timer every session if used!)
+	vipExpiryTime = ParseVIPExpiry(sessionData.Duration)
+end
 
 -- Initial VIP status description
 local function GetVIPStatusDesc()
