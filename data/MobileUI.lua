@@ -10,7 +10,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
-local VERSION = "1.2.3"
+local VERSION = "1.2.4"
 local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 
 -- DEV_MODE detection (same as StarshipCore)
@@ -576,13 +576,13 @@ task.wait(0.1)
 task.wait(0.2)
 local Window = WindUI:CreateWindow({
 	-- ═══ PREMIUM BRANDING ═══
-	Title = "✨ STARSHIP ┃ dsc.gg-starshipcore",
+	Title = "✨ STARSHIP┃dsc.gg-starshipcore",
 	Icon = "rbxassetid://123840945153526", -- Logo next to title
 	IconSize = 36, -- Larger icon for premium look
 	Author = "Premium Edition • StarshipCore",
 
 	-- ═══ WINDOW SIZING ═══
-	Size = UDim2.fromOffset(830, 600),
+	Size = UDim2.fromOffset(770, 500),
 	SideBarWidth = 180, -- Slightly wider sidebar
 
 	-- ═══ PREMIUM TRANSPARENCY & GLASSMORPHISM ═══
@@ -649,18 +649,18 @@ Window:SetBackgroundImageTransparency(0.85)
 -- ══════════════════════════════════════════════════════════════════
 -- TOPBAR THEME SWITCH BUTTON
 -- ══════════════════════════════════════════════════════════════════
-getgenv().Theme = Settings.Theme or "Indigo"
-Window:CreateTopbarButton(
-	"SwitchTheme",
-	"eye",
-	function()
-		getgenv().Theme = getgenv().Theme == "Indigo" and "Dark" or "Indigo"
-		WindUI:SetTheme(getgenv().Theme)
-		Settings.Theme = getgenv().Theme
-		SaveSettings()
-	end,
-	990
-)
+-- getgenv().Theme = Settings.Theme or "Indigo"
+-- Window:CreateTopbarButton(
+-- 	"SwitchTheme",
+-- 	"eye",
+-- 	function()
+-- 		getgenv().Theme = getgenv().Theme == "Indigo" and "Dark" or "Indigo"
+-- 		WindUI:SetTheme(getgenv().Theme)
+-- 		Settings.Theme = getgenv().Theme
+-- 		SaveSettings()
+-- 	end,
+-- 	990
+-- )
 
 -- Get session data from StarshipSession (set by main loader)
 local function GetSessionData()
@@ -1725,23 +1725,138 @@ DashboardTab:Paragraph({
 })
 
 -- ══════════════════════════════════════════════════════════════════
+-- SESSION DATA & HELPERS
+-- ══════════════════════════════════════════════════════════════════
+-- Mock session data for development/testing (will be overridden by real data in production)
+local sessionData = _G.sessionData or {
+	Role = "VIP Mobile",
+	Duration = "30 days", -- Change this to test: "7 days", "24 hours", "Lifetime", etc
+	UserId = LocalPlayer.UserId,
+	Username = LocalPlayer.Name,
+}
+
+-- Helper function to format role names
+local function FormatRole(role)
+	if not role then return "Free" end
+	
+	local roleColors = {
+		["VIP Mobile"] = '<font color="#FFD700">VIP Mobile</font>',
+		["PC VIP"] = '<font color="#00BFFF">PC VIP</font>',
+		["Bundle"] = '<font color="#FF1493">Bundle</font>',
+		["Lifetime"] = '<font color="#9370DB">Lifetime</font>',
+	}
+	
+	return roleColors[role] or '<font color="#FFFFFF">' .. role .. '</font>'
+end
+
+-- ══════════════════════════════════════════════════════════════════
 -- VIP STATUS
 -- ══════════════════════════════════════════════════════════════════
 AccountTab:Section({ Title = "VIP Status", TextSize = 16 })
 AccountTab:Divider()
 
-local vipStatusDesc = '<font size="16">Role: '
-	.. FormatRole(sessionData.Role)
-	.. "\n"
-	.. "Duration: "
-	.. sessionData.Duration
-	.. "\n"
-	.. "Status: Active</font>"
+-- Parse VIP expiry time from sessionData
+local vipExpiryTime = nil
+local vipParagraph = nil
 
-AccountTab:Paragraph({
+-- Function to parse duration string and calculate expiry timestamp
+local function ParseVIPExpiry(durationStr)
+	if not durationStr or durationStr == "Lifetime" or durationStr == "lifetime" then
+		return nil -- Lifetime VIP
+	end
+	
+	-- Try to parse duration like "30 days", "7 days", etc
+	local days = tonumber(durationStr:match("(%d+)%s*day"))
+	local hours = tonumber(durationStr:match("(%d+)%s*hour"))
+	
+	if days then
+		return os.time() + (days * 24 * 60 * 60)
+	elseif hours then
+		return os.time() + (hours * 60 * 60)
+	end
+	
+	return nil
+end
+
+-- Function to format time remaining
+local function FormatTimeRemaining(seconds)
+	if seconds <= 0 then
+		return "Expired"
+	end
+	
+	local days = math.floor(seconds / 86400)
+	local hours = math.floor((seconds % 86400) / 3600)
+	local mins = math.floor((seconds % 3600) / 60)
+	local secs = math.floor(seconds % 60)
+	
+	if days > 0 then
+		return string.format("%dd %dh %dm %ds", days, hours, mins, secs)
+	elseif hours > 0 then
+		return string.format("%dh %dm %ds", hours, mins, secs)
+	elseif mins > 0 then
+		return string.format("%dm %ds", mins, secs)
+	else
+		return string.format("%ds", secs)
+	end
+end
+
+-- Calculate VIP expiry time
+vipExpiryTime = ParseVIPExpiry(sessionData.Duration)
+
+-- Initial VIP status description
+local function GetVIPStatusDesc()
+	local timeRemaining = "Lifetime"
+	
+	if vipExpiryTime then
+		local remaining = vipExpiryTime - os.time()
+		timeRemaining = FormatTimeRemaining(remaining)
+	end
+	
+	return '<font size="16">Role: '
+		.. FormatRole(sessionData.Role)
+		.. "\n"
+		.. "Time Remaining: "
+		.. timeRemaining
+		.. "\n"
+		.. "Status: Active</font>"
+end
+
+vipParagraph = AccountTab:Paragraph({
 	Title = "Subscription",
-	Desc = vipStatusDesc,
+	Desc = GetVIPStatusDesc(),
 })
+
+-- Update VIP timer every second
+if vipExpiryTime then
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			
+			local remaining = vipExpiryTime - os.time()
+			
+			if remaining <= 0 then
+				-- VIP expired
+				pcall(function()
+					if vipParagraph and vipParagraph.SetDesc then
+						vipParagraph:SetDesc('<font size="16">Role: '
+							.. FormatRole(sessionData.Role)
+							.. "\n"
+							.. "Time Remaining: Expired\n"
+							.. "Status: Inactive</font>")
+					end
+				end)
+				break
+			else
+				-- Update countdown
+				pcall(function()
+					if vipParagraph and vipParagraph.SetDesc then
+						vipParagraph:SetDesc(GetVIPStatusDesc())
+					end
+				end)
+			end
+		end
+	end)
+end
 
 -- ══════════════════════════════════════════════════════════════════
 -- GAME DETECTION
@@ -2847,11 +2962,11 @@ local ListMapTab = Window:Tab({
 task.wait(0.1)
 
 -- ══════════════════════════════════════════════════════════════════
--- 🛠️ TOOLS TAB
+-- 👤 PLAYER TAB
 -- ══════════════════════════════════════════════════════════════════
 local ToolsTab = Window:Tab({
-	Title = "Tools",
-	Icon = "wrench",
+	Title = "Player",
+	Icon = "zap",
 })
 task.wait(0.1)
 
@@ -2872,6 +2987,7 @@ ToolsTab:Slider({
 	end,
 })
 
+--[[ JumpPower removed for mobile
 ToolsTab:Slider({
 	Title = "JumpPower",
 	Desc = "Jump height (Default: 50)",
@@ -2885,6 +3001,7 @@ ToolsTab:Slider({
 		end
 	end,
 })
+]]
 
 -- Infinite Jump (consolidated to reduce local vars)
 local InfiniteJumpState = { connection = nil, isOn = false }
@@ -2924,6 +3041,7 @@ ToolsTab:Toggle({
 	end,
 })
 
+--[[ === FPS BOOSTER SECTION REMOVED ===
 -- ══════════════════════════════════════════════════════════════════
 -- 🚀 FPS BOOSTER
 -- ══════════════════════════════════════════════════════════════════
@@ -3344,6 +3462,8 @@ ToolsTab:Button({
 		})
 	end,
 })
+
+=== END FPS BOOSTER SECTION === ]]
 
 ToolsTab:Divider()
 
@@ -3768,6 +3888,7 @@ ToolsTab:Slider({
 
 ToolsTab:Divider()
 
+--[[ === RESET CHARACTER, SPEED CHECKER, SHIFT LOCK, STREAMER MODE, HIDE PLAYERS REMOVED ===
 ToolsTab:Button({
 	Title = "💀 Reset Character",
 	Callback = function()
@@ -4294,6 +4415,7 @@ ToolsTab:Toggle({
 	end,
 })
 
+=== END OF REMOVED SECTIONS === ]]
 ToolsTab:Divider()
 
 -- ══════════════════════════════════════════════════════════�������������═══════
@@ -4956,15 +5078,19 @@ local function DrawPath(frames)
 		return
 	end
 
-	-- Optimization: Limit to ~300 points for mobile performance
+	-- ═══════════════════════════════════════════════════════════════
+	-- FULL PRECISION MODE: Draw ALL points for accurate path
+	-- Uses progressive loading for very long recordings
+	-- ═══════════════════════════════════════════════════════════════
 	local totalPoints = #positions
-	local step = math.max(1, math.floor(totalPoints / 300))
 	local filteredPositions = {}
 	local lastPos = nil
-	local minDistance = 1.5 -- Minimum distance between points
-
-	for i = 1, totalPoints, step do
+	local minDistance = 0.3 -- REDUCED: Much more precise (was 1.5)
+	
+	-- No limit on points - include all positions with minimum distance filter
+	for i = 1, totalPoints do
 		local posData = positions[i]
+		-- Include point if it's far enough from last point (prevents overlapping)
 		if not lastPos or (posData.pos - lastPos).Magnitude > minDistance then
 			posData.progress = (i - 1) / math.max(1, totalPoints - 1)
 			table.insert(filteredPositions, posData)
@@ -4972,63 +5098,89 @@ local function DrawPath(frames)
 		end
 	end
 
-	-- Always include last position
+	-- Always include last position for complete path
 	local lastPosData = positions[totalPoints]
 	lastPosData.progress = 1
 	if #filteredPositions > 0 and (filteredPositions[#filteredPositions].pos - lastPosData.pos).Magnitude > 0.1 then
 		table.insert(filteredPositions, lastPosData)
 	end
+	
+	-- Log stats (dev mode only)
+	if DEV_MODE then
+		warn(string.format("[PathViz] Total frames: %d, Drawn points: %d (%.1f%% coverage)", 
+			totalPoints, #filteredPositions, (#filteredPositions / totalPoints) * 100))
+	end
 
-	-- Draw nodes and beams
+	-- Draw nodes and beams using PROGRESSIVE RENDERING
+	-- Renders in chunks to prevent lag on long recordings
 	local nodeInstances = {}
 	local prevPart = nil
+	local CHUNK_SIZE = 50 -- Render 50 nodes per frame to prevent lag
+	local totalFiltered = #filteredPositions
+	
+	-- Use task.spawn for progressive rendering on long paths
+	task.spawn(function()
+		for i, posData in ipairs(filteredPositions) do
+			-- Check if path was cleared mid-render
+			if not pathVisualsFolder or not pathVisualsFolder.Parent then
+				return
+			end
+			
+			local pos = posData.pos
+			local progress = posData.progress
+			local color = GetGradientColor(progress)
 
-	for i, posData in ipairs(filteredPositions) do
-		local pos = posData.pos
-		local progress = posData.progress
-		local color = GetGradientColor(progress)
+			-- Create node (smaller neon spheres for precision)
+			local node = Instance.new("Part")
+			node.Name = "PathNode_" .. i
+			node.Size = Vector3.new(0.25, 0.25, 0.25) -- Smaller for precision
+			node.Shape = Enum.PartType.Ball
+			node.Color = color
+			node.Material = Enum.Material.Neon
+			node.Transparency = 0.15
+			node.Anchored = true
+			node.CanCollide = false
+			node.CanQuery = false
+			node.CastShadow = false
+			node.Position = pos
+			node.Parent = nodesFolder
+			table.insert(nodeInstances, node)
 
-		-- Create node (smaller neon spheres)
-		local node = Instance.new("Part")
-		node.Name = "PathNode_" .. i
-		node.Size = Vector3.new(0.35, 0.35, 0.35)
-		node.Shape = Enum.PartType.Ball
-		node.Color = color
-		node.Material = Enum.Material.Neon
-		node.Transparency = 0.2
-		node.Anchored = true
-		node.CanCollide = false
-		node.CanQuery = false
-		node.CastShadow = false
-		node.Position = pos
-		node.Parent = nodesFolder
-		table.insert(nodeInstances, node)
+			-- Create beam/line to previous node
+			if prevPart then
+				local distance = (pos - prevPart.Position).Magnitude
+				if distance > 0.1 then
+					local midpoint = (pos + prevPart.Position) / 2
 
-		-- Create beam/line to previous node
-		if prevPart then
-			local distance = (pos - prevPart.Position).Magnitude
-			if distance > 0.1 then
-				local midpoint = (pos + prevPart.Position) / 2
-				local direction = (pos - prevPart.Position).Unit
+					local beam = Instance.new("Part")
+					beam.Name = "PathBeam_" .. i
+					beam.Size = Vector3.new(0.08, 0.08, distance) -- Thinner for precision
+					beam.Shape = Enum.PartType.Block
+					beam.Color = color:Lerp(GetGradientColor(filteredPositions[i - 1].progress), 0.5)
+					beam.Material = Enum.Material.Neon
+					beam.Transparency = 0.3
+					beam.Anchored = true
+					beam.CanCollide = false
+					beam.CanQuery = false
+					beam.CastShadow = false
+					beam.CFrame = CFrame.lookAt(midpoint, pos)
+					beam.Parent = beamsFolder
+				end
+			end
 
-				local beam = Instance.new("Part")
-				beam.Name = "PathBeam_" .. i
-				beam.Size = Vector3.new(0.12, 0.12, distance)
-				beam.Shape = Enum.PartType.Block
-				beam.Color = color:Lerp(GetGradientColor(filteredPositions[i - 1].progress), 0.5)
-				beam.Material = Enum.Material.Neon
-				beam.Transparency = 0.4
-				beam.Anchored = true
-				beam.CanCollide = false
-				beam.CanQuery = false
-				beam.CastShadow = false
-				beam.CFrame = CFrame.lookAt(midpoint, pos)
-				beam.Parent = beamsFolder
+			prevPart = node
+			
+			-- Yield every CHUNK_SIZE nodes to prevent lag
+			if i % CHUNK_SIZE == 0 then
+				task.wait()
 			end
 		end
-
-		prevPart = node
-	end
+		
+		-- Render complete notification (dev mode)
+		if DEV_MODE then
+			warn("[PathViz] Rendering complete: " .. totalFiltered .. " nodes drawn")
+		end
+	end)
 
 	-- ═══════════════════════════════════════════════════════════════════
 	-- SPECIAL MARKERS (START & END)
@@ -6288,6 +6440,26 @@ local function LoadCloudRecording(recInfo)
 	CloudRecordingLoaded = false -- Reset until loaded
 
 	-- ═══════════════════════════════════════════════════════════════
+	-- STOP CURRENT PLAYBACK: If switching to different recording
+	-- This ensures old recording stops before new one loads
+	-- ═══════════════════════════════════════════════════════════════
+	local wasPlayingBefore = PlaybackState.isPlaying
+	if wasPlayingBefore then
+		if StarSpacePlaybackLoaded and _G.StarSpace and _G.StarSpace.StopPlayback then
+			_G.StarSpace.StopPlayback()
+		elseif StopPlayback then
+			StopPlayback()
+		end
+		-- Reset playback state
+		PlaybackState.isPlaying = false
+		PlaybackState.isPaused = false
+		PlaybackState.currentFrame = 0
+	end
+	
+	-- Track if we're switching recordings (for notification later) - use _G so LoadCloudRecordingDirect can access
+	_G.StarshipCloud.IsSwitchingRecording = wasPlayingBefore or (MiniPlayerGui ~= nil)
+
+	-- ═══════════════════════════════════════════════════════════════
 	-- STEP 0: CHECK LOCAL CACHE FIRST (INSTANT if cached!)
 	-- ═══════════════════════════════════════════════════════════════
 	if IsRecordingCached(recInfo.recordingId) then
@@ -6323,6 +6495,11 @@ local function LoadCloudRecording(recInfo)
 
 			-- Show Playback Controls & Enable Mini Player
 			CreatePlaybackControls()
+			
+			-- Show "Recording Switched" notification if switching from another recording
+			if _G.StarshipCloud.IsSwitchingRecording then
+				WindUI:Notify({ Title = "📂 Recording Switched", Content = _G.StarshipCloud.RecordingName .. " ready - Press Play!", Duration = 2 })
+			end
 
 			return -- Done! No network needed
 		end
@@ -6449,6 +6626,11 @@ LoadCloudRecordingDirect = function(recInfo)
 
 			-- Show Playback Controls & Enable Mini Player
 			CreatePlaybackControls()
+			
+			-- Show "Recording Switched" notification if switching from another recording
+			if _G.StarshipCloud.IsSwitchingRecording then
+				WindUI:Notify({ Title = "📂 Recording Switched", Content = _G.StarshipCloud.RecordingName .. " ready - Press Play!", Duration = 2 })
+			end
 			return
 		end
 
@@ -6476,6 +6658,11 @@ LoadCloudRecordingDirect = function(recInfo)
 
 			-- Show Playback Controls & Enable Mini Player
 			CreatePlaybackControls()
+			
+			-- Show "Recording Switched" notification if switching from another recording
+			if _G.StarshipCloud.IsSwitchingRecording then
+				WindUI:Notify({ Title = "📂 Recording Switched", Content = _G.StarshipCloud.RecordingName .. " ready - Press Play!", Duration = 2 })
+			end
 
 			-- Save to local cache for instant load next time
 			task.spawn(function()
@@ -6563,10 +6750,10 @@ local function ToggleMiniPlayer(state)
 		-- ═══════════════════════════════════════════════════════════
 		local mainFrame = Instance.new("Frame")
 		mainFrame.Name = "MiniPlayerMain"
-		mainFrame.Size = UDim2.new(0, 150, 0, 60)
-		mainFrame.Position = UDim2.new(0.5, -75, 0, 50)
-		mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-		mainFrame.BackgroundTransparency = 0.08
+		mainFrame.Size = UDim2.new(0, 160, 0, 65)
+		mainFrame.Position = UDim2.new(0.5, -80, 0, 50)
+		mainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+		mainFrame.BackgroundTransparency = 0.05
 		mainFrame.BorderSizePixel = 0
 		mainFrame.Active = true
 		mainFrame.Draggable = true
@@ -6576,52 +6763,125 @@ local function ToggleMiniPlayer(state)
 		mainFrame.Size = UDim2.new(0, 0, 0, 0)
 		mainFrame.Position = UDim2.new(0.5, 0, 0, 50)
 		local entranceTween =
-			TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-				Size = UDim2.new(0, 150, 0, 60),
-				Position = UDim2.new(0.5, -75, 0, 50),
+			TweenService:Create(mainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(0, 160, 0, 65),
+				Position = UDim2.new(0.5, -80, 0, 50),
 			})
 		entranceTween:Play()
 
-		-- Rounded corners
+		-- Sharper tech-corners
 		local mainCorner = Instance.new("UICorner")
-		mainCorner.CornerRadius = UDim.new(0, 14)
+		mainCorner.CornerRadius = UDim.new(0, 6)
 		mainCorner.Parent = mainFrame
 
-		-- Gradient border
+		-- Fierce Neon Border
 		local glowStroke = Instance.new("UIStroke")
-		glowStroke.Color = Color3.fromRGB(138, 43, 226)
-		glowStroke.Thickness = 1.5
-		glowStroke.Transparency = 0.3
+		glowStroke.Color = Color3.fromRGB(255, 0, 0)
+		glowStroke.Thickness = 2
+		glowStroke.Transparency = 0.2
 		glowStroke.Parent = mainFrame
 
-		-- Animated gradient for stroke
+		-- Fierce RGB (Red/Cyan/Black)
 		local strokeGradient = Instance.new("UIGradient")
 		strokeGradient.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(138, 43, 226)),
-			ColorSequenceKeypoint.new(0.5, Color3.fromRGB(59, 130, 246)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(236, 72, 153)),
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 40, 40)), -- Neon Red
+			ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 220, 255)), -- Cyber Cyan
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 20, 25)), -- Metal Dark
 		})
 		strokeGradient.Rotation = 0
 		strokeGradient.Parent = glowStroke
 
-		-- Animate gradient rotation
+		-- Animate gradient rotation (Faster/More Aggressive)
 		local gradientRotation = 0
 		table.insert(
 			MiniPlayerAnimations,
 			RunService.Heartbeat:Connect(function(dt)
-				gradientRotation = (gradientRotation + dt * 45) % 360
+				gradientRotation = (gradientRotation + dt * 110) % 360
 				strokeGradient.Rotation = gradientRotation
 			end)
 		)
 
-		-- Background gradient
+		-- Background metal/tech gradient
 		local bgGradient = Instance.new("UIGradient")
 		bgGradient.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 30, 45)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(18, 18, 28)),
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 15, 18)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 5, 8)),
 		})
-		bgGradient.Rotation = 45
+		bgGradient.Rotation = 90
 		bgGradient.Parent = mainFrame
+
+		-- ══════════════════════════════════════════════════════════════════
+		-- SIDE DECORATIONS - Tech Vents & Glow Bars
+		-- ══════════════════════════════════════════════════════════════════
+		
+		-- Left Glow Bar (Outside)
+		local leftGlow = Instance.new("Frame")
+		leftGlow.Name = "LeftGlow"
+		leftGlow.Size = UDim2.new(0, 4, 1, -16)
+		leftGlow.Position = UDim2.new(0, -12, 0, 8)
+		leftGlow.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+		leftGlow.BorderSizePixel = 0
+		leftGlow.ZIndex = 4
+		leftGlow.Parent = mainFrame
+		Instance.new("UICorner", leftGlow).CornerRadius = UDim.new(1, 0)
+		
+		-- Right Glow Bar (Outside)
+		local rightGlow = Instance.new("Frame")
+		rightGlow.Name = "RightGlow"
+		rightGlow.Size = UDim2.new(0, 4, 1, -16)
+		rightGlow.Position = UDim2.new(1, 8, 0, 8)
+		rightGlow.BackgroundColor3 = Color3.fromRGB(0, 220, 255)
+		rightGlow.BorderSizePixel = 0
+		rightGlow.ZIndex = 4
+		rightGlow.Parent = mainFrame
+		Instance.new("UICorner", rightGlow).CornerRadius = UDim.new(1, 0)
+
+		-- Add Glow effect to bars
+		local leftUIStroke = Instance.new("UIStroke")
+		leftUIStroke.Color = Color3.fromRGB(255, 0, 0)
+		leftUIStroke.Thickness = 2
+		leftUIStroke.Transparency = 0.5
+		leftUIStroke.Parent = leftGlow
+		
+		local rightUIStroke = Instance.new("UIStroke")
+		rightUIStroke.Color = Color3.fromRGB(0, 220, 255)
+		rightUIStroke.Thickness = 2
+		rightUIStroke.Transparency = 0.5
+		rightUIStroke.Parent = rightGlow
+
+		-- Industrial Vents (Gills - Outside)
+		for i = 1, 3 do
+			-- Left Vents (Floating outside)
+			local lv = Instance.new("Frame")
+			lv.Size = UDim2.new(0, 8, 0, 3)
+			lv.Position = UDim2.new(0, -26, 0, 15 + (i * 10))
+			lv.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+			lv.Rotation = -25
+			lv.BorderSizePixel = 0
+			lv.BackgroundTransparency = 0.3
+			lv.ZIndex = 4
+			lv.Parent = mainFrame
+			
+			-- Right Vents (Floating outside)
+			local rv = Instance.new("Frame")
+			rv.Size = UDim2.new(0, 8, 0, 3)
+			rv.Position = UDim2.new(1, 18, 0, 15 + (i * 10))
+			rv.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+			rv.Rotation = 25
+			rv.BorderSizePixel = 0
+			rv.BackgroundTransparency = 0.3
+			rv.ZIndex = 4
+			rv.Parent = mainFrame
+		end
+
+		-- Breathe animation for side glows
+		table.insert(MiniPlayerAnimations, RunService.Heartbeat:Connect(function()
+			local breathe = (math.sin(os.clock() * 4) + 1) / 2
+			leftGlow.BackgroundTransparency = 0.2 + (breathe * 0.4)
+			rightGlow.BackgroundTransparency = 0.2 + (breathe * 0.4)
+			leftUIStroke.Transparency = 0.3 + (breathe * 0.4)
+			rightUIStroke.Transparency = 0.3 + (breathe * 0.4)
+		end))
 
 		-- ════════��══════════════���═════════════════════════════���═════
 		-- HEADER - Drag indicator + Close button
@@ -6647,14 +6907,14 @@ local function ToggleMiniPlayer(state)
 
 		-- Close button
 		local closeBtn = Instance.new("TextButton")
-		closeBtn.Size = UDim2.new(0, 16, 0, 16)
-		closeBtn.Position = UDim2.new(1, -20, 0, 1)
-		closeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-		closeBtn.BackgroundTransparency = 0.5
+		closeBtn.Size = UDim2.new(0, 20, 0, 20)
+		closeBtn.Position = UDim2.new(1, -24, 0, 4)
+		closeBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		closeBtn.BackgroundTransparency = 0.2
 		closeBtn.Text = "×"
-		closeBtn.TextColor3 = Color3.fromRGB(180, 180, 200)
-		closeBtn.Font = Enum.Font.SourceSansBold
-		closeBtn.TextSize = 12
+		closeBtn.TextColor3 = Color3.fromRGB(255, 50, 50)
+		closeBtn.Font = Enum.Font.GothamBold
+		closeBtn.TextSize = 14
 		closeBtn.AutoButtonColor = false
 		closeBtn.ZIndex = 6
 		closeBtn.Parent = header
@@ -6691,8 +6951,8 @@ local function ToggleMiniPlayer(state)
 		-- ═══════════════════════════════════════════════════════════
 		local buttonsFrame = Instance.new("Frame")
 		buttonsFrame.Name = "Buttons"
-		buttonsFrame.Size = UDim2.new(1, -16, 0, 32)
-		buttonsFrame.Position = UDim2.new(0, 8, 0, 22)
+		buttonsFrame.Size = UDim2.new(1, -12, 0, 34)
+		buttonsFrame.Position = UDim2.new(0, 6, 0, 26)
 		buttonsFrame.BackgroundTransparency = 1
 		buttonsFrame.ZIndex = 5
 		buttonsFrame.Parent = mainFrame
@@ -6705,18 +6965,18 @@ local function ToggleMiniPlayer(state)
 		-- Button creator function
 		local function createButton(icon, color, posX, tooltip)
 			local btn = Instance.new("TextButton")
-			btn.Size = UDim2.new(0, 40, 0, 32)
+			btn.Size = UDim2.new(0, 44, 0, 34)
 			btn.Position = UDim2.new(0, posX, 0, 0)
 			btn.BackgroundColor3 = color
 			btn.BackgroundTransparency = 0.15
 			btn.Text = icon
 			btn.TextColor3 = Color3.new(1, 1, 1)
-			btn.Font = Enum.Font.SourceSansBold
-			btn.TextSize = 16
+			btn.Font = Enum.Font.GothamBold
+			btn.TextSize = 18
 			btn.AutoButtonColor = false
 			btn.ZIndex = 6
 			btn.Parent = buttonsFrame
-			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
 
 			local btnStroke = Instance.new("UIStroke")
 			btnStroke.Color = color
@@ -6741,8 +7001,8 @@ local function ToggleMiniPlayer(state)
 			return btn, btnStroke
 		end
 
-		-- 1. PLAY/PAUSE Button (Green)
-		local playBtn, playStroke = createButton("▶", Color3.fromRGB(34, 197, 94), 0, "Play/Pause")
+		-- 1. PLAY/PAUSE Button (Aggressive Emerald)
+		local playBtn, playStroke = createButton("▶", Color3.fromRGB(0, 180, 100), 0, "Play/Pause")
 		local playDebounce = false -- Prevent double-click
 		playBtn.MouseButton1Click:Connect(function()
 			-- Debounce to prevent double-click causing fast playback
@@ -6792,8 +7052,8 @@ local function ToggleMiniPlayer(state)
 			end
 		end)
 
-		-- 2. MOONWALK Button (Purple) - Walk backward while facing forward
-		local moonwalkBtn, moonwalkStroke = createButton("🌙", Color3.fromRGB(138, 43, 226), 46, "Moonwalk")
+		-- 2. MOONWALK Button (Aggressive Blue/Indigo)
+		local moonwalkBtn, moonwalkStroke = createButton("🌙", Color3.fromRGB(60, 80, 255), 50, "Moonwalk")
 
 		-- Set initial state from PlaybackState
 		if PlaybackState.isMoonwalk then
@@ -6811,18 +7071,18 @@ local function ToggleMiniPlayer(state)
 			end
 
 			if isMoonwalk then
-				moonwalkBtn.BackgroundColor3 = Color3.fromRGB(236, 72, 153)
-				moonwalkStroke.Color = Color3.fromRGB(236, 72, 153)
+				moonwalkBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 255) -- Electric Cyan
+				moonwalkStroke.Color = Color3.fromRGB(0, 255, 255)
 				WindUI:Notify({ Title = "🌙 Moonwalk", Content = "ON - Walking backward", Duration = 1.5 })
 			else
-				moonwalkBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-				moonwalkStroke.Color = Color3.fromRGB(138, 43, 226)
+				moonwalkBtn.BackgroundColor3 = Color3.fromRGB(60, 80, 255) -- Deep Blue
+				moonwalkStroke.Color = Color3.fromRGB(60, 80, 255)
 				WindUI:Notify({ Title = "🌙 Moonwalk", Content = "OFF", Duration = 1 })
 			end
 		end)
 
-		-- 3. LOOP Button (Blue)
-		local loopBtn, loopStroke = createButton("🔁", Color3.fromRGB(59, 130, 246), 92, "Loop")
+		-- 3. LOOP Button (Toxic Orange)
+		local loopBtn, loopStroke = createButton("🔁", Color3.fromRGB(255, 100, 0), 100, "Loop")
 
 		-- Set initial state
 		if isLooping then
@@ -6840,12 +7100,12 @@ local function ToggleMiniPlayer(state)
 			end
 
 			if isLooping then
-				loopBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
-				loopStroke.Color = Color3.fromRGB(34, 197, 94)
+				loopBtn.BackgroundColor3 = Color3.fromRGB(255, 200, 0) -- Gold/Toxic
+				loopStroke.Color = Color3.fromRGB(255, 200, 0)
 				WindUI:Notify({ Title = "🔁 Loop", Content = "Loop ON", Duration = 1 })
 			else
-				loopBtn.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
-				loopStroke.Color = Color3.fromRGB(59, 130, 246)
+				loopBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 0) -- Deep Orange
+				loopStroke.Color = Color3.fromRGB(255, 100, 0)
 				WindUI:Notify({ Title = "🔁 Loop", Content = "Loop OFF", Duration = 1 })
 			end
 		end)
@@ -6920,7 +7180,8 @@ function CreatePlaybackControls()
 		if MiniPlayerToggle then
 			MiniPlayerToggle:SetValue(true)
 		end
-		return
+		-- Return true if mini player was already active (for auto-play feature)
+		return MiniPlayerGui ~= nil
 	end
 	PlaybackControlsCreated = true
 
@@ -7541,13 +7802,14 @@ function CreatePlaybackControls()
 end
 
 -- ══════════════════════════════════════════════════════════════════
--- 🎉 FUN TAB
+-- 🎉 FUN TAB (REMOVED FOR MOBILE)
 -- ══════════════════════════════════════════════════════════════════
-local FunTab = Window:Tab({
+--[[local FunTab = Window:Tab({
 	Title = "Fun",
 	Icon = "smile",
-})
+})]]
 
+--[[ === FUN TAB CONTENT DISABLED (Tab removed for mobile) ===
 FunTab:Divider()
 
 -- Fun Actions
@@ -8156,15 +8418,17 @@ FunTab:Toggle({
 })
 
 FunTab:Divider()
+=== END FUN TAB CONTENT ===  ]]
 
 -- ══════════════════════════════════════════════════════════════════
--- 🚀 WARP TAB (Advanced Teleportation - PC-like features)
+-- 🚀 WARP TAB (REMOVED FOR MOBILE)
 -- ══════════════════════════════════════════════════════════════════
-local WarpTab = Window:Tab({
+--[[local WarpTab = Window:Tab({
 	Title = "Warp",
 	Icon = "map-pin",
-})
+})]]
 
+--[[ === WARP TAB CONTENT DISABLED (Tab removed for mobile) ===
 -- All warp state consolidated into single table to reduce local variables
 WarpSystem = {
 	FOLDER = "StarshipMobile/Warps",
@@ -8601,57 +8865,58 @@ WarpTab:Divider()
 
 
 
+=== END WARP TAB CONTENT === ]]
 
 -- ══════════════════════════════════════════════════════════════════
 -- 🔗 SOCIAL TAB
 -- ══════════════════════════════════════════════════════════════════
-local SocialTab = Window:Tab({
-	Title = "Social",
-	Icon = "share-2",
-})
+-- local SocialTab = Window:Tab({
+-- 	Title = "Social",
+-- 	Icon = "share-2",
+-- })
 
-SocialTab:Section({ Title = "🔗 Links & Social", TextSize = 16 })
+-- SocialTab:Section({ Title = "🔗 Links & Social", TextSize = 16 })
 
-SocialTab:Button({
-	Title = "💬 Join Discord",
-	Desc = "Get updates, support & community",
-	Callback = function()
-		if setclipboard then
-			setclipboard("https://dsc.gg/starshipcore")
-			WindUI:Notify({ Title = "✅ Copied!", Content = "Discord invite link copied to clipboard!", Duration = 3 })
-		else
-			WindUI:Notify({ Title = "Discord", Content = "https://dsc.gg/starshipcore", Duration = 5 })
-		end
-	end,
-})
+-- SocialTab:Button({
+-- 	Title = "💬 Join Discord",
+-- 	Desc = "Get updates, support & community",
+-- 	Callback = function()
+-- 		if setclipboard then
+-- 			setclipboard("https://dsc.gg/starshipcore")
+-- 			WindUI:Notify({ Title = "✅ Copied!", Content = "Discord invite link copied to clipboard!", Duration = 3 })
+-- 		else
+-- 			WindUI:Notify({ Title = "Discord", Content = "https://dsc.gg/starshipcore", Duration = 5 })
+-- 		end
+-- 	end,
+-- })
 
-SocialTab:Button({
-	Title = "⭐ Rate Us",
-	Desc = "Leave a review if you enjoy Starship",
-	Callback = function()
-		WindUI:Notify({ Title = "Thank You!", Content = "We appreciate your support! 💜", Duration = 3 })
-	end,
-})
+-- SocialTab:Button({
+-- 	Title = "⭐ Rate Us",
+-- 	Desc = "Leave a review if you enjoy Starship",
+-- 	Callback = function()
+-- 		WindUI:Notify({ Title = "Thank You!", Content = "We appreciate your support! 💜", Duration = 3 })
+-- 	end,
+-- })
 
-SocialTab:Button({
-	Title = "📋 Copy Script",
-	Desc = "Copy loadstring to clipboard",
-	Callback = function()
-		if setclipboard then
-			setclipboard('loadstring(game:HttpGet("https://starship-core.my.id/api/mobile-bootstrap"))()')
-			WindUI:Notify({ Title = "✅ Copied!", Content = "Loadstring copied to clipboard!", Duration = 3 })
-		end
-	end,
-})
+-- SocialTab:Button({
+-- 	Title = "📋 Copy Script",
+-- 	Desc = "Copy loadstring to clipboard",
+-- 	Callback = function()
+-- 		if setclipboard then
+-- 			setclipboard('loadstring(game:HttpGet("https://starship-core.my.id/api/mobile-bootstrap"))()')
+-- 			WindUI:Notify({ Title = "✅ Copied!", Content = "Loadstring copied to clipboard!", Duration = 3 })
+-- 		end
+-- 	end,
+-- })
 
-SocialTab:Divider()
+-- SocialTab:Divider()
 
-SocialTab:Section({ Title = "📢 About", TextSize = 16 })
+-- SocialTab:Section({ Title = "📢 About", TextSize = 16 })
 
-SocialTab:Paragraph({
-	Title = "Starship Mobile",
-	Desc = "Version 1.1 • Made with 💜\n\nThank you for using Starship Mobile!\nJoin our Discord for updates and support.",
-})
+-- SocialTab:Paragraph({
+-- 	Title = "Starship Mobile",
+-- 	Desc = "Version 1.1 • Made with 💜\n\nThank you for using Starship Mobile!\nJoin our Discord for updates and support.",
+-- })
 
 -- ═══════���════════════════════════════════════��═════════════════════
 -- ⚙️ SETTINGS TAB
