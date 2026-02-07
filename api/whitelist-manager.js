@@ -352,7 +352,7 @@ export default async function handler(req, res) {
   }
 
   // ==== UPDATE ====
-  if (action === "update" && method === "PUT") {
+  if (action === "update" && (method === "PUT" || method === "POST")) {
     return await handleUpdate(req, res, redisClient, platform, config);
   }
 
