@@ -758,9 +758,14 @@ async function handleAdd(req, res, redisClient, platform, config) {
 
 async function handleUpdate(req, res, redisClient, platform, config) {
   // Accept userId from query or body
-  const userId = req.query.userId || req.body.userId;
+  // Support changing userId: use oldUserId to find user, newUserId as new key
+  const oldUserId = req.body.oldUserId;
+  const newUserId = req.body.newUserId;
+  const userId = oldUserId || req.query.userId || req.body.userId;
   const updates = { ...req.body };
   delete updates.userId;
+  delete updates.oldUserId;
+  delete updates.newUserId;
 
   if (!userId) return res.status(400).json({ error: "userId required" });
 
@@ -798,14 +803,64 @@ async function handleUpdate(req, res, redisClient, platform, config) {
     }
     user.updatedAt = new Date().toISOString();
 
-    whitelist[userId] = user;
+    // Handle userId change
+    let finalUserId = userId;
+    let userIdChanged = false;
+    if (newUserId && newUserId !== userId) {
+      // Check if new userId already exists
+      if (whitelist[newUserId]) {
+        return res.status(409).json({
+          error: "New User ID already exists",
+          platform,
+          newUserId: newUserId
+        });
+      }
+
+      // Update user's userId field
+      user.userId = newUserId;
+      user.previousUserId = userId;
+      user.userIdChangedAt = new Date().toISOString();
+
+      // Add to whitelist with new key
+      whitelist[newUserId] = user;
+
+      // Remove old key
+      delete whitelist[userId];
+
+      // Update HWID registry key if it exists
+      if (redis) {
+        try {
+          const oldHwidKey = `hwid:${platform}:${userId}`;
+          const newHwidKey = `hwid:${platform}:${newUserId}`;
+          const hwidData = await redis.get(oldHwidKey);
+          if (hwidData) {
+            await redis.set(newHwidKey, hwidData);
+            await redis.del(oldHwidKey);
+            console.log(`[User ID Change] Migrated HWID key: ${oldHwidKey} -> ${newHwidKey}`);
+          }
+        } catch (hwidError) {
+          console.warn(`[User ID Change] HWID migration warning: ${hwidError.message}`);
+        }
+      }
+
+      finalUserId = newUserId;
+      userIdChanged = true;
+      console.log(`[User ID Change] ${userId} -> ${newUserId} (${platform})`);
+    } else {
+      whitelist[userId] = user;
+    }
+
     await saveWhitelistToRedis(platform, whitelist);
 
     return res.status(200).json({
       success: true,
-      message: `${platform.toUpperCase()} user ${userId} updated`,
+      message: userIdChanged
+        ? `${platform.toUpperCase()} user ID changed: ${userId} → ${finalUserId}`
+        : `${platform.toUpperCase()} user ${finalUserId} updated`,
       platform,
-      user: { userId, ...user },
+      userIdChanged,
+      oldUserId: userIdChanged ? userId : undefined,
+      user: { userId: finalUserId, ...user },
       data: user, // PC style compatibility
     });
   } catch (error) {

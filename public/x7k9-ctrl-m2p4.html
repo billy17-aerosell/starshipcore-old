@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -144,7 +145,7 @@
         }
 
         .nav-item.active .badge {
-            background: rgba(255,255,255,0.2);
+            background: rgba(255, 255, 255, 0.2);
         }
 
         .sidebar-footer {
@@ -285,10 +286,21 @@
             background: linear-gradient(90deg, var(--primary), var(--secondary));
         }
 
-        .stat-card.pc::before { background: linear-gradient(90deg, #3b82f6, #1d4ed8); }
-        .stat-card.mobile::before { background: linear-gradient(90deg, #8b5cf6, #6366f1); }
-        .stat-card.success::before { background: linear-gradient(90deg, #22c55e, #16a34a); }
-        .stat-card.warning::before { background: linear-gradient(90deg, #f59e0b, #d97706); }
+        .stat-card.pc::before {
+            background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+        }
+
+        .stat-card.mobile::before {
+            background: linear-gradient(90deg, #8b5cf6, #6366f1);
+        }
+
+        .stat-card.success::before {
+            background: linear-gradient(90deg, #22c55e, #16a34a);
+        }
+
+        .stat-card.warning::before {
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+        }
 
         .stat-icon {
             font-size: 32px;
@@ -527,7 +539,8 @@
             transition: all 0.2s;
         }
 
-        .page-btn:hover, .page-btn.active {
+        .page-btn:hover,
+        .page-btn.active {
             background: var(--primary);
             color: white;
             border-color: var(--primary);
@@ -627,7 +640,7 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
             transform: translateX(400px);
             transition: transform 0.3s ease;
             z-index: 9999;
@@ -637,9 +650,17 @@
             transform: translateX(0);
         }
 
-        .toast.success { border-left: 4px solid var(--success); }
-        .toast.error { border-left: 4px solid var(--danger); }
-        .toast.info { border-left: 4px solid var(--primary); }
+        .toast.success {
+            border-left: 4px solid var(--success);
+        }
+
+        .toast.error {
+            border-left: 4px solid var(--danger);
+        }
+
+        .toast.info {
+            border-left: 4px solid var(--primary);
+        }
 
         /* Loading Spinner */
         .loading-overlay {
@@ -662,7 +683,9 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         /* Responsive */
@@ -670,22 +693,27 @@
             .sidebar {
                 width: var(--sidebar-collapsed);
             }
+
             .sidebar .label,
             .sidebar .badge,
             .sidebar-brand,
             .user-details {
                 display: none;
             }
+
             .main-content {
                 margin-left: var(--sidebar-collapsed);
             }
+
             .sidebar-header {
                 justify-content: center;
             }
         }
 
         /* Hidden utility */
-        .hidden { display: none !important; }
+        .hidden {
+            display: none !important;
+        }
 
         /* ═══════════════════════════════════════ */
         /* MODAL */
@@ -866,6 +894,7 @@
         }
     </style>
 </head>
+
 <body>
     <!-- SIDEBAR -->
     <aside class="sidebar">
@@ -873,7 +902,7 @@
             <span class="sidebar-logo">🚀</span>
             <span class="sidebar-brand">StarshipCore</span>
         </div>
-        
+
         <nav class="sidebar-nav">
             <div class="nav-section">
                 <div class="nav-section-title">Main</div>
@@ -882,7 +911,7 @@
                     <span class="label">Dashboard</span>
                 </a>
             </div>
-            
+
             <div class="nav-section">
                 <div class="nav-section-title">Users</div>
                 <a class="nav-item" data-page="pc-users" onclick="navigateTo('pc-users')">
@@ -896,7 +925,7 @@
                     <span class="badge" id="mobileUserCount">0</span>
                 </a>
             </div>
-            
+
             <div class="nav-section">
                 <div class="nav-section-title">System</div>
                 <a class="nav-item" data-page="maintenance" onclick="navigateTo('maintenance')">
@@ -909,7 +938,7 @@
                 </a>
             </div>
         </nav>
-        
+
         <div class="sidebar-footer">
             <div class="user-info">
                 <div class="user-avatar">👤</div>
@@ -929,12 +958,12 @@
                 <div class="login-logo">🚀</div>
                 <h1 class="login-title">StarshipCore Admin</h1>
                 <p class="login-subtitle">Enter your admin credentials to continue</p>
-                
+
                 <div class="input-group">
                     <label>Admin Secret Key</label>
                     <input type="password" id="adminSecret" placeholder="Enter your secret key...">
                 </div>
-                
+
                 <button class="login-btn" onclick="authenticate()">
                     🔐 Connect & Authenticate
                 </button>
@@ -1020,14 +1049,16 @@
                             </thead>
                             <tbody id="pcUsersTable">
                                 <tr>
-                                    <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                                    <td colspan="6"
+                                        style="text-align: center; padding: 40px; color: var(--text-muted);">
                                         Loading...
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                         <div class="pagination">
-                            <div class="pagination-info">Showing <span id="pcShowingRange">0-0</span> of <span id="pcTotalUsers">0</span> users</div>
+                            <div class="pagination-info">Showing <span id="pcShowingRange">0-0</span> of <span
+                                    id="pcTotalUsers">0</span> users</div>
                             <div class="pagination-controls" id="pcPagination"></div>
                         </div>
                     </div>
@@ -1041,7 +1072,8 @@
                                 📱 Mobile VIP Users
                             </div>
                             <div class="data-controls">
-                                <input type="text" class="search-box" id="mobileSearchBox" placeholder="🔍 Search users...">
+                                <input type="text" class="search-box" id="mobileSearchBox"
+                                    placeholder="🔍 Search users...">
                                 <button class="btn btn-primary" onclick="showAddUserModal('mobile')">
                                     ➕ Add User
                                 </button>
@@ -1060,14 +1092,16 @@
                             </thead>
                             <tbody id="mobileUsersTable">
                                 <tr>
-                                    <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                                    <td colspan="6"
+                                        style="text-align: center; padding: 40px; color: var(--text-muted);">
                                         Loading...
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                         <div class="pagination">
-                            <div class="pagination-info">Showing <span id="mobileShowingRange">0-0</span> of <span id="mobileTotalUsers">0</span> users</div>
+                            <div class="pagination-info">Showing <span id="mobileShowingRange">0-0</span> of <span
+                                    id="mobileTotalUsers">0</span> users</div>
                             <div class="pagination-controls" id="mobilePagination"></div>
                         </div>
                     </div>
@@ -1076,7 +1110,8 @@
                 <!-- Maintenance Page -->
                 <div id="page-maintenance" class="page-section">
                     <div id="maintenanceContent">
-                        <p style="text-align: center; padding: 40px; color: var(--text-muted);">Loading maintenance data...</p>
+                        <p style="text-align: center; padding: 40px; color: var(--text-muted);">Loading maintenance
+                            data...</p>
                     </div>
                 </div>
 
@@ -1113,12 +1148,18 @@
                 <div class="form-group">
                     <label>Duration</label>
                     <div class="duration-grid">
-                        <button type="button" class="duration-btn" data-days="1" onclick="selectDuration(1)">1 Day</button>
-                        <button type="button" class="duration-btn" data-days="3" onclick="selectDuration(3)">3 Days</button>
-                        <button type="button" class="duration-btn" data-days="7" onclick="selectDuration(7)">7 Days</button>
-                        <button type="button" class="duration-btn" data-days="14" onclick="selectDuration(14)">14 Days</button>
-                        <button type="button" class="duration-btn active" data-days="30" onclick="selectDuration(30)">30 Days</button>
-                        <button type="button" class="duration-btn" data-days="lifetime" onclick="selectDuration('lifetime')">♾️ Lifetime</button>
+                        <button type="button" class="duration-btn" data-days="1" onclick="selectDuration(1)">1
+                            Day</button>
+                        <button type="button" class="duration-btn" data-days="3" onclick="selectDuration(3)">3
+                            Days</button>
+                        <button type="button" class="duration-btn" data-days="7" onclick="selectDuration(7)">7
+                            Days</button>
+                        <button type="button" class="duration-btn" data-days="14" onclick="selectDuration(14)">14
+                            Days</button>
+                        <button type="button" class="duration-btn active" data-days="30" onclick="selectDuration(30)">30
+                            Days</button>
+                        <button type="button" class="duration-btn" data-days="lifetime"
+                            onclick="selectDuration('lifetime')">♾️ Lifetime</button>
                     </div>
                     <input type="hidden" id="modalDuration" value="30">
                 </div>
@@ -1174,9 +1215,12 @@
                 <div class="form-group">
                     <label>Add Duration</label>
                     <div class="duration-grid">
-                        <button type="button" class="duration-btn" data-days="1" onclick="selectExtendDuration(1)">+1 Day</button>
-                        <button type="button" class="duration-btn" data-days="7" onclick="selectExtendDuration(7)">+7 Days</button>
-                        <button type="button" class="duration-btn active" data-days="30" onclick="selectExtendDuration(30)">+30 Days</button>
+                        <button type="button" class="duration-btn" data-days="1" onclick="selectExtendDuration(1)">+1
+                            Day</button>
+                        <button type="button" class="duration-btn" data-days="7" onclick="selectExtendDuration(7)">+7
+                            Days</button>
+                        <button type="button" class="duration-btn active" data-days="30"
+                            onclick="selectExtendDuration(30)">+30 Days</button>
                     </div>
                     <input type="hidden" id="extendDuration" value="30">
                 </div>
@@ -1212,10 +1256,10 @@
                 showToast('Please enter admin secret key', 'error');
                 return;
             }
-            
+
             adminSecret = secret;
             localStorage.setItem('starship_admin_secret', secret);
-            
+
             // Test authentication
             testAuth();
         }
@@ -1225,7 +1269,7 @@
                 const response = await fetch(`${API_BASE}/api/whitelist-manager?action=list&platform=pc`, {
                     headers: { 'X-Admin-Secret': adminSecret }
                 });
-                
+
                 if (response.ok) {
                     showToast('✅ Authentication successful!', 'success');
                     document.getElementById('loginSection').classList.add('hidden');
@@ -1259,7 +1303,7 @@
         // ═══════════════════════════════════════════════════════════════
         function navigateTo(page) {
             currentPage = page;
-            
+
             // Update nav items
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.classList.remove('active');
@@ -1267,13 +1311,13 @@
                     item.classList.add('active');
                 }
             });
-            
+
             // Update page sections
             document.querySelectorAll('.page-section').forEach(section => {
                 section.classList.remove('active');
             });
             document.getElementById('page-' + page).classList.add('active');
-            
+
             // Update header title
             const titles = {
                 'dashboard': 'Dashboard',
@@ -1283,7 +1327,7 @@
                 'settings': 'Settings'
             };
             document.getElementById('pageTitle').textContent = titles[page] || page;
-            
+
             // Load page-specific data
             if (page === 'maintenance') {
                 loadMaintenanceData();
@@ -1306,9 +1350,9 @@
                 const response = await fetch(`${API_BASE}/api/whitelist-manager?action=list&platform=${platform}`, {
                     headers: { 'X-Admin-Secret': adminSecret }
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.users) {
                     if (platform === 'pc') {
                         pcUsers = data.users;
@@ -1331,34 +1375,34 @@
             const tableBody = document.getElementById(platform + 'UsersTable');
             const searchBox = document.getElementById(platform + 'SearchBox');
             const searchTerm = searchBox ? searchBox.value.toLowerCase() : '';
-            
+
             // Filter users
-            let filteredUsers = users.filter(u => 
+            let filteredUsers = users.filter(u =>
                 (u.username || '').toLowerCase().includes(searchTerm) ||
                 (u.userId || '').toLowerCase().includes(searchTerm)
             );
-            
+
             // Pagination
             const total = filteredUsers.length;
             const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
             const start = (currentPageNum - 1) * ITEMS_PER_PAGE;
             const end = Math.min(start + ITEMS_PER_PAGE, total);
             const pageUsers = filteredUsers.slice(start, end);
-            
+
             // Render table
             if (pageUsers.length === 0) {
                 tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">No users found</td></tr>`;
             } else {
                 tableBody.innerHTML = pageUsers.map(user => {
                     const status = getStatus(user);
-                    const added = user.addedAt ? new Date(user.addedAt).toLocaleString('id-ID', {dateStyle: 'short', timeStyle: 'short'}) : '-';
-                    const expiry = user.expiresAt ? new Date(user.expiresAt).toLocaleString('id-ID', {dateStyle: 'short', timeStyle: 'short'}) : 'Lifetime';
+                    const added = user.addedAt ? new Date(user.addedAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }) : '-';
+                    const expiry = user.expiresAt ? new Date(user.expiresAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }) : 'Lifetime';
                     const initial = (user.username || 'U')[0].toUpperCase();
                     const isSuspended = user.status === 'suspended';
-                    const suspendBtn = isSuspended 
+                    const suspendBtn = isSuspended
                         ? `<button class="action-btn" onclick="reactivateUser('${platform}', '${user.userId}')" title="Reactivate" style="background: var(--success); color: white; border-color: var(--success);">▶️</button>`
                         : `<button class="action-btn" onclick="suspendUser('${platform}', '${user.userId}')" title="Suspend" style="background: var(--warning); color: white; border-color: var(--warning);">⏸️</button>`;
-                    
+
                     return `
                         <tr>
                             <td>
@@ -1389,52 +1433,52 @@
                     `;
                 }).join('');
             }
-            
+
             // Update pagination info
             document.getElementById(platform + 'ShowingRange').textContent = total > 0 ? `${start + 1}-${end}` : '0-0';
             document.getElementById(platform + 'TotalUsers').textContent = total;
-            
+
             // Render pagination controls
             const paginationContainer = document.getElementById(platform + 'Pagination');
             let paginationHTML = '';
-            
+
             if (totalPages > 1) {
                 paginationHTML += `<button class="page-btn" onclick="changePage('${platform}', ${currentPageNum - 1})" ${currentPageNum === 1 ? 'disabled' : ''}>←</button>`;
-                
+
                 for (let i = 1; i <= Math.min(totalPages, 5); i++) {
                     paginationHTML += `<button class="page-btn ${i === currentPageNum ? 'active' : ''}" onclick="changePage('${platform}', ${i})">${i}</button>`;
                 }
-                
+
                 if (totalPages > 5) {
                     paginationHTML += `<button class="page-btn" disabled>...</button>`;
                     paginationHTML += `<button class="page-btn ${totalPages === currentPageNum ? 'active' : ''}" onclick="changePage('${platform}', ${totalPages})">${totalPages}</button>`;
                 }
-                
+
                 paginationHTML += `<button class="page-btn" onclick="changePage('${platform}', ${currentPageNum + 1})" ${currentPageNum === totalPages ? 'disabled' : ''}>→</button>`;
             }
-            
+
             paginationContainer.innerHTML = paginationHTML;
-            
+
             // Load Roblox avatars
             loadRobloxAvatars();
         }
-        
+
         // Fetch and display Roblox avatars via server-side proxy
         async function loadRobloxAvatars() {
             const avatarElements = document.querySelectorAll('.roblox-avatar[data-userid]');
             if (avatarElements.length === 0) return;
-            
+
             // Get unique user IDs
             const userIds = [...new Set(Array.from(avatarElements).map(el => el.dataset.userid).filter(id => id))];
             if (userIds.length === 0) return;
-            
+
             try {
                 // Fetch via whitelist-manager to bypass CORS
                 const response = await fetch(`${API_BASE}/api/whitelist-manager?action=avatars&userIds=${userIds.join(',')}`, {
                     headers: { 'X-Admin-Secret': adminSecret }
                 });
                 const data = await response.json();
-                
+
                 if (data.success && data.avatars) {
                     Object.entries(data.avatars).forEach(([userId, imageUrl]) => {
                         const imgElements = document.querySelectorAll(`.roblox-avatar[data-userid="${userId}"]`);
@@ -1451,25 +1495,25 @@
         function changePage(platform, page) {
             const users = platform === 'pc' ? pcUsers : mobileUsers;
             const totalPages = Math.ceil(users.length / ITEMS_PER_PAGE);
-            
+
             if (page < 1 || page > totalPages) return;
-            
+
             if (platform === 'pc') {
                 pcCurrentPage = page;
             } else {
                 mobileCurrentPage = page;
             }
-            
+
             renderUsersTable(platform);
         }
 
         function getStatus(user) {
             if (user.status === 'suspended') return { text: 'Suspended', class: 'suspended' };
             if (!user.expiresAt) return { text: 'Active', class: 'active' };
-            
+
             const expiry = new Date(user.expiresAt);
             const now = new Date();
-            
+
             if (expiry < now) return { text: 'Expired', class: 'expired' };
             return { text: 'Active', class: 'active' };
         }
@@ -1477,13 +1521,13 @@
         function updateDashboardStats() {
             document.getElementById('statPcUsers').textContent = pcUsers.length;
             document.getElementById('statMobileUsers').textContent = mobileUsers.length;
-            
+
             const now = new Date();
             const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-            
+
             let activeCount = 0;
             let expiringCount = 0;
-            
+
             [...pcUsers, ...mobileUsers].forEach(user => {
                 if (user.status !== 'suspended') {
                     if (!user.expiresAt || new Date(user.expiresAt) > now) {
@@ -1497,7 +1541,7 @@
                     }
                 }
             });
-            
+
             document.getElementById('statActiveUsers').textContent = activeCount;
             document.getElementById('statExpiringSoon').textContent = expiringCount;
         }
@@ -1505,20 +1549,20 @@
         async function loadMaintenanceData() {
             const container = document.getElementById('maintenanceContent');
             container.innerHTML = '<p style="text-align: center; padding: 40px; color: var(--text-muted);">Loading...</p>';
-            
+
             try {
                 const response = await fetch(`${API_BASE}/api/tags?action=maintenance_history`, {
                     headers: { 'X-Admin-Secret': adminSecret }
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (!data.success) {
                     throw new Error(data.error || 'Failed to load');
                 }
-                
+
                 renderMaintenanceContent(data, container);
-                
+
             } catch (error) {
                 container.innerHTML = `<p style="text-align: center; padding: 40px; color: var(--danger);">Error: ${error.message}</p>`;
             }
@@ -1528,7 +1572,7 @@
             const currentStatus = data.currentStatus || {};
             const stats = data.statistics || {};
             const history = data.history || [];
-            
+
             container.innerHTML = `
                 <div class="stats-grid">
                     <div class="stat-card pc">
@@ -1569,8 +1613,8 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${history.length === 0 ? '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">No history yet</td></tr>' : 
-                            history.map((e, i) => `
+                            ${history.length === 0 ? '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">No history yet</td></tr>' :
+                    history.map((e, i) => `
                                 <tr>
                                     <td>${e.platform === 'pc' ? '💻 PC' : '📱 Mobile'}</td>
                                     <td>${new Date(e.endAt).toLocaleString('id-ID')}</td>
@@ -1594,9 +1638,9 @@
                                             ${e.usersList.map(u => `
                                                 <tr>
                                                     <td style="padding: 8px;"><strong>${u.username || 'Unknown'}</strong> <span style="color: var(--text-muted); font-size: 11px;">(${u.userId})</span></td>
-                                                    <td style="text-align: center; padding: 8px; color: var(--warning);">${u.expiryBefore ? new Date(u.expiryBefore).toLocaleString('id-ID', {dateStyle: 'short', timeStyle: 'short'}) : 'N/A'}</td>
+                                                    <td style="text-align: center; padding: 8px; color: var(--warning);">${u.expiryBefore ? new Date(u.expiryBefore).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}</td>
                                                     <td style="text-align: center; padding: 8px; color: var(--primary);">➜</td>
-                                                    <td style="text-align: center; padding: 8px; color: var(--success); font-weight: bold;">${u.expiryAfter ? new Date(u.expiryAfter).toLocaleString('id-ID', {dateStyle: 'short', timeStyle: 'short'}) : 'N/A'}</td>
+                                                    <td style="text-align: center; padding: 8px; color: var(--success); font-weight: bold;">${u.expiryAfter ? new Date(u.expiryAfter).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}</td>
                                                 </tr>
                                             `).join('')}
                                         </table>
@@ -1628,6 +1672,7 @@
         let modalMode = 'add'; // 'add' or 'edit'
         let modalPlatform = 'pc';
         let editingUserId = null;
+        let originalUserId = null; // Store original userId for edit mode
         let deleteTarget = { platform: '', userId: '', username: '' };
         let extendTarget = { platform: '', userId: '', username: '' };
 
@@ -1635,7 +1680,7 @@
             modalMode = 'add';
             modalPlatform = platform;
             editingUserId = null;
-            
+
             document.getElementById('userModalTitle').textContent = `➕ Add ${platform.toUpperCase()} User`;
             document.getElementById('userModalSubmit').textContent = '➕ Add User';
             document.getElementById('modalUserId').value = '';
@@ -1643,13 +1688,13 @@
             document.getElementById('modalUsername').value = '';
             document.getElementById('modalNote').value = '';
             document.getElementById('modalDuration').value = '30';
-            
+
             // Reset duration buttons
             document.querySelectorAll('#userModal .duration-btn').forEach(btn => {
                 btn.classList.remove('active');
                 if (btn.dataset.days === '30') btn.classList.add('active');
             });
-            
+
             document.getElementById('userModal').classList.add('show');
         }
 
@@ -1657,22 +1702,23 @@
             modalMode = 'edit';
             modalPlatform = platform;
             editingUserId = userId;
-            
+            originalUserId = userId; // Store original userId for API
+
             const users = platform === 'pc' ? pcUsers : mobileUsers;
             const user = users.find(u => u.userId === userId);
-            
+
             if (!user) {
                 showToast('User not found', 'error');
                 return;
             }
-            
+
             document.getElementById('userModalTitle').textContent = `✏️ Edit ${platform.toUpperCase()} User`;
             document.getElementById('userModalSubmit').textContent = '💾 Save Changes';
             document.getElementById('modalUserId').value = user.userId;
-            document.getElementById('modalUserId').disabled = true;
+            document.getElementById('modalUserId').disabled = false; // Allow editing User ID
             document.getElementById('modalUsername').value = user.username || '';
             document.getElementById('modalNote').value = user.notes || user.note || '';
-            
+
             // Set duration from user data
             let userDuration = 'LIFETIME';
             if (user.duration) {
@@ -1684,15 +1730,15 @@
                 const remainingDays = Math.ceil((expiresDate - now) / (1000 * 60 * 60 * 24));
                 userDuration = remainingDays > 0 ? remainingDays.toString() : 'LIFETIME';
             }
-            
+
             document.getElementById('modalDuration').value = userDuration;
-            
+
             // Update duration buttons
             document.querySelectorAll('#userModal .duration-btn').forEach(btn => {
                 btn.classList.remove('active');
                 if (btn.dataset.days == userDuration) btn.classList.add('active');
             });
-            
+
             document.getElementById('userModal').classList.add('show');
         }
 
@@ -1713,12 +1759,12 @@
             const username = document.getElementById('modalUsername').value.trim();
             const duration = document.getElementById('modalDuration').value;
             const note = document.getElementById('modalNote').value.trim();
-            
+
             if (!userId || !username) {
                 showToast('Please fill in User ID and Username', 'error');
                 return;
             }
-            
+
             try {
                 const action = modalMode === 'add' ? 'add' : 'update';
                 const body = {
@@ -1729,7 +1775,13 @@
                     duration: duration,
                     note: note
                 };
-                
+
+                // If editing and userId changed, send the old userId
+                if (modalMode === 'edit' && originalUserId && originalUserId !== userId) {
+                    body.oldUserId = originalUserId;
+                    body.newUserId = userId;
+                }
+
                 const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
                     method: 'POST',
                     headers: {
@@ -1738,9 +1790,9 @@
                     },
                     body: JSON.stringify(body)
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showToast(`✅ User ${modalMode === 'add' ? 'added' : 'updated'} successfully!`, 'success');
                     closeUserModal();
@@ -1757,13 +1809,13 @@
         function deleteUser(platform, userId) {
             const users = platform === 'pc' ? pcUsers : mobileUsers;
             const user = users.find(u => u.userId === userId);
-            
+
             deleteTarget = {
                 platform: platform,
                 userId: userId,
                 username: user?.username || userId
             };
-            
+
             document.getElementById('deleteUserName').textContent = deleteTarget.username;
             document.getElementById('deleteModal').classList.add('show');
         }
@@ -1781,9 +1833,9 @@
                         'X-Admin-Secret': adminSecret
                     }
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showToast(`✅ User ${deleteTarget.username} deleted!`, 'success');
                     closeDeleteModal();
@@ -1800,22 +1852,22 @@
         function extendUser(platform, userId) {
             const users = platform === 'pc' ? pcUsers : mobileUsers;
             const user = users.find(u => u.userId === userId);
-            
+
             extendTarget = {
                 platform: platform,
                 userId: userId,
                 username: user?.username || userId
             };
-            
+
             document.getElementById('extendUserName').textContent = extendTarget.username;
             document.getElementById('extendDuration').value = '30';
-            
+
             // Reset duration buttons
             document.querySelectorAll('#extendModal .duration-btn').forEach(btn => {
                 btn.classList.remove('active');
                 if (btn.dataset.days === '30') btn.classList.add('active');
             });
-            
+
             document.getElementById('extendModal').classList.add('show');
         }
 
@@ -1834,7 +1886,7 @@
         async function confirmExtend() {
             try {
                 const days = parseInt(document.getElementById('extendDuration').value);
-                
+
                 const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
                     method: 'POST',
                     headers: {
@@ -1848,9 +1900,9 @@
                         days: days
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showToast(`✅ Extended ${extendTarget.username} by ${days} days!`, 'success');
                     closeExtendModal();
@@ -1865,7 +1917,7 @@
 
         async function resetHwid(platform, userId) {
             if (!confirm('Reset HWID for this user? They will need to re-login.')) return;
-            
+
             try {
                 const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
                     method: 'POST',
@@ -1879,9 +1931,9 @@
                         userId: userId
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showToast('✅ HWID reset successfully!', 'success');
                     loadUsers(platform);
@@ -1897,9 +1949,9 @@
             const users = platform === 'pc' ? pcUsers : mobileUsers;
             const user = users.find(u => u.userId === userId);
             const username = user?.username || userId;
-            
+
             if (!confirm(`Suspend user ${username}? They will not be able to access the script.`)) return;
-            
+
             try {
                 const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
                     method: 'POST',
@@ -1913,9 +1965,9 @@
                         userId: userId
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showToast(`⏸️ User ${username} suspended!`, 'success');
                     loadUsers(platform);
@@ -1931,7 +1983,7 @@
             const users = platform === 'pc' ? pcUsers : mobileUsers;
             const user = users.find(u => u.userId === userId);
             const username = user?.username || userId;
-            
+
             try {
                 const response = await fetch(`${API_BASE}/api/whitelist-manager`, {
                     method: 'POST',
@@ -1945,9 +1997,9 @@
                         userId: userId
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showToast(`▶️ User ${username} reactivated!`, 'success');
                     loadUsers(platform);
@@ -1967,7 +2019,7 @@
             toast.className = 'toast ' + type;
             toast.innerHTML = message;
             toast.classList.add('show');
-            
+
             setTimeout(() => {
                 toast.classList.remove('show');
             }, 3000);
@@ -1980,11 +2032,12 @@
             pcCurrentPage = 1;
             renderUsersTable('pc');
         });
-        
+
         document.getElementById('mobileSearchBox').addEventListener('input', () => {
             mobileCurrentPage = 1;
             renderUsersTable('mobile');
         });
     </script>
 </body>
+
 </html>
