@@ -30,10 +30,10 @@ local function DestroyAllStarshipGUIs()
         if not container then continue end
         for _, gui in pairs(container:GetChildren()) do
             if gui:IsA("ScreenGui") then
-                -- Check for our unique attribute
+                -- Check for our unique attribute or name
                 local guiID = gui:GetAttribute("StarshipID")
-                if guiID and tostring(guiID):find("STARSHIP_MOBILE_GUI_") then
-                    warn("[STARSHIP] 🗑️ Destroying old GUI: " .. gui.Name)
+                if (guiID and tostring(guiID):find("STARSHIP_MOBILE_GUI_")) or gui.Name == "StarshipMiniApple" then
+                    if DEV_MODE then warn("[STARSHIP] 🗑️ Destroying old GUI: " .. gui.Name) end
                     pcall(function() gui:Destroy() end)
                     destroyed = destroyed + 1
                 end
@@ -46,7 +46,7 @@ end
 -- Cleanup any existing Starship GUIs from previous executions
 local oldDestroyed = DestroyAllStarshipGUIs()
 if oldDestroyed > 0 then
-    warn("[STARSHIP] ♻️ Cleaned up " .. oldDestroyed .. " previous GUI(s)")
+    if DEV_MODE then warn("[STARSHIP] ♻️ Cleaned up " .. oldDestroyed .. " previous GUI(s)") end
     task.wait(0.1)
 end
 
@@ -202,10 +202,12 @@ do
 	end
 	
 	if isPresent then
-		warn("═══════════════════════════════════════════════════════════")
-		warn("[STARSHIP] 🛡️ BLOCKED: unauthorized script active!")
-		warn("[STARSHIP] Reason: " .. tostring(ind))
-		warn("═══════════════════════════════════════════════════════════")
+		if DEV_MODE then
+			warn("═══════════════════════════════════════════════════════════")
+			warn("[STARSHIP] 🛡️ BLOCKED: unauthorized script active!")
+			warn("[STARSHIP] Reason: " .. tostring(ind))
+			warn("═══════════════════════════════════════════════════════════")
+		end
 		error("[STARSHIP] Execution blocked - unauthorized script detected") -- Force complete halt
 	end
 end
@@ -216,7 +218,7 @@ local function TerminateScript(reason)
 	AntiMultiScript.Terminated = true
 	AntiMultiScript.Running = false
 	
-	warn("[STARSHIP] ⚠️ Terminating script: " .. tostring(reason))
+	if DEV_MODE then warn("[STARSHIP] ⚠️ Terminating script: " .. tostring(reason)) end
 	
 	-- Disconnect all connections
 	for _, conn in pairs(AntiMultiScript.Connections) do
@@ -224,7 +226,7 @@ local function TerminateScript(reason)
 	end
 	
 	-- AGGRESSIVE GUI DESTRUCTION (Using Attribute-based detection)
-	warn("[STARSHIP] 🗑️ Finding and destroying Starship UI...")
+	if DEV_MODE then warn("[STARSHIP] 🗑️ Finding and destroying Starship UI...") end
 	
 	-- Use our reliable attribute-based destruction
 	local destroyed = DestroyAllStarshipGUIs()
@@ -239,7 +241,7 @@ local function TerminateScript(reason)
 	pcall(function() getgenv().StarshipWindow = nil end)
 	pcall(function() getgenv().StarshipWindUI = nil end)
 	
-	warn("[STARSHIP] ⚠️ Script terminated! Destroyed " .. destroyed .. " GUI(s)")
+	if DEV_MODE then warn("[STARSHIP] ⚠️ Script terminated! Destroyed " .. destroyed .. " GUI(s)") end
 end
 
 -- Check if GUI is whitelisted (our own GUIs)
@@ -327,7 +329,7 @@ end
 local function ScanForScriptHubs()
 	if not AntiMultiScript.Running then return false end
 	
-	local DEBUG = true -- Set to true to see all GUIs being scanned
+	local DEBUG = DEV_MODE -- Set to true to see all GUIs being scanned
 	
 	for _, container in pairs(GetAllGUIContainers()) do
 		pcall(function()
@@ -349,8 +351,10 @@ local function ScanForScriptHubs()
 					-- Check for script hub indicators ONLY (text-based detection)
 					local hasIndicators, indicator = HasScriptHubIndicators(gui)
 					if hasIndicators then
-						warn("[STARSHIP] ⚠️ DETECTED SCRIPT HUB: " .. guiName)
-						warn("[STARSHIP] ⚠️ Found indicator: " .. indicator)
+						if DEV_MODE then
+							warn("[STARSHIP] ⚠️ DETECTED SCRIPT HUB: " .. guiName)
+							warn("[STARSHIP] ⚠️ Found indicator: " .. indicator)
+						end
 						TerminateScript("Script hub: " .. guiName .. " (" .. indicator .. ")")
 						return true
 					end
@@ -378,15 +382,17 @@ local function SetupGUIMonitors()
 				if IsWhitelistedGUI(guiName, child) then return end
 				
 				local descendantCount = #child:GetDescendants()
-				if descendantCount > 10 then
+				if descendantCount > 10 and DEV_MODE then
 					warn("[STARSHIP DEBUG] New GUI: '" .. guiName .. "' (" .. descendantCount .. " descendants)")
 				end
 				
 				-- Check for script hub indicators ONLY
 				local hasIndicators, indicator = HasScriptHubIndicators(child)
 				if hasIndicators then
-					warn("[STARSHIP] ⚠️ NEW SCRIPT HUB DETECTED: " .. guiName)
-					warn("[STARSHIP] ⚠️ Found indicator: " .. indicator)
+					if DEV_MODE then
+						warn("[STARSHIP] ⚠️ NEW SCRIPT HUB DETECTED: " .. guiName)
+						warn("[STARSHIP] ⚠️ Found indicator: " .. indicator)
+					end
 					TerminateScript("New script hub: " .. guiName .. " (" .. indicator .. ")")
 				end
 			end)
@@ -432,7 +438,7 @@ local function MonitorGlobalEnv()
 						if type(genv[libName]) == "table" then
 							local lib = genv[libName]
 							if lib.CreateWindow or lib.MakeWindow or lib.CreateTab or lib.new then
-								warn("[STARSHIP] ⚠️ Detected script library: " .. libName)
+								if DEV_MODE then warn("[STARSHIP] ⚠️ Detected script library: " .. libName) end
 								TerminateScript("Library: " .. libName)
 								return
 							end
@@ -447,7 +453,7 @@ local function MonitorGlobalEnv()
 					if type(_G[libName]) == "table" then
 						local lib = _G[libName]
 						if lib.CreateWindow or lib.MakeWindow or lib.CreateTab or lib.new then
-							warn("[STARSHIP] ⚠️ Detected _G library: " .. libName)
+							if DEV_MODE then warn("[STARSHIP] ⚠️ Detected _G library: " .. libName) end
 							TerminateScript("_G Library: " .. libName)
 							return
 						end
@@ -471,7 +477,7 @@ if AntiMultiScript.Enabled then
 		SetupGUIMonitors()
 		MonitorGlobalEnv()
 		
-		warn("[STARSHIP] 🛡️ Anti-Multi-Script protection ACTIVE (Structure-Based)")
+		if DEV_MODE then warn("[STARSHIP] 🛡️ Anti-Multi-Script protection ACTIVE (Structure-Based)") end
 	end
 end
 
@@ -1125,7 +1131,7 @@ if Window.Internal and Window.Internal.ScreenGui then
 	AntiMultiScript.OurGUI = Window.Internal.ScreenGui
 	-- TAG WITH UNIQUE ID FOR RELIABLE DESTRUCTION
 	AntiMultiScript.OurGUI:SetAttribute("StarshipID", STARSHIP_ID)
-	warn("[STARSHIP] 🛡️ GUI tagged with ID: " .. STARSHIP_ID)
+	if DEV_MODE then warn("[STARSHIP] 🛡️ GUI tagged with ID: " .. STARSHIP_ID) end
 else
 	-- Fallback: scan and tag
 	local containers = {game:GetService("CoreGui")}
@@ -1151,7 +1157,7 @@ else
 					if hasStarship then
 						AntiMultiScript.OurGUI = gui
 						gui:SetAttribute("StarshipID", STARSHIP_ID)
-						warn("[STARSHIP] 🛡️ GUI tagged via scan: " .. gui.Name)
+						if DEV_MODE then warn("[STARSHIP] 🛡️ GUI tagged via scan: " .. gui.Name) end
 						break
 					end
 				end
@@ -1162,7 +1168,7 @@ else
 end
 
 if not AntiMultiScript.OurGUI then
-	warn("[STARSHIP] ⚠️ WARNING: Could not tag GUI!")
+	if DEV_MODE then warn("[STARSHIP] ⚠️ WARNING: Could not tag GUI!") end
 end
 
 -- ══════════════════════════════════════════════════════════════════
@@ -1173,7 +1179,7 @@ task.spawn(function()
 	
 	-- Reset terminated flag in case old code set it
 	AntiMultiScript.Terminated = false
-	warn("[STARSHIP] 🛡️ Background protection active...")
+	if DEV_MODE then warn("[STARSHIP] 🛡️ Background protection active...") end
 	
 	local loopTerminated = false -- LOCAL flag to prevent interference from old code
 	local scanCount = 0
@@ -1184,17 +1190,19 @@ task.spawn(function()
 		local detected, detectedGUI, detectedIndicator = PerformDetectionScan()
 		
 		if detected then
-			warn("═══════════════════════════════════════════════════════════")
-			warn("[STARSHIP] ⚠️ SCRIPT HUB DETECTED! Closing Starship...")
-			warn("[STARSHIP] Evidence: " .. detectedIndicator)
-			warn("═══════════════════════════════════════════════════════════")
+			if DEV_MODE then
+				warn("═══════════════════════════════════════════════════════════")
+				warn("[STARSHIP] ⚠️ SCRIPT HUB DETECTED! Closing Starship...")
+				warn("[STARSHIP] Evidence: " .. detectedIndicator)
+				warn("═══════════════════════════════════════════════════════════")
+			end
 			
 		-- DIRECT GUI DESTRUCTION (bypass TerminateScript)
 			loopTerminated = true
 			
 			-- Method 1: Destroy saved reference
 			if AntiMultiScript.OurGUI then
-				warn("[STARSHIP] 🗑️ Destroying OurGUI: " .. AntiMultiScript.OurGUI.Name)
+				if DEV_MODE then warn("[STARSHIP] 🗑️ Destroying OurGUI: " .. AntiMultiScript.OurGUI.Name) end
 				pcall(function() 
 					AntiMultiScript.OurGUI.Enabled = false
 					AntiMultiScript.OurGUI:Destroy() 
@@ -1203,7 +1211,7 @@ task.spawn(function()
 			
 			-- Method 2: Destroy by attribute
 			local destroyed = DestroyAllStarshipGUIs()
-			warn("[STARSHIP] 🗑️ DestroyAllStarshipGUIs() removed: " .. destroyed)
+			if DEV_MODE then warn("[STARSHIP] 🗑️ DestroyAllStarshipGUIs() removed: " .. destroyed) end
 			
 			-- Method 3: Brute force - destroy ALL WindUI with STARSHIP content
 			pcall(function()
@@ -1222,7 +1230,7 @@ task.spawn(function()
 									if desc:IsA("TextLabel") then
 										local text = desc.Text or ""
 										if (text:find("STARSHIP") or text:find("dsc.gg")) and not text:lower():find("rullzsy") then
-											warn("[STARSHIP] 🗑️ Force destroying: " .. gui.Name)
+											if DEV_MODE then warn("[STARSHIP] 🗑️ Force destroying: " .. gui.Name) end
 											gui.Enabled = false
 											gui:Destroy()
 											break
@@ -1239,12 +1247,12 @@ task.spawn(function()
 			_G.STARSHIP_MOBILE_ACTIVE = nil
 			pcall(function() getgenv().StarshipWindow = nil end)
 			
-			warn("[STARSHIP] ⚠️ Protection complete - Starship closed")
+			if DEV_MODE then warn("[STARSHIP] ⚠️ Protection complete - Starship closed") end
 			break
 		end
 		
 		if scanCount <= 2 then
-			warn("[STARSHIP] Scan #" .. scanCount .. " complete - no threats")
+			if DEV_MODE then warn("[STARSHIP] Scan #" .. scanCount .. " complete - no threats") end
 		end
 	end
 end)
@@ -6123,7 +6131,7 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 			elseif not data.frames then
 				errMsg = errMsg .. " (no frames in response)"
 			end
-			warn(errMsg)
+			if DEV_MODE then warn(errMsg) end
 
 			-- Initialize retry counter if not exists
 			ChunkRetryCount[chunkIndex] = (ChunkRetryCount[chunkIndex] or 0) + 1
@@ -6139,7 +6147,7 @@ local function LoadChunk(recordingId, chunkIndex, callback)
 			else
 				-- Max retries reached or chunk loaded elsewhere - stop retrying
 				if ChunkRetryCount[chunkIndex] > MAX_CHUNK_RETRIES then
-					warn("[Chunked] Max retries reached for chunk " .. chunkIndex .. " - giving up")
+					if DEV_MODE then warn("[Chunked] Max retries reached for chunk " .. chunkIndex .. " - giving up") end
 				end
 				ChunkRetryCount[chunkIndex] = nil -- Clean up
 				if callback then
@@ -6704,54 +6712,70 @@ local function ToggleMiniPlayer(state)
 
 		local function fmt(s) return string.format("%d:%02d", math.floor(s/60), math.floor(s%60)) end
 		table.insert(MiniPlayerAnimations, RunService.Heartbeat:Connect(function()
-			if not mainFrame.Parent then return end
+			if not mainFrame or not mainFrame.Parent then return end
 			
-			local isPlaying = (PlaybackState.isPlaying and not PlaybackState.isPaused)
-			play.Icon.Image = isPlaying and MiniPlayerIcons.Pause or MiniPlayerIcons.Play
-			
-			-- Dynamic Color Sync - Unique colors for each feature
-			local inactiveImg = Color3.fromRGB(200, 200, 200)
-			local inactiveBg = Color3.fromRGB(45, 45, 50)
-			
-			-- Path: Yellow
-			pathBtn.Icon.ImageColor3 = isPathVisualsEnabled and Color3.fromRGB(255, 200, 0) or inactiveImg
-			pathBtn.BackgroundColor3 = isPathVisualsEnabled and Color3.fromRGB(150, 120, 0) or inactiveBg
-			
-			-- Moonwalk: Purple
-			moonBtn.Icon.ImageColor3 = PlaybackState.isMoonwalk and Color3.fromRGB(180, 100, 255) or inactiveImg
-			moonBtn.BackgroundColor3 = PlaybackState.isMoonwalk and Color3.fromRGB(100, 50, 150) or inactiveBg
-			
-			-- Loop: Green
-			loopBtn.Icon.ImageColor3 = PlaybackState.isLooping and Color3.fromRGB(0, 255, 120) or inactiveImg
-			loopBtn.BackgroundColor3 = PlaybackState.isLooping and Color3.fromRGB(0, 120, 60) or inactiveBg
-			
-			-- Respawn: Red
-			respawnBtn.Icon.ImageColor3 = PlaybackState.respawnOnEnd and Color3.fromRGB(255, 80, 80) or inactiveImg
-			respawnBtn.BackgroundColor3 = PlaybackState.respawnOnEnd and Color3.fromRGB(150, 40, 40) or inactiveBg
-			if _G.StarshipCloud.RecordingName then title.Text = _G.StarshipCloud.RecordingName end
-			local c, t = PlaybackState.currentTime or 0, PlaybackState.totalDuration or 0
-			if t > 0 then
-				fill.Size = UDim2.fromScale(math.clamp(c/t, 0, 1), 1)
-				curT.Text = fmt(c)
-				remT.Text = "-" .. fmt(math.max(0, t - c))
-			end
+			pcall(function()
+				local isPlaying = (PlaybackState.isPlaying and not PlaybackState.isPaused)
+				if play and play:FindFirstChild("Icon") then
+					play.Icon.Image = isPlaying and MiniPlayerIcons.Pause or MiniPlayerIcons.Play
+				end
+				
+				-- Dynamic Color Sync - Unique colors for each feature
+				local inactiveImg = Color3.fromRGB(200, 200, 200)
+				local inactiveBg = Color3.fromRGB(45, 45, 50)
+				
+				-- Path: Yellow
+				if pathBtn and pathBtn:FindFirstChild("Icon") then
+					pathBtn.Icon.ImageColor3 = isPathVisualsEnabled and Color3.fromRGB(255, 200, 0) or inactiveImg
+					pathBtn.BackgroundColor3 = isPathVisualsEnabled and Color3.fromRGB(150, 120, 0) or inactiveBg
+				end
+				
+				-- Moonwalk: Purple
+				if moonBtn and moonBtn:FindFirstChild("Icon") then
+					moonBtn.Icon.ImageColor3 = PlaybackState.isMoonwalk and Color3.fromRGB(180, 100, 255) or inactiveImg
+					moonBtn.BackgroundColor3 = PlaybackState.isMoonwalk and Color3.fromRGB(100, 50, 150) or inactiveBg
+				end
+				
+				-- Loop: Green
+				if loopBtn and loopBtn:FindFirstChild("Icon") then
+					loopBtn.Icon.ImageColor3 = PlaybackState.isLooping and Color3.fromRGB(0, 255, 120) or inactiveImg
+					loopBtn.BackgroundColor3 = PlaybackState.isLooping and Color3.fromRGB(0, 120, 60) or inactiveBg
+				end
+				
+				-- Respawn: Red
+				if respawnBtn and respawnBtn:FindFirstChild("Icon") then
+					respawnBtn.Icon.ImageColor3 = PlaybackState.respawnOnEnd and Color3.fromRGB(255, 80, 80) or inactiveImg
+					respawnBtn.BackgroundColor3 = PlaybackState.respawnOnEnd and Color3.fromRGB(150, 40, 40) or inactiveBg
+				end
+
+				if _G.StarshipCloud.RecordingName and title then title.Text = _G.StarshipCloud.RecordingName end
+				
+				local c, t = PlaybackState.currentTime or 0, PlaybackState.totalDuration or 0
+				if t > 0 and fill then
+					fill.Size = UDim2.fromScale(math.clamp(c/t, 0, 1), 1)
+					if curT then curT.Text = fmt(c) end
+					if remT then remT.Text = "-" .. fmt(math.max(0, t - c)) end
+				end
+			end)
 		end))
 		
 		MiniPlayerGui = screen
+		-- Tag with StarshipID for proper cleanup on re-execution
+		pcall(function() screen:SetAttribute("StarshipID", STARSHIP_ID) end)
 	else
-		for _, c in ipairs(MiniPlayerAnimations) do if c then c:Disconnect() end end
+		for _, c in ipairs(MiniPlayerAnimations) do if c then pcall(function() c:Disconnect() end) end end
 		MiniPlayerAnimations = {}
 		if MiniPlayerGui then
 			local mf = MiniPlayerGui:FindFirstChild("MiniPlayerMain")
-			if mf then
+			if mf and mf.Parent then
 				local out = TweenService:Create(mf, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
 					Size = UDim2.fromOffset(0, 0),
 					Position = UDim2.new(0.5, 0, 0.75, 0),
 					BackgroundTransparency = 1
 				})
 				out:Play()
-				out.Completed:Connect(function() if MiniPlayerGui then MiniPlayerGui:Destroy(); MiniPlayerGui = nil end end)
-			else MiniPlayerGui:Destroy(); MiniPlayerGui = nil end
+				out.Completed:Connect(function() if MiniPlayerGui then pcall(function() MiniPlayerGui:Destroy() end); MiniPlayerGui = nil end end)
+			else pcall(function() MiniPlayerGui:Destroy() end); MiniPlayerGui = nil end
 		end
 	end
 end
@@ -7671,13 +7695,16 @@ end
 
 -- Handle Window Close/Destroy
 Window:OnClose(function()
-	-- When main UI is closed, also hide the Mini Player
-	ToggleMiniPlayer(false)
+	-- When main UI is closed, we don't hide the Mini Player anymore 
+	-- as per user request to keep it visible when minimized.
+	-- ToggleMiniPlayer(false)
 end)
 
--- Method 1: OnDestroy callback (jika WindUI support)
+-- Method 1: OnDestroy callback/Destroying signal
 pcall(function()
-	if Window.OnDestroy then
+	if Window.Internal and Window.Internal.ScreenGui then
+		Window.Internal.ScreenGui.Destroying:Connect(CleanupAll)
+	elseif Window.OnDestroy then
 		Window:OnDestroy(CleanupAll)
 	end
 end)
@@ -7734,7 +7761,7 @@ task.spawn(function()
 
 	-- Method 3: Polling backup - check setiap 2 detik apakah window masih ada
 	task.spawn(function()
-		while not isWindowDestroyed do
+		while not _G.StarshipWindowState.isDestroyed do
 			task.wait(2)
 
 			-- Check apakah WindUI screen masih exist
