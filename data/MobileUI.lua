@@ -71,7 +71,7 @@ local DEV_MODE = _G.StarshipDevMode or false
 -- ══════════════════════════════════════════════════════════════════
 local AntiMultiScript = {}
 AntiMultiScript.Enabled = true
-AntiMultiScript.CheckInterval = 0.5
+AntiMultiScript.CheckInterval = 5.0 -- Increased from 0.5 to 5.0 for better mobile performance
 AntiMultiScript.UniqueToken = "STARSHIP_MOBILE_" .. tostring(os.clock()) .. "_" .. tostring(math.random(100000, 999999))
 AntiMultiScript.Connections = {}
 AntiMultiScript.Running = true
@@ -135,50 +135,23 @@ local function PerformDetectionScan()
 		for _, container in ipairs(containers) do
 			if not container then continue end
 			
-			-- Check for OTHER WindUI instances first
 			for _, gui in pairs(container:GetChildren()) do
-				if gui:IsA("ScreenGui") and (gui.Name:lower():find("windui") or gui.Name:lower():find("starship")) then
-					if gui ~= AntiMultiScript.OurGUI then
-						-- Found another WindUI! Scan its contents
-						for _, desc in pairs(gui:GetDescendants()) do
-							if desc:IsA("TextLabel") or desc:IsA("TextButton") then
-								local text = (desc.Text or ""):lower()
-								for _, indicator in ipairs(AntiMultiScript.ScriptHubIndicators) do
-									if text:find(indicator, 1, true) then
-										detected = true
-										detectedGUI = gui:GetFullName()
-										detectedIndicator = "WindUI Clash (" .. indicator .. ")"
-										return
+				if gui:IsA("ScreenGui") and not IsWhitelistedGUI(gui.Name, gui) then
+					local lowerName = gui.Name:lower()
+					if lowerName:find("windui") or lowerName:find("starship") then
+						if gui ~= AntiMultiScript.OurGUI then
+							-- Found another WindUI! Scan its contents
+							for _, desc in pairs(gui:GetDescendants()) do
+								if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+									local text = (desc.Text or ""):lower()
+									for _, indicator in ipairs(AntiMultiScript.ScriptHubIndicators) do
+										if text:find(indicator, 1, true) then
+											detected = true
+											detectedGUI = gui:GetFullName()
+											detectedIndicator = "WindUI Clash (" .. indicator .. ")"
+											return
+										end
 									end
-								end
-							end
-						end
-					end
-				end
-			end
-			
-			-- General scan fallback
-			if not detected then
-				for _, gui in pairs(container:GetDescendants()) do
-					if gui:IsA("TextLabel") or gui:IsA("TextButton") then
-						local text = (gui.Text or ""):lower()
-						for _, indicator in ipairs(AntiMultiScript.ScriptHubIndicators) do
-							if text:find(indicator, 1, true) then
-								-- Better safety check
-								local parent = gui.Parent
-								local belongsToUs = false
-								while parent and parent ~= container do
-									if (AntiMultiScript.OurGUI and parent == AntiMultiScript.OurGUI) or (parent.Name or ""):lower():find("starship") then
-										belongsToUs = true break
-									end
-									parent = parent.Parent
-								end
-								
-								if not belongsToUs then
-									detected = true
-									detectedGUI = gui:GetFullName()
-									detectedIndicator = indicator
-									return
 								end
 							end
 						end
@@ -1184,7 +1157,7 @@ task.spawn(function()
 	local loopTerminated = false -- LOCAL flag to prevent interference from old code
 	local scanCount = 0
 	while not loopTerminated do
-		task.wait(1.5)
+		task.wait(5.0) -- Increased from 1.5 to 5.0 for performance
 		scanCount = scanCount + 1
 		
 		local detected, detectedGUI, detectedIndicator = PerformDetectionScan()
@@ -7762,7 +7735,7 @@ task.spawn(function()
 	-- Method 3: Polling backup - check setiap 2 detik apakah window masih ada
 	task.spawn(function()
 		while not _G.StarshipWindowState.isDestroyed do
-			task.wait(2)
+			task.wait(10) -- Increased from 2s to 10s for performance
 
 			-- Check apakah WindUI screen masih exist
 			local screen = findWindUIScreen()
