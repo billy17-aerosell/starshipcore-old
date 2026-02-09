@@ -1,7 +1,15 @@
 {
-  "currentVersion": "1.5.3",
-  "lastUpdated": "2026-01-27",
+  "currentVersion": "1.5.4",
+  "lastUpdated": "2026-02-07",
   "updates": [
+    {
+      "version": "1.5.4",
+      "date": "2026-02-07",
+      "title": "Clone Avatar by Username",
+      "changes": [
+        "Clone any Roblox avatar by entering their username"
+      ]
+    },
     {
       "version": "1.5.3",
       "date": "2026-01-27",

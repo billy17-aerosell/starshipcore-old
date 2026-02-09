@@ -10,7 +10,7 @@
 -- SERVER-BASED LOADING MODE
 -- Automatically detects environment and loads modules from appropriate server
 -- No manual configuration needed!
-local VERSION = "1.5.3"
+local VERSION = "1.5.4"
 
 -- Auto-detect: Check if URL was injected by bootstrap/dev-script
 if _G.StarshipServerMode == nil then
@@ -2089,16 +2089,21 @@ do
 	-- PRIORITY ORDER: Checkpoint-type names first (most dynamic), then Stage, then Summit (often static)
 	local LEADERSTAT_NAMES = {
 		-- Checkpoint variations FIRST (most likely to change during gameplay)
+		"CheckpointHard", -- PRIORITY: Mountain obby hard mode (capital H, lowercase p)
 		"Checkpoint",
+		"Checkpointhard",
 		"Checkpoints",
 		"checkpoint",
 		"CHECKPOINT",
 		"CheckPoint", -- camelCase variation
+		"CheckPointHard", -- camelCase variation (capital P)
 		"CP",
 		"cp",
 		"Chkpt",
 		"chkpt",
 		"CHKPT",
+		"Posisi",
+		"Position",
 		-- Common stage/level names
 		"Stage",
 		"stage",
@@ -2110,7 +2115,6 @@ do
 		"lv",
 		"LV",
 		-- Position (some mountain obbies use this)
-		"Position",
 		"position",
 		"POSITION",
 		"Pos",
@@ -2118,6 +2122,8 @@ do
 		"POS",
 		-- Summit (mountain obbies - often STATIC end goal, so lower priority)
 		"Summit",
+		"SummitHard",
+		"Summithard",
 		"Summits",
 		"summit",
 		"SUMMIT",
@@ -2252,24 +2258,94 @@ do
 	UIHandlers.ExtractShortGameName = ExtractShortGameName
 
 	-- Detect leaderstat value object - stored in UIHandlers
+	-- IMPROVED: Prioritize leaderstats with value > 0 (indicates active progress)
 	UIHandlers.DetectLeaderstat = function()
 		local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
 		if not leaderstats then
 			return nil, nil
 		end
 
-		for _, name in ipairs(LEADERSTAT_NAMES) do
-			local stat = leaderstats:FindFirstChild(name)
-			if stat and (stat:IsA("IntValue") or stat:IsA("NumberValue") or stat:IsA("StringValue")) then
-				return stat, name
+		-- Debug: Print all available leaderstats
+		print("=== DETECTING LEADERSTATS ===")
+		local allStats = {}
+		for _, child in pairs(leaderstats:GetChildren()) do
+			if child:IsA("IntValue") or child:IsA("NumberValue") then
+				print(string.format("  └─ %s = %s (%s)", child.Name, tostring(child.Value), child.ClassName))
+				table.insert(allStats, child)
+			elseif child:IsA("StringValue") then
+				print(string.format("  └─ %s = '%s' (%s)", child.Name, tostring(child.Value), child.ClassName))
+				table.insert(allStats, child)
 			end
 		end
 
-		for _, child in pairs(leaderstats:GetChildren()) do
-			if child:IsA("IntValue") or child:IsA("NumberValue") or child:IsA("StringValue") then
-				return child, child.Name
+		-- Helper: Case-insensitive find
+		local function findStatCaseInsensitive(targetName)
+			local lowerTarget = targetName:lower()
+			for _, stat in ipairs(allStats) do
+				if stat.Name:lower() == lowerTarget then
+					return stat
+				end
+			end
+			return nil
+		end
+
+		-- PASS 1: Find leaderstat with value > 0 first (indicates active checkpoint/stage)
+		-- This prioritizes CheckpointHard=2 over Checkpoint=0
+		for _, name in ipairs(LEADERSTAT_NAMES) do
+			-- Try exact match first
+			local stat = leaderstats:FindFirstChild(name)
+			-- If not found, try case-insensitive
+			if not stat then
+				stat = findStatCaseInsensitive(name)
+			end
+			
+			if stat then
+				if stat:IsA("IntValue") or stat:IsA("NumberValue") then
+					if stat.Value > 0 then
+						print("✅ Selected (value > 0): " .. stat.Name .. " = " .. tostring(stat.Value))
+						return stat, stat.Name
+					end
+				elseif stat:IsA("StringValue") then
+					-- For strings, check if it's not empty/placeholder
+					local val = stat.Value
+					if val and val ~= "" and val ~= "-" and val ~= "0" then
+						print("✅ Selected (non-empty string): " .. stat.Name .. " = '" .. val .. "'")
+						return stat, stat.Name
+					end
+				end
 			end
 		end
+
+		-- PASS 2: If no stat with value > 0 found, fallback to ANY matching stat
+		-- (player might be at checkpoint 0 / start)
+		for _, name in ipairs(LEADERSTAT_NAMES) do
+			local stat = leaderstats:FindFirstChild(name)
+			if not stat then
+				stat = findStatCaseInsensitive(name)
+			end
+			if stat and (stat:IsA("IntValue") or stat:IsA("NumberValue") or stat:IsA("StringValue")) then
+				print("⚠️ Fallback selection (value=0): " .. stat.Name .. " = " .. tostring(stat.Value))
+				return stat, stat.Name
+			end
+		end
+
+		-- PASS 3: If still no match, use any IntValue/NumberValue/StringValue with value > 0
+		for _, child in ipairs(allStats) do
+			if child:IsA("IntValue") or child:IsA("NumberValue") then
+				if child.Value > 0 then
+					print("⚠️ Generic fallback (value > 0): " .. child.Name .. " = " .. tostring(child.Value))
+					return child, child.Name
+				end
+			end
+		end
+		
+		-- PASS 4: Last resort - any stat
+		for _, child in ipairs(allStats) do
+			print("⚠️ Last resort fallback: " .. child.Name .. " = " .. tostring(child.Value))
+			return child, child.Name
+		end
+		
+		print("❌ No suitable leaderstat found!")
 		return nil, nil
 	end
 

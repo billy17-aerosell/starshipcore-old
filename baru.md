@@ -1,77 +1,146 @@
 # ✦ STARSHIP CORE | MAP DIRECTORY
-> **Premium Path Repository v0.9 Beta**
+> **Premium Path Repository v1.5.4**
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
 
-### 📂 DATABASE ENTRIES (69)
+### 📂 DATABASE ENTRIES (138)
+✦ ⎯ `Eventide Mountain`
+✦ ⎯ `Expired Obstacle`
+✦ ⎯ `Gerbang Rintangan Neraka`
+✦ ⎯ `MT 7TH Domination `
 ✦ ⎯ `MT AAAH`
-✦ ⎯ `MT Aetheria`
+✦ ⎯ `MT Adelza`
+✦ ⎯ `MT Aetheria CVIP`
 ✦ ⎯ `MT Age 30FPS`
+✦ ⎯ `MT Age Habeg`
+✦ ⎯ `MT Age Jalur Tali`
 ✦ ⎯ `MT Age`
 ✦ ⎯ `MT Ajadeh`
+✦ ⎯ `MT Allstars V2`
 ✦ ⎯ `MT Alstars 30FPS`
 ✦ ⎯ `MT Alunna 30FPS`
+✦ ⎯ `MT Ana Bahebak`
+✦ ⎯ `MT Appalachi`
 ✦ ⎯ `MT Arcana`
 ✦ ⎯ `MT Arunika 30FPS`
-✦ ⎯ `MT Auryn Pro`
-✦ ⎯ `MT Axis Pro`
+✦ ⎯ `MT AS`
+✦ ⎯ `MT Auryn PRO`
+✦ ⎯ `MT Axis`
+✦ ⎯ `MT Ayaka`
 ✦ ⎯ `MT Ayriene WASD`
 ✦ ⎯ `MT Ayriene`
 ✦ ⎯ `MT Baru Jalur Tali`
 ✦ ⎯ `MT Baru WASD`
 ✦ ⎯ `MT Baru`
-✦ ⎯ `MT Bejirlah Jalur Kiri 30FPS`
-✦ ⎯ `MT Bejirlah Jalur Tenggah 30FPS`
+✦ ⎯ `MT Bejirlah Jalur Kanan`
+✦ ⎯ `MT Bejirlah Jalur Kiri`
+✦ ⎯ `MT Bejirlah Jalur Tengah`
+✦ ⎯ `MT BIN CVIP`
+✦ ⎯ `MT BIN`
+✦ ⎯ `MT Borisov`
 ✦ ⎯ `MT Cae 30FPS`
+✦ ⎯ `MT Casio`
+✦ ⎯ `MT Celestia`
 ✦ ⎯ `MT CenCen`
+✦ ⎯ `MT Chillout`
+✦ ⎯ `MT Coco`
 ✦ ⎯ `MT Comot Pro`
+✦ ⎯ `MT Crush`
+✦ ⎯ `MT Devara`
+✦ ⎯ `MT Elystra`
+✦ ⎯ `MT Fall`
 ✦ ⎯ `MT Freestyle 30FPS`
-✦ ⎯ `MT Freestyle WASD 30FPS`
+✦ ⎯ `MT Freestyle WASD`
+✦ ⎯ `MT Funny HABEG`
 ✦ ⎯ `MT Funny WASD`
 ✦ ⎯ `MT Funny`
 ✦ ⎯ `MT Gabut`
 ✦ ⎯ `MT Gaspol`
 ✦ ⎯ `MT Gemi WASD`
 ✦ ⎯ `MT Gemi`
+✦ ⎯ `MT Gini R6`
+✦ ⎯ `MT Gini`
+✦ ⎯ `MT Guangzhou`
 ✦ ⎯ `MT H2C 30FPS`
+✦ ⎯ `MT Habeg`
+✦ ⎯ `MT Hachimi`
+✦ ⎯ `MT Hellvi`
 ✦ ⎯ `MT HTS 30FPS`
 ✦ ⎯ `MT Iyadeh`
 ✦ ⎯ `MT Kanala WASD`
 ✦ ⎯ `MT Kanala`
 ✦ ⎯ `MT Kita`
-✦ ⎯ `MT Leveling`
+✦ ⎯ `MT Koplo`
+✦ ⎯ `MT Leveling Habeg`
+✦ ⎯ `MT Leveling Normal`
+✦ ⎯ `MT LimaSatu C2`
+✦ ⎯ `MT LimaSatu`
+✦ ⎯ `MT Lincala`
+✦ ⎯ `MT Lucia`
 ✦ ⎯ `MT Luna 30FPS`
+✦ ⎯ `MT Luna`
+✦ ⎯ `MT Magnus`
+✦ ⎯ `MT Malthera`
 ✦ ⎯ `MT Maniezz 30FPS`
+✦ ⎯ `MT Mapingin`
+✦ ⎯ `MT Memo`
+✦ ⎯ `MT Miwaaa`
 ✦ ⎯ `MT Molti`
-✦ ⎯ `MT Moonlight V2.1`
+✦ ⎯ `MT Moonlight V2`
 ✦ ⎯ `MT Mukjizat Obstacle Jalur Tali`
 ✦ ⎯ `MT Mukjizat Obstacle`
+✦ ⎯ `MT Muzukashi V2`
+✦ ⎯ `MT Muzukashi`
 ✦ ⎯ `MT Nero PRO`
-✦ ✦ ⎯ `MT Pillows`
+✦ ⎯ `MT Nese`
+✦ ⎯ `MT Nextro WASD`
+✦ ⎯ `MT Nextro`
+✦ ⎯ `MT Ngebut`
+✦ ⎯ `MT Ngekost`
+✦ ⎯ `MT Parker`
+✦ ⎯ `MT Phonk`
+✦ ⎯ `MT Pillows`
+✦ ⎯ `MT Rise`
+✦ ⎯ `MT Roven`
 ✦ ⎯ `MT Runia 30FPS`
 ✦ ⎯ `MT SakahayangV2 30FPS`
 ✦ ⎯ `MT Sangkala 30FPS`
+✦ ⎯ `MT SapSap Jalur Pro`
 ✦ ⎯ `MT Sendang 30FPS`
 ✦ ⎯ `MT Seru 30FPS`
 ✦ ⎯ `MT Sibuatan`
+✦ ⎯ `MT Socrates`
 ✦ ⎯ `MT Space X PRO`
 ✦ ⎯ `MT Toria`
-✦ ⎯ `MT Velora`
+✦ ⎯ `MT Vanguard`
+✦ ⎯ `MT Velora Full C2`
+✦ ⎯ `MT Veltharia`
 ✦ ⎯ `MT Verdant Matrix 30FPS`
-✦ ⎯ `MT YNTKS 30FPS`
+✦ ⎯ `MT Vmour`
+✦ ⎯ `MT Vraya WASD EXPERT`
+✦ ⎯ `MT Vraya`
 ✦ ⎯ `MT Yagesya 30FPS`
-✦ ⎯ `MT Yahayuk BT VIP`
-✦ ⎯ `MT Yahayuk CP5 Jalur Baru`
-✦ ⎯ `MT Yahayuk CVIP WASD`
+✦ ⎯ `MT Yahayuk Balap`
+✦ ⎯ `MT Yahayuk CVIP V2+WASD`
 ✦ ⎯ `MT Yahayuk CVIP`
-✦ ⎯ `MT Yahayuk Jalur S-Line`
-✦ ⎯ `MT Yahayuk Jalur Tenggah`
+✦ ⎯ `MT Yahayuk Normal V2+WASD`
+✦ ⎯ `MT Yahayuk Normal`
 ✦ ⎯ `MT Yahayuk PINK`
+✦ ⎯ `MT Yahayuk R6`
+✦ ⎯ `MT Yayakin Habeg`
+✦ ⎯ `MT Yayakin Normal`
 ✦ ⎯ `MT Yayakin WASD`
-✦ ⎯ `MT Yayakin`
+✦ ⎯ `MT Yepink V2`
+✦ ⎯ `MT YNTKS 30FPS`
 ✦ ⎯ `MT Yubi Pro`
 ✦ ⎯ `MT Yubi`
+✦ ⎯ `MT Yuna`
+✦ ⎯ `Mukjizat Obstacle Jalur Tali`
+✦ ⎯ `Mukjizat Obstacle`
+✦ ⎯ `Pasundan Obstacle`
 ✦ ⎯ `Sadewa City 30FPS`
-✦ ⎯ `Vica Obstacle`
+✦ ⎯ `Sentul Obstacle`
+✦ ⎯ `Vesst Obstacle`
+✦ ⎯ `Yolo Dimension`
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
 
@@ -94,35 +163,32 @@
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
 
 # ✦ STARSHIP CORE | CHANGELOG
-@everyone **PC Version 1.5.3**
+@everyone **PC Version 1.5.4**
 Download the latest update from the link below:
 https://dsc.gg/starshipcore
 
 ```text
-STARSHIP CORE UPDATE FOR version-1.5.3
+STARSHIP CORE UPDATE FOR version-1.5.4
 
-Stability & Item Detection
-- [+] Old recordings now work even if game items are renamed
-- [+] Smarter and more accurate item detection system
-- [+] Fixed issues where items weren't recognized due to naming differences
-- [+] System synchronization for better stability and consistency with mobile
-- [+] Cleaner and more organized console output
+Latest Changes
+- [+] Clone any Roblox avatar by entering their username
 ```
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
 
-STARSHIP MOBILE UPDATE FOR version-1.2.4
+@everyone **Mobile Version 1.2.5**
+Join our community for mobile support:
+https://dsc.gg/starshipcore
 
-Easier Route Switching
-- [+] Switch routes instantly without turning off player first
-- [+] Old route stops automatically when you pick a new one
-- [+] Now shows a notification when route is switched
-- [+] Path lines are now super detailed and follow the exact route
-- [+] Long routes no longer cause any lag
-- [+] Cleaner and smaller path visuals
-- [+] Improved Mini Player UI
-- [+] Show Vip Time Remaining on Tab Account
-- [+] Memory Improve For Device
+```text
+STARSHIP MOBILE UPDATE FOR version-1.2.5
+
+Latest Changes
+- [+] Clone any Roblox avatar by entering their username
+- [+] Fixed Playback Speed: Added '+' and '-' buttons for precise control
+- [+] Improved speed synchronization between UI and playback engine
+- [+] Improved Main UI
+- [+] Mini Player Overhaul: Premium new look with instant Path & Respawn toggles!
 ```
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯

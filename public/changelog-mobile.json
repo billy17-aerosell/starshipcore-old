@@ -1,7 +1,19 @@
 {
-    "currentVersion": "1.2.4",
-    "lastUpdated": "2026-02-04",
+    "currentVersion": "1.2.5",
+    "lastUpdated": "2026-02-08",
     "updates": [
+        {
+            "version": "1.2.5",
+            "date": "2026-02-08",
+            "title": "Avatar Swap & UI Fixes",
+            "changes": [
+                "Clone any Roblox avatar by entering their username",
+                "Fixed Playback Speed: Added '+' and '-' buttons for precise control",
+                "Improved speed synchronization between UI and playback engine",
+                "Improved Main UI",
+                "Mini Player Overhaul: Premium new look with instant Path & Respawn toggles!"
+            ]
+        },
         {
             "version": "1.2.4",
             "date": "2026-02-04",

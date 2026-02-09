@@ -3300,6 +3300,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 	CloneContent.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
 	local cloneTarget = nil
+	local cloneUsernameInput = "" -- Store username for cloning players outside the game
 	local originalAppearance = nil -- Store original appearance for restore
 
 	-- Clone Target Selection Label
@@ -3355,6 +3356,58 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 	ClonePreviewImage.ZIndex = 205
 	Instance.new("UICorner", ClonePreviewImage).CornerRadius = UDim.new(0, 12)
 
+	-- ==================== COPY AVATAR BY USERNAME ====================
+	-- Section Label
+	local UsernameCloneLabel = Instance.new("TextLabel", CloneContent)
+	UsernameCloneLabel.Text = "── OR CLONE BY USERNAME ──"
+	UsernameCloneLabel.Size = UDim2.new(0.94, 0, 0, 20)
+	UsernameCloneLabel.BackgroundTransparency = 1
+	UsernameCloneLabel.TextColor3 = C_ACCENT
+	UsernameCloneLabel.Font = Enum.Font.GothamBold
+	UsernameCloneLabel.TextSize = 10
+	UsernameCloneLabel.ZIndex = 205
+
+	-- Username Input Container
+	local UsernameInputFrame = Instance.new("Frame", CloneContent)
+	UsernameInputFrame.Size = UDim2.new(0.94, 0, 0, 32)
+	UsernameInputFrame.BackgroundColor3 = C_ITEM
+	UsernameInputFrame.BorderSizePixel = 0
+	UsernameInputFrame.ZIndex = 205
+	Instance.new("UICorner", UsernameInputFrame).CornerRadius = UDim.new(0, 6)
+
+	local UsernameInputBox = Instance.new("TextBox", UsernameInputFrame)
+	UsernameInputBox.Size = UDim2.new(1, -10, 1, -6)
+	UsernameInputBox.Position = UDim2.new(0, 5, 0, 3)
+	UsernameInputBox.BackgroundTransparency = 1
+	UsernameInputBox.TextColor3 = C_TEXT
+	UsernameInputBox.PlaceholderText = "Enter Roblox Username..."
+	UsernameInputBox.PlaceholderColor3 = C_TEXT_DIM
+	UsernameInputBox.Font = Enum.Font.Gotham
+	UsernameInputBox.TextSize = 12
+	UsernameInputBox.TextXAlignment = Enum.TextXAlignment.Left
+	UsernameInputBox.ClearTextOnFocus = false
+	UsernameInputBox.ZIndex = 206
+
+	UsernameInputBox:GetPropertyChangedSignal("Text"):Connect(function()
+		cloneUsernameInput = UsernameInputBox.Text
+		-- Clear player selection when typing username
+		if cloneUsernameInput ~= "" then
+			cloneTarget = nil
+			CloneSelectedDisplay.Text = "Username: " .. cloneUsernameInput
+			CloneSelectedDisplay.TextColor3 = C_ACCENT
+			-- Try to show preview for username
+			task.spawn(function()
+				local success, userId = pcall(function()
+					return Players:GetUserIdFromNameAsync(cloneUsernameInput)
+				end)
+				if success and userId then
+					local thumbUrl = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(userId) .. "&w=150&h=150"
+					ClonePreviewImage.Image = thumbUrl
+				end
+			end)
+		end
+	end)
+
 	-- Function to update player list
 	local function UpdateClonePlayerList()
 		for _, child in pairs(ClonePlayerListScroll:GetChildren()) do
@@ -3406,9 +3459,38 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		end
 	end
 
+	-- Forward declaration for CloneStatus (created later in UI)
+	local CloneStatus = nil
+
 	-- Function to clone player appearance using HumanoidDescription
+	-- Supports both in-game player selection AND username input
 	local function ClonePlayerAppearance()
-		if not cloneTarget then
+		local targetUserId = nil
+		local targetDisplayName = ""
+
+		-- Priority 1: Use Username Input (for players outside the game)
+		if cloneUsernameInput ~= "" then
+			if CloneStatus then
+				CloneStatus.Text = "Fetching " .. cloneUsernameInput .. "'s ID..."
+				CloneStatus.TextColor3 = C_ACCENT
+			end
+			CloneSelectedDisplay.Text = "Username: " .. cloneUsernameInput
+			CloneSelectedDisplay.TextColor3 = C_ACCENT
+			local success, id = pcall(function()
+				return Players:GetUserIdFromNameAsync(cloneUsernameInput)
+			end)
+			
+			if success and id then
+				targetUserId = id
+				targetDisplayName = cloneUsernameInput
+			else
+				return false, "User '" .. cloneUsernameInput .. "' not found!"
+			end
+		-- Priority 2: Use Player Selection (from dropdown)
+		elseif cloneTarget then
+			targetUserId = cloneTarget.UserId
+			targetDisplayName = cloneTarget.DisplayName
+		else
 			return false, "No target selected"
 		end
 
@@ -3420,7 +3502,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 
 		-- Load Description
 		local success, desc = pcall(function()
-			return Players:GetHumanoidDescriptionFromUserId(cloneTarget.UserId)
+			return Players:GetHumanoidDescriptionFromUserId(targetUserId)
 		end)
 
 		if not success or not desc then
@@ -3444,7 +3526,7 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		end)
 
 		if applySuccess then
-			return true, "Cloned!"
+			return true, "Cloned " .. targetDisplayName .. "!"
 		else
 			return false, "Apply failed"
 		end
@@ -3517,8 +3599,8 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 		end
 	end)
 
-	-- Status Label
-	local CloneStatus = Instance.new("TextLabel", CloneContent)
+	-- Status Label (assigns to forward-declared variable)
+	CloneStatus = Instance.new("TextLabel", CloneContent)
 	CloneStatus.Text = "Select a player and click Clone"
 	CloneStatus.Size = UDim2.new(0.94, 0, 0, 20)
 	CloneStatus.BackgroundTransparency = 1
@@ -3543,21 +3625,28 @@ local function SetupFunUI(PageFun, UI, Connections, Config, LocalPlayer, UIHandl
 	end)
 
 	BtnClone.MouseButton1Click:Connect(function()
-		if not cloneTarget then
-			CloneStatus.Text = "Please select a player first!"
+		-- Check if we have either a player target OR username input
+		if not cloneTarget and cloneUsernameInput == "" then
+			CloneStatus.Text = "Please select a player or enter a username!"
 			CloneStatus.TextColor3 = C_RED
 			return
 		end
 
-		if not cloneTarget.Parent then
-			CloneStatus.Text = "Player left the game!"
-			CloneStatus.TextColor3 = C_RED
-			cloneTarget = nil
-			CloneSelectedDisplay.Text = "Target: None"
-			CloneSelectedDisplay.TextColor3 = C_TEXT_DIM
-			UpdateClonePlayerList()
-			return
+		-- If using player target (not username), check if they're still in game
+		if cloneTarget and cloneUsernameInput == "" then
+			if not cloneTarget.Parent then
+				CloneStatus.Text = "Player left the game!"
+				CloneStatus.TextColor3 = C_RED
+				cloneTarget = nil
+				CloneSelectedDisplay.Text = "Target: None"
+				CloneSelectedDisplay.TextColor3 = C_TEXT_DIM
+				UpdateClonePlayerList()
+				return
+			end
 		end
+
+		CloneStatus.Text = "Cloning..."
+		CloneStatus.TextColor3 = C_ACCENT
 
 		local success, msg = ClonePlayerAppearance()
 		if success then
