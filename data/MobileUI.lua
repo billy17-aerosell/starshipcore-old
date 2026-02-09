@@ -103,58 +103,30 @@ AntiMultiScript.WhitelistedGUIs = {
 -- Direct reference to OUR GUI (set when created)
 AntiMultiScript.OurGUI = nil
 
--- Names to SKIP entirely (Roblox system GUIs and game admin interfaces)
-AntiMultiScript.SystemGUINames = {
-	-- Roblox Core GUIs (MUST skip these - they contain console output/system messages)
-	"robloxgui", "coregui", "systemgui", "bubblechat", "experiencenotifications",
-	"topbarsafeareasink", "purchaseprompt", "playerlistmaster", "contactslist",
-	"chat", "voicechat", "performancestats", "screenshotscarousel",
-	-- Roblox Console/Debug (CRITICAL - console shows our own messages!)
-	"devconsole", "console", "output", "commandbar", "scriptcontext",
-	-- Roblox UI Elements
-	"topbar", "playerlist", "emotes", "backpack", "health", "leaderboard",
-	-- Game Admin Interfaces (common in many games, not script hubs)
-	"hdadmin", "admin", "cmdr", "basicadmin", "kohls", "adonis", "infinity",
-	-- Donation/Gamepass UIs (common in games)
-	"donation", "gamepass", "premium", "shop", "store",
-}
-
 -- NOTE: Do NOT set _G.StarshipCleanup here - it causes premature termination
 -- Cleanup is handled by DestroyAllStarshipGUIs() at script start
 
--- Function to perform a single detection scan
 local function PerformDetectionScan()
 	local detected = false
 	local detectedGUI = ""
 	local detectedIndicator = ""
 	
 	pcall(function()
-		local containers = {game:GetService("CoreGui"), game.Players.LocalPlayer:FindFirstChild("PlayerGui")}
-		if gethui then table.insert(containers, gethui()) end
+		local containers = GetAllGUIContainers()
 		
 		for _, container in ipairs(containers) do
 			if not container then continue end
 			
 			for _, gui in pairs(container:GetChildren()) do
+				-- ONLY scan ScreenGuis that are NOT whitelisted
 				if gui:IsA("ScreenGui") and not IsWhitelistedGUI(gui.Name, gui) then
-					local lowerName = gui.Name:lower()
-					if lowerName:find("windui") or lowerName:find("starship") then
-						if gui ~= AntiMultiScript.OurGUI then
-							-- Found another WindUI! Scan its contents
-							for _, desc in pairs(gui:GetDescendants()) do
-								if desc:IsA("TextLabel") or desc:IsA("TextButton") then
-									local text = (desc.Text or ""):lower()
-									for _, indicator in ipairs(AntiMultiScript.ScriptHubIndicators) do
-										if text:find(indicator, 1, true) then
-											detected = true
-											detectedGUI = gui:GetFullName()
-											detectedIndicator = "WindUI Clash (" .. indicator .. ")"
-											return
-										end
-									end
-								end
-							end
-						end
+					-- Scan this specific GUI for the indicators the user specified
+					local hasIndicators, indicator = HasScriptHubIndicators(gui)
+					if hasIndicators then
+						detected = true
+						detectedGUI = gui:GetFullName()
+						detectedIndicator = indicator
+						return
 					end
 				end
 			end
@@ -235,13 +207,6 @@ local function IsWhitelistedGUI(guiName, guiInstance)
 		end
 	end
 	
-	-- Check system GUIs that we should skip
-	for _, pattern in ipairs(AntiMultiScript.SystemGUINames) do
-		if lowerName:find(pattern, 1, true) then
-			return true
-		end
-	end
-	
 	return false
 end
 
@@ -252,10 +217,15 @@ local function HasScriptHubIndicators(gui)
 	
 	pcall(function()
 		local descendants = gui:GetDescendants()
+		local checkCount = 0
+		local MAX_CHECKS = 200 -- Limit to prevent lag on complex UIs
 		
 		for _, desc in pairs(descendants) do
+			if checkCount >= MAX_CHECKS then break end
+			
 			-- ONLY check VISIBLE TEXT content (not element names - they cause false positives)
 			if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
+				checkCount = checkCount + 1
 				local text = (desc.Text or ""):lower()
 				
 				-- Skip empty or very short text
@@ -1299,36 +1269,42 @@ local PingTag = Window:Tag({
 	Color = Color3.fromHex("#3b82f6"),
 })
 
--- Live update FPS & PING
+-- Live update FPS & PING (Optimized for mobile - no per-frame callback)
 task.spawn(function()
 	local frameCount = 0
 	local lastTime = tick()
-
-	RunService.Heartbeat:Connect(function()
+	
+	-- Use a separate connection just for counting frames
+	local countConn = RunService.Heartbeat:Connect(function()
 		frameCount = frameCount + 1
-
+	end)
+	
+	-- Update UI every 2 seconds (less frequent = better performance)
+	while true do
+		task.wait(2)
+		
 		local now = tick()
-		if now - lastTime >= 1 then
-			-- Update FPS
-			local fps = math.floor(frameCount / (now - lastTime))
+		local elapsed = now - lastTime
+		if elapsed > 0 then
+			local fps = math.floor(frameCount / elapsed)
 			local fpsColor = "#22c55e" -- Green
 			if fps < 30 then
 				fpsColor = "#ef4444" -- Red
 			elseif fps < 50 then
 				fpsColor = "#eab308" -- Yellow
 			end
-
+			
 			pcall(function()
 				FPSTag:SetTitle('<font size="11">FPS: ' .. fps .. "</font>")
 				FPSTag:SetColor(Color3.fromHex(fpsColor))
 			end)
-
+			
 			-- Update Ping
 			local ping = 0
 			pcall(function()
 				ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
 			end)
-
+			
 			local pingColor = "#3b82f6" -- Blue
 			if ping > 150 then
 				pingColor = "#ef4444" -- Red
@@ -1344,7 +1320,7 @@ task.spawn(function()
 			frameCount = 0
 			lastTime = now
 		end
-	end)
+	end
 end)
 
 -- ══════════════════════════════════════════════════════════════════
