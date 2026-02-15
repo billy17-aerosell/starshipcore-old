@@ -2086,17 +2086,18 @@ end
 -- ═══════════════════════════════════════════════════════════════════
 do
 	-- Common leaderstat names to detect (stored in table to save locals)
-	-- PRIORITY ORDER: Checkpoint-type names first (most dynamic), then Stage, then Summit (often static)
+	-- PRIORITY ORDER: Checkpoint (Main) -> Stage -> Summit (Static)
 	local LEADERSTAT_NAMES = {
-		-- Checkpoint variations FIRST (most likely to change during gameplay)
-		"CheckpointHard", -- PRIORITY: Mountain obby hard mode (capital H, lowercase p)
+		-- CHECKPOINT / SPAWNS (Most active change)
+		-- Common variations first
+		"CheckpointHard",
 		"Checkpoint",
 		"Checkpointhard",
 		"Checkpoints",
 		"checkpoint",
 		"CHECKPOINT",
-		"CheckPoint", -- camelCase variation
-		"CheckPointHard", -- camelCase variation (capital P)
+		"CheckPoint",
+		"CheckPointHard",
 		"CP",
 		"cp",
 		"Chkpt",
@@ -2104,7 +2105,6 @@ do
 		"CHKPT",
 		"Posisi",
 		"Position",
-		-- Common stage/level names
 		"Stage",
 		"stage",
 		"STAGE",
@@ -2114,66 +2114,60 @@ do
 		"Lv",
 		"lv",
 		"LV",
-		-- Position (some mountain obbies use this)
-		"position",
-		"POSITION",
-		"Pos",
-		"pos",
-		"POS",
-		-- Summit (mountain obbies - often STATIC end goal, so lower priority)
-		"Summit",
-		"SummitHard",
-		"Summithard",
-		"Summits",
-		"summit",
-		"SUMMIT",
-		-- Floor/Tower games
 		"Floor",
 		"floor",
 		"FLOOR",
-		-- Wave/Round games
-		"Wave",
-		"wave",
-		"WAVE",
 		"Round",
 		"round",
 		"ROUND",
-		-- Section/Part games
-		"Section",
-		"section",
-		"SECTION",
-		"Part",
-		"part",
-		"PART",
-		-- Zone/Area games
-		"Zone",
-		"zone",
-		"ZONE",
-		"Area",
-		"area",
-		"AREA",
-		-- Phase games
+		"Wave",
+		"wave",
+		"WAVE",
 		"Phase",
 		"phase",
 		"PHASE",
-		-- Room/Sector games
+		"Area",
+		"area",
+		"AREA",
+		"Zone",
+		"zone",
+		"ZONE",
 		"Room",
 		"room",
 		"ROOM",
 		"Sector",
 		"sector",
 		"SECTOR",
-		-- Racing games
+		
+		-- MISC
+		"Section",
+		"section",
+		"SECTION",
+		"Part",
+		"part",
+		"PART",
 		"Lap",
 		"lap",
 		"LAP",
-		-- Progress/Wins
 		"Progress",
 		"progress",
 		"PROGRESS",
 		"Wins",
 		"wins",
 		"WINS",
+		"position",
+		"POSITION",
+		"Pos",
+		"pos",
+		"POS",
+		
+		-- STATIC / GOAL (Lowest Priority)
+		"Summit",
+		"SummitHard",
+		"Summithard",
+		"Summits",
+		"summit",
+		"SUMMIT",
 	}
 
 	-- Keywords to look for when extracting short game name (obby names usually start with these)
@@ -2257,102 +2251,67 @@ do
 	-- Store for external use (e.g., auto-fill base name input)
 	UIHandlers.ExtractShortGameName = ExtractShortGameName
 
-	-- Detect leaderstat value object - stored in UIHandlers
-	-- IMPROVED: Prioritize leaderstats with value > 0 (indicates active progress)
-	UIHandlers.DetectLeaderstat = function()
-		local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
-		if not leaderstats then
-			return nil, nil
+	-- Helper to find folder
+	local function GetLeaderstatsFolder()
+		local names = {"leaderstats", "Leaderstats", "Stats", "stats", "Data", "data", "Values", "values"}
+		for _, name in pairs(names) do
+			local folder = LocalPlayer:FindFirstChild(name)
+			if folder then return folder end
 		end
+		return nil
+	end
 
-		-- Debug: Print all available leaderstats
-		print("=== DETECTING LEADERSTATS ===")
-		local allStats = {}
-		for _, child in pairs(leaderstats:GetChildren()) do
-			if child:IsA("IntValue") or child:IsA("NumberValue") then
-				print(string.format("  └─ %s = %s (%s)", child.Name, tostring(child.Value), child.ClassName))
-				table.insert(allStats, child)
-			elseif child:IsA("StringValue") then
-				print(string.format("  └─ %s = '%s' (%s)", child.Name, tostring(child.Value), child.ClassName))
-				table.insert(allStats, child)
-			end
-		end
+	-- NEW: Detect ALL relevant leaderstats for multi-monitoring
+	UIHandlers.DetectLeaderstatsList = function()
+		local folder = GetLeaderstatsFolder()
+		if not folder then return {} end
+		
+		local results = {}
+		local seen = {}
 
-		-- Helper: Case-insensitive find
-		local function findStatCaseInsensitive(targetName)
-			local lowerTarget = targetName:lower()
-			for _, stat in ipairs(allStats) do
-				if stat.Name:lower() == lowerTarget then
-					return stat
-				end
-			end
-			return nil
-		end
-
-		-- PASS 1: Find leaderstat with value > 0 first (indicates active checkpoint/stage)
-		-- This prioritizes CheckpointHard=2 over Checkpoint=0
+		-- Check for names in LEADERSTAT_NAMES
 		for _, name in ipairs(LEADERSTAT_NAMES) do
-			-- Try exact match first
-			local stat = leaderstats:FindFirstChild(name)
-			-- If not found, try case-insensitive
+			local stat = folder:FindFirstChild(name) -- Try exact match first
 			if not stat then
-				stat = findStatCaseInsensitive(name)
+				-- Try finding case insensitive match in children
+				for _, child in pairs(folder:GetChildren()) do
+					if child.Name:lower() == name:lower() then
+						stat = child
+						break
+					end
+				end
 			end
 			
-			if stat then
-				if stat:IsA("IntValue") or stat:IsA("NumberValue") then
-					if stat.Value > 0 then
-						print("✅ Selected (value > 0): " .. stat.Name .. " = " .. tostring(stat.Value))
-						return stat, stat.Name
-					end
-				elseif stat:IsA("StringValue") then
-					-- For strings, check if it's not empty/placeholder
-					local val = stat.Value
-					if val and val ~= "" and val ~= "-" and val ~= "0" then
-						print("✅ Selected (non-empty string): " .. stat.Name .. " = '" .. val .. "'")
-						return stat, stat.Name
-					end
-				end
-			end
-		end
-
-		-- PASS 2: If no stat with value > 0 found, fallback to ANY matching stat
-		-- (player might be at checkpoint 0 / start)
-		for _, name in ipairs(LEADERSTAT_NAMES) do
-			local stat = leaderstats:FindFirstChild(name)
-			if not stat then
-				stat = findStatCaseInsensitive(name)
-			end
-			if stat and (stat:IsA("IntValue") or stat:IsA("NumberValue") or stat:IsA("StringValue")) then
-				print("⚠️ Fallback selection (value=0): " .. stat.Name .. " = " .. tostring(stat.Value))
-				return stat, stat.Name
-			end
-		end
-
-		-- PASS 3: If still no match, use any IntValue/NumberValue/StringValue with value > 0
-		for _, child in ipairs(allStats) do
-			if child:IsA("IntValue") or child:IsA("NumberValue") then
-				if child.Value > 0 then
-					print("⚠️ Generic fallback (value > 0): " .. child.Name .. " = " .. tostring(child.Value))
-					return child, child.Name
-				end
+			if stat and not seen[stat] then
+				table.insert(results, {Stat = stat, Name = stat.Name})
+				seen[stat] = true
 			end
 		end
 		
-		-- PASS 4: Last resort - any stat
-		for _, child in ipairs(allStats) do
-			print("⚠️ Last resort fallback: " .. child.Name .. " = " .. tostring(child.Value))
-			return child, child.Name
+		return results
+	end
+
+	-- LEGACY wrapper: Returns the "best" single leaderstat for backward compatibility
+	-- IMPROVED: Strictly follows LEADERSTAT_NAMES priority (Checkpoint > Summit)
+	UIHandlers.DetectLeaderstat = function()
+		local list = UIHandlers.DetectLeaderstatsList()
+		
+		-- Return the first match (Highest priority in LEADERSTAT_NAMES)
+		-- e.g. If "Checkpoint" (idx 1) and "Summit" (idx 2) are found, return Checkpoint.
+		if #list > 0 then
+			return list[1].Stat, list[1].Name
 		end
 		
-		print("❌ No suitable leaderstat found!")
 		return nil, nil
 	end
+
+
 
 	-- Save checkpoint snapshot (without stopping recording) - ASYNC to prevent lag
 	-- Now saves ONLY frames since last checkpoint (non-cumulative)
 	-- isStageIncrease: true = stage went UP, false = stage went DOWN (skip auto-stop for decrease)
-	UIHandlers.SaveCheckpointSnapshot = function(stageValue, isStageIncrease)
+	-- statName: Optional name of the specific leaderstat that triggered this (e.g., "Checkpoint", "Summit")
+	UIHandlers.SaveCheckpointSnapshot = function(stageValue, isStageIncrease, statName)
 		print(
 			"───────────────────────────────────────────────────────"
 		)
@@ -2394,10 +2353,11 @@ do
 
 		-- Use "Summit" instead of "Stage0" for loop completion
 		local stageSuffix
+		local sName = statName or "Stage"
 		if tonumber(stageValue) == 0 then
-			stageSuffix = "_Summit"
+			stageSuffix = "_" .. sName .. "_Start"
 		else
-			stageSuffix = "_Stage" .. tostring(stageValue)
+			stageSuffix = "_" .. sName .. tostring(stageValue)
 		end
 		local filename = baseName .. stageSuffix
 
@@ -2540,145 +2500,112 @@ do
 
 	-- Setup checkpoint monitoring
 	UIHandlers.SetupCheckpointMonitor = function()
-		if Connections.Checkpoint then
-			Connections.Checkpoint:Disconnect()
-			Connections.Checkpoint = nil
+		-- Clean up existing monitors
+		if UIHandlers.CleanupCheckpointMonitor then
+			UIHandlers.CleanupCheckpointMonitor()
 		end
 
 		if not S.isAutoCheckpoint then
 			return
 		end
 
-		local stat, statName = UIHandlers.DetectLeaderstat()
-		if not stat then
+		local statsList = UIHandlers.DetectLeaderstatsList()
+		if #statsList == 0 then
 			ShowToast("Auto-Checkpoint", L("checkpoint_no_leaderstat"), "warning", 3)
-			S.detectedLeaderstat = nil
 			return
 		end
 
-		S.detectedLeaderstat = statName
-		S.lastCheckpointStage = stat.Value
+		print("[Checkpoint] Monitoring " .. #statsList .. " leaderstats...")
 
-		Connections.Checkpoint = stat.Changed:Connect(function(newValue)
-			-- Detailed console logging for debugging
-			local oldValue = S.lastCheckpointStage or 0
+		-- Track last values for each stat individually
+		S.lastValues = {} 
 
-			-- Smart number extraction for string-based checkpoints
-			-- Handles: "CP1" -> 1, "Stage5" -> 5, "Start" -> 0, "Summit" -> 9999, plain numbers
-			local function ExtractStageNumber(val)
-				if val == nil then
+		for _, item in ipairs(statsList) do
+			local stat = item.Stat
+			local name = item.Name
+			
+			-- Initialize last value
+			S.lastValues[name] = stat.Value
+			
+			-- Create unique connection key
+			local connKey = "Checkpoint_" .. name
+			
+			Connections[connKey] = stat.Changed:Connect(function(newValue)
+				-- Detailed console logging for debugging
+				local oldValue = S.lastValues[name] or 0
+				
+				-- Smart number extraction for string-based checkpoints
+				local function ExtractStageNumber(val)
+					if val == nil then return 0 end
+					local num = tonumber(val)
+					if num then return num end
+					local strVal = tostring(val):lower()
+					if strVal == "-" or strVal == "--" or strVal == "n/a" or strVal == "none" or strVal == "" or strVal == "null" then return 0 end
+					if strVal == "start" or strVal == "spawn" or strVal == "lobby" or strVal == "base" or strVal == "begin" then return 0 end
+					if strVal == "summit" or strVal == "finish" or strVal == "end" or strVal == "goal" or strVal == "complete" then return 99999 end
+					local extractedNum = tostring(val):match("(%d+)")
+					if extractedNum then return tonumber(extractedNum) or 0 end
 					return 0
 				end
 
-				-- Direct number
-				local num = tonumber(val)
-				if num then
-					return num
+				local numNew = ExtractStageNumber(newValue)
+				local numOld = ExtractStageNumber(oldValue)
+
+				print("═══════════════════════════════════════════════════════")
+				print("[Checkpoint] CHANGE DETECTED: " .. name)
+				print("  └─ Old:", oldValue, "->", numOld)
+				print("  └─ New:", newValue, "->", numNew)
+				print("═══════════════════════════════════════════════════════")
+
+				if not isRecording or isPaused then return end
+				if oldValue == newValue then return end
+
+				-- Update tracked value
+				S.lastValues[name] = newValue
+				S.lastCheckpointStage = newValue -- Keep global for display if needed
+
+				local isStageIncrease = numNew > numOld
+				local isLoopBack = numNew == 0 and numOld > 0
+
+				if isStageIncrease or (numNew == numOld and newValue ~= oldValue) then
+					print("✅ [CHECKPOINT] Saved: " .. name .. " " .. tostring(newValue))
+					UIHandlers.SaveCheckpointSnapshot(newValue, true, name)
+				elseif isLoopBack then
+					print("⏳ [LOOP DETECTION] Returned to start")
+					S.pendingLoopSave = { stageValue = newValue, triggeredAt = tick(), statName = name }
+					S.waitingForTeleport = true
+					ShowToast("🔄 " .. L("loop_detected"), L("waiting_for_teleport"), "info", 3)
+				else
+					print("⚠️ [CHECKPOINT] Saved (Decrease): " .. name .. " " .. tostring(newValue))
+					UIHandlers.SaveCheckpointSnapshot(newValue, false, name)
 				end
+			end)
+			
+			print("  └─ Connected: " .. name .. " (Initial: " .. tostring(stat.Value) .. ")")
+		end
 
-				-- String processing
-				local strVal = tostring(val):lower()
-
-				-- Handle empty/placeholder values like "-", "--", "N/A", "None", empty string
-				if strVal == "-" or strVal == "--" or strVal == "n/a" or strVal == "none" or strVal == "" or strVal == "null" then
-					return 0 -- Treat as "start" / no checkpoint
-				end
-
-				-- Special keywords for start/beginning
-				if strVal == "start" or strVal == "spawn" or strVal == "lobby" or strVal == "base" or strVal == "begin" then
-					return 0
-				end
-				if strVal == "summit" or strVal == "finish" or strVal == "end" or strVal == "goal" or strVal == "complete" then
-					return 99999 -- Very high number for "end" stages
-				end
-
-				-- Extract number from string like "CP1", "Stage5", "Level10", "Checkpoint3"
-				local extractedNum = tostring(val):match("(%d+)")
-				if extractedNum then
-					return tonumber(extractedNum) or 0
-				end
-
-				return 0
-			end
-
-			local numNew = ExtractStageNumber(newValue)
-			local numOld = ExtractStageNumber(oldValue)
-
-			print(
-				"═══════════════════════════════════════════════════════"
-			)
-			print("[Checkpoint] STAGE CHANGE DETECTED")
-			print("  └─ Old Stage:", oldValue, "(type:", type(oldValue), ") -> extracted:", numOld)
-			print("  └─ New Stage:", newValue, "(type:", type(newValue), ") -> extracted:", numNew)
-			print("  └─ isRecording:", isRecording)
-			print("  └─ isPaused:", isPaused)
-			print("  └─ Auto-Stop Enabled:", S.isAutoStopOnCheckpoint)
-			print(
-				"  └─ Direction:",
-				numNew > numOld and "INCREASE ↑"
-					or (numNew < numOld and "DECREASE ↓" or "CHANGED (same extracted num)")
-			)
-			print(
-				"═══════════════════════════════════════════════════════"
-			)
-
-			if not isRecording or isPaused then
-				print("[Checkpoint] Skipped - Not recording or paused")
-				return
-			end
-			if S.lastCheckpointStage == newValue then
-				print("[Checkpoint] Skipped - Same value")
-				return
-			end
-
-			DevLog("[Checkpoint] Stage changed:", oldValue, "->", newValue)
-
-			-- Determine if stage increased or decreased
-			-- For string checkpoints where we can't determine direction, treat as increase (save immediately)
-			local isStageIncrease = numNew > numOld
-			local isLoopBack = numNew == 0 and numOld > 0 -- Only loop detection when going back to "Start"/0
-
-			if isStageIncrease or (numNew == numOld and newValue ~= oldValue) then
-				-- Stage INCREASED or changed with same extracted number (e.g., "Area1" -> "Zone1")
-				-- Save immediately
-				print("✅ [CHECKPOINT] Stage increased or changed - saving immediately")
-				UIHandlers.SaveCheckpointSnapshot(newValue, true)
-			elseif isLoopBack then
-				-- Only trigger loop detection when returning to start (0)
-				print("⏳ [LOOP DETECTION] Returned to start - waiting for teleport")
-				print("  └─ Will save when player teleports back to recording start")
-
-				-- Store this for later when we detect teleport
-				S.pendingLoopSave = {
-					stageValue = newValue,
-					triggeredAt = tick(),
-				}
-				S.lastCheckpointStage = newValue -- Update stage tracking
-
-				-- Start monitoring for teleport (checked in recorder heartbeat)
-				S.waitingForTeleport = true
-
-				ShowToast("🔄 " .. L("loop_detected"), L("waiting_for_teleport"), "info", 3)
-			else
-				-- Stage decreased but not to start (rare case like CP5 -> CP3)
-				-- Still save to not miss any checkpoint
-				print("⚠️ [CHECKPOINT] Stage decreased (not to start) - saving anyway")
-				UIHandlers.SaveCheckpointSnapshot(newValue, false) -- false = don't auto-stop
-			end
-		end)
-
-		ShowToast(L("auto_checkpoint_enabled"), L("checkpoint_monitoring", statName), "success", 2)
+		ShowToast(L("auto_checkpoint_enabled"), "Monitoring " .. #statsList .. " stats", "success", 2)
 	end
 
 	-- Cleanup checkpoint monitor
 	UIHandlers.CleanupCheckpointMonitor = function()
+		-- Disconnect all Checkpoint_* connections
+		for k, conn in pairs(Connections) do
+			if type(k) == "string" and k:sub(1, 11) == "Checkpoint_" then
+				conn:Disconnect()
+				Connections[k] = nil
+			end
+		end
+		-- Also clear legacy connection if present
 		if Connections.Checkpoint then
 			Connections.Checkpoint:Disconnect()
 			Connections.Checkpoint = nil
 		end
+		
 		S.checkpointSaveCount = 0
 		S.lastCheckpointStage = nil
-		S.checkpointStartFrame = 1 -- Reset segment start for next session
+		S.lastValues = {}
+		S.checkpointStartFrame = 1
 		S.waitingForTeleport = false
 		S.pendingLoopSave = nil
 		S.lastTeleportCheckPos = nil

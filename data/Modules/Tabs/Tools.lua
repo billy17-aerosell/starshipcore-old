@@ -1450,7 +1450,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 		}):Play()
 	end
 
-	-- Fungsi utama pengecekan admin
+	-- Fungsi utama pengecekan admin (FULL detection)
 	local function CheckForAdmin(player)
 		if player == LocalPlayer or not player.Parent then
 			return
@@ -1459,8 +1459,14 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 		local isAdmin = false
 		local reason = ""
 
+		-- 0. Cek ModuleScan cache dari ESP system (shared via _G)
+		if _G._ScannedAdminUserIds and _G._ScannedAdminUserIds[player.UserId] then
+			isAdmin = true
+			reason = "ModuleScan: " .. tostring(_G._ScannedAdminUserIds[player.UserId])
+		end
+
 		-- 1. Cek Game Creator
-		if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
+		if not isAdmin and game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
 			isAdmin = true
 			reason = "Game Owner"
 		end
@@ -1493,34 +1499,70 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 			end
 		end
 
-		-- 3. Cek via HTTP API (untuk semua grup player)
+		-- 3. Cek Player Attributes (IsAdmin, Role, Rank, AdminLevel, etc.)
 		if not isAdmin then
-			task.spawn(function()
-				local success, roles = pcall(function()
-					local HttpService = game:GetService("HttpService")
-					local response =
-						game:HttpGet("https://groups.roblox.com/v1/users/" .. player.UserId .. "/groups/roles")
-					return HttpService:JSONDecode(response)
-				end)
-
-				if success and roles and roles.data then
-					for _, group in ipairs(roles.data) do
-						if group.role.rank >= 200 then -- Rank 200+ biasanya owner/admin
-							ShowAdminAlert(
-								player.Name,
-								"High Rank in Group: " .. group.group.name .. " (Rank " .. group.role.rank .. ")"
-							)
-							return
+			pcall(function()
+				local adminAttrs = {"IsAdmin", "isAdmin", "Admin", "admin", "Role", "role", 
+					"Rank", "rank", "AdminLevel", "adminLevel", "StaffLevel", "staffLevel",
+					"Permission", "permission", "IsDev", "isDev"}
+				for _, attrName in ipairs(adminAttrs) do
+					local ok, val = pcall(function() return player:GetAttribute(attrName) end)
+					if ok and val ~= nil then
+						if type(val) == "boolean" and val == true then
+							isAdmin = true
+							reason = "Attribute: " .. attrName .. " = true"
+							break
+						elseif type(val) == "string" then
+							local vl = val:lower()
+							if vl:find("admin") or vl:find("owner") or vl:find("mod") or vl:find("staff") or vl:find("dev") then
+								isAdmin = true
+								reason = "Attribute: " .. attrName .. " = " .. val
+								break
+							end
+						elseif type(val) == "number" and val >= 1 then
+							local al = attrName:lower()
+							if al:find("admin") or al:find("level") or al:find("rank") or al:find("permission") then
+								isAdmin = true
+								reason = "Attribute: " .. attrName .. " = " .. tostring(val)
+								break
+							end
 						end
 					end
 				end
 			end)
 		end
 
-		-- 4. Cek Admin Tools di Backpack
+		-- 4. Cek Overhead BillboardGui tags
+		if not isAdmin and player.Character then
+			pcall(function()
+				local adminKeywords = {"admin", "owner", "moderator", "mod", "staff", "developer", 
+					"dev", "super admin", "co-owner", "head admin", "manager"}
+				for _, desc in ipairs(player.Character:GetDescendants()) do
+					if desc:IsA("BillboardGui") then
+						for _, child in ipairs(desc:GetDescendants()) do
+							if child:IsA("TextLabel") or child:IsA("TextButton") then
+								local txt = child.Text:lower()
+								for _, kw in ipairs(adminKeywords) do
+									if txt:find(kw, 1, true) then
+										isAdmin = true
+										reason = "Overhead: " .. child.Text:sub(1, 50)
+										break
+									end
+								end
+								if isAdmin then break end
+							end
+						end
+						if isAdmin then break end
+					end
+				end
+			end)
+		end
+
+		-- 5. Cek Admin Tools di Backpack
 		if not isAdmin then
 			task.spawn(function()
-				task.wait(1) -- Tunggu character load
+				task.wait(1)
+				if not player.Parent then return end
 				local backpack = player:FindFirstChild("Backpack")
 				if backpack then
 					for _, tool in ipairs(backpack:GetChildren()) do
@@ -1541,7 +1583,41 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 			end)
 		end
 
-		-- 5. Monitor Chat untuk Command Admin
+		-- 6. Async HTTP API (HANYA grup game ini, bukan semua grup)
+		if not isAdmin then
+			task.spawn(function()
+				local gameGroupId = nil
+				if game.CreatorType == Enum.CreatorType.Group then
+					gameGroupId = game.CreatorId
+				end
+				
+				if not gameGroupId then return end
+				if not player.Parent then return end
+				
+				local success, roles = pcall(function()
+					local HttpService = game:GetService("HttpService")
+					local response =
+						game:HttpGet("https://groups.roblox.com/v1/users/" .. player.UserId .. "/groups/roles")
+					return HttpService:JSONDecode(response)
+				end)
+
+				if success and roles and roles.data then
+					for _, group in ipairs(roles.data) do
+						local gId = group.group and group.group.id
+						local rank = group.role and group.role.rank or 0
+						if gId == gameGroupId and rank >= 100 then
+							ShowAdminAlert(
+								player.Name,
+								"Group API: " .. group.group.name .. " (Rank " .. rank .. ": " .. (group.role.name or "") .. ")"
+							)
+							return
+						end
+					end
+				end
+			end)
+		end
+
+		-- 7. Monitor Chat untuk Command Admin
 		local chatConnection = player.Chatted:Connect(function(msg)
 			if not isAntiAdmin then
 				return

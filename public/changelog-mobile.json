@@ -1,7 +1,23 @@
 {
-    "currentVersion": "1.2.5",
-    "lastUpdated": "2026-02-08",
+    "currentVersion": "1.2.6",
+    "lastUpdated": "2026-02-14",
     "updates": [
+        {
+            "version": "1.2.6",
+            "date": "2026-02-14",
+            "title": "Security & Admin Visuals Update",
+            "changes": [
+                "Admin ESP - High precision highlighting for Owners, Admins, and Staff",
+                "Device Spoofing - Change your appearance to PC, Mobile, or Console",
+                "Enhanced Bypass Admin with automatic safety disconnect",
+                "Advanced Privacy Hooks with secure metamethod protection",
+                "Anti-AFK is now permanently active for maximum protection",
+                "Major performance improvements for mobile devices",
+                "Control speed now inside mini player with + and - buttons",
+                "Improved mini player structure and stability",
+                "Enhanced Auto Walk for more smooth"
+            ]
+        },
         {
             "version": "1.2.5",
             "date": "2026-02-08",

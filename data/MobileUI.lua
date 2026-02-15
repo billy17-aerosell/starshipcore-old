@@ -5,13 +5,101 @@
     ╚═══════════════════════════════════════════════════════════════╝
 ]]
 
+-- ══════════════════════════════════════════════════════════════════
+-- ADONIS BYPASS (Must load FIRST before any hookmetamethod calls)
+-- Prevents "namecallInstance detector detected" kicks
+-- ══════════════════════════════════════════════════════════════════
+local SilenceActive = true
+task.delay(11, function() SilenceActive = false end)
+
+local sg = game:GetService("StarterGui")
+local cg = game:GetService("CoreGui")
+
+local function checkBypassUI(obj)
+    if not SilenceActive then return end
+    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+        local t = tostring(obj.Text):lower()
+        if t:find("adonis") or t:find("pixeluted") or t:find("bypassed") then
+            local root = obj
+            local lp = game:GetService("Players").LocalPlayer
+            local pg = lp and lp:FindFirstChild("PlayerGui")
+            
+            while root.Parent and root.Parent ~= cg and root.Parent ~= pg and root.Parent ~= game do
+                root = root.Parent
+            end
+            
+            local name = root.Name:lower()
+            if not name:find("starship") and not name:find("windui") and not name:find("wind_") then
+                pcall(function() root:Destroy() end)
+            end
+        end
+    end
+end
+
+-- Hook into CoreGui and wait for PlayerGui
+cg.DescendantAdded:Connect(checkBypassUI)
+task.spawn(function()
+    local lp = game:GetService("Players").LocalPlayer
+    while not lp do task.wait() lp = game:GetService("Players").LocalPlayer end
+    local pg = lp:WaitForChild("PlayerGui")
+    pg.DescendantAdded:Connect(checkBypassUI)
+    for _, v in pairs(pg:GetDescendants()) do checkBypassUI(v) end
+end)
+
+-- Polling: much less frequent (every 1s instead of 0.1s) to save FPS
+task.spawn(function()
+    for i = 1, 15 do
+        if not SilenceActive then break end
+        for _, v in pairs(cg:GetChildren()) do -- Scan top-level objects first (faster)
+            if v:IsA("ScreenGui") then
+                for _, desc in pairs(v:GetDescendants()) do
+                    checkBypassUI(desc)
+                end
+            end
+        end
+        task.wait(1.0) 
+    end
+end)
+
+local old; old = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    if SilenceActive and self == sg and method == "SetCore" and args[1] == "SendNotification" then
+        local data = args[2]
+        if data and (tostring(data.Title):find("Adonis") or tostring(data.Text):find("pixeluted") or tostring(data.Text):find("bypassed")) then
+            return
+        end
+    end
+    return old(self, ...)
+end)
+
+pcall(function()
+	loadstring(game:HttpGet('https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua'))()
+end)
+
+-- Remove any blur effects added by bypass
+task.spawn(function()
+    for i = 1, 20 do
+        if not SilenceActive then break end
+        pcall(function()
+            for _, effect in pairs(game:GetService("Lighting"):GetChildren()) do
+                if effect:IsA("BlurEffect") or effect:IsA("DepthOfFieldEffect") then
+                    effect:Destroy()
+                end
+            end
+        end)
+        task.wait(0.5)
+    end
+end)
+
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
-local VERSION = "1.2.5"
+local VERSION = "1.2.6"
 local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 
 -- ══════════════════════════════════════════════════════════════════
@@ -43,12 +131,13 @@ local function DestroyAllStarshipGUIs()
     return destroyed
 end
 
--- Cleanup any existing Starship GUIs from previous executions
-local oldDestroyed = DestroyAllStarshipGUIs()
-if oldDestroyed > 0 then
-    if DEV_MODE then warn("[STARSHIP] ♻️ Cleaned up " .. oldDestroyed .. " previous GUI(s)") end
-    task.wait(0.1)
-end
+-- Cleanup any existing Starship GUIs from previous executions (deferred)
+task.defer(function()
+	local oldDestroyed = DestroyAllStarshipGUIs()
+	if oldDestroyed > 0 then
+		if DEV_MODE then warn("[STARSHIP] ♻️ Cleaned up " .. oldDestroyed .. " previous GUI(s)") end
+	end
+end)
 
 -- Clear old globals IMMEDIATELY to prevent old code from interfering
 _G.StarshipCleanup = nil -- CRITICAL: Remove old cleanup function that causes premature termination
@@ -410,19 +499,23 @@ local function MonitorGlobalEnv()
 	end)
 end
 
--- INITIALIZE PROTECTION
-if AntiMultiScript.Enabled then
-	-- Initial scan - check for existing script hubs
-	local foundExisting = ScanForScriptHubs()
+-- INITIALIZE PROTECTION (Deferred to reduce startup lag)
+task.defer(function()
+	task.wait(2) -- Wait for UI to fully render first
 	
-	if not foundExisting and AntiMultiScript.Running then
-		-- Setup monitors
-		SetupGUIMonitors()
-		MonitorGlobalEnv()
+	if AntiMultiScript.Enabled then
+		-- Initial scan - check for existing script hubs
+		local foundExisting = ScanForScriptHubs()
 		
-		if DEV_MODE then warn("[STARSHIP] 🛡️ Anti-Multi-Script protection ACTIVE (Structure-Based)") end
+		if not foundExisting and AntiMultiScript.Running then
+			-- Setup monitors
+			SetupGUIMonitors()
+			MonitorGlobalEnv()
+			
+			if DEV_MODE then warn("[STARSHIP] 🛡️ Anti-Multi-Script protection ACTIVE (Structure-Based)") end
+		end
 	end
-end
+end)
 
 -- Export
 getgenv().StarshipAntiMultiScript = AntiMultiScript
@@ -571,7 +664,11 @@ local Settings = {
 	AutoAntiAFK = false,
 	RememberPosition = false,
 	ShowNotifications = true,
-	Theme = "Indigo", -- Default theme
+	Theme = "Indigo",
+	AutoLeaveAdmin = false,
+	AdminESP = false,
+	AdminESPBox = true,
+	AdminESPChams = true,
 }
 
 local ConfigStatus = "Default"
@@ -2050,12 +2147,6 @@ local AccountTab = Window:Tab({
 })
 RunService.Heartbeat:Wait()
 
-local ServerTab = Window:Tab({
-	Title = "Server",
-	Icon = "solar:globus-bold",
-})
-RunService.Heartbeat:Wait()
-
 local CustomAnimTab = Window:Tab({
 	Title = "Animations",
 	Icon = "solar:accessibility-bold",
@@ -2466,11 +2557,11 @@ end
 -- ══════════════════════════════════════════════════════════════════
 -- GAME DETECTION
 -- ══════════════════════════════════════════════════════════════════
-ServerTab:Section({ Title = "Current Game", Desc = "Information about the activity you are playing" })
-ServerTab:Space({ Columns = 0.5 })
+DashboardTab:Section({ Title = "Current Game", Desc = "Information about the activity you are playing" })
+DashboardTab:Space({ Columns = 0.5 })
 
 local gameName = GetGameName()
-ServerTab:Paragraph({
+DashboardTab:Paragraph({
 	Title = gameName,
 	Desc = "Place ID: " .. game.PlaceId,
 })
@@ -2503,10 +2594,10 @@ local AccountCard = AccountTab:Paragraph({
 -- ══════════════════════════════════════════════════════════════════
 -- SERVER INFORMATION
 -- ══════════════════════════════════════════════════════════════════
-ServerTab:Section({ Title = "Server Details", Desc = "Technical details about the current instance" })
-ServerTab:Space({ Columns = 0.5 })
+DashboardTab:Section({ Title = "Server Details", Desc = "Technical details about the current instance" })
+DashboardTab:Space({ Columns = 0.5 })
 
-ServerTab:Button({
+DashboardTab:Button({
 	Title = "Copy Job ID",
 	Desc = "Copy server Job ID to clipboard",
 	Icon = "solar:copy-bold",
@@ -2620,10 +2711,10 @@ DashboardTab:Button({
 -- ══════════════════════════════════════════════════════════════════
 -- SERVER ACTIONS (Moved to ServerTab)
 -- ══════════════════════════════════════════════════════════════════
-ServerTab:Section({ Title = "Server Actions", Desc = "Quick commands for server management" })
-ServerTab:Space({ Columns = 0.5 })
+DashboardTab:Section({ Title = "Server Actions", Desc = "Quick commands for server management" })
+DashboardTab:Space({ Columns = 0.5 })
 
-local ServerActions = ServerTab:Group()
+local ServerActions = DashboardTab:Group()
 
 ServerActions:Button({
 	Title = "Rejoin",
@@ -3718,8 +3809,1054 @@ ToolsTab:Slider({
 		end
 	end,
 })
--- Infinite Jump (consolidated to reduce local vars)
-local InfiniteJumpState = { connection = nil, isOn = false }
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🎯 ADMIN ESP SYSTEM (File-level scope for toggle callbacks)
+-- Includes: Box ESP, Chams, Health Bar
+-- ══════════════════════════════════════════════════════════════════
+local AdminESPDrawings = {}
+local AdminESPTrackedPlayers = {}
+local AdminESPRenderConnection = nil
+local AdminESPToggle = nil
+local ESPGeneration = 0 -- Increments each toggle, async callbacks check this to avoid stale updates
+local ESPHandlerConnections = {} -- Store PlayerAdded/CharacterAdded connections for cleanup
+local AdminChatConnections = {} -- Store chat monitoring connections for cleanup
+
+-- Check if Drawing API exists
+local HasDrawingAPI = pcall(function()
+	local test = Drawing.new("Line")
+	pcall(function() test:Remove() end)
+	pcall(function() test.Visible = false end)
+end)
+if not HasDrawingAPI then
+	warn("[ESP] ⚠️ Drawing API not available — Box ESP will be disabled, only Chams/Highlight will work")
+end
+
+local espOk, espErr = pcall(function()
+
+local function CreateDrawing(drawType, props)
+	if not HasDrawingAPI then return nil end
+	local ok, drawing = pcall(function()
+		local d = Drawing.new(drawType)
+		for k, v in pairs(props) do
+			d[k] = v
+		end
+		return d
+	end)
+	return ok and drawing or nil
+end
+
+local function CleanupPlayerDrawings(player)
+	local data = AdminESPDrawings[player]
+	if data then
+		for _, obj in pairs(data) do
+			if typeof(obj) ~= "Color3" and typeof(obj) ~= "string" and type(obj) ~= "string" then
+				pcall(function() obj:Remove() end)
+			end
+		end
+		AdminESPDrawings[player] = nil
+	end
+end
+
+local function CleanupAllDrawings()
+	for player, _ in pairs(AdminESPDrawings) do
+		CleanupPlayerDrawings(player)
+	end
+	AdminESPDrawings = {}
+	AdminESPTrackedPlayers = {}
+end
+
+local function CreateESPDrawingsForPlayer(player, color)
+	CleanupPlayerDrawings(player)
+
+	local data = {}
+	-- Transparency: 0 = fully visible, 1 = invisible
+
+	-- 1. Box ESP (outline)
+	data.boxOutline = CreateDrawing("Square", {
+		Visible = false,
+		Color = color,
+		Thickness = 2,
+		Filled = false,
+		Transparency = 0,
+	})
+
+	-- 3. Box ESP (fill - semi transparan)
+	data.boxFill = CreateDrawing("Square", {
+		Visible = false,
+		Color = color,
+		Thickness = 1,
+		Filled = true,
+		Transparency = 0.8,
+	})
+
+	-- 4. Name Label (Drawing text di atas box)
+	data.nameLabel = CreateDrawing("Text", {
+		Visible = false,
+		Color = color,
+		Size = 14,
+		Center = true,
+		Outline = true,
+		OutlineColor = Color3.fromRGB(0, 0, 0),
+		Font = 2,
+		Text = "",
+		Transparency = 0,
+	})
+
+	-- 5. Health Bar Background
+	data.healthBarBg = CreateDrawing("Square", {
+		Visible = false,
+		Color = Color3.fromRGB(40, 40, 40),
+		Thickness = 1,
+		Filled = true,
+		Transparency = 0.3,
+	})
+
+	-- 7. Health Bar
+	data.healthBar = CreateDrawing("Square", {
+		Visible = false,
+		Color = Color3.fromRGB(0, 255, 0),
+		Thickness = 1,
+		Filled = true,
+		Transparency = 0,
+	})
+
+	data.color = color
+	AdminESPDrawings[player] = data
+end
+
+local function UpdateESPDrawings()
+	local Camera = workspace.CurrentCamera
+	if not Camera then return end
+
+	for player, data in pairs(AdminESPDrawings) do
+		local char = player.Character
+		local root = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
+		local head = char and char:FindFirstChild("Head")
+		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+		if not char or not root or not head or not humanoid or humanoid.Health <= 0 then
+			-- Hide all drawings
+			for k, obj in pairs(data) do
+				if typeof(obj) ~= "Color3" and typeof(obj) ~= "string" and type(obj) ~= "string" then
+					pcall(function() obj.Visible = false end)
+				end
+			end
+			continue
+		end
+
+		-- Calculate screen positions
+		local rootPos, rootOnScreen = Camera:WorldToViewportPoint(root.Position)
+		local headPos = Camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 1.5, 0)).Position)
+		local footPos = Camera:WorldToViewportPoint((root.CFrame * CFrame.new(0, -3, 0)).Position)
+
+		if not rootOnScreen or rootPos.Z < 0 then
+			for k, obj in pairs(data) do
+				if typeof(obj) ~= "Color3" and typeof(obj) ~= "string" and type(obj) ~= "string" then
+					pcall(function() obj.Visible = false end)
+				end
+			end
+			continue
+		end
+
+		-- Calculate 2D box dimensions
+		local boxHeight = math.abs(headPos.Y - footPos.Y)
+		local boxWidth = boxHeight * 0.6
+		local boxX = rootPos.X - boxWidth / 2
+		local boxY = headPos.Y
+
+		local espColor = data.color or Color3.fromRGB(255, 0, 0)
+
+		-- 1. Box ESP Outline
+		if data.boxOutline then
+			pcall(function()
+				data.boxOutline.Visible = Settings.AdminESP and Settings.AdminESPBox
+				data.boxOutline.Position = Vector2.new(boxX, boxY)
+				data.boxOutline.Size = Vector2.new(boxWidth, boxHeight)
+				data.boxOutline.Color = espColor
+			end)
+		end
+
+		-- 3. Box ESP Fill
+		if data.boxFill then
+			pcall(function()
+				data.boxFill.Visible = Settings.AdminESP and Settings.AdminESPBox
+				data.boxFill.Position = Vector2.new(boxX, boxY)
+				data.boxFill.Size = Vector2.new(boxWidth, boxHeight)
+				data.boxFill.Color = espColor
+			end)
+		end
+
+		-- 4. Name Label
+		if data.nameLabel then
+			pcall(function()
+				local reason = AdminESPTrackedPlayers[player] or "Admin"
+				data.nameLabel.Visible = Settings.AdminESP
+				data.nameLabel.Position = Vector2.new(rootPos.X, boxY - 16)
+				data.nameLabel.Text = "🛡️ " .. player.DisplayName .. " [" .. reason .. "]"
+				data.nameLabel.Color = espColor
+			end)
+		end
+
+		-- 5. Health Bar BG
+		if data.healthBarBg then
+			pcall(function()
+				local barWidth = 3
+				data.healthBarBg.Visible = Settings.AdminESP and Settings.AdminESPBox
+				data.healthBarBg.Position = Vector2.new(boxX - barWidth - 2, boxY)
+				data.healthBarBg.Size = Vector2.new(barWidth, boxHeight)
+			end)
+		end
+
+		-- 7. Health Bar
+		if data.healthBar then
+			pcall(function()
+				local barWidth = 3
+				local healthPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+				local barHeight = boxHeight * healthPct
+				local barY = boxY + (boxHeight - barHeight)
+				data.healthBar.Visible = Settings.AdminESP and Settings.AdminESPBox
+				data.healthBar.Position = Vector2.new(boxX - barWidth - 2, barY)
+				data.healthBar.Size = Vector2.new(barWidth, barHeight)
+				-- Color: green -> yellow -> red
+				if healthPct > 0.5 then
+					data.healthBar.Color = Color3.fromRGB(
+						math.floor(255 * (1 - healthPct) * 2),
+						255,
+						0
+					)
+				else
+					data.healthBar.Color = Color3.fromRGB(
+						255,
+						math.floor(255 * healthPct * 2),
+						0
+					)
+				end
+			end)
+		end
+	end
+end
+
+local function HideAllDrawings()
+	for player, data in pairs(AdminESPDrawings) do
+		for k, obj in pairs(data) do
+			if typeof(obj) ~= "Color3" and typeof(obj) ~= "string" and type(obj) ~= "string" then
+				pcall(function() obj.Visible = false end)
+			end
+		end
+	end
+end
+
+local function StartESPRenderLoop()
+	if AdminESPRenderConnection then return end
+	AdminESPRenderConnection = RunService.RenderStepped:Connect(function()
+		if Settings.AdminESP then
+			UpdateESPDrawings()
+		else
+			-- Sembunyikan semua drawing saat AdminESP OFF
+			HideAllDrawings()
+		end
+	end)
+end
+
+local function StopESPRenderLoop()
+	if AdminESPRenderConnection then
+		AdminESPRenderConnection:Disconnect()
+		AdminESPRenderConnection = nil
+	end
+end
+
+-- Admin detection function (synchronous — basic checks)
+local function isPlayerAdmin(player)
+	if player == LocalPlayer or not player.Parent then return false, "" end
+	
+	-- 1. Check Game Owner
+	if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
+		return true, "Owner"
+	end
+	
+	-- 2. Check Group Rank/Role (game creator group)
+	if game.CreatorType == Enum.CreatorType.Group then
+		local s, rank = pcall(function() return player:GetRankInGroup(game.CreatorId) end)
+		if s and rank and rank >= 100 then
+			return true, (rank >= 255 and "Owner" or rank >= 200 and "High Admin ("..rank..")" or "Admin ("..rank..")")
+		end
+		
+		local s2, role = pcall(function() return player:GetRoleInGroup(game.CreatorId) end)
+		if s2 and role then
+			local lr = role:lower()
+			if lr:find("admin") or lr:find("mod") or lr:find("staff") or lr:find("owner") or lr:find("dev") or lr:find("manager") or lr:find("founder") then
+				return true, "Staff ("..role..")"
+			end
+		end
+	end
+	
+	-- 3. Check Backpack Tools
+	local bp = player:FindFirstChild("Backpack")
+	if bp then
+		for _, t in pairs(bp:GetChildren()) do
+			if t:IsA("Tool") then
+				local tn = t.Name:lower()
+				if tn:find("admin") or tn:find("ban") or tn:find("kick") or tn:find("mod") or tn:find("jail") or tn:find("mute") then
+					return true, "Admin Tool ("..t.Name..")"
+				end
+			end
+		end
+	end
+	
+	-- 4. Check Character equipped tools
+	local char = player.Character
+	if char then
+		for _, t in pairs(char:GetChildren()) do
+			if t:IsA("Tool") then
+				local tn = t.Name:lower()
+				if tn:find("admin") or tn:find("ban") or tn:find("kick") or tn:find("mod") then
+					return true, "Admin Tool ("..t.Name..")"
+				end
+			end
+		end
+	end
+	
+	return false, ""
+end
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🔍 AUTO-SCAN: Scan game ModuleScripts for admin UserID lists
+-- Runs ONCE, results cached. Works across any game.
+-- ══════════════════════════════════════════════════════════════════
+local ScannedAdminUserIds = {} -- {[userId] = "reason"}
+_G._ScannedAdminUserIds = ScannedAdminUserIds -- Share with Tools.lua & other modules
+local ModuleScanCompleted = false
+
+local function scanTableForAdminData(tbl, depth, source)
+	if depth > 4 or not tbl or type(tbl) ~= "table" then return end
+	
+	-- Pattern 1: { [userId] = "RoleName" } (seperti AdminUserIds)
+	for k, v in pairs(tbl) do
+		if type(k) == "number" and k > 1000000 and type(v) == "string" then
+			local vl = v:lower()
+			if vl:find("owner") or vl:find("admin") or vl:find("mod") or vl:find("staff") or vl:find("dev") or vl:find("super") then
+				ScannedAdminUserIds[k] = "ModuleScan: " .. v .. " (" .. source .. ")"
+			end
+		end
+	end
+	
+	-- Pattern 2: Roles array { { name="Admin", userIds={123,456} }, ... }
+	if type(tbl) == "table" then
+		local name = tbl.name or tbl.Name or tbl.role or tbl.Role
+		local uids = tbl.userIds or tbl.UserIds or tbl.userId or tbl.UserId or tbl.users or tbl.Users or tbl.ids or tbl.Ids
+		
+		if type(name) == "string" and type(uids) == "table" then
+			local nl = name:lower()
+			if nl:find("owner") or nl:find("admin") or nl:find("mod") or nl:find("staff") or nl:find("dev") or nl:find("super") then
+				local exclude = nl:find("guest") or nl:find("player") or nl:find("member") or nl:find("default")
+				if not exclude then
+					for _, uid in pairs(uids) do
+						if type(uid) == "number" and uid > 1000000 then
+							ScannedAdminUserIds[uid] = "ModuleScan: " .. name .. " (" .. source .. ")"
+						end
+					end
+				end
+			end
+		end
+	end
+	
+	-- Pattern 3: { AdminUserIds = {...}, AdminUsernames = {...} }
+	for key, val in pairs(tbl) do
+		if type(key) == "string" then
+			local kl = key:lower()
+			if (kl:find("admin") or kl:find("owner") or kl:find("staff") or kl:find("mod")) and 
+			   (kl:find("user") or kl:find("id") or kl:find("list") or kl:find("white")) then
+				if type(val) == "table" then
+					scanTableForAdminData(val, depth + 1, source .. "/" .. key)
+				end
+			end
+			-- Scan Roles/Ranks tables recursively
+			if kl == "roles" or kl == "ranks" or kl == "admins" or kl == "staff" or kl == "permissions" then
+				if type(val) == "table" then
+					for _, item in pairs(val) do
+						if type(item) == "table" then
+							scanTableForAdminData(item, depth + 1, source .. "/" .. key)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+-- STRICT module name filter to prevent side effects from requiring game modules
+local function isModuleNameSafe(name)
+	local nl = name:lower()
+	
+	-- BLOCK known dangerous/system modules (UI, controllers, handlers, etc.)
+	local blocklist = {
+		"mainmodule", "client", "server", "handler", "controller", "manager",
+		"service", "system", "engine", "page", "screen", "gui", "ui",
+		"utility", "util", "animate", "camera", "input", "movement",
+		"player", "character", "chat", "sound", "effect", "particle",
+		"weapon", "tool", "vehicle", "shop", "store", "menu", "hud",
+		"loading", "lobby", "game", "match", "round", "spawn", "teleport",
+		"leaderstats", "leaderboard", "inventory", "quest", "mission",
+		"notification", "popup", "dialog", "prompt", "button", "frame",
+		"tween", "spring", "signal", "event", "remote", "network",
+		"physics", "ray", "hitbox", "combat", "damage", "health",
+		"fullscreen", "search", "render", "display", "layout", "theme",
+		"home", "history", "profile", "account", "friend", "party",
+	}
+	for _, blocked in ipairs(blocklist) do
+		if nl:find(blocked, 1, true) then
+			return false
+		end
+	end
+	
+	-- ALLOW only modules containing specific admin-related keywords
+	local allowlist = {"admin", "owner", "staff", "role", "rank", "overhead", 
+					   "nametag", "whitelist", "permission"}
+	for _, allowed in ipairs(allowlist) do
+		if nl:find(allowed, 1, true) then
+			return true
+		end
+	end
+	
+	-- Allow generic "Config"/"Settings" ONLY if that's basically the whole name
+	if nl == "config" or nl == "settings" or nl == "configuration" or 
+	   nl == "constants" or nl == "defines" then
+		return true
+	end
+	
+	return false
+end
+
+local function scanReplicatedModules()
+	if ModuleScanCompleted then return end
+	ModuleScanCompleted = true
+	
+	warn("[ESP] 🔍 Scanning game modules for admin data...")
+	local scannedCount = 0
+	local skippedCount = 0
+	local foundCount = 0
+	
+	-- Locations accessible from client
+	local scanLocations = {}
+	pcall(function() table.insert(scanLocations, {game:GetService("ReplicatedStorage"), "ReplicatedStorage"}) end)
+	pcall(function() table.insert(scanLocations, {game:GetService("ReplicatedFirst"), "ReplicatedFirst"}) end)
+	pcall(function() table.insert(scanLocations, {game:GetService("StarterGui"), "StarterGui"}) end)
+	pcall(function() table.insert(scanLocations, {game:GetService("StarterPack"), "StarterPack"}) end)
+	pcall(function() table.insert(scanLocations, {game:GetService("StarterPlayer"), "StarterPlayer"}) end)
+	
+	for _, loc in ipairs(scanLocations) do
+		local container, containerName = loc[1], loc[2]
+		if not container then continue end
+		
+		-- Find all ModuleScripts (max 2 levels deep to keep it fast)
+		local modules = {}
+		pcall(function()
+			for _, child in pairs(container:GetChildren()) do
+				if child:IsA("ModuleScript") then
+					table.insert(modules, {child, containerName .. "/" .. child.Name})
+				end
+				pcall(function()
+					for _, subChild in pairs(child:GetChildren()) do
+						if subChild:IsA("ModuleScript") then
+							table.insert(modules, {subChild, containerName .. "/" .. child.Name .. "/" .. subChild.Name})
+						end
+						pcall(function()
+							for _, sub2 in pairs(subChild:GetChildren()) do
+								if sub2:IsA("ModuleScript") then
+									table.insert(modules, {sub2, containerName .. "/" .. child.Name .. "/" .. subChild.Name .. "/" .. sub2.Name})
+								end
+							end
+						end)
+					end
+				end)
+			end
+		end)
+		
+		-- Only require modules with safe/relevant names
+		for _, modInfo in ipairs(modules) do
+			local moduleScript, path = modInfo[1], modInfo[2]
+			
+			-- SAFETY CHECK: Only require modules whose name suggests config/admin data
+			if not isModuleNameSafe(moduleScript.Name) then
+				skippedCount = skippedCount + 1
+				continue
+			end
+			
+			scannedCount = scannedCount + 1
+			
+			local ok, result = pcall(function()
+				return require(moduleScript)
+			end)
+			
+			if ok and type(result) == "table" then
+				local prevCount = 0
+				for _ in pairs(ScannedAdminUserIds) do prevCount = prevCount + 1 end
+				
+				pcall(function()
+					scanTableForAdminData(result, 0, path)
+				end)
+				
+				local newCount = 0
+				for _ in pairs(ScannedAdminUserIds) do newCount = newCount + 1 end
+				
+				if newCount > prevCount then
+					warn("[ESP] ✅ Found admin data in: " .. path .. " (+" .. (newCount - prevCount) .. " UserIDs)")
+				end
+			end
+		end
+	end
+	
+	for _ in pairs(ScannedAdminUserIds) do foundCount = foundCount + 1 end
+	-- Remove self from scan results
+	ScannedAdminUserIds[LocalPlayer.UserId] = nil
+	
+	warn("[ESP] 📊 Module scan: " .. scannedCount .. " scanned, " .. skippedCount .. " skipped (unsafe), " .. foundCount .. " admin UserIDs found")
+end
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🏷️ OVERHEAD SCAN: Check existing BillboardGuis/nametags for admin labels
+-- ══════════════════════════════════════════════════════════════════
+local function scanPlayerOverhead(player)
+	local char = player.Character
+	if not char then return false, "" end
+	
+	local adminKeywords = {"admin", "owner", "mod", "staff", "dev", "super admin", "developer", "manager", "founder", "operator"}
+	
+	-- Scan all BillboardGuis on the character
+	for _, obj in pairs(char:GetDescendants()) do
+		local ok, result = pcall(function()
+			if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+				local txt = obj.Text:lower()
+				for _, keyword in ipairs(adminKeywords) do
+					if txt:find(keyword, 1, true) then
+						-- Make sure it's in a BillboardGui (overhead tag)
+						local parent = obj.Parent
+						while parent and parent ~= char do
+							if parent:IsA("BillboardGui") then
+								return true, "Overhead: " .. obj.Text:sub(1, 40)
+							end
+							parent = parent.Parent
+						end
+					end
+				end
+			end
+			return false, ""
+		end)
+		if ok and result then return true, result end
+	end
+	
+	-- Also check Head for direct BillboardGui
+	local head = char:FindFirstChild("Head")
+	if head then
+		for _, bb in pairs(head:GetChildren()) do
+			if bb:IsA("BillboardGui") then
+				for _, label in pairs(bb:GetDescendants()) do
+					local ok2, res2 = pcall(function()
+						if label:IsA("TextLabel") or label:IsA("TextButton") then
+							local txt = label.Text:lower()
+							for _, keyword in ipairs(adminKeywords) do
+								if txt:find(keyword, 1, true) then
+									return true, "Overhead: " .. label.Text:sub(1, 40)
+								end
+							end
+						end
+						return false, ""
+					end)
+					if ok2 and res2 then return true, res2 end
+				end
+			end
+		end
+	end
+	
+	return false, ""
+end
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🏷️ ATTRIBUTE SCAN: Check player Attributes for admin flags
+-- ══════════════════════════════════════════════════════════════════
+local function scanPlayerAttributes(player)
+	-- Check common admin-related attributes
+	local adminAttrs = {"IsAdmin", "isAdmin", "Admin", "admin", "IsOwner", "isOwner", "IsMod", "isMod", 
+						"IsStaff", "isStaff", "Role", "role", "Rank", "rank", "AdminLevel", "adminLevel",
+						"Permission", "permission", "IsDev", "isDev"}
+	
+	for _, attrName in ipairs(adminAttrs) do
+		local ok, val = pcall(function() return player:GetAttribute(attrName) end)
+		if ok and val ~= nil then
+			if type(val) == "boolean" and val == true then
+				return true, "Attribute: " .. attrName .. " = true"
+			elseif type(val) == "string" then
+				local vl = val:lower()
+				if vl:find("admin") or vl:find("owner") or vl:find("mod") or vl:find("staff") or vl:find("dev") then
+					return true, "Attribute: " .. attrName .. " = " .. val
+				end
+			elseif type(val) == "number" and val >= 1 then
+				local al = attrName:lower()
+				if al:find("admin") or al:find("level") or al:find("rank") or al:find("permission") then
+					return true, "Attribute: " .. attrName .. " = " .. tostring(val)
+				end
+			end
+		end
+	end
+	
+	return false, ""
+end
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🌐 HTTP API: Check player's groups — ONLY game's creator group
+-- Only checks the game's group, NOT random/personal groups
+-- ══════════════════════════════════════════════════════════════════
+local function asyncCheckPlayerAdmin(player, callback)
+	task.spawn(function()
+		-- Only useful if game is owned by a Group
+		local gameGroupId = nil
+		if game.CreatorType == Enum.CreatorType.Group then
+			gameGroupId = game.CreatorId
+		end
+		
+		if not gameGroupId then
+			-- User-owned game: owner already detected by isPlayerAdmin
+			callback(false, "")
+			return
+		end
+		
+		local success, data = pcall(function()
+			local HttpService = game:GetService("HttpService")
+			local response = game:HttpGet("https://groups.roblox.com/v1/users/" .. player.UserId .. "/groups/roles")
+			return HttpService:JSONDecode(response)
+		end)
+		
+		if success and data and data.data then
+			for _, group in ipairs(data.data) do
+				local gId = group.group and group.group.id
+				local rank = group.role and group.role.rank or 0
+				local roleName = group.role and group.role.name or ""
+				
+				-- ONLY check the game's creator group
+				if gId == gameGroupId and rank >= 100 then
+					local reason = group.group.name .. " (Rank " .. rank .. ": " .. roleName .. ")"
+					callback(true, reason)
+					return
+				end
+			end
+		end
+		callback(false, "")
+	end)
+end
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🎯 FULL ADMIN SCAN: Combines ALL detection methods
+-- Order: ModuleScan → Sync checks → Attributes → Overhead → HTTP API
+-- ══════════════════════════════════════════════════════════════════
+local function fullAdminScan(player, onDetected)
+	if player == LocalPlayer or not player.Parent then return end
+	
+	-- 0. Run module scan once (cached after first run)
+	pcall(scanReplicatedModules)
+	
+	-- 1. Check ModuleScan results (instant, cached)
+	if ScannedAdminUserIds[player.UserId] then
+		onDetected(ScannedAdminUserIds[player.UserId])
+		return
+	end
+	
+	-- 2. Quick sync checks (Owner, Group, Tools)
+	local isA, reason = isPlayerAdmin(player)
+	if isA then
+		onDetected(reason)
+		return
+	end
+	
+	-- 3. Check Attributes (instant)
+	local attrFound, attrReason = scanPlayerAttributes(player)
+	if attrFound then
+		onDetected(attrReason)
+		return
+	end
+	
+	-- 4. Check Overhead/BillboardGui tags (instant, needs character)
+	if player.Character then
+		local ohFound, ohReason = scanPlayerOverhead(player)
+		if ohFound then
+			onDetected(ohReason)
+			return
+		end
+	end
+	
+	-- 5. Async HTTP API check (slowest, runs last)
+	asyncCheckPlayerAdmin(player, function(found, httpReason)
+		if found and player.Parent then
+			onDetected(httpReason)
+		end
+	end)
+end
+
+-- UpdateESP: Apply full ESP (Chams + Billboard + Drawing) to admin player
+local function UpdateESP(player, show, reason)
+	if not player then warn("[ESP] UpdateESP: player is nil") return end
+	
+	warn("[ESP] UpdateESP called: " .. player.Name .. " | show=" .. tostring(show) .. " | reason=" .. tostring(reason))
+	
+	-- Clean old ESP (in-world) — pcall for safety, only if character exists
+	local char = player.Character
+	if char then
+		pcall(function()
+			local oldESP = char:FindFirstChild("AdminESP")
+			if oldESP then oldESP:Destroy() end
+			local oldHighlight = char:FindFirstChild("AdminHighlight")
+			if oldHighlight then oldHighlight:Destroy() end
+		end)
+	end
+	
+	-- If turning OFF, just cleanup everything and return immediately (NO waiting)
+	if not show then
+		CleanupPlayerDrawings(player)
+		AdminESPTrackedPlayers[player] = nil
+		return
+	end
+	
+	-- Only wait for character when SHOWING ESP
+	if not char then
+		warn("[ESP] " .. player.Name .. " has no character, waiting...")
+		char = player.CharacterAdded:Wait()
+		task.wait(0.5)
+		char = player.Character
+		if not char then warn("[ESP] " .. player.Name .. " still no character, aborting") return end
+	end
+	
+	-- Color based on reason
+	local color = Color3.fromRGB(255, 0, 0) -- Red default
+	local reasonLower = reason:lower()
+	if reasonLower:find("owner") then color = Color3.fromRGB(255, 215, 0)
+	elseif reasonLower:find("staff") then color = Color3.fromRGB(255, 100, 50)
+	elseif reasonLower:find("mod") then color = Color3.fromRGB(255, 50, 150)
+	end
+	
+	-- 1. Chams / Highlight (through walls) — wrapped in pcall
+	if Settings.AdminESPChams then
+		local ok, err = pcall(function()
+			local highlight = Instance.new("Highlight")
+			highlight.Name = "AdminHighlight"
+			highlight.FillColor = color
+			highlight.FillTransparency = 0.4
+			highlight.OutlineColor = Color3.new(1, 1, 1)
+			highlight.OutlineTransparency = 0
+			-- DepthMode may not exist in all executors
+			pcall(function()
+				highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			end)
+			highlight.Parent = char
+			warn("[ESP] ✅ Highlight applied to " .. player.Name)
+		end)
+		if not ok then warn("[ESP] ❌ Highlight error: " .. tostring(err)) end
+	end
+	
+	-- 2. Billboard tag (name + role above head) — wrapped in pcall
+	local ok2, err2 = pcall(function()
+		local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char
+		local bb = Instance.new("BillboardGui")
+		bb.Name = "AdminESP"
+		bb.AlwaysOnTop = true
+		bb.Size = UDim2.new(0, 250, 0, 50)
+		bb.StudsOffset = Vector3.new(0, 4, 0)
+		bb.Parent = head
+		
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, 0, 1, 0)
+		label.BackgroundTransparency = 1
+		label.Text = "🛡️ " .. player.DisplayName .. "\n" .. reason
+		label.TextColor3 = color
+		label.TextStrokeTransparency = 0
+		label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		label.Font = Enum.Font.GothamBold
+		label.TextSize = 14
+		label.TextScaled = false
+		label.Parent = bb
+		warn("[ESP] ✅ Billboard applied to " .. player.Name)
+	end)
+	if not ok2 then warn("[ESP] ❌ Billboard error: " .. tostring(err2)) end
+
+	-- 3. Create Drawing-based ESP (Tracer Line + Box + Distance)
+	AdminESPTrackedPlayers[player] = reason
+	
+	local ok3, err3 = pcall(function()
+		CreateESPDrawingsForPlayer(player, color)
+		StartESPRenderLoop()
+		warn("[ESP] ✅ Drawing ESP created for " .. player.Name)
+	end)
+	if not ok3 then warn("[ESP] ❌ Drawing ESP error: " .. tostring(err3)) end
+	
+	warn("[ESP] ✅ Full ESP applied to " .. player.Name .. " (" .. reason .. ")")
+end
+
+-- Monitor chat for admin commands (defined AFTER UpdateESP to fix Lua scope)
+-- AdminChatConnections declared earlier (before DisconnectESPHandlers) for proper scope
+local function monitorPlayerChat(player)
+	if player == LocalPlayer then return end
+	
+	local chatGen = ESPGeneration -- Capture generation at time of connection
+	local conn = player.Chatted:Connect(function(msg)
+		if ESPGeneration ~= chatGen then return end -- Stale connection
+		if not Settings.AdminESP then return end
+		local lowMsg = msg:lower()
+		local adminCmds = {";kick", ";ban", ";jail", ";mute", ";warn", ";fly", ";god",
+						   ":kick", ":ban", ":jail", ":mute", ":warn", ":fly", ":god",
+						   "!kick", "!ban", "!jail", "!mute", "!warn"}
+		
+		for _, cmd in ipairs(adminCmds) do
+			if lowMsg:find(cmd, 1, true) then
+				if not AdminESPTrackedPlayers[player] then
+					warn("[ESP] 💬 Admin command detected from " .. player.Name .. ": " .. msg)
+					UpdateESP(player, true, "Chat Cmd: " .. msg:sub(1, 25))
+				end
+				break
+			end
+		end
+	end)
+	table.insert(AdminChatConnections, conn)
+end
+
+-- Disconnect all ESP handler connections (for cleanup when ESP is turned off)
+local function DisconnectESPHandlers()
+	for _, conn in ipairs(ESPHandlerConnections) do
+		pcall(function() conn:Disconnect() end)
+	end
+	ESPHandlerConnections = {}
+	
+	-- Also disconnect chat monitoring connections
+	if AdminChatConnections then
+		for _, conn in ipairs(AdminChatConnections) do
+			pcall(function() conn:Disconnect() end)
+		end
+		AdminChatConnections = {}
+	end
+end
+
+-- Start the ESP handler (scan players & connect events)
+local function StartESPHandler()
+	DisconnectESPHandlers() -- Clean old connections first
+	local myGen = ESPGeneration -- Capture current generation
+	
+	local function scanAndApplyESP(p)
+		if ESPGeneration ~= myGen then return end -- Stale, ESP was toggled
+		if not Settings.AdminESP then return end
+		if AdminESPTrackedPlayers[p] then return end -- Already tracked
+		
+		warn("[ESP] 🔍 Scanning: " .. p.Name)
+		
+		fullAdminScan(p, function(reason)
+			-- CRITICAL: Check generation AGAIN — async callback might fire after ESP was turned off
+			if ESPGeneration ~= myGen then return end
+			if not Settings.AdminESP then return end
+			if not p.Parent then return end
+			
+			warn("[ESP] 🎯 Admin found: " .. p.Name .. " → " .. reason)
+			if p.Character then
+				UpdateESP(p, true, reason)
+			else
+				-- Wait for character but with generation check
+				task.spawn(function()
+					local c = p.CharacterAdded:Wait()
+					task.wait(0.5)
+					if ESPGeneration ~= myGen then return end
+					if not Settings.AdminESP then return end
+					if p.Character then
+						UpdateESP(p, true, reason)
+					end
+				end)
+			end
+		end)
+	end
+	
+	local function onPlayerAdded(p)
+		if p == LocalPlayer then return end
+		if ESPGeneration ~= myGen then return end
+		
+		-- Scan when character loads
+		local charConn = p.CharacterAdded:Connect(function(c)
+			task.wait(1.5)
+			if ESPGeneration ~= myGen then return end
+			if not Settings.AdminESP then return end
+			-- Re-apply ESP on respawn for already-tracked admins
+			if AdminESPTrackedPlayers[p] then
+				UpdateESP(p, true, AdminESPTrackedPlayers[p])
+			else
+				scanAndApplyESP(p)
+			end
+		end)
+		table.insert(ESPHandlerConnections, charConn)
+		
+		-- Monitor chat for admin commands
+		monitorPlayerChat(p)
+		
+		-- Initial scan if character already exists
+		if p.Character then
+			task.spawn(function()
+				task.wait(0.5)
+				if ESPGeneration ~= myGen then return end
+				scanAndApplyESP(p)
+			end)
+		end
+	end
+	
+	local addedConn = Players.PlayerAdded:Connect(function(p)
+		if ESPGeneration ~= myGen then return end
+		onPlayerAdded(p)
+	end)
+	table.insert(ESPHandlerConnections, addedConn)
+	
+	local removingConn = Players.PlayerRemoving:Connect(function(p)
+		CleanupPlayerDrawings(p)
+		AdminESPTrackedPlayers[p] = nil
+	end)
+	table.insert(ESPHandlerConnections, removingConn)
+	
+	-- Scan existing players
+	for _, p in pairs(Players:GetPlayers()) do
+		if ESPGeneration ~= myGen then break end
+		onPlayerAdded(p)
+	end
+end
+
+-- 👁️ VISUALS
+ToolsTab:Section({ Title = "👁️ Visuals", Desc = "Visual assistance and player highlighting" })
+AdminESPToggle = ToolsTab:Toggle({
+	Title = "Admin ESP",
+	Desc = "Deteksi & highlight Admin/Mod/Staff (HTTP + Group + Tools + Chat)",
+	Value = Settings.AdminESP,
+	Callback = function(state)
+		Settings.AdminESP = state
+		SaveSettings()
+		
+		-- ALWAYS increment generation to invalidate all pending async callbacks
+		ESPGeneration = ESPGeneration + 1
+		
+		if state then
+			warn("[ESP] 🟢 Admin ESP ENABLED — scanning " .. (#Players:GetPlayers() - 1) .. " players...")
+			StartESPHandler()
+		else
+			warn("[ESP] 🔴 Admin ESP DISABLED — cleaning up")
+			
+			-- 1. Disconnect ALL handler connections (PlayerAdded, CharacterAdded, etc.)
+			DisconnectESPHandlers()
+			
+			-- 2. Sembunyikan semua Drawing dulu (instant)
+			HideAllDrawings()
+			
+			-- 3. Hapus in-world ESP (Highlight + BillboardGui) dari SEMUA player
+			for _, p in pairs(Players:GetPlayers()) do
+				pcall(function()
+					local c = p.Character
+					if c then
+						local oldESP = c:FindFirstChild("AdminESP")
+						if oldESP then oldESP:Destroy() end
+						local oldHL = c:FindFirstChild("AdminHighlight")
+						if oldHL then oldHL:Destroy() end
+					end
+				end)
+			end
+			
+			-- 4. Hapus semua Drawing objects & clear tracked players
+			CleanupAllDrawings()
+			
+			-- 5. Stop render loop
+			StopESPRenderLoop()
+			
+			warn("[ESP] ✅ Cleanup selesai — generation: " .. ESPGeneration)
+		end
+	end,
+})
+
+ToolsTab:Toggle({
+	Title = "┗ Box ESP",
+	Desc = "Kotak 2D di sekitar admin (+ Health Bar)",
+	Value = Settings.AdminESPBox,
+	Callback = function(state)
+		Settings.AdminESPBox = state
+		SaveSettings()
+		-- Langsung sembunyikan box/health jika OFF
+		if not state then
+			for _, data in pairs(AdminESPDrawings) do
+				if data.boxOutline then pcall(function() data.boxOutline.Visible = false end) end
+				if data.boxFill then pcall(function() data.boxFill.Visible = false end) end
+				if data.healthBarBg then pcall(function() data.healthBarBg.Visible = false end) end
+				if data.healthBar then pcall(function() data.healthBar.Visible = false end) end
+			end
+		end
+	end,
+})
+
+ToolsTab:Toggle({
+	Title = "┗ Chams (Highlight)",
+	Desc = "Warna transparan tembus dinding pada admin",
+	Value = Settings.AdminESPChams,
+	Callback = function(state)
+		Settings.AdminESPChams = state
+		SaveSettings()
+		if not state then
+			-- Langsung hapus semua Highlight saat dimatikan
+			for p, _ in pairs(AdminESPTrackedPlayers) do
+				pcall(function()
+					local c = p.Character
+					if c then
+						local hl = c:FindFirstChild("AdminHighlight")
+						if hl then hl:Destroy() end
+					end
+				end)
+			end
+		else
+			-- Buat ulang Highlight untuk semua tracked admin
+			if Settings.AdminESP then
+				for p, reason in pairs(AdminESPTrackedPlayers) do
+					if p and p.Parent and p.Character then
+						pcall(function()
+							-- Hapus highlight lama dulu
+							local oldHL = p.Character:FindFirstChild("AdminHighlight")
+							if oldHL then oldHL:Destroy() end
+							
+							-- Buat highlight baru
+							local color = Color3.fromRGB(255, 0, 0)
+							local rl = reason:lower()
+							if rl:find("owner") then color = Color3.fromRGB(255, 215, 0)
+							elseif rl:find("staff") then color = Color3.fromRGB(255, 100, 50)
+							elseif rl:find("mod") then color = Color3.fromRGB(255, 50, 150) end
+							
+							local highlight = Instance.new("Highlight")
+							highlight.Name = "AdminHighlight"
+							highlight.FillColor = color
+							highlight.FillTransparency = 0.4
+							highlight.OutlineColor = Color3.new(1, 1, 1)
+							highlight.OutlineTransparency = 0
+							pcall(function() highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop end)
+							highlight.Parent = p.Character
+						end)
+					end
+				end
+			end
+		end
+	end,
+})
+
+end) -- End of ESP pcall block
+if not espOk then
+	warn("[ESP] ❌ ADMIN ESP SYSTEM ERROR: " .. tostring(espErr))
+	warn("[ESP] ❌ ESP system disabled, but script continues normally")
+	-- Buat toggle dummy supaya safeSet tidak error
+	if not AdminESPToggle then
+		pcall(function()
+			ToolsTab:Section({ Title = "👁️ Visuals", Desc = "Visual assistance and player highlighting" })
+			AdminESPToggle = ToolsTab:Toggle({
+				Title = "Admin ESP (ERROR)",
+				Desc = "ESP crashed: " .. tostring(espErr):sub(1, 50),
+				Value = false,
+				Callback = function() end,
+			})
+		end)
+	end
+end
+
+ToolsTab:Divider()
 
 ToolsTab:Toggle({
 	Title = "Infinite Jump",
@@ -6506,6 +7643,8 @@ local MiniPlayerIcons = {
 	Path = "rbxthumb://type=Asset&id=485491709&w=150&h=150",
 	Respawn = "rbxthumb://type=Asset&id=11318174695&w=150&h=150",
 	Close = "rbxthumb://type=Asset&id=81869729496131&w=150&h=150",
+	Plus = "rbxthumb://type=Asset&id=77458026579005&w=150&h=150",
+	Minus = "rbxthumb://type=Asset&id=136825236896355&w=150&h=150",
 }
 task.spawn(function()
 	local toLoad = {}
@@ -6522,79 +7661,118 @@ local function ToggleMiniPlayer(state)
 		screen.Name, screen.ResetOnSpawn, screen.IgnoreGuiInset = "StarshipMiniApple", false, true
 		screen.Parent = parent
 		
+		-- Smaller, more compact size (Reduceed further as requested)
 		local mainFrame = Instance.new("Frame")
-		mainFrame.Name, mainFrame.Size, mainFrame.Position = "MiniPlayerMain", UDim2.fromOffset(300, 130), UDim2.new(0.5, -150, 0.75, 0)
-		mainFrame.BackgroundColor3, mainFrame.BorderSizePixel, mainFrame.Active, mainFrame.Draggable = Color3.fromRGB(24, 24, 26), 0, true, true
+		mainFrame.Name, mainFrame.Size, mainFrame.Position = "MiniPlayerMain", UDim2.fromOffset(280, 90), UDim2.new(0.5, -140, 0.78, 0)
+		mainFrame.BackgroundColor3, mainFrame.BorderSizePixel, mainFrame.Active, mainFrame.Draggable = Color3.fromRGB(0, 0, 0), 0, true, true
+		mainFrame.ClipsDescendants = true
 		mainFrame.Parent = screen
-		Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 20)
+		Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 14)
 		
+		-- Game Image Background - FIXED (Most Compatible Method)
+		local bgImage = Instance.new("ImageLabel")
+		bgImage.Name = "BackgroundImage"
+		bgImage.Size = UDim2.new(1.2, 0, 1.2, 0) -- Slightly larger to allow for better cropping
+		bgImage.Position = UDim2.fromScale(0.5, 0.5)
+		bgImage.AnchorPoint = Vector2.new(0.5, 0.5)
+		-- Using Asset type with PlaceId (Standard across all Roblox games & executors)
+		bgImage.Image = "rbxthumb://type=Asset&id=" .. game.PlaceId .. "&w=150&h=150"
+		bgImage.ImageTransparency = 0.45 -- Balanced for a background look
+		bgImage.BackgroundTransparency = 1
+		bgImage.ScaleType = Enum.ScaleType.Crop -- Fills the window naturally
+		bgImage.ZIndex = 1
+		bgImage.Parent = mainFrame
+		
+		-- Dark overlay for readability
+		local overlay = Instance.new("Frame")
+		overlay.Name = "Overlay"
+		overlay.Size = UDim2.fromScale(1, 1)
+		overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		overlay.BackgroundTransparency = 0.4 -- Balanced darkness
+		overlay.BorderSizePixel = 0
+		overlay.ZIndex = 2
+		overlay.Parent = mainFrame
+		
+		-- Animation
 		mainFrame.Size = UDim2.fromOffset(0, 0)
-		mainFrame.Position = UDim2.new(0.5, 0, 0.75, 0)
+		mainFrame.Position = UDim2.new(0.5, 0, 0.78, 0)
 		TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			Size = UDim2.fromOffset(300, 130),
-			Position = UDim2.new(0.5, -150, 0.75, 0),
+			Size = UDim2.fromOffset(280, 90),
+			Position = UDim2.new(0.5, -140, 0.78, 0),
 		}):Play()
 
-		local gameIconId = game.GameId > 0 and game.GameId or game.PlaceId
-		local thumb = Instance.new("ImageLabel")
-		thumb.Size, thumb.Position, thumb.Image = UDim2.fromOffset(40, 40), UDim2.fromOffset(15, 12), "rbxthumb://type=GameIcon&id=" .. gameIconId .. "&w=150&h=150"
-		thumb.BackgroundColor3, thumb.BorderSizePixel, thumb.Parent = Color3.fromRGB(40, 40, 42), 0, mainFrame
-		Instance.new("UICorner", thumb).CornerRadius = UDim.new(0, 8)
-		
+		-- Title with stroke for clarity
 		local title = Instance.new("TextLabel")
-		title.Size, title.Position, title.BackgroundTransparency = UDim2.new(1, -100, 0, 20), UDim2.fromOffset(65, 12), 1
-		title.Text = _G.StarshipCloud.RecordingName or "No Recording Loaded"
-		title.TextColor3, title.Font, title.TextSize, title.TextXAlignment = Color3.new(1,1,1), Enum.Font.SourceSansBold, 16, 0
-		title.TextTruncate, title.Parent = 1, mainFrame
+		title.Name = "Title"
+		title.Size, title.Position = UDim2.new(1, -50, 0, 22), UDim2.fromOffset(12, 8)
+		title.BackgroundTransparency = 1
+		title.Text = _G.StarshipCloud.RecordingName or "No Recording"
+		title.TextColor3 = Color3.new(1, 1, 1)
+		title.Font = Enum.Font.GothamBold
+		title.TextSize = 14
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.TextTruncate = Enum.TextTruncate.AtEnd
+		title.ZIndex = 3
+		title.Parent = mainFrame
 		
+		local titleStroke = Instance.new("UIStroke", title)
+		titleStroke.Color = Color3.fromRGB(0, 0, 0)
+		titleStroke.Thickness = 1
+		titleStroke.Transparency = 0.3
+		
+		-- Subtitle with Speed Display
 		local artist = Instance.new("TextLabel")
-		artist.Size, artist.Position, artist.BackgroundTransparency = UDim2.new(1, -100, 0, 15), UDim2.fromOffset(65, 32), 1
-		artist.Text, artist.TextColor3, artist.Font, artist.TextSize, artist.TextXAlignment = "STARSHIP CORE", Color3.fromRGB(150, 150, 150), Enum.Font.SourceSans, 12, 0
+		artist.Name = "Subtitle"
+		artist.Size, artist.Position = UDim2.new(1, -50, 0, 14), UDim2.fromOffset(12, 28)
+		artist.BackgroundTransparency = 1
+		artist.Text = "STARSHIP CORE (1.0x)"
+		artist.TextColor3 = Color3.fromRGB(180, 180, 180)
+		artist.Font = Enum.Font.Gotham
+		artist.TextSize = 10
+		artist.TextXAlignment = Enum.TextXAlignment.Left
+		artist.ZIndex = 3
 		artist.Parent = mainFrame
 		
-		local progressG = Instance.new("Frame")
-		progressG.Size, progressG.Position, progressG.BackgroundColor3 = UDim2.new(1, -30, 0, 4), UDim2.fromOffset(15, 74), Color3.fromRGB(60, 60, 62)
-		progressG.BorderSizePixel, progressG.Parent = 0, mainFrame
-		Instance.new("UICorner", progressG).CornerRadius = UDim.new(1, 0)
+		-- Buttons Area Adjusted for Compact Look
+		local btnCenterY = 65 -- Relative to 90 Height
 		
-		local fill = Instance.new("Frame")
-		fill.Size, fill.BackgroundColor3, fill.BorderSizePixel, fill.Parent = UDim2.fromScale(0, 1), Color3.new(1, 1, 1), 0, progressG
-		Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-		
-		local curT = Instance.new("TextLabel")
-		curT.Size, curT.Position, curT.BackgroundTransparency = UDim2.fromOffset(40, 12), UDim2.fromOffset(15, 58), 1
-		curT.Text, curT.TextColor3, curT.Font, curT.TextSize = "0:00", Color3.fromRGB(130, 130, 130), Enum.Font.SourceSans, 11
-		curT.TextXAlignment, curT.Parent = 0, mainFrame
-		
-		local remT = Instance.new("TextLabel")
-		remT.Size, remT.Position, remT.BackgroundTransparency = UDim2.fromOffset(40, 12), UDim2.new(1, -55, 0, 58), 1
-		remT.Text, remT.TextColor3, remT.Font, remT.TextSize = "-0:00", Color3.fromRGB(130, 130, 130), Enum.Font.SourceSans, 11
-		remT.TextXAlignment, remT.Parent = 2, mainFrame
-		
-		local function createBtn(iconId, sz, xPos, cb, isIcon)
+		local function createBtn(iconId, sz, xPos, cb, isIcon, textLabel)
 			local b = Instance.new("TextButton")
-			b.Size, b.Position, b.AnchorPoint = UDim2.fromOffset(sz, sz), UDim2.new(xPos, 0, 1, -28), Vector2.new(0.5, 0.5)
-			b.BackgroundTransparency = isIcon and 0 or 1
-			b.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-			b.Text = ""
+			b.Size, b.Position, b.AnchorPoint = UDim2.fromOffset(sz, sz), UDim2.new(xPos, 0, 0, btnCenterY), Vector2.new(0.5, 0.5)
+			b.BackgroundTransparency = isIcon and 0.2 or 0
+			b.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+			b.Text = textLabel or ""
+			b.TextColor3 = Color3.new(1,1,1)
+			b.Font = Enum.Font.GothamBold
+			b.TextSize = 14
+			b.ZIndex = 4 -- Above overlay
 			b.Parent = mainFrame
-			if isIcon then Instance.new("UICorner", b).CornerRadius = UDim.new(0, 10) end
 			
-			local img = Instance.new("ImageLabel")
-			img.Name = "Icon"
-			img.Size = UDim2.fromScale(0.65, 0.65)
-			img.Position = UDim2.fromScale(0.5, 0.5)
-			img.AnchorPoint = Vector2.new(0.5, 0.5)
-			img.BackgroundTransparency = 1
-			img.Image = iconId -- Now passing the full registry URL
-			img.ImageColor3 = Color3.new(1, 1, 1)
-			img.Parent = b
+			if isIcon then 
+				Instance.new("UICorner", b).CornerRadius = UDim.new(0, 10)
+			else
+				Instance.new("UICorner", b).CornerRadius = UDim.new(1, 0) -- Circular for Play/Speed
+				if not textLabel then b.BackgroundColor3 = Color3.fromRGB(255, 255, 255) end
+			end
+			
+			if iconId and iconId ~= "" then
+				local img = Instance.new("ImageLabel")
+				img.Name = "Icon"
+				img.Size = UDim2.fromScale(0.6, 0.6)
+				img.Position = UDim2.fromScale(0.5, 0.5)
+				img.AnchorPoint = Vector2.new(0.5, 0.5)
+				img.BackgroundTransparency = 1
+				img.Image = iconId
+				img.ImageColor3 = isIcon and Color3.new(1, 1, 1) or Color3.fromRGB(20, 20, 22)
+				img.ZIndex = 5
+				img.Parent = b
+			end
 			
 			b.MouseButton1Click:Connect(cb)
 			return b
 		end
 		
-		local play = createBtn(MiniPlayerIcons.Play, 55, 0.5, function()
+		local play = createBtn(MiniPlayerIcons.Play, 42, 0.5, function()
 			if not selectedFile then return end
 			if PlaybackState.isPlaying and not PlaybackState.isPaused then
 				if _G.StarSpace and _G.StarSpace.PausePlayback then _G.StarSpace.PausePlayback() else PausePlayback() end
@@ -6607,12 +7785,24 @@ local function ToggleMiniPlayer(state)
 			end
 		end)
 		
-		local pathBtn = createBtn(MiniPlayerIcons.Path, 42, 0.12, function()
+		-- Function to update speed globally and sync UI
+		local function ChangeSpeed(delta)
+			local current = PlaybackState.speed or 1
+			local newVal = math.clamp(math.floor((current + delta) * 10 + 0.5) / 10, 0.1, 3)
+			PlaybackState.speed = newVal
+			if _G.StarSpace and _G.StarSpace.SetSpeed then _G.StarSpace.SetSpeed(newVal) end
+			
+			WindUI:Notify({ Title = "Speed", Content = "Speed: " .. tostring(newVal) .. "x", Duration = 0.5 })
+		end
+		
+		local speedDown = createBtn(MiniPlayerIcons.Minus, 28, 0.35, function() ChangeSpeed(-0.1) end, true)
+		local speedUp = createBtn(MiniPlayerIcons.Plus, 28, 0.65, function() ChangeSpeed(0.1) end, true)
+		
+		local pathBtn = createBtn(MiniPlayerIcons.Path, 30, 0.09, function()
 			local newState = not (isPathVisualsEnabled or false)
 			isPathVisualsEnabled = newState
 			if _G.StarSpace and _G.StarSpace.SetShowPath then _G.StarSpace.SetShowPath(newState) end
 			if newState then if PlaybackState.frameData then DrawPath(PlaybackState.frameData) end else ClearPath() end
-			WindUI:Notify({ Title = "Path Visuals", Content = newState and "Path Visible" or "Path Hidden", Duration = 1 })
 			if PathVisToggle then
 				pcall(function()
 					if PathVisToggle.SetValue then PathVisToggle:SetValue(newState) end
@@ -6621,25 +7811,22 @@ local function ToggleMiniPlayer(state)
 			end
 		end, true)
 
-		local moonBtn = createBtn(MiniPlayerIcons.Moonlight, 42, 0.31, function()
+		local moonBtn = createBtn(MiniPlayerIcons.Moonlight, 30, 0.22, function()
 			local newState = not (PlaybackState.isMoonwalk or false)
 			PlaybackState.isMoonwalk = newState
 			if _G.StarSpace and _G.StarSpace.SetMoonwalk then _G.StarSpace.SetMoonwalk(newState) end
-			WindUI:Notify({ Title = "Moonwalk", Content = newState and "Moonwalk Enabled" or "Moonwalk Disabled", Duration = 1 })
 		end, true)
 		
-		local loopBtn = createBtn(MiniPlayerIcons.Loop, 42, 0.69, function()
+		local loopBtn = createBtn(MiniPlayerIcons.Loop, 30, 0.78, function()
 			local newState = not (PlaybackState.isLooping or false)
 			PlaybackState.isLooping = newState
 			if _G.StarSpace and _G.StarSpace.SetLooping then _G.StarSpace.SetLooping(newState) end
-			WindUI:Notify({ Title = "Loop", Content = newState and "Looping Enabled" or "Looping Disabled", Duration = 1 })
 		end, true)
 
-		local respawnBtn = createBtn(MiniPlayerIcons.Respawn, 42, 0.88, function()
+		local respawnBtn = createBtn(MiniPlayerIcons.Respawn, 30, 0.91, function()
 			local newState = not (PlaybackState.respawnOnEnd or false)
 			PlaybackState.respawnOnEnd = newState
 			if _G.StarSpace and _G.StarSpace.SetRespawnOnEnd then _G.StarSpace.SetRespawnOnEnd(newState) end
-			WindUI:Notify({ Title = "Respawn", Content = newState and "Respawn On End: ON" or "Respawn On End: OFF", Duration = 1 })
 			if RespawnEndToggle then
 				pcall(function()
 					if RespawnEndToggle.SetValue then RespawnEndToggle:SetValue(newState) end
@@ -6649,9 +7836,10 @@ local function ToggleMiniPlayer(state)
 		end, true)
 
 		local closeX = Instance.new("ImageButton")
-		closeX.Name, closeX.Size, closeX.Position = "CloseBtn", UDim2.fromOffset(24, 24), UDim2.new(1, -32, 0, 8)
+		closeX.Name, closeX.Size, closeX.Position = "CloseBtn", UDim2.fromOffset(20, 20), UDim2.new(1, -28, 0, 8)
 		closeX.BackgroundTransparency, closeX.Image = 1, MiniPlayerIcons.Close
-		closeX.ImageColor3 = Color3.fromRGB(150, 150, 150)
+		closeX.ImageColor3 = Color3.fromRGB(255, 80, 80)
+		closeX.ZIndex = 5
 		closeX.Parent = mainFrame
 		closeX.MouseButton1Click:Connect(function()
 			if MiniPlayerToggle then MiniPlayerToggle:Set(false) else ToggleMiniPlayer(false) end
@@ -6660,13 +7848,27 @@ local function ToggleMiniPlayer(state)
 		closeX.MouseLeave:Connect(function() closeX.ImageColor3 = Color3.fromRGB(150, 150, 150) end)
 
 		local function fmt(s) return string.format("%d:%02d", math.floor(s/60), math.floor(s%60)) end
+		
+		-- Cache icon references to avoid FindFirstChild every frame
+		local playIcon = play and play:FindFirstChild("Icon")
+		local pathIcon = pathBtn and pathBtn:FindFirstChild("Icon")
+		local moonIcon = moonBtn and moonBtn:FindFirstChild("Icon")
+		local loopIcon = loopBtn and loopBtn:FindFirstChild("Icon")
+		local respawnIcon = respawnBtn and respawnBtn:FindFirstChild("Icon")
+		
+		-- Throttled update loop - only update every 5 frames for better mobile performance
+		local frameCounter = 0
 		table.insert(MiniPlayerAnimations, RunService.Heartbeat:Connect(function()
 			if not mainFrame or not mainFrame.Parent then return end
 			
+			frameCounter = frameCounter + 1
+			if frameCounter < 10 then return end -- Skip 9 out of 10 frames (even less frequent now)
+			frameCounter = 0
+			
 			pcall(function()
 				local isPlaying = (PlaybackState.isPlaying and not PlaybackState.isPaused)
-				if play and play:FindFirstChild("Icon") then
-					play.Icon.Image = isPlaying and MiniPlayerIcons.Pause or MiniPlayerIcons.Play
+				if playIcon then
+					playIcon.Image = isPlaying and MiniPlayerIcons.Pause or MiniPlayerIcons.Play
 				end
 				
 				-- Dynamic Color Sync - Unique colors for each feature
@@ -6674,37 +7876,38 @@ local function ToggleMiniPlayer(state)
 				local inactiveBg = Color3.fromRGB(45, 45, 50)
 				
 				-- Path: Yellow
-				if pathBtn and pathBtn:FindFirstChild("Icon") then
-					pathBtn.Icon.ImageColor3 = isPathVisualsEnabled and Color3.fromRGB(255, 200, 0) or inactiveImg
+				if pathIcon then
+					pathIcon.ImageColor3 = isPathVisualsEnabled and Color3.fromRGB(255, 200, 0) or inactiveImg
 					pathBtn.BackgroundColor3 = isPathVisualsEnabled and Color3.fromRGB(150, 120, 0) or inactiveBg
 				end
 				
 				-- Moonwalk: Purple
-				if moonBtn and moonBtn:FindFirstChild("Icon") then
-					moonBtn.Icon.ImageColor3 = PlaybackState.isMoonwalk and Color3.fromRGB(180, 100, 255) or inactiveImg
+				if moonIcon then
+					moonIcon.ImageColor3 = PlaybackState.isMoonwalk and Color3.fromRGB(180, 100, 255) or inactiveImg
 					moonBtn.BackgroundColor3 = PlaybackState.isMoonwalk and Color3.fromRGB(100, 50, 150) or inactiveBg
 				end
 				
 				-- Loop: Green
-				if loopBtn and loopBtn:FindFirstChild("Icon") then
-					loopBtn.Icon.ImageColor3 = PlaybackState.isLooping and Color3.fromRGB(0, 255, 120) or inactiveImg
+				if loopIcon then
+					loopIcon.ImageColor3 = PlaybackState.isLooping and Color3.fromRGB(0, 255, 120) or inactiveImg
 					loopBtn.BackgroundColor3 = PlaybackState.isLooping and Color3.fromRGB(0, 120, 60) or inactiveBg
 				end
 				
 				-- Respawn: Red
-				if respawnBtn and respawnBtn:FindFirstChild("Icon") then
-					respawnBtn.Icon.ImageColor3 = PlaybackState.respawnOnEnd and Color3.fromRGB(255, 80, 80) or inactiveImg
+				if respawnIcon then
+					respawnIcon.ImageColor3 = PlaybackState.respawnOnEnd and Color3.fromRGB(255, 80, 80) or inactiveImg
 					respawnBtn.BackgroundColor3 = PlaybackState.respawnOnEnd and Color3.fromRGB(150, 40, 40) or inactiveBg
 				end
 
 				if _G.StarshipCloud.RecordingName and title then title.Text = _G.StarshipCloud.RecordingName end
 				
-				local c, t = PlaybackState.currentTime or 0, PlaybackState.totalDuration or 0
-				if t > 0 and fill then
-					fill.Size = UDim2.fromScale(math.clamp(c/t, 0, 1), 1)
-					if curT then curT.Text = fmt(c) end
-					if remT then remT.Text = "-" .. fmt(math.max(0, t - c)) end
+				-- Update Speed Display in Subtitle
+				if artist then
+					local s = PlaybackState.speed or 1.0
+					artist.Text = string.format("STARSHIP CORE (%.1fx)", s)
 				end
+				
+				-- Timeline update removed for performance
 			end)
 		end))
 		
@@ -6712,6 +7915,44 @@ local function ToggleMiniPlayer(state)
 		-- Tag with StarshipID for proper cleanup on re-execution
 		pcall(function() screen:SetAttribute("StarshipID", STARSHIP_ID) end)
 	else
+		-- Reset all features when closing Mini Player
+		isPathVisualsEnabled = false
+		PlaybackState.isMoonwalk = false
+		PlaybackState.isLooping = false
+		PlaybackState.respawnOnEnd = false
+		
+		-- Sync with Playback Engine
+		if _G.StarSpace then
+			if _G.StarSpace.SetShowPath then _G.StarSpace.SetShowPath(false) end
+			if _G.StarSpace.SetMoonwalk then _G.StarSpace.SetMoonwalk(false) end
+			if _G.StarSpace.SetLooping then _G.StarSpace.SetLooping(false) end
+			if _G.StarSpace.SetRespawnOnEnd then _G.StarSpace.SetRespawnOnEnd(false) end
+		end
+		
+		-- Clear Path Visuals
+		ClearPath()
+		
+		-- Sync Main UI Toggles if they exist
+		pcall(function()
+			if PathVisToggle then
+				if PathVisToggle.SetValue then PathVisToggle:SetValue(false)
+				elseif PathVisToggle.Set then PathVisToggle:Set(false) end
+			end
+			if RespawnEndToggle then
+				if RespawnEndToggle.SetValue then RespawnEndToggle:SetValue(false)
+				elseif RespawnEndToggle.Set then RespawnEndToggle:Set(false) end
+			end
+			-- Add other toggles if needed (Moonwalk, Loop usually in main UI too)
+			if MoonwalkToggle then
+				if MoonwalkToggle.SetValue then MoonwalkToggle:SetValue(false)
+				elseif MoonwalkToggle.Set then MoonwalkToggle:Set(false) end
+			end
+			if LoopToggle then
+				if LoopToggle.SetValue then LoopToggle:SetValue(false)
+				elseif LoopToggle.Set then LoopToggle:Set(false) end
+			end
+		end)
+
 		for _, c in ipairs(MiniPlayerAnimations) do if c then pcall(function() c:Disconnect() end) end end
 		MiniPlayerAnimations = {}
 		if MiniPlayerGui then
@@ -6761,114 +8002,7 @@ function CreatePlaybackControls()
 		Callback = ToggleMiniPlayer,
 	})
 
-	PathVisToggle = PlaybackSection:Toggle({
-		Title = "✨ Path Visualization",
-		Desc = "Premium gradient path with animated markers",
-		Value = false,
-		Callback = function(state)
-			isPathVisualsEnabled = state
-			
-			-- Sync with StarSpacePlayback module
-			if _G.StarSpace and _G.StarSpace.SetShowPath then
-				_G.StarSpace.SetShowPath(state)
-			end
-
-			if state then
-				if PlaybackState.frameData then
-					DrawPath(PlaybackState.frameData)
-				end
-			else
-				ClearPath()
-			end
-		end,
-	})
-
-	local SpeedSliderVar = PlaybackSection:Slider({
-		Title = "Playback Speed",
-		Desc = "Speed multiplier (Default: 1)",
-		Value = { Min = 0.1, Max = 3, Default = 1 },
-		Step = 0.1,
-		Callback = function(val)
-			PlaybackState.speed = val
-			if _G.StarSpace and _G.StarSpace.SetSpeed then
-				_G.StarSpace.SetSpeed(val)
-			end
-		end,
-	})
-
-	PlaybackSection:Button({
-		Title = "Increase Speed (+0.1)",
-		Desc = "Tap for precise adjustment",
-		Icon = "solar:add-circle-bold",
-		Callback = function()
-			local current = PlaybackState.speed or 1
-			local newVal = math.min(3, math.floor((current + 0.1) * 10 + 0.5) / 10)
-			
-			-- Direct update & Sync
-			PlaybackState.speed = newVal
-			if _G.StarSpace and _G.StarSpace.SetSpeed then
-				_G.StarSpace.SetSpeed(newVal)
-			end
-			
-			-- Update UI Slider visually
-			if SpeedSliderVar then
-				pcall(function()
-					if SpeedSliderVar.Set then SpeedSliderVar:Set(newVal)
-					elseif SpeedSliderVar.SetValue then SpeedSliderVar:SetValue(newVal) end
-				end)
-			end
-			
-			WindUI:Notify({ Title = "Speed", Content = "Speed: " .. tostring(newVal) .. "x", Duration = 0.5 })
-		end,
-	})
-
-	PlaybackSection:Button({
-		Title = "Decrease Speed (-0.1)",
-		Desc = "Tap for precise adjustment",
-		Icon = "solar:minus-circle-bold",
-		Callback = function()
-			local current = PlaybackState.speed or 1
-			local newVal = math.max(0.1, math.floor((current - 0.1) * 10 + 0.5) / 10)
-			
-			-- Direct update & Sync
-			PlaybackState.speed = newVal
-			if _G.StarSpace and _G.StarSpace.SetSpeed then
-				_G.StarSpace.SetSpeed(newVal)
-			end
-			
-			-- Update UI Slider visually
-			if SpeedSliderVar then
-				pcall(function()
-					if SpeedSliderVar.Set then SpeedSliderVar:Set(newVal)
-					elseif SpeedSliderVar.SetValue then SpeedSliderVar:SetValue(newVal) end
-				end)
-			end
-			
-			WindUI:Notify({ Title = "Speed", Content = "Speed: " .. tostring(newVal) .. "x", Duration = 0.5 })
-		end,
-	})
-
-	RespawnEndToggle = PlaybackSection:Toggle({
-		Title = "Respawn on End",
-		Desc = "Respawn character when recording ends",
-		Value = false,
-		Callback = function(state)
-			PlaybackState.respawnOnEnd = state
-			
-			-- Sync with StarSpacePlayback module
-			if _G.StarSpace and _G.StarSpace.SetRespawnOnEnd then
-				_G.StarSpace.SetRespawnOnEnd(state)
-			end
-
-			WindUI:Notify({
-				Title = "Respawn",
-				Content = state and "Will respawn on end" or "Will NOT respawn",
-				Duration = 1,
-			})
-		end,
-	})
-
-	PlaybackSection:Divider()
+	-- Path Visualization and Respawn On End are in Mini Player buttons
 
 	PlaybackSection:Toggle({
 		Title = "Auto Smoothing",
@@ -6947,42 +8081,92 @@ function CreatePlaybackControls()
 		end,
 	})
 
-	-- Anti-AFK Feature
+	-- Anti-AFK Feature (Always ON)
 	local antiAfkConnection = nil
-	local isAntiAfkOn = Settings.AutoAntiAFK
+	local isAntiAfkOn = true -- Force to true
+	local AFK_DisabledConns = {}
+	_G.StarshipAntiTabDetect = true -- Force to true
 
 	local function setAfkState(state)
-		isAntiAfkOn = state
-		Settings.AutoAntiAFK = state
-		SaveSettings()
-
-		if isAntiAfkOn then
-			if not antiAfkConnection then
-				antiAfkConnection = LocalPlayer.Idled:Connect(function() end)
-			end
-		else
-			if antiAfkConnection then
-				antiAfkConnection:Disconnect()
-				antiAfkConnection = nil
-			end
+		-- We ignore the state and always keep it true
+		isAntiAfkOn = true 
+		_G.StarshipAntiTabDetect = true
+		
+		-- Logic to enable protection
+		pcall(function()
+			if DS_ApplyPrivacyHooks then DS_ApplyPrivacyHooks() end
+		end)
+		
+		if not antiAfkConnection then
+			local vu = game:GetService("VirtualUser")
+			antiAfkConnection = LocalPlayer.Idled:Connect(function()
+				vu:CaptureController()
+				vu:ClickButton2(Vector2.new())
+			end)
 		end
+
+		-- Forcefully disable existing focus-loss connections & STORE THEM
+		pcall(function()
+			AFK_DisabledConns = {}
+			if getconnections then
+				for _, c in pairs(getconnections(UserInputService.WindowFocusReleased)) do
+					if c.Enabled then
+						c:Disable()
+						table.insert(AFK_DisabledConns, c)
+					end
+				end
+				for _, c in pairs(getconnections(UserInputService.WindowFocused)) do
+					if c.Enabled then
+						c:Disable()
+						table.insert(AFK_DisabledConns, c)
+					end
+				end
+			end
+		end)
+
+		-- Background Protection Loop (Wiggle + Attribute Lock)
+		task.spawn(function()
+			while isAntiAfkOn and antiAfkConnection do
+				pcall(function()
+					local char = LocalPlayer.Character
+					local hum = char and char:FindFirstChildOfClass("Humanoid")
+					if hum and hum.Health > 0 then
+						hum.Jump = true
+					end
+				end)
+
+				for i = 1, 60 do
+					if not isAntiAfkOn or not antiAfkConnection then
+						break
+					end
+					pcall(function()
+						if LocalPlayer:GetAttribute("AFK") then
+							LocalPlayer:SetAttribute("AFK", false)
+						end
+						if LocalPlayer:GetAttribute("IsAFK") then
+							LocalPlayer:SetAttribute("IsAFK", false)
+						end
+					end)
+					task.wait(1)
+				end
+			end
+		end)
 	end
 
-	if isAntiAfkOn then
-		setAfkState(true)
-	end
+	-- Always start Anti-AFK
+	task.defer(function() setAfkState(true) end)
 
 	PlaybackSection:Toggle({
-		Title = "Anti-AFK",
-		Desc = "Prevent being kicked for inactivity",
-		Value = Settings.AutoAntiAFK,
+		Title = "Anti-AFK (Fixed ON)",
+		Desc = "Permanently enabled for maximum protection",
+		Value = true,
 		Callback = function(state)
-			setAfkState(state)
-			WindUI:Notify({
-				Title = "Anti-AFK",
-				Content = state and "Anti-AFK enabled!" or "Anti-AFK disabled.",
-				Duration = 2,
-			})
+			-- Force it back to true if they try to turn it off
+			if not state then
+				task.wait(0.1)
+				setAfkState(true)
+				WindUI:Notify({ Title = "Anti-AFK", Content = "Anti-AFK is permanently active!", Duration = 2 })
+			end
 		end,
 	})
 
@@ -6992,6 +8176,18 @@ function CreatePlaybackControls()
 	local isBypassAdminOn = false
 	local bypassAdminConnections = {}
 	local AdminAlertGui = nil
+	local AdminESPConnections = {}
+
+	-- Action function (Handles Alert vs Kick)
+	local function HandleAdminDetection(player, reason)
+		if Settings.AutoLeaveAdmin then
+			-- Immediate kick for safety (StarSpace style)
+			LocalPlayer:Kick("🛡️ Admin Detected: " .. player.Name .. "\nReason: " .. reason .. "\n\n(Auto-Leave for Safety)")
+		else
+			-- Show custom alert (MobileUI style)
+			ShowAdminAlert(player.Name, reason)
+		end
+	end
 
 	-- Fungsi untuk menampilkan notifikasi admin
 	local function ShowAdminNotification(titleText, messageText)
@@ -7236,7 +8432,7 @@ function CreatePlaybackControls()
 		}):Play()
 	end
 
-	-- Fungsi utama pengecekan admin
+	-- Fungsi utama pengecekan admin (FULL detection — sama dengan ESP system)
 	local function CheckForAdmin(player)
 		if player == LocalPlayer or not player.Parent then
 			return
@@ -7245,13 +8441,22 @@ function CreatePlaybackControls()
 		local isAdmin = false
 		local reason = ""
 
-		-- 1. Cek Game Creator
-		if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
+		-- 0. Run ModuleScan once (cached) — scan AdminConfig, OverheadConfig, etc.
+		pcall(scanReplicatedModules)
+
+		-- 1. Cek ModuleScan results (instant, cached)
+		if ScannedAdminUserIds and ScannedAdminUserIds[player.UserId] then
+			isAdmin = true
+			reason = "ModuleScan: " .. tostring(ScannedAdminUserIds[player.UserId])
+		end
+
+		-- 2. Cek Game Creator
+		if not isAdmin and game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
 			isAdmin = true
 			reason = "Game Owner"
 		end
 
-		-- 2. Cek Group Rank (untuk game grup)
+		-- 3. Cek Group Rank (untuk game grup)
 		if not isAdmin and game.CreatorType == Enum.CreatorType.Group then
 			local s, rank = pcall(function()
 				return player:GetRankInGroup(game.CreatorId)
@@ -7279,34 +8484,29 @@ function CreatePlaybackControls()
 			end
 		end
 
-		-- 3. Cek via HTTP API (untuk semua grup player)
+		-- 4. Cek Player Attributes (IsAdmin, Role, Rank, etc.)
 		if not isAdmin then
-			task.spawn(function()
-				local success, roles = pcall(function()
-					local HttpService = game:GetService("HttpService")
-					local response =
-						game:HttpGet("https://groups.roblox.com/v1/users/" .. player.UserId .. "/groups/roles")
-					return HttpService:JSONDecode(response)
-				end)
-
-				if success and roles and roles.data then
-					for _, group in ipairs(roles.data) do
-						if group.role.rank >= 200 then -- Rank 200+ biasanya owner/admin
-							ShowAdminAlert(
-								player.Name,
-								"High Rank in Group: " .. group.group.name .. " (Rank " .. group.role.rank .. ")"
-							)
-							return
-						end
-					end
-				end
-			end)
+			local attrOk, attrFound, attrReason = pcall(scanPlayerAttributes, player)
+			if attrOk and attrFound then
+				isAdmin = true
+				reason = attrReason
+			end
 		end
 
-		-- 4. Cek Admin Tools di Backpack
+		-- 5. Cek Overhead BillboardGui tags
+		if not isAdmin and player.Character then
+			local ohOk, ohFound, ohReason = pcall(scanPlayerOverhead, player)
+			if ohOk and ohFound then
+				isAdmin = true
+				reason = ohReason
+			end
+		end
+
+		-- 6. Cek Admin Tools di Backpack
 		if not isAdmin then
 			task.spawn(function()
-				task.wait(1) -- Tunggu character load
+				task.wait(1)
+				if not player.Parent then return end
 				local backpack = player:FindFirstChild("Backpack")
 				if backpack then
 					for _, tool in ipairs(backpack:GetChildren()) do
@@ -7318,7 +8518,7 @@ function CreatePlaybackControls()
 								or toolName:find("kick")
 								or toolName:find("mod")
 							then
-								ShowAdminAlert(player.Name, "Admin Tool: " .. tool.Name)
+								HandleAdminDetection(player, "Admin Tool: " .. tool.Name)
 								return
 							end
 						end
@@ -7327,7 +8527,41 @@ function CreatePlaybackControls()
 			end)
 		end
 
-		-- 5. Monitor Chat untuk Command Admin
+		-- 7. Async HTTP API (HANYA grup game ini, bukan semua grup)
+		if not isAdmin then
+			task.spawn(function()
+				local gameGroupId = nil
+				if game.CreatorType == Enum.CreatorType.Group then
+					gameGroupId = game.CreatorId
+				end
+				
+				if not gameGroupId then return end
+				if not player.Parent then return end
+				
+				local success, roles = pcall(function()
+					local HttpService = game:GetService("HttpService")
+					local response =
+						game:HttpGet("https://groups.roblox.com/v1/users/" .. player.UserId .. "/groups/roles")
+					return HttpService:JSONDecode(response)
+				end)
+
+				if success and roles and roles.data then
+					for _, group in ipairs(roles.data) do
+						local gId = group.group and group.group.id
+						local rank = group.role and group.role.rank or 0
+						if gId == gameGroupId and rank >= 100 then
+							HandleAdminDetection(
+								player,
+								"Group API: " .. group.group.name .. " (Rank " .. rank .. ": " .. (group.role.name or "") .. ")"
+							)
+							return
+						end
+					end
+				end
+			end)
+		end
+
+		-- 8. Monitor Chat untuk Command Admin
 		local chatConnection = player.Chatted:Connect(function(msg)
 			if not isBypassAdminOn then
 				return
@@ -7342,16 +8576,26 @@ function CreatePlaybackControls()
 				or lowMsg:find("/e :")
 			then
 				ShowAdminNotification("ADMIN COMMAND", player.Name .. " used: " .. msg:sub(1, 30))
-				ShowAdminAlert(player.Name, "Admin Command: " .. msg:sub(1, 50))
+				HandleAdminDetection(player, "Admin Command: " .. msg:sub(1, 50))
 			end
 		end)
 		table.insert(bypassAdminConnections, chatConnection)
 
 		-- Jika sudah terdeteksi admin dari awal
 		if isAdmin then
-			ShowAdminAlert(player.Name, reason)
+			HandleAdminDetection(player, reason)
 		end
 	end
+
+	PlaybackSection:Toggle({
+		Title = "🚪 Auto Leave (Admin)",
+		Desc = "Automatically leave the server if an admin is detected",
+		Value = Settings.AutoLeaveAdmin,
+		Callback = function(state)
+			Settings.AutoLeaveAdmin = state
+			SaveSettings()
+		end,
+	})
 
 	PlaybackSection:Toggle({
 		Title = "🛡️ Bypass Admin",
@@ -7414,8 +8658,980 @@ function CreatePlaybackControls()
 		end
 	end)
 end
+-- ══════════════════════════════════════════════════════════════════
+-- 📱 DEVICE SPOOF TAB
+-- Ported from StarSpace.lua — Full device spoofing system
+-- ══════════════════════════════════════════════════════════════════
+local DeviceSpoofTab = Window:Tab({
+	Title = "Device Spoof",
+	Icon = "solar:smartphone-bold",
+})
+RunService.Heartbeat:Wait()
+
+-- Load Device Spoof content asynchronously to avoid blocking
+task.spawn(function()
+task.wait(0.5) -- Let UI settle first
+local dsOk, dsErr = pcall(function()
+
+DeviceSpoofTab:Section({ Title = "📱 Device Spoof System", Desc = "Spoof your device type to appear as PC, Mobile, or Console" })
+DeviceSpoofTab:Space({ Columns = 0.5 })
+
+DeviceSpoofTab:Paragraph({
+	Title = "💡 Tips",
+	Desc = "• Pilih 'PC' untuk menampilkan ikon 💻 di atas kepala\\n"
+		.. "• Pilih 'Mobile' untuk menampilkan ikon 📱 (terlihat sebagai pemain HP)\\n"
+		.. "• Pilih 'Console' untuk menampilkan ikon 🎮 (terlihat sebagai pemain Xbox/PS)\\n"
+		.. "• Respawn setelah mengaktifkan untuk hasil terbaik\\n"
+		.. "• Pengaturan tersimpan otomatis & diterapkan saat rejoin\\n"
+		.. "• Berfungsi di sebagian besar game yang menggunakan ikon device overhead",
+})
+DeviceSpoofTab:Space({ Columns = 0.5 })
+
+-- ═══ Device Spoof State ═══
+local DS_SpoofName = ""
+local DS_DeviceSpoof = "Default"
+local DS_SpoofEnabled = false
+local DS_HooksApplied = false
+local DS_OriginalValues = {}
+local DS_SpoofToggleRef = nil
+
+-- Persistent settings
+local DS_SETTINGS_FILE = "StarshipMobile/spoof_settings.json"
+
+local function DS_SaveSettings()
+	pcall(function()
+		if not writefile then return end
+		if isfolder and not isfolder("StarshipMobile") then makefolder("StarshipMobile") end
+		writefile(DS_SETTINGS_FILE, game:GetService("HttpService"):JSONEncode({
+			DeviceSpoof = DS_DeviceSpoof,
+			SpoofEnabled = DS_SpoofEnabled,
+			SpoofName = DS_SpoofName,
+		}))
+	end)
+end
+
+local function DS_ClearSettings()
+	pcall(function()
+		if isfile and isfile(DS_SETTINGS_FILE) then delfile(DS_SETTINGS_FILE) end
+	end)
+end
+
+-- Load saved settings
+pcall(function()
+	if isfile and isfile(DS_SETTINGS_FILE) then
+		local raw = readfile(DS_SETTINGS_FILE)
+		local data = game:GetService("HttpService"):JSONDecode(raw)
+		if data then
+			if data.DeviceSpoof and data.DeviceSpoof ~= "Default" then DS_DeviceSpoof = data.DeviceSpoof end
+			if data.SpoofEnabled then DS_SpoofEnabled = true end
+			if data.SpoofName and data.SpoofName ~= "" then DS_SpoofName = data.SpoofName end
+		end
+	end
+end)
+
+-- ═══ Per-Game Icon Database ═══
+local DS_GameIconSets = {
+	["16624148448"] = { Name = "MT Yahayukk", PC = "rbxassetid://16624148448", Mobile = "rbxassetid://16624149840", Console = "rbxassetid://16624150956" },
+	["94089970073947"] = { Name = "MT Moonlight", PC = "rbxassetid://106290076073871", Mobile = "rbxassetid://94089970073947", Console = "rbxassetid://139663456027187" },
+	["106290076073871"] = { Name = "MT Moonlight", PC = "rbxassetid://106290076073871", Mobile = "rbxassetid://94089970073947", Console = "rbxassetid://139663456027187" },
+	["139663456027187"] = { Name = "MT Moonlight", PC = "rbxassetid://106290076073871", Mobile = "rbxassetid://94089970073947", Console = "rbxassetid://139663456027187" },
+	["110487074518360"] = { Name = "MT Velora", PC = "rbxassetid://133663694484547", Mobile = "rbxassetid://110487074518360", Console = "rbxassetid://6034509537" },
+	["6034789893"] = { Name = "NameTag Game", PC = "rbxassetid://6034789893", Mobile = "rbxassetid://6034848733", Console = "rbxassetid://6034509537" },
+	["12684119225"] = { Name = "User Requested", PC = "rbxassetid://12684119225", Mobile = "rbxassetid://13021320268", Console = "rbxassetid://6034509537" },
+}
+
+local DS_DefaultIcons = { PC = "rbxassetid://6034509993", Mobile = "rbxassetid://6034509012", Console = "rbxassetid://6034509537" }
+
+-- Reverse lookup: asset -> icon set
+local DS_AssetToIconSet = {}
+for _, iconSet in pairs(DS_GameIconSets) do
+	DS_AssetToIconSet[iconSet.PC:lower()] = iconSet
+	DS_AssetToIconSet[iconSet.Mobile:lower()] = iconSet
+	DS_AssetToIconSet[iconSet.Console:lower()] = iconSet
+end
+
+local DS_DeviceAssets = {
+	PC = { Emojis = {"💻","🖥️","🖥","⌨️","🖱️"}, Keywords = {"pc","computer","desktop","windows","keyboard"}, TargetEmoji = "💻" },
+	Mobile = { Emojis = {"📱","📲","🤳"}, Keywords = {"mobile","phone","touch","ios","android","iphone","ipad","tablet"}, TargetEmoji = "📱" },
+	Console = { Emojis = {"🎮","🕹️","🎲"}, Keywords = {"console","xbox","playstation","gamepad","controller","ps4","ps5"}, TargetEmoji = "🎮" },
+}
+
+local DS_AllDeviceEmojis = {}
+for _, data in pairs(DS_DeviceAssets) do
+	for _, emoji in ipairs(data.Emojis) do DS_AllDeviceEmojis[emoji] = true end
+end
+
+local DS_DeviceDetectionPatterns = {
+	Names = {"deviceicon","deviceindicator","platformicon","activetype","inputicon","activeicon"},
+	Parents = {"overhead","_overhead","overheadui","billboard","nametag","playertag","headtag","toprow","line1","deviceframe","logoframe"},
+}
+local DS_UIBlacklist = {"starspace","xan","rayfield","kavo","orion","ventox","wally","infinite","catalyst","linoria","sense","vape","lunar","solara","arctic","starship","windui"}
+
+local function DS_containsKeyword(str, keywords)
+	if not str then return false end
+	str = str:lower()
+	for _, kw in ipairs(keywords) do if str:find(kw) then return true end end
+	return false
+end
+
+local function DS_isBlacklistedUI(obj)
+	local current = obj
+	for i = 1, 10 do
+		if not current then break end
+		local name = current.Name:lower()
+		for _, bl in ipairs(DS_UIBlacklist) do if name:find(bl) then return true end end
+		if current:IsA("ScreenGui") and current.Parent and current.Parent.Name == "CoreGui" then
+			if not (obj:FindFirstAncestorOfClass("BillboardGui") or obj:FindFirstAncestorOfClass("SurfaceGui")) then return true end
+		end
+		current = current.Parent
+	end
+	return false
+end
+
+local function DS_isOwnedByLocalPlayer(obj)
+	local lp = LocalPlayer
+	if not lp then return false end
+	local myChar, myPG = lp.Character, lp:FindFirstChild("PlayerGui")
+	if myPG and obj:IsDescendantOf(myPG) then return true end
+	if myChar and (obj:IsDescendantOf(myChar) or obj == myChar) then return true end
+	local rootGui = obj:FindFirstAncestorOfClass("BillboardGui") or obj:FindFirstAncestorOfClass("SurfaceGui")
+	if rootGui and rootGui.Adornee and myChar and rootGui.Adornee:IsDescendantOf(myChar) then return true end
+	return false
+end
+
+local function DS_isDeviceRelated(obj)
+	if not DS_isOwnedByLocalPlayer(obj) then return false end
+	if DS_isBlacklistedUI(obj) then return false end
+	if (obj:IsA("ImageLabel") or obj:IsA("ImageButton")) and obj.Image ~= "" then
+		if DS_AssetToIconSet[obj.Image:lower()] then return true end
+		for id, _ in pairs(DS_GameIconSets) do if obj.Image:find(id, 1, true) then return true end end
+	end
+	if DS_containsKeyword(obj.Name, DS_DeviceDetectionPatterns.Names) then return true end
+	local pCheck = obj.Parent
+	for i = 1, 8 do
+		if not pCheck then break end
+		local pName = pCheck.Name:lower()
+		if DS_containsKeyword(pName, DS_DeviceDetectionPatterns.Parents) then return true end
+		if pName:find("playerlist") or pName:find("leaderboard") then return true end
+		pCheck = pCheck.Parent
+	end
+	local headAnc = obj:FindFirstAncestor("Head")
+	if headAnc and headAnc:IsA("BasePart") then
+		local parent = obj.Parent
+		for i = 1, 5 do
+			if not parent or parent == headAnc then break end
+			if DS_containsKeyword(parent.Name:lower(), DS_DeviceDetectionPatterns.Parents) then return true end
+			parent = parent.Parent
+		end
+	end
+	local humAnc = obj:FindFirstAncestorOfClass("Humanoid")
+	if humAnc then
+		local pn = obj.Parent and obj.Parent.Name:lower() or ""
+		if pn:find("icon") or obj.Name:lower():find("icon") or obj.Name:lower():find("device") then return true end
+	end
+	local bb = obj:FindFirstAncestorOfClass("BillboardGui") or obj:FindFirstAncestorOfClass("SurfaceGui")
+	if not bb and not headAnc and not humAnc then return false end
+	if bb then
+		local adornee = bb.Adornee
+		if adornee then
+			local char = adornee:FindFirstAncestorOfClass("Model")
+			if char and char:FindFirstChildOfClass("Humanoid") then return true end
+		end
+	end
+	return false
+end
+
+local function DS_getTargetImage(deviceType, currentImage)
+	if currentImage and currentImage ~= "" then
+		local set = DS_AssetToIconSet[currentImage:lower()]
+		if set and set[deviceType] then return set[deviceType] end
+		for id, iconSet in pairs(DS_GameIconSets) do
+			if currentImage:find(id, 1, true) then return iconSet[deviceType] end
+		end
+	end
+	return DS_DefaultIcons[deviceType]
+end
+
+-- ═══ Spoof Function (Visual: text, images, visibility) ═══
+local function DS_spoof(obj)
+	if not obj or not obj.Parent then return end
+	local lp = LocalPlayer
+	
+	-- TEXT SPOOFING
+	if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+		if not DS_OriginalValues[obj] then 
+			DS_OriginalValues[obj] = { Text = obj.Text, Type = "Text" }
+			-- Instant lock for text
+			obj:GetPropertyChangedSignal("Text"):Connect(function()
+				if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" and not _G.StarshipInternalChange then
+					_G.StarshipInternalChange = true
+					DS_spoof(obj)
+					_G.StarshipInternalChange = false
+				end
+			end)
+		end
+		
+		if DS_SpoofEnabled then
+			local currentText = DS_OriginalValues[obj].Text
+			local modified = false
+			if DS_SpoofName ~= "" and lp then
+				if currentText:find(lp.Name) or currentText:find(lp.DisplayName) then
+					currentText = currentText:gsub(lp.Name, DS_SpoofName):gsub(lp.DisplayName, DS_SpoofName)
+					modified = true
+				end
+			end
+			if DS_DeviceSpoof ~= "Default" and DS_isDeviceRelated(obj) then
+				local targetEmoji = DS_DeviceAssets[DS_DeviceSpoof].TargetEmoji
+				for emoji, _ in pairs(DS_AllDeviceEmojis) do
+					if currentText:find(emoji) then currentText = currentText:gsub(emoji, targetEmoji); modified = true end
+				end
+				-- Keyword matching omitted for performance/simplicity in flicker fix
+			end
+			if modified and obj.Text ~= currentText then obj.Text = currentText end
+		else
+			if DS_OriginalValues[obj] then obj.Text = DS_OriginalValues[obj].Text end
+		end
+	end
+	
+	-- IMAGE SPOOFING (The main cause of glitching)
+	if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+		if not DS_OriginalValues[obj] then
+			DS_OriginalValues[obj] = { 
+				Image = obj.Image, 
+				ImageRectOffset = obj.ImageRectOffset, 
+				ImageRectSize = obj.ImageRectSize, 
+				Visible = obj.Visible, 
+				Type = "Image" 
+			}
+			
+			-- INSTANT RE-APPLY: This kills the flickering
+			obj:GetPropertyChangedSignal("Image"):Connect(function()
+				if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" and not _G.StarshipInternalChange then
+					if DS_isDeviceRelated(obj) then
+						local target = DS_getTargetImage(DS_DeviceSpoof, obj.Image)
+						if obj.Image ~= target then
+							_G.StarshipInternalChange = true
+							obj.Image = target
+							_G.StarshipInternalChange = false
+						end
+					end
+				end
+			end)
+		end
+		
+		if DS_isDeviceRelated(obj) then
+			if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
+				local origImg = DS_OriginalValues[obj] and DS_OriginalValues[obj].Image or obj.Image
+				local targetImg = DS_getTargetImage(DS_DeviceSpoof, origImg)
+				if targetImg and obj.Image ~= targetImg then
+					_G.StarshipInternalChange = true
+					obj.Image = targetImg
+					if obj.ImageRectSize ~= Vector2.new(0, 0) then
+						obj.ImageRectOffset = Vector2.new(0, 0)
+						obj.ImageRectSize = Vector2.new(0, 0)
+					end
+					_G.StarshipInternalChange = false
+				end
+			else
+				local orig = DS_OriginalValues[obj]
+				if orig and obj.Image ~= orig.Image then 
+					obj.Image = orig.Image 
+					obj.ImageRectOffset = orig.ImageRectOffset
+					obj.ImageRectSize = orig.ImageRectSize
+				end
+			end
+		end
+	end
+	
+	-- VISIBILITY TOGGLE (For games with multiple frames)
+	if obj:IsA("Frame") or obj:IsA("CanvasGroup") or obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+		local nameLower = obj.Name:lower()
+		local isDeviceFrame = DS_containsKeyword(nameLower, {"pc","mobile","console","phone","computer","xbox","touch"})
+		if isDeviceFrame and DS_isDeviceRelated(obj) then
+			if not DS_OriginalValues[obj] then 
+				DS_OriginalValues[obj] = { Visible = obj.Visible, Type = "Frame" }
+				obj:GetPropertyChangedSignal("Visible"):Connect(function()
+					if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" and not _G.StarshipInternalChange then
+						_G.StarshipInternalChange = true
+						DS_spoof(obj)
+						_G.StarshipInternalChange = false
+					end
+				end)
+			end
+			
+			if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
+				local targetKws = DS_DeviceAssets[DS_DeviceSpoof].Keywords
+				local isTarget = false
+				for _, kw in ipairs(targetKws) do if nameLower:find(kw) then isTarget = true; break end end
+				
+				if isTarget then 
+					if not obj.Visible then obj.Visible = true end
+				else
+					local isOther = false
+					for dt, data in pairs(DS_DeviceAssets) do
+						if dt ~= DS_DeviceSpoof then
+							for _, kw in ipairs(data.Keywords) do if nameLower:find(kw) then isOther = true; break end end
+						end
+						if isOther then break end
+					end
+					if isOther and obj.Visible then obj.Visible = false end
+				end
+			else
+				if DS_OriginalValues[obj] then obj.Visible = DS_OriginalValues[obj].Visible end
+			end
+		end
+	end
+end
+
+-- ═══ SMART DEVICE TERM MAPPING ═══
+-- Games use their own terms: "Phone"/"Computer"/"Gamepad"
+-- We must use the GAME's terms, not generic "Mobile"/"PC"/"Console"
+if not _G._StarshipDeviceTerms then _G._StarshipDeviceTerms = {} end
+
+local DS_TERM_TO_CATEGORY = {
+	computer = "PC", pc = "PC", desktop = "PC", keyboard = "PC",
+	windows = "PC", ["windows10"] = "PC", win64 = "PC", win32 = "PC", uwp = "PC",
+	phone = "Mobile", mobile = "Mobile", touch = "Mobile", tablet = "Mobile",
+	android = "Mobile", ios = "Mobile", iphone = "Mobile", ipad = "Mobile",
+	console = "Console", gamepad = "Console", xbox = "Console",
+	playstation = "Console", controller = "Console",
+}
+
+-- Initialize with common defaults based on category
+if not _G._StarshipDeviceTerms then 
+	_G._StarshipDeviceTerms = {
+		PC = "Computer",
+		Mobile = "Phone",
+		Console = "Console"
+	} 
+end
+
+local function DS_getDeviceCategory(val)
+	if typeof(val) ~= "string" then return nil end
+	return DS_TERM_TO_CATEGORY[val:lower()]
+end
+
+local function DS_getGameTermForTarget()
+	return (_G._StarshipDeviceTerms[DS_DeviceSpoof]) or DS_DeviceSpoof
+end
+
+local function DS_learnGameTerm(val)
+	local cat = DS_getDeviceCategory(val)
+	if cat then _G._StarshipDeviceTerms[cat] = val end
+end
+
+-- Recursive Spoof: only replace values that are a DIFFERENT device category
+local function DS_deepSpoof(val)
+	local tVal = typeof(val)
+	if tVal == "string" then
+		local cat = DS_getDeviceCategory(val)
+		if cat then
+			DS_learnGameTerm(val)
+			if cat == DS_DeviceSpoof then return val end
+			return DS_getGameTermForTarget()
+		end
+	elseif tVal == "EnumItem" then
+		if DS_DeviceSpoof == "Mobile" then
+			if val == Enum.Platform.Windows or val == Enum.Platform.OSX or val == Enum.Platform.UWP then return Enum.Platform.Android end
+		elseif DS_DeviceSpoof == "Console" then
+			if val == Enum.Platform.Windows or val == Enum.Platform.Android or val == Enum.Platform.IOS then return Enum.Platform.XBoxOne end
+		elseif DS_DeviceSpoof == "PC" then
+			if val == Enum.Platform.Android or val == Enum.Platform.IOS then return Enum.Platform.Windows end
+		end
+	elseif tVal == "table" then
+		for k, v in pairs(val) do val[k] = DS_deepSpoof(v) end
+	end
+	return val
+end
+
+-- ═══ DEVICE ATTRIBUTE & REMOTE CONSTANTS ═══
+local DS_DEVICE_ATTR_NAMES = {
+	"Device", "Platform", "DeviceType", "InputType",
+	"PlayerDevice", "PlayerPlatform", "device", "platform",
+	"deviceType", "inputType", "playerDevice"
+}
+local DS_DEVICE_VALUE_KEYWORDS = {"device", "platform", "inputtype", "devicetype"}
+
+-- ═══ Proactive Device Spoof (Full - matches StarSpace.lua) ═══
+local function DS_proactiveDeviceSpoof()
+	if not DS_SpoofEnabled or DS_DeviceSpoof == "Default" then return end
+	local lp = LocalPlayer
+	if not lp then return end
+	local spoofVal = (DS_DeviceSpoof == "Mobile") and "Phone" or (DS_DeviceSpoof == "PC") and "Computer" or DS_DeviceSpoof
+
+	-- 1. Override device attributes on all targets
+	local targets = {lp}
+	if lp.Character then
+		table.insert(targets, lp.Character)
+		local hum = lp.Character:FindFirstChildOfClass("Humanoid")
+		if hum then table.insert(targets, hum) end
+		local head = lp.Character:FindFirstChild("Head")
+		if head then table.insert(targets, head) end
+	end
+	for _, target in ipairs(targets) do
+		for _, attrName in ipairs(DS_DEVICE_ATTR_NAMES) do
+			pcall(function()
+				local existing = target:GetAttribute(attrName)
+				if existing ~= nil then target:SetAttribute(attrName, spoofVal) end
+			end)
+		end
+	end
+	pcall(function() lp:SetAttribute("Device", spoofVal) end)
+
+	-- 2. Game-specific remote overrides
+	pcall(function()
+		local RS = game:GetService("ReplicatedStorage")
+		-- PATTERN A: GetDevice RemoteFunction (Generalized)
+		for _, v in pairs(RS:GetChildren()) do
+			if v:IsA("RemoteFunction") and (v.Name:find("Device") or v.Name:find("Platform")) then
+				if not DS_OriginalValues[v] then 
+					DS_OriginalValues[v] = { OnClientInvoke = v.OnClientInvoke, Type = "Remote" }
+				end
+				v.OnClientInvoke = function()
+					if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
+						if DS_DeviceSpoof == "Mobile" then return "Phone" end
+						if DS_DeviceSpoof == "PC" then return "Computer" end
+						if DS_DeviceSpoof == "Console" then return "Console" end
+					end
+				end
+			end
+		end
+
+		-- PATTERN B: DeviceUpdateEvent & Common Remotes
+		local overhead = RS:FindFirstChild("Overhead") or RS:FindFirstChild("Nametags")
+		if overhead then
+			local de = overhead:FindFirstChild("DeviceUpdateEvent") or overhead:FindFirstChild("UpdateDevice")
+			if de and de:IsA("RemoteEvent") then de:FireServer(spoofVal) end
+			
+			local dr = overhead:FindFirstChild("DeviceRequestFunction") or overhead:FindFirstChild("GetDevice")
+			if dr and dr:IsA("RemoteFunction") then 
+				if not DS_OriginalValues[dr] then 
+					DS_OriginalValues[dr] = { OnClientInvoke = dr.OnClientInvoke, Type = "Remote" }
+				end
+				dr.OnClientInvoke = function() return spoofVal end 
+			end
+		end
+
+		-- Direct Remote Search & Fire
+		local function scanAndFire()
+			for _, v in pairs(RS:GetDescendants()) do
+				if v:IsA("RemoteEvent") then
+					local vn = v.Name
+					if vn == "DeviceUpdateEvent" or vn == "UpdateDevice" or vn == "DeviceDetected" or vn == "DeviceRemote" then
+						if vn == "DeviceDetected" then
+							local emojiMap = { Mobile = "\240\159\147\177", PC = "\240\159\146\187", Console = "\240\159\142\174" }
+							v:FireServer(emojiMap[DS_DeviceSpoof] or emojiMap.PC)
+						elseif vn == "DeviceRemote" then
+							local termVal = (DS_DeviceSpoof == "Mobile") and "Mobile" or (DS_DeviceSpoof == "PC") and "Desktop" or DS_DeviceSpoof
+							v:FireServer(termVal)
+						else
+							v:FireServer(spoofVal)
+						end
+					end
+				end
+			end
+		end
+		
+		scanAndFire()
+		-- Late loading support (like Pattern D in StarSpace.lua)
+		task.spawn(function()
+			for i = 1, 5 do
+				task.wait(3)
+				scanAndFire()
+			end
+		end)
+	end)
+
+	-- 3. Override StringValues with device-related names
+	pcall(function()
+		local function scanValues(parent)
+			for _, child in pairs(parent:GetDescendants()) do
+				if child:IsA("StringValue") then
+					local nameLower = child.Name:lower()
+					for _, kw in ipairs(DS_DEVICE_VALUE_KEYWORDS) do
+						if nameLower:find(kw) then pcall(function() child.Value = spoofVal end); break end
+					end
+				end
+			end
+		end
+		pcall(function() scanValues(lp) end)
+		if lp.Character then pcall(function() scanValues(lp.Character) end) end
+	end)
+
+	-- 4. Watch attribute changes (prevent server reset)
+	if lp.Character then
+		for _, target in ipairs(targets) do
+			pcall(function()
+				if target:GetAttribute("Device") ~= nil then
+					local conn = target:GetAttributeChangedSignal("Device"):Connect(function()
+						if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
+							local current = target:GetAttribute("Device")
+							local cat = DS_getDeviceCategory(tostring(current))
+							if cat and cat ~= DS_DeviceSpoof then
+								pcall(function() target:SetAttribute("Device", spoofVal) end)
+							end
+						end
+					end)
+					_G.StarshipSpoofConnections = _G.StarshipSpoofConnections or {}
+					table.insert(_G.StarshipSpoofConnections, conn)
+				end
+			end)
+		end
+	end
+end
+
+-- ═══ Privacy Hooks (FULL - hookmetamethod __index + __namecall) ═══
+local DS_oldIndex = (getrawmetatable and getrawmetatable(game).__index) or nil
+local DS_oldNamecall = (getrawmetatable and getrawmetatable(game).__namecall) or nil
+local function DS_ApplyPrivacyHooks()
+	if DS_HooksApplied then return end
+
+	-- Check all required functions exist
+	if not hookmetamethod or not checkcaller or not getnamecallmethod then
+		warn("[STARSHIP] ⚠️ hookmetamethod/checkcaller/getnamecallmethod not available — visual spoof only")
+		DS_HooksApplied = true
+		return
+	end
+
+	local lp = LocalPlayer
+	local UIS = game:GetService("UserInputService")
+	local GS = game:GetService("GuiService")
+
+	-- Pre-cache device remote references for fast comparison
+	local _cachedDeviceRemotes = {}
+	local _deviceEmojiMap = {
+		Mobile = "\240\159\147\177", PC = "\240\159\146\187", Console = "\240\159\142\174",
+	}
+	task.spawn(function()
+		pcall(function()
+			local RS = game:GetService("ReplicatedStorage")
+			local overhead = RS:FindFirstChild("Overhead")
+			if overhead then
+				local de = overhead:FindFirstChild("DeviceUpdateEvent")
+				if de then _cachedDeviceRemotes[de] = "DeviceUpdateEvent" end
+			end
+			local de2 = RS:FindFirstChild("DeviceUpdateEvent")
+			if de2 then _cachedDeviceRemotes[de2] = "DeviceUpdateEvent" end
+			local dd = RS:FindFirstChild("DeviceDetected")
+			if dd then _cachedDeviceRemotes[dd] = "DeviceDetected" end
+		end)
+	end)
+
+	-- Hook __index
+	local hookOk1, hookErr1 = pcall(function()
+		local oldIndex
+		oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
+			if not checkcaller() then
+				-- Anti-AFK hooks (Always block if AntiTabDetect is on)
+				if _G.StarshipAntiTabDetect then
+					if self == UIS then
+						if key == "IsWindowFocused" then return function() return true end end
+						if key == "GetLastInputTime" then return function() return tick() end end
+					end
+				end
+
+				if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
+					-- Optimization: Check common services first
+					if self == UIS then
+						if DS_DeviceSpoof == "Mobile" then
+							if key == "TouchEnabled" or key == "KeyboardEnabled" or key == "MouseEnabled" or key == "AccelerometerEnabled" or key == "GyroscopeEnabled" then return true end
+							if key == "GamepadEnabled" then return false end
+						elseif DS_DeviceSpoof == "PC" then
+							if key == "TouchEnabled" then return false end
+							if key == "KeyboardEnabled" or key == "MouseEnabled" then return true end
+						elseif DS_DeviceSpoof == "Console" then
+							if key == "TouchEnabled" then return false end
+							if key == "GamepadEnabled" then return true end
+						end
+					elseif self == GS then
+						if key == "IsTenFootInterface" then return DS_DeviceSpoof == "Console" end
+					elseif DS_DeviceSpoof == "Mobile" and key == "ViewportSize" and self:IsA("Camera") then
+						return Vector2.new(896, 414)
+					end
+				end
+			end
+			return (oldIndex or DS_oldIndex)(self, key)
+		end))
+		if oldIndex then DS_oldIndex = oldIndex end
+	end)
+	if not hookOk1 or not DS_oldIndex then
+		warn("[STARSHIP] __index hook failed:", hookErr1 or "hookmetamethod returned nil")
+		DS_oldIndex = nil
+	end
+
+	-- Hook __namecall
+	-- Hook __namecall
+	local hookOk2, hookErr2 = pcall(function()
+		local oldNamecall
+		oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+			local method = getnamecallmethod()
+
+			if not checkcaller() then
+				if _G.StarshipAntiTabDetect then
+					-- 1. Block focus signals
+					if (method == "Connect" or method == "connect") and self == UIS.WindowFocusReleased then
+						return {
+							Connected = true,
+							Disconnect = function(s) if type(s) == "table" then s.Connected = false end end,
+							disconnect = function(s) if type(s) == "table" then s.Connected = false end end,
+						}
+					end
+					-- 2. Block focus checks
+					if method == "IsWindowFocused" then return true end
+					if method == "GetLastInputTime" then return tick() end
+					-- 3. Block AFK remotes
+					if method == "FireServer" or method == "InvokeServer" then
+						local nm = tostring(self.Name):lower()
+						if nm:find("afk") or nm:find("focus") or nm:find("tab") or nm:find("idle") or nm:find("activity") then
+							return
+						end
+					end
+					-- 4. Block AFK attributes
+					if method == "SetAttribute" then
+						local attr = tostring(...):lower()
+						if attr:find("afk") or attr:find("focus") or attr:find("tab") or attr:find("idle") then
+							return
+						end
+					end
+				end
+
+				if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
+					-- 0. DEVICE REMOTE INTERCEPT (fast path)
+					if method == "FireServer" or method == "InvokeServer" then
+						local isDeviceRemote = _cachedDeviceRemotes[self] ~= nil
+						local remoteName = not isDeviceRemote and tostring(self.Name):lower() or ""
+						
+						-- ONLY process if it's a known device remote or name contains keywords
+						if isDeviceRemote or remoteName:find("device") or remoteName:find("platform") or remoteName:find("input") then
+							if _cachedDeviceRemotes[self] == "DeviceUpdateEvent" then
+								local spoofVal2 = (DS_DeviceSpoof == "Mobile") and "Phone" or
+									(DS_DeviceSpoof == "PC") and "Computer" or DS_DeviceSpoof
+								return (oldNamecall or DS_oldNamecall)(self, spoofVal2)
+							elseif _cachedDeviceRemotes[self] == "DeviceDetected" then
+								return (oldNamecall or DS_oldNamecall)(self, _deviceEmojiMap[DS_DeviceSpoof] or _deviceEmojiMap.PC)
+							end
+
+							-- Deep spoof only when potentially relevant
+							local args = {...}
+							local argCount = select("#", ...)
+							local changed = false
+							for i = 1, argCount do
+								local spoofed = DS_deepSpoof(args[i])
+								if spoofed ~= args[i] then args[i] = spoofed; changed = true end
+							end
+							if changed then return (oldNamecall or DS_oldNamecall)(self, unpack(args, 1, argCount)) end
+						end
+					end
+
+					-- 2. ATTRIBUTE SPOOFING (READ)
+					if method == "GetAttribute" then
+						local name = ...
+						local nameLower = name and tostring(name):lower() or ""
+						if nameLower == "device" or nameLower == "platform" or nameLower == "devicetype" or
+						   nameLower == "inputtype" or nameLower == "playerdevice" or nameLower == "playerplatform" then
+							if DS_DeviceSpoof == "Mobile" then return "Mobile" end
+							if DS_DeviceSpoof == "PC" then return "PC" end
+							if DS_DeviceSpoof == "Console" then return "Console" end
+						end
+					end
+
+					-- 2b. ATTRIBUTE SPOOFING (WRITE)
+					if method == "SetAttribute" then
+						local args = {...}
+						local name = args[1]
+						local nameLower = name and tostring(name):lower() or ""
+						if nameLower == "device" or nameLower == "platform" or nameLower == "devicetype" or
+						   nameLower == "inputtype" or nameLower == "playerdevice" or nameLower == "playerplatform" then
+							local currentVal = tostring(args[2])
+							DS_learnGameTerm(currentVal)
+							args[2] = DS_getGameTermForTarget()
+							return (oldNamecall or DS_oldNamecall)(self, unpack(args, 1, select("#", ...)))
+						end
+					end
+
+					-- 3. CORE SERVICE SPOOFING
+					if self == GS and method == "IsTenFootInterface" then
+						return DS_DeviceSpoof == "Console"
+					elseif self == UIS then
+						if method == "GetPlatform" then
+							if DS_DeviceSpoof == "Mobile" then return Enum.Platform.Android end
+							if DS_DeviceSpoof == "PC" then return Enum.Platform.Windows end
+							if DS_DeviceSpoof == "Console" then return Enum.Platform.XBoxOne end
+						elseif method == "GetLastInputType" then
+							if DS_DeviceSpoof == "Mobile" then return Enum.UserInputType.Touch end
+							if DS_DeviceSpoof == "PC" then return Enum.UserInputType.Keyboard end
+							if DS_DeviceSpoof == "Console" then return Enum.UserInputType.Gamepad1 end
+						elseif method == "GetConnectedGamepads" then
+							if DS_DeviceSpoof == "Mobile" or DS_DeviceSpoof == "PC" then return {} end
+							if DS_DeviceSpoof == "Console" then return {{}} end
+						elseif method == "GetSupportedGamepadKeyCodes" then
+							if DS_DeviceSpoof == "Console" then
+								return {Enum.KeyCode.ButtonX, Enum.KeyCode.ButtonY, Enum.KeyCode.ButtonA, Enum.KeyCode.ButtonB}
+							else return {} end
+						end
+					end
+				end
+			end
+			return (oldNamecall or DS_oldNamecall)(self, ...)
+		end))
+		if oldNamecall then DS_oldNamecall = oldNamecall end
+	end)
+	if not hookOk2 or not DS_oldNamecall then
+		warn("[STARSHIP] __namecall hook failed:", hookErr2 or "hookmetamethod returned nil")
+		DS_oldNamecall = nil
+	end
+
+	-- Create TouchGui for Mobile spoofing
+	if DS_DeviceSpoof == "Mobile" then
+		pcall(function()
+			local pg = lp:FindFirstChild("PlayerGui")
+			if pg and not pg:FindFirstChild("TouchGui") then
+				local tg = Instance.new("ScreenGui")
+				tg.Name = "TouchGui"
+				tg.ResetOnSpawn = false
+				tg.Parent = pg
+				local f = Instance.new("Frame", tg)
+				f.Name = "TouchControlFrame"
+				f.Visible = false
+			end
+		end)
+	end
+
+	DS_HooksApplied = true
+end
+
+-- ═══ Apply hooks early if saved settings exist ═══
+if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
+	pcall(DS_ApplyPrivacyHooks)
+	task.spawn(function()
+		task.wait(2)
+		pcall(DS_proactiveDeviceSpoof)
+	end)
+end
+
+-- ═══ Full Scan & Listen Functions ═══
+local function DS_fullScan()
+	local lp = LocalPlayer
+	for _, player in pairs(Players:GetPlayers()) do
+		if player.Character then
+			for _, g in pairs(player.Character:GetDescendants()) do
+				if g:IsA("GuiObject") and DS_isDeviceRelated(g) then
+					_G.StarshipDeviceElements = _G.StarshipDeviceElements or {}
+					_G.StarshipDeviceElements[g] = true
+					pcall(DS_spoof, g)
+				end
+			end
+		end
+	end
+	pcall(function()
+		for _, g in pairs(lp.PlayerGui:GetDescendants()) do
+			if g:IsA("GuiObject") and DS_isDeviceRelated(g) then
+				_G.StarshipDeviceElements = _G.StarshipDeviceElements or {}
+				_G.StarshipDeviceElements[g] = true
+				pcall(DS_spoof, g)
+			end
+		end
+	end)
+end
+
+local function DS_listenToCharacter(char)
+	if not char then return end
+	local conn = char.DescendantAdded:Connect(function(g)
+		if DS_SpoofEnabled and g:IsA("GuiObject") and DS_isDeviceRelated(g) then
+			_G.StarshipDeviceElements = _G.StarshipDeviceElements or {}
+			_G.StarshipDeviceElements[g] = true
+			task.defer(function() pcall(DS_spoof, g) end)
+		end
+	end)
+	_G.StarshipSpoofConnections = _G.StarshipSpoofConnections or {}
+	table.insert(_G.StarshipSpoofConnections, conn)
+end
+
+-- ═══ UI ELEMENTS ═══
+DeviceSpoofTab:Paragraph({
+	Title = "⚙️ Configuration",
+	Desc = "Select your target device and enable spoofing below.",
+})
+
+DeviceSpoofTab:Dropdown({
+	Title = "🎯 Device Type",
+	Desc = "Choose which device to appear as",
+	Values = {"Default", "PC", "Mobile", "Console"},
+	Value = DS_DeviceSpoof,
+	Callback = function(v)
+		local prev = DS_DeviceSpoof
+		DS_DeviceSpoof = v
+		DS_SaveSettings()
+		if DS_SpoofEnabled then
+			DS_ApplyPrivacyHooks()
+			-- Re-spoof confirmed elements
+			if _G.StarshipDeviceElements then
+				for obj, _ in pairs(_G.StarshipDeviceElements) do
+					if typeof(obj) == "Instance" and obj.Parent then pcall(DS_spoof, obj) end
+				end
+			end
+			task.spawn(function() task.wait(0.3); DS_proactiveDeviceSpoof() end)
+			if v ~= "Default" and v ~= prev then
+				WindUI:Notify({ Title = "📱 Device Spoof", Content = "Updated to: " .. v .. "\nRespawn for full effect!", Duration = 4 })
+			end
+		end
+		WindUI:Notify({ Title = "📱 Device Spoof", Content = "Device set to: " .. v, Duration = 2 })
+	end,
+})
+
+DS_SpoofToggleRef = DeviceSpoofTab:Toggle({
+	Title = "🔄 Enable Spoofing",
+	Desc = "Activate device spoofing hooks",
+	Value = DS_SpoofEnabled,
+	Callback = function(v)
+		DS_SpoofEnabled = v
+		DS_SaveSettings()
+		if v then
+			DS_ApplyPrivacyHooks()
+			task.spawn(function() task.wait(0.3); DS_proactiveDeviceSpoof() end)
+			if DS_DeviceSpoof ~= "Default" then
+				_G.StarshipSpoofConnections = {}
+				_G.StarshipDeviceElements = {}
+				DS_fullScan()
+				-- Listen to all characters
+				for _, player in pairs(Players:GetPlayers()) do
+					if player.Character then DS_listenToCharacter(player.Character) end
+					local cc = player.CharacterAdded:Connect(function(char)
+						task.wait(1); DS_listenToCharacter(char); DS_fullScan()
+						task.spawn(function() task.wait(0.5); DS_proactiveDeviceSpoof() end)
+					end)
+					table.insert(_G.StarshipSpoofConnections, cc)
+				end
+				local jc = Players.PlayerAdded:Connect(function(player)
+					local cc = player.CharacterAdded:Connect(function(char) task.wait(1); DS_listenToCharacter(char); DS_fullScan() end)
+					table.insert(_G.StarshipSpoofConnections, cc)
+				end)
+				table.insert(_G.StarshipSpoofConnections, jc)
+				-- Periodic re-spoof
+				task.spawn(function()
+					while DS_SpoofEnabled and task.wait(5) do
+						if _G.StarshipDeviceElements then
+							for obj, isD in pairs(_G.StarshipDeviceElements) do
+								if isD and typeof(obj) == "Instance" and obj.Parent then pcall(DS_spoof, obj) end
+							end
+						end
+					end
+				end)
+				WindUI:Notify({ Title = "📱 Device Spoof", Content = "Spoofing ACTIVE → " .. DS_DeviceSpoof, Duration = 3 })
+			else
+				WindUI:Notify({ Title = "📱 Device Spoof", Content = "Spoofing enabled. Select a device type above!", Duration = 3 })
+			end
+		else
+			-- Disconnect all
+			if _G.StarshipSpoofConnections then
+				for _, conn in pairs(_G.StarshipSpoofConnections) do pcall(function() conn:Disconnect() end) end
+				_G.StarshipSpoofConnections = {}
+			end
+			-- Restore originals
+			for obj, orig in pairs(DS_OriginalValues) do
+				if typeof(obj) == "Instance" and obj.Parent then
+					pcall(function()
+						if orig.Type == "Image" then
+							obj.Image = orig.Image; obj.ImageRectOffset = orig.ImageRectOffset; obj.ImageRectSize = orig.ImageRectSize
+						elseif orig.Type == "Text" then obj.Text = orig.Text
+						elseif orig.Type == "Frame" then obj.Visible = orig.Visible 
+						elseif orig.Type == "Remote" then obj.OnClientInvoke = orig.OnClientInvoke end
+					end)
+				end
+			end
+			DS_OriginalValues = {}
+			_G.StarshipDeviceElements = {}
+			
+			-- Restore device attributes & remotes with accurate detection
+			pcall(function()
+				local RS = game:GetService("ReplicatedStorage")
+				local UIS2 = game:GetService("UserInputService")
+				
+				-- Detect Real Device
+				local realDevice = "Computer"
+				if UIS2.TouchEnabled and not (UIS2.MouseEnabled or UIS2.KeyboardEnabled) then 
+					realDevice = "Phone"
+				elseif UIS2.GamepadEnabled and not (UIS2.MouseEnabled or UIS2.KeyboardEnabled) then 
+					realDevice = "Console" 
+				end
+				
+				LocalPlayer:SetAttribute("Device", realDevice)
+				if LocalPlayer.Character then LocalPlayer.Character:SetAttribute("Device", realDevice) end
+				
+				-- Notify server of back-to-normal state
+				local overhead = RS:FindFirstChild("Overhead") or RS:FindFirstChild("Nametags")
+				if overhead then
+					local de = overhead:FindFirstChild("DeviceUpdateEvent") or overhead:FindFirstChild("UpdateDevice")
+					if de and de:IsA("RemoteEvent") then de:FireServer(realDevice) end
+				end
+				local deRoot = RS:FindFirstChild("DeviceUpdateEvent") or RS:FindFirstChild("UpdateDevice")
+				if deRoot and deRoot:IsA("RemoteEvent") then deRoot:FireServer(realDevice) end
+			end)
+			DS_SaveSettings()
+			WindUI:Notify({ Title = "📱 Device Spoof", Content = "Spoofing DISABLED & restored to normal", Duration = 3 })
+		end
+	end,
+})
+
+DeviceSpoofTab:Divider()
+
+DeviceSpoofTab:Button({
+	Title = "🔄 Force Respawn",
+	Desc = "Respawn character to apply spoofing",
+	Callback = function()
+		local lp = LocalPlayer
+		if lp and lp.Character then
+			local hum = lp.Character:FindFirstChildOfClass("Humanoid")
+			if hum then hum.Health = 0 end
+			WindUI:Notify({ Title = "📱 Device Spoof", Content = "Respawning to apply spoof...", Duration = 2 })
+		end
+	end,
+})
+
+
+
+-- Auto-init if loaded from saved settings
+if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
+	task.spawn(function()
+		task.wait(2)
+		if DS_SpoofToggleRef then
+			pcall(function()
+				DS_SpoofEnabled = false
+				if DS_SpoofToggleRef.SetValue then DS_SpoofToggleRef:SetValue(false)
+				elseif DS_SpoofToggleRef.Set then DS_SpoofToggleRef:Set(false) end
+				task.wait(0.2)
+				if DS_SpoofToggleRef.SetValue then DS_SpoofToggleRef:SetValue(true)
+				elseif DS_SpoofToggleRef.Set then DS_SpoofToggleRef:Set(true) end
+			end)
+		else
+			DS_SpoofEnabled = true
+			_G.StarshipSpoofConnections = {}
+			_G.StarshipDeviceElements = {}
+			DS_fullScan()
+			task.spawn(function()
+				while DS_SpoofEnabled and task.wait(5) do
+					if _G.StarshipDeviceElements then
+						for obj, isD in pairs(_G.StarshipDeviceElements) do
+							if isD and typeof(obj) == "Instance" and obj.Parent then pcall(DS_spoof, obj) end
+						end
+					end
+				end
+			end)
+		end
+	end)
+end
+
+end) -- end pcall
+if not dsOk then
+	warn("[STARSHIP] ⚠️ Device Spoof tab error:", tostring(dsErr))
+	pcall(function()
+		DeviceSpoofTab:Paragraph({ Title = "❌ Error", Desc = "Device Spoof failed to load: " .. tostring(dsErr) })
+	end)
+end
+end) -- end task.spawn for Device Spoof Tab
 
 -- ══════════════════════════════════════════════════════════════════
+
 -- ⚙️ SETTINGS TAB
 -- ══════════════════════════════════════════════════════════════════
 local SettingsTab = Window:Tab({
@@ -7462,11 +9678,6 @@ local ThemeDropdown = SettingsTab:Dropdown({
 		pcall(function()
 			WindUI:SetTheme(selected)
 		end)
-		WindUI:Notify({
-			Title = "🎨 Theme",
-			Content = "Theme changed to " .. selected,
-			Duration = 2,
-		})
 	end,
 })
 
@@ -7494,18 +9705,6 @@ SettingsTab:Divider()
 -- ══════════════════════════════════════════════════════════════════
 SettingsTab:Section({ Title = "🔧 General", TextSize = 16 })
 
-local AutoAntiAFKToggle = SettingsTab:Toggle({
-	Title = "Auto Anti-AFK",
-	Desc = "Automatically enable Anti-AFK on start",
-	Value = Settings.AutoAntiAFK,
-	Callback = function(state)
-		Settings.AutoAntiAFK = state
-		SaveSettings()
-		if state then
-			WindUI:Notify({ Title = "Auto Anti-AFK", Content = "Will be enabled on next load", Duration = 2 })
-		end
-	end,
-})
 
 local RememberPositionToggle = SettingsTab:Toggle({
 	Title = "Remember Position",
@@ -7551,10 +9750,9 @@ task.defer(function()
 
 		-- Sync all settings toggles
 		safeSet(ShowNotificationsToggle, Settings.ShowNotifications)
-		safeSet(AutoAntiAFKToggle, Settings.AutoAntiAFK)
 		safeSet(RememberPositionToggle, Settings.RememberPosition)
-		safeSet(PlaybackAntiAFKToggle, Settings.AutoAntiAFK)
 		safeSet(ThemeDropdown, Settings.Theme)
+		safeSet(AdminESPToggle, Settings.AdminESP)
 
 		task.wait(0.5) -- Wait for any delayed callbacks
 		getgenv().isSyncingSettings = false -- Re-enable notifications
@@ -7739,24 +9937,7 @@ task.delay(1, function()
 		statusText = "Config unavailable"
 	end
 
-	OriginalNotify(WindUI, {
-		Title = "🚀 Starship Mobile",
-		Content = statusIcon .. " " .. statusText,
-		Duration = 4,
-	})
+	-- Notifications removed for performance
 end)
 
--- Check for updates using cached data
-task.spawn(function()
-	task.wait(5) -- Wait for UI to settle
-	local data = _G.StarshipChangelogData
-	
-	if data and data.currentVersion and data.currentVersion ~= VERSION then
-		WindUI:Notify({
-			Title = "Update Available",
-			Content = "New version " .. data.currentVersion .. " is available!\nRe-execute script to update.",
-			Duration = 8,
-			Icon = "download"
-		})
-	end
-end)
+-- Update check removed for performance
