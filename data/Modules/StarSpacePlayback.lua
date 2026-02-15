@@ -1656,20 +1656,45 @@ function _G.StarSpace.LoadRecording(pathOrName)
                 r.AssemblyLinearVelocity = vel
                 r.CFrame = r.CFrame:Lerp(CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(finalRot), 0), 0.5)
 
-            -- ==== In Air (Anchored for Smoothness) ====
+            -- ==== In Air (Generalized Physics for Smooth Replication) ====
             elseif isInAir and smoothPos then
-                r.Anchored = true
-                -- Direct positioning while anchored. No physics interference.
-                local targetCF = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(finalRot or fA.rot or 0), 0)
-                if isTimeJump or isTeleportFrame then
-                    r.CFrame = targetCF
-                else
-                    r.CFrame = r.CFrame:Lerp(targetCF, 0.85)
+                -- [PATCH] Removed Anchored=true to fix "stuttering" for other players.
+                -- By letting this fall through to the velocity logic below, we get smooth physics replication.
+                -- We only set explicit state if needed for animation.
+                if isSpin then 
+                     -- Handle spin manually here or let rotation logic handle it (added below)
                 end
-                if isSpin then r.CFrame = r.CFrame * CFrame.Angles(0, dt * 10, 0) end
+                -- Fallthrough to standard physics block...
+                r.Anchored = false
                 
-                -- Feed velocity for animation/trail effects
-                r.AssemblyLinearVelocity = (smoothVel or Vector3.zero) * playbackSpeed
+                -- Use the same logic as ground for consistency
+                local currentPos = r.Position
+                local posDiff = smoothPos - currentPos
+                local distance = posDiff.Magnitude
+                
+                -- Stronger correction in air to fight gravity/drift
+                local correctionStrength = math.clamp(distance * 12, 0, 200) 
+                local correctionVel = (distance > 0.01) and (posDiff * correctionStrength) or Vector3.zero
+                
+                local targetVel = (smoothVel or Vector3.zero) * playbackSpeed
+                local finalVel = targetVel + correctionVel
+                
+                r.AssemblyLinearVelocity = r.AssemblyLinearVelocity:Lerp(finalVel, 0.6)
+                
+                -- Rotation
+                local currentRot = r.Orientation.Y
+                local diff = (finalRot - currentRot + 180) % 360 - 180
+                local rotLerp = 0.5 
+                if isSpin then
+                    r.CFrame = r.CFrame * CFrame.Angles(0, dt * 10, 0)
+                else
+                    r.CFrame = CFrame.new(r.Position) * CFrame.Angles(0, math.rad(currentRot + diff * rotLerp), 0)
+                end
+                
+                -- Snap if drift is too large
+                if (distance > 10) or isTimeJump or isTeleportFrame then
+                    r.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(finalRot), 0)
+                end
 
             -- ==== Ground Movement (Velocity-Based - Match Backup) ====
             elseif smoothPos then
