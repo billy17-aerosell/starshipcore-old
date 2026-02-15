@@ -10,12 +10,13 @@
 -- Prevents "namecallInstance detector detected" kicks
 -- ══════════════════════════════════════════════════════════════════
 local SilenceActive = true
-task.delay(11, function() SilenceActive = false end)
+task.delay(120, function() SilenceActive = false end) -- Increased to 120s to catch delayed detections
 
 local sg = game:GetService("StarterGui")
 local cg = game:GetService("CoreGui")
 
 local function checkBypassUI(obj)
+    -- Allow UI check to run longer or persistently if needed
     if not SilenceActive then return end
     if obj:IsA("TextLabel") or obj:IsA("TextButton") then
         local t = tostring(obj.Text):lower()
@@ -46,10 +47,9 @@ task.spawn(function()
     for _, v in pairs(pg:GetDescendants()) do checkBypassUI(v) end
 end)
 
--- Polling: much less frequent (every 1s instead of 0.1s) to save FPS
+-- Polling: much less frequent (every 1s) to save FPS
 task.spawn(function()
-    for i = 1, 15 do
-        if not SilenceActive then break end
+    while SilenceActive do -- Run while SilenceActive is true
         for _, v in pairs(cg:GetChildren()) do -- Scan top-level objects first (faster)
             if v:IsA("ScreenGui") then
                 for _, desc in pairs(v:GetDescendants()) do
@@ -66,8 +66,12 @@ local old; old = hookmetamethod(game, "__namecall", function(self, ...)
     local args = {...}
     if SilenceActive and self == sg and method == "SetCore" and args[1] == "SendNotification" then
         local data = args[2]
-        if data and (tostring(data.Title):find("Adonis") or tostring(data.Text):find("pixeluted") or tostring(data.Text):find("bypassed")) then
-            return
+        if data then
+            local title = tostring(data.Title or ""):lower()
+            local text = tostring(data.Text or ""):lower()
+            if title:find("adonis") or text:find("adonis") or text:find("pixeluted") or text:find("bypassed") then
+                return
+            end
         end
     end
     return old(self, ...)
@@ -77,47 +81,7 @@ pcall(function()
 	loadstring(game:HttpGet('https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua'))()
 end)
 
--- Remove any blur effects added by bypass
-local function CleanBypassBlur()
-    pcall(function()
-        for _, effect in pairs(game:GetService("Lighting"):GetChildren()) do
-            if effect:IsA("BlurEffect") or effect:IsA("DepthOfFieldEffect") then
-                -- Don't destroy Starship's own effects (intro/shader)
-                if not (effect.Name:find("Starship") or effect.Name:find("StarshipShader")) then
-                    effect:Destroy()
-                end
-            end
-        end
-    end)
-end
 
--- Immediate cleanup right after bypass loads
-CleanBypassBlur()
-
--- ChildAdded listener: instantly destroy any new blur from bypass (active for 15 seconds)
-local blurConn
-blurConn = game:GetService("Lighting").ChildAdded:Connect(function(child)
-    task.defer(function() -- defer to let properties be set
-        if child and child.Parent and (child:IsA("BlurEffect") or child:IsA("DepthOfFieldEffect")) then
-            if not (child.Name:find("Starship") or child.Name:find("StarshipShader")) then
-                pcall(function() child:Destroy() end)
-            end
-        end
-    end)
-end)
-
--- Polling: continuous blur cleaner (runs for 15 seconds, NOT tied to SilenceActive)
-task.spawn(function()
-    for i = 1, 30 do
-        CleanBypassBlur()
-        task.wait(0.5)
-    end
-    -- Disconnect listener after 15 seconds
-    if blurConn then
-        blurConn:Disconnect()
-        blurConn = nil
-    end
-end)
 
 
 local Players = game:GetService("Players")
