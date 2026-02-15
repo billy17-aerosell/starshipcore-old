@@ -1768,10 +1768,14 @@ function _G.StarSpace.TogglePlayback()
                 hum:Move(Vector3.zero)
                 hum.AutoRotate = true -- Enable user rotation
                 hum:ChangeState(Enum.HumanoidStateType.Running) -- Reset to running state
+                -- Restore official WalkSpeed when paused
+                if originalWalkSpeed then
+                    hum.WalkSpeed = originalWalkSpeed
+                end
             end
             if root then
-                root.AssemblyLinearVelocity = Vector3.zero
-                root.AssemblyAngularVelocity = Vector3.zero
+                root.Anchored = false -- IMPORTANT: unanchor so player can move while paused
+                
                 -- Remove any playback constraints
                 local att = root:FindFirstChild("PlaybackAtt")
                 if att then att:Destroy() end
@@ -1879,10 +1883,14 @@ function _G.StarSpace.PausePlayback()
             hum:Move(Vector3.zero)
             hum.AutoRotate = true
             hum:ChangeState(Enum.HumanoidStateType.Running)
+            -- Restore official WalkSpeed when paused
+            if originalWalkSpeed then
+                hum.WalkSpeed = originalWalkSpeed
+            end
         end
         if root then
-            root.AssemblyLinearVelocity = Vector3.zero
-            root.AssemblyAngularVelocity = Vector3.zero
+            root.Anchored = false -- IMPORTANT: unanchor so player can move while paused
+            
             local att = root:FindFirstChild("PlaybackAtt")
             if att then att:Destroy() end
             local ao = root:FindFirstChild("PlaybackAO")
