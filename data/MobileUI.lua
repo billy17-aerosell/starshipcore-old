@@ -82,8 +82,6 @@ pcall(function()
 end)
 
 
-
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -367,9 +365,6 @@ local function ScanForScriptHubs()
 					
 					-- Log non-whitelisted GUIs for debugging
 					local descendantCount = #gui:GetDescendants()
-					if DEBUG and descendantCount > 10 then
-						warn("[STARSHIP DEBUG] Scanning: '" .. guiName .. "' (" .. descendantCount .. " descendants)")
-					end
 					
 					-- Check for script hub indicators ONLY (text-based detection)
 					local hasIndicators, indicator = HasScriptHubIndicators(gui)
@@ -405,9 +400,6 @@ local function SetupGUIMonitors()
 				if IsWhitelistedGUI(guiName, child) then return end
 				
 				local descendantCount = #child:GetDescendants()
-				if descendantCount > 10 and DEV_MODE then
-					warn("[STARSHIP DEBUG] New GUI: '" .. guiName .. "' (" .. descendantCount .. " descendants)")
-				end
 				
 				-- Check for script hub indicators ONLY
 				local hasIndicators, indicator = HasScriptHubIndicators(child)
@@ -6736,8 +6728,9 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 		end
 		
 		local speed = tonumber(PlaybackState.speed) or 1.0
+		local updateDt = math.min(dt, 0.1) -- [PATCH] Cap dt
 		if PlaybackState.isReversing then
-			PlaybackState.currentTime = PlaybackState.currentTime - (dt * speed)
+			PlaybackState.currentTime = PlaybackState.currentTime - (updateDt * speed)
 			if PlaybackState.currentTime <= 0 then
 				if PlaybackState.isLooping then 
 					PlaybackState.currentTime = PlaybackState.totalDuration 
@@ -6749,7 +6742,7 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 				return
 			end
 		else
-			PlaybackState.currentTime = PlaybackState.currentTime + (dt * speed)
+			PlaybackState.currentTime = PlaybackState.currentTime + (updateDt * speed)
 			if PlaybackState.currentTime >= PlaybackState.totalDuration then
 				if PlaybackState.isLooping then 
 					PlaybackState.currentTime = 0 
