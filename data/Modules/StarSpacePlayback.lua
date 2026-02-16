@@ -61,11 +61,6 @@ local pathVisualsFolder = nil
 local pathAnimationConnection = nil
 local currentPositionMarker = nil
 
--- Device Optimization
-local isMobile = (UserInputService:GetPlatform() == Enum.Platform.Android or UserInputService:GetPlatform() == Enum.Platform.IOS)
-local MAX_PATH_PARTS = isMobile and 150 or 500 -- Reduced for mobile
-local YIELD_THRESHOLD = isMobile and 1000 or 5000 -- Yield more often on mobile
-
 -- Premium gradient colors (Green → Cyan → Blue → Purple → Pink)
 local PATH_GRADIENT_COLORS = {
     Color3.fromRGB(34, 197, 94), -- Emerald Green (Start)
@@ -156,9 +151,9 @@ local function DrawPlaybackPath(frames)
 
     if #positions < 2 then return end
 
-    -- Optimization: Limit points for performance (more aggressive on mobile)
+    -- Optimization: Limit to ~500 points for performance
     local totalPoints = #positions
-    local step = math.max(1, math.floor(totalPoints / MAX_PATH_PARTS))
+    local step = math.max(1, math.floor(totalPoints / 500))
     local filteredPositions = {}
     local lastPos = nil
     local minDistance = 1.0
@@ -179,10 +174,8 @@ local function DrawPlaybackPath(frames)
         table.insert(filteredPositions, lastPosData)
     end
 
-    -- Draw nodes and beams with staggered creation to prevent hangs
+    -- Draw nodes and beams
     local prevPart = nil
-    local partsCreatedSinceWait = 0
-    local MAX_PARTS_PER_WAIT = isMobile and 25 or 100
     for i, posData in ipairs(filteredPositions) do
         local pos = posData.pos
         local progress = posData.progress
@@ -219,21 +212,9 @@ local function DrawPlaybackPath(frames)
                 beam.CastShadow = false
                 beam.CFrame = CFrame.lookAt(midpoint, pos)
                 beam.Parent = beamsFolder
-                
-                partsCreatedSinceWait = partsCreatedSinceWait + 1
             end
         end
-        partsCreatedSinceWait = partsCreatedSinceWait + 1
         prevPart = node
-        
-        -- Yield to keep UI responsive and prevent crash on low devices
-        if partsCreatedSinceWait >= MAX_PARTS_PER_WAIT then
-            partsCreatedSinceWait = 0
-            task.wait()
-            -- Check if folder was destroyed while waiting
-            if not pathVisualsFolder or not pathVisualsFolder.Parent then return end
-        end
-    end
     end
 
     -- START MARKER
@@ -440,21 +421,6 @@ function _G.StarSpace.ClearPath()
     ClearPlaybackPath()
 end
 
--- ==== SAFETY HELPERS ====
-
-local function IsValidVector(v)
-    if not v then return false end
-    if typeof(v) ~= "Vector3" then return false end
-    return (v.X == v.X) and (v.Y == v.Y) and (v.Z == v.Z) -- NaN check
-        and (math.abs(v.X) ~= math.huge) and (math.abs(v.Y) ~= math.huge) and (math.abs(v.Z) ~= math.huge) -- Inf check
-end
-
-local function IsValidCFrame(cf)
-    if not cf then return false end
-    if typeof(cf) ~= "CFrame" then return false end
-    return IsValidVector(cf.Position)
-end
-
 -- ==== HELPERS ====
 
 local function GaussianWeight(distance, sigma)
@@ -509,11 +475,9 @@ local function NormalizeFrames(frames)
                 f.hh = f.hipHeight
             end
             -- Time
-            if f.t == nil and f.time then
+            if f.time then
                 f.t = f.time
             end
-            
-            if _ % YIELD_THRESHOLD == 0 then task.wait() end
         end
     end
     return frames
@@ -536,7 +500,7 @@ local function PreprocessFrames(frames)
             if stateName then f.stEnum = stateName end
         end
         
-        if i % YIELD_THRESHOLD == 0 then task.wait() end
+        if i % 10000 == 0 then task.wait() end
     end
     frames._preprocessed = true
     return frames
@@ -632,7 +596,7 @@ local function GetSmoothedFrames(frames, strength, isFlexible)
                 end
             end
             
-            if i % YIELD_THRESHOLD == 0 then task.wait() end
+            if i % 5000 == 0 then task.wait() end
         end
         
         for i, pos in pairs(tempPos) do processedFrames[i].pos = pos end
@@ -1086,12 +1050,8 @@ function _G.StarSpace.LoadRecording(pathOrName)
         
         if #frames > 10 and not data.IsSmoothed then
             -- Only smooth if not already smoothed and not excessively large
-            -- Mobile devices have lower limits to prevent OOM
-            local maxSmoothFrames = isMobile and 10000 or 30000
-            local smoothStrength = isMobile and 1 or 3
-            
-            if #frames < maxSmoothFrames then 
-                frames = GetSmoothedFrames(frames, smoothStrength, true)
+            if #frames < 30000 then 
+                frames = GetSmoothedFrames(frames, 3, true)
                 frames = PreprocessFrames(frames)
             end
         end
@@ -1309,8 +1269,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
         end
     end
     
-    h.AutoRotate = false
-    h.PlatformStand = true
+    h.AutoRotate = true
     
     -- CRITICAL: Force R6 HipHeight to 0 (R6 always has HipHeight = 0)
     -- This prevents R6 characters from floating when they have non-zero HipHeight
@@ -1446,12 +1405,6 @@ function _G.StarSpace.LoadRecording(pathOrName)
             return
         end
         
-        -- STOP IF DEAD: Prevent errors/glitches when user dies
-        if h and h.Health <= 0 then
-            _G.StarSpace.StopPlayback(true)
-            return
-        end
-        
         -- ========================================
         -- REAL-TIME RIG & SCALE DETECTION
         -- Automatically adjusts height if player changes avatar or scales body
@@ -1485,7 +1438,8 @@ function _G.StarSpace.LoadRecording(pathOrName)
         end
         
         -- Update Time
-        local updateDt = dt
+        -- [PATCH] Cap dt to prevent massive time jumps on low FPS / lag spikes
+        local updateDt = math.min(dt, 0.1)
         if isReversing then
             currentPlaybackTime = currentPlaybackTime - (updateDt * playbackSpeed)
             if currentPlaybackTime <= 0 then
@@ -1597,10 +1551,8 @@ function _G.StarSpace.LoadRecording(pathOrName)
                     local isAirState = (stateEnum == Enum.HumanoidStateType.Jumping or stateEnum == Enum.HumanoidStateType.Freefall)
                     
                     if isAirState then
-                        -- PHYSICS OWNERSHIP: Only anchor if speed is extremely low to prevent jitter
-                        -- Otherwise let velocity-based physics handle it (set later in loop)
-                        local speed = fA.velVector and fA.velVector.Magnitude or 0
-                        r.Anchored = (speed < 0.1)
+                        -- PHYSICS OWNERSHIP: Anchor character in air to prevent physics stutter
+                        r.Anchored = true
                         
                         local isJumpState = (stateEnum == Enum.HumanoidStateType.Jumping)
                         local targetState = isJumpState and "jump" or "fall"
@@ -1682,7 +1634,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
                 if cachedPlaybackIsR6 then h.Jump = false end
                 
                 -- Snap to correct height immediately on landing
-                if smoothPos and IsValidVector(smoothPos) then
+                if smoothPos then
                     r.CFrame = CFrame.new(smoothPos.X, smoothPos.Y, smoothPos.Z) * CFrame.Angles(0, math.rad(finalRot), 0)
                 end
                 skipSnapFrames = 5
@@ -1722,7 +1674,8 @@ function _G.StarSpace.LoadRecording(pathOrName)
                 local distance = posDiff.Magnitude
                 
                 -- Stronger correction in air to fight gravity/drift
-                local correctionStrength = math.clamp(distance * 12, 0, 200) 
+                -- [PATCH] Reduced max strength to prevent flinging on low-end devices
+                local correctionStrength = math.clamp(distance * 8, 0, 80)
                 local correctionVel = (distance > 0.01) and (posDiff * correctionStrength) or Vector3.zero
                 
                 local targetVel = (smoothVel or Vector3.zero) * playbackSpeed
@@ -1730,20 +1683,19 @@ function _G.StarSpace.LoadRecording(pathOrName)
                 
                 r.AssemblyLinearVelocity = r.AssemblyLinearVelocity:Lerp(finalVel, 0.6)
                 
-                -- Rotation calculation (saved to finalRot to be applied later in Unified CFrame block)
+                -- Rotation
                 local currentRot = r.Orientation.Y
                 local diff = (finalRot - currentRot + 180) % 360 - 180
                 local rotLerp = 0.5 
-                
                 if isSpin then
-                    -- Let rotation logic handle spin or apply directly if needed
+                    r.CFrame = r.CFrame * CFrame.Angles(0, dt * 10, 0)
                 else
-                    finalRot = currentRot + diff * rotLerp
+                    r.CFrame = CFrame.new(r.Position) * CFrame.Angles(0, math.rad(currentRot + diff * rotLerp), 0)
                 end
                 
                 -- Snap if drift is too large
                 if (distance > 10) or isTimeJump or isTeleportFrame then
-                    -- Handled by snap flag logic in unified block
+                    r.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(finalRot), 0)
                 end
 
             -- ==== Ground Movement (Velocity-Based - Match Backup) ====
@@ -1761,7 +1713,8 @@ function _G.StarSpace.LoadRecording(pathOrName)
                 
                 -- Pull towards path in 3D (prevents sinking and floating)
                 -- We use a slightly stronger pull for vertical a bit more than horizontal
-                local correctionStrength = math.clamp(distance * 10, 0, 150)
+                -- [PATCH] Reduced max strength to prevent flinging on low-end devices
+                local correctionStrength = math.clamp(distance * 8, 0, 60)
                 local correctionVel = distance > 0.02 and (posDiff * correctionStrength) or Vector3.zero
                 
                 local targetVel = (smoothVel or Vector3.zero) * playbackSpeed
@@ -1770,12 +1723,12 @@ function _G.StarSpace.LoadRecording(pathOrName)
                 -- Apply velocity with Lerp for smoothness (Prevent jitter)
                 r.AssemblyLinearVelocity = r.AssemblyLinearVelocity:Lerp(finalVel, 0.5)
                 
-                -- 2. ROTATION CONTROL (Calculated, applied in unified block)
+                -- 2. ROTATION CONTROL
                 if not isUserMoving then
                     local currentRot = r.Orientation.Y
                     local diff = (finalRot - currentRot + 180) % 360 - 180
                     local rotLerp = (cachedPlaybackIsR6 and 0.6 or 0.45)
-                    finalRot = currentRot + diff * rotLerp
+                    r.CFrame = CFrame.new(r.Position) * CFrame.Angles(0, math.rad(currentRot + diff * rotLerp), 0)
                 end
 
                 -- 3. DRIFT SAFETY SNAP
@@ -1783,7 +1736,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
                 local verticalDiff = math.abs(posDiff.Y)
                 local needsSnap = (distance > 15) or (verticalDiff > 8) or isTimeJump or isTeleportFrame
                 
-                if needsSnap and skipSnapFrames <= 0 and IsValidVector(smoothPos) then
+                if needsSnap and skipSnapFrames <= 0 then
                     local snapCF = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(finalRot), 0)
                     r.CFrame = snapCF
                 end
@@ -1852,19 +1805,9 @@ function _G.StarSpace.LoadRecording(pathOrName)
             -- end
             
             -- ==== UNIFIED CFRAME APPLY (SINGLE WRITE) ====
-            if finalPos and finalRot and IsValidVector(finalPos) then
-                -- VOID PROTECTION: Stop if recorded position is in the void
-                local destroyHeight = workspace.FallenPartsDestroyHeight
-                if finalPos.Y < destroyHeight + 5 then
-                    _G.StarSpace.StopPlayback()
-                    if UI and UI.Slide then UI.Slide("Playback Error", "Path leads into the void!") end
-                    return
-                end
-
+            if finalPos and finalRot then
                 local targetCF = CFrame.new(finalPos) * CFrame.Angles(0, math.rad(finalRot), 0)
                 
-                if not IsValidCFrame(targetCF) then return end -- Final safety check
-
                 if isTimeJump or isTeleportFrame then
                     r.CFrame = targetCF
                 else
