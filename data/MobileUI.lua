@@ -6,29 +6,43 @@
 ]]
 
 -- ══════════════════════════════════════════════════════════════════
--- ADONIS BYPASS (Must load FIRST before any hookmetamethod calls)
+-- ADONIS BYPASS (Must load FIRST before any other code)
 -- Prevents "namecallInstance detector detected" kicks
 -- ══════════════════════════════════════════════════════════════════
+pcall(function()
+	loadstring(game:HttpGet('https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua'))()
+end)
+
 local sg = game:GetService("StarterGui")
 local cg = game:GetService("CoreGui")
 
 -- ══════════════════════════════════════════════════════════════════
--- CUSTOM NOTIFICATION RENAMER
+-- CUSTOM NOTIFICATION RENAMER (Optimized)
 -- ══════════════════════════════════════════════════════════════════
+local function renameText(text)
+    if not text then return nil end
+    local t = tostring(text):lower()
+    if (t:find("adonis") or t:find("pixeluted")) and (t:find("bypassed") or t:find("created") or t:find("loaded")) then
+        if t:find("bypassed") or t:find("loaded") then
+            return "Starship Protection"
+        else
+            return "Security bypass active!"
+        end
+    end
+    return nil
+end
+
 local old; old = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
     
-    if not checkcaller() and self == sg and method == "SetCore" and args[1] == "SendNotification" then
+    if self == sg and method == "SetCore" and args[1] == "SendNotification" then
         local data = args[2]
-        if data then
-            local title = tostring(data.Title or ""):lower()
-            local text = tostring(data.Text or ""):lower()
-            
-            if title:find("adonis") or text:find("adonis") or text:find("pixeluted") or text:find("bypassed") then
-                data.Title = "Starship Protection"
-                data.Text = "Security bypass active!"
-            end
+        if typeof(data) == "table" then
+            local newTitle = renameText(data.Title)
+            local newText = renameText(data.Text)
+            if newTitle then data.Title = newTitle end
+            if newText then data.Text = newText end
         end
     end
     return old(self, ...)
@@ -37,24 +51,21 @@ end)
 -- (Rename UI elements that might appear in CoreGui/PlayerGui)
 local function renameUI(obj)
     if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-        local t = tostring(obj.Text):lower()
-        if (t:find("adonis") or t:find("pixeluted")) and (t:find("bypassed") or t:find("created")) then
-            if t:find("bypassed") then
-                obj.Text = "Starship Protection"
-            else
-                obj.Text = "Security bypass active!"
-            end
-        end
+        local newText = renameText(obj.Text)
+        if newText then obj.Text = newText end
     end
 end
 
 cg.DescendantAdded:Connect(renameUI)
-pcall(function()
-    for _, v in pairs(cg:GetDescendants()) do renameUI(v) end
-end)
-
-pcall(function()
-	loadstring(game:HttpGet('https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua'))()
+task.spawn(function()
+    -- Scan top-level only first for speed, then descendants slowly
+    for _, v in pairs(cg:GetChildren()) do 
+        renameUI(v) 
+        for _, desc in pairs(v:GetDescendants()) do 
+            renameUI(desc) 
+            if #v:GetDescendants() > 50 then task.wait() end -- Don't freeze mobile
+        end
+    end
 end)
 
 
