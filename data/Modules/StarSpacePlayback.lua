@@ -33,10 +33,10 @@ local isMoonwalk = false
 local isGodMode = false
 local isSpin = false
 local isRespawnOnEnd = false
-local originalWalkSpeed = 16 -- NEW: Store original speed
 local skipSnapFrames = 0 -- NEW: Skip position snapping for X frames
 local totalDuration = 0
 local isPositionBasedPlayback = true -- Default to position-based for smooth movement
+local originalWalkSpeed = nil -- Saved WalkSpeed before playback, restored on stop
 
 -- Configuration
 local MAP_DISTANCE_THRESHOLD = 500 -- Max distance to start playback
@@ -478,6 +478,10 @@ local function NormalizeFrames(frames)
             if f.time then
                 f.t = f.time
             end
+            -- WalkSpeed
+            if f.walkSpeed then
+                f.ws = f.walkSpeed
+            end
         end
     end
     return frames
@@ -529,13 +533,13 @@ local function SmoothInterpolateFrames(frames, frameIdx, alpha)
         smoothPos = f1.posVector:Lerp(f2.posVector, alpha)
     end
 
-    -- Velocity Catmull-Rom
+    -- Velocity: Catmull-Rom for smooth transitions, CLAMPED to prevent overshoot
+    -- Catmull-Rom gives smooth direction/speed changes at turns and curves
+    -- Clamping ensures magnitude never exceeds max of adjacent keyframes
     if f0.velVector and f1.velVector and f2.velVector and f3.velVector then
         smoothVel = CatmullRomVector3(f0.velVector, f1.velVector, f2.velVector, f3.velVector, alpha)
-        
-        -- VELOCITY CLAMPING (NEW)
-        -- Prevents overshoot by limiting magnitude to a reasonable range
-        local maxMag = 300
+        -- Clamp magnitude: prevent overshoot beyond recorded values
+        local maxMag = math.max(f1.velVector.Magnitude, f2.velVector.Magnitude)
         if smoothVel.Magnitude > maxMag then
             smoothVel = smoothVel.Unit * maxMag
         end
@@ -847,6 +851,11 @@ function _G.StarSpace.StopPlayback(silent)
     
     if hum then
         hum.AutoRotate = true
+        -- Restore original WalkSpeed
+        if originalWalkSpeed then
+            hum.WalkSpeed = originalWalkSpeed
+            originalWalkSpeed = nil
+        end
         -- CARRY PRESERVATION: Skip stopping animations when ForceCarryMode is ON
         if not _G.StarshipForceCarryMode then
             for _, t in pairs(hum:GetPlayingAnimationTracks()) do
@@ -935,6 +944,31 @@ local function FindNearestFrame(frames, rPos)
     return bestT, minDst, bestFrameIdx
 end
 
+-- Helper to get RootPart height from floor level (Accurate for all rigs/scales)
+local function GetCharRootHeight(character)
+    if not character then return 3.0 end
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not hum or not root then return 3.0 end
+    
+    -- R6 Detection
+    local isR6 = (character:FindFirstChild("Torso") ~= nil)
+    
+    if isR6 then
+        -- R6: Standard height is ~3.0 (2.0 legs + 1.0 half torso)
+        local leftLeg = character:FindFirstChild("Left Leg")
+        local rightLeg = character:FindFirstChild("Right Leg")
+        local torso = character:FindFirstChild("Torso")
+        
+        local legLen = (leftLeg and leftLeg.Size.Y) or (rightLeg and rightLeg.Size.Y) or 2.0
+        local torsoHalf = (torso and torso.Size.Y / 2) or 1.0
+        return legLen + torsoHalf
+    else
+        -- R15: Floor distance is HipHeight + half RootPart size (usually 1.0)
+        return hum.HipHeight + (root.Size.Y / 2)
+    end
+end
+
 function _G.StarSpace.LoadRecording(pathOrName)
     -- print("[StarSpacePlayback] LoadRecording: " .. tostring(pathOrName))
     
@@ -1005,7 +1039,8 @@ function _G.StarSpace.LoadRecording(pathOrName)
     else
         -- Stop existing playback
         if isPlaying then
-            _G.StarSpace.StopPlayback(true) -- Full cleanup
+            isPlaying = false
+            if playbackConnection then playbackConnection:Disconnect() end
         end
         
         local frames = NormalizeFrames(data.Frames or data)
@@ -1020,7 +1055,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
         if #frames > 10 and not data.IsSmoothed then
             -- Only smooth if not already smoothed and not excessively large
             if #frames < 30000 then 
-                frames = GetSmoothedFrames(frames, 2, true)
+                frames = GetSmoothedFrames(frames, 3, true)
                 frames = PreprocessFrames(frames)
             end
         end
@@ -1046,7 +1081,7 @@ function _G.StarSpace.LoadRecording(pathOrName)
         DrawPlaybackPath(frames)
     end
     
-    print("[StarSpacePlayback] Preparing playback for " .. #frames .. " frames")
+    -- print("[StarSpacePlayback] Preparing playback for " .. #frames .. " frames")
     
     local char = LocalPlayer.Character
     local r = char and char:FindFirstChild("HumanoidRootPart")
@@ -1056,10 +1091,6 @@ function _G.StarSpace.LoadRecording(pathOrName)
         -- print("[StarSpacePlayback] Error: Character or RootPart not found!")
         return 
     end
-    
-    -- SAVE ORIGINAL WALKSPEED (NEW)
-    originalWalkSpeed = h.WalkSpeed
-    if originalWalkSpeed < 5 then originalWalkSpeed = 16 end -- Fallback
     
     -- Set isPlaying to true for Travel Phase
     isPlaying = true
@@ -1125,124 +1156,142 @@ function _G.StarSpace.LoadRecording(pathOrName)
     lastAirState = nil
     wasInAirLastFrame = false
     
--- Helper to get RootPart height from floor level (Accurate for all rigs/scales)
-local function GetCharRootHeight(character)
-    if not character then return 3.0 end
-    local hum = character:FindFirstChildOfClass("Humanoid")
-    local root = character:FindFirstChild("HumanoidRootPart")
-    if not hum or not root then return 3.0 end
+    -- ========================================
+    -- CROSS-RIG HEIGHT OFFSET SYSTEM (REMASTERED)
+    -- Handles: R6→R15, R15→R6, Mini-Avatars, and Scaled Characters
+    -- ========================================
     
-    -- R6 Detection
-    local isR6 = (character:FindFirstChild("Torso") ~= nil)
+    local playbackRootHeight = GetCharRootHeight(char)
+    local playbackIsR6 = (char:FindFirstChild("Torso") ~= nil)
+    local playbackRigType = playbackIsR6 and "R6" or "R15"
     
-    if isR6 then
-        -- R6: Standard height is ~3.0 (2.0 legs + 1.0 half torso)
-        local leftLeg = character:FindFirstChild("Left Leg")
-        local rightLeg = character:FindFirstChild("Right Leg")
-        local torso = character:FindFirstChild("Torso")
-        
-        local legLen = (leftLeg and leftLeg.Size.Y) or (rightLeg and rightLeg.Size.Y) or 2.0
-        local torsoHalf = (torso and torso.Size.Y / 2) or 1.0
-        return legLen + torsoHalf
-    else
-        -- R15: Floor distance is HipHeight + half RootPart size (usually 1.0)
-        return hum.HipHeight + (root.Size.Y / 2)
-    end
-end
-
--- ========================================
--- CROSS-RIG HEIGHT OFFSET SYSTEM (REMASTERED)
--- Handles: R6→R15, R15→R6, Mini-Avatars, and Scaled Characters
--- ========================================
-
-local playbackRootHeight = GetCharRootHeight(char)
-local playbackIsR6 = (char:FindFirstChild("Torso") ~= nil)
-local playbackRigType = playbackIsR6 and "R6" or "R15"
-
--- Auto-detect RigType from recording data
-local recordedRigType = currentPlaybackMetadata and currentPlaybackMetadata.RigType
-
-if not recordedRigType then
-    local firstFrame = frames[1]
-    if firstFrame and firstFrame.j then
-        -- Check for R6-specific joints
-        if firstFrame.j["Left Leg"] or firstFrame.j["Right Leg"] or firstFrame.j["Torso"] then
-            recordedRigType = "R6"
-        -- Check for R15-specific joints
-        elseif firstFrame.j["LeftUpperLeg"] or firstFrame.j["RightUpperLeg"] or firstFrame.j["UpperTorso"] then
-            recordedRigType = "R15"
-        else
-            recordedRigType = "R15" -- Default fallback
-        end
-    else
-        -- Flexible mode: Try to detect from recorded HipHeight
-        if firstFrame and firstFrame.hh ~= nil then
-            if firstFrame.hh < 0.5 then
+    -- print(string.format("[StarSpacePlayback] Playback Rig: %s (HipHeight: %.2f)", playbackRigType, h.HipHeight or 0))
+    
+    -- Auto-detect RigType from recording data
+    local recordedRigType = currentPlaybackMetadata and currentPlaybackMetadata.RigType
+    
+    if not recordedRigType then
+        local firstFrame = frames[1]
+        if firstFrame and firstFrame.j then
+            -- Check for R6-specific joints
+            if firstFrame.j["Left Leg"] or firstFrame.j["Right Leg"] or firstFrame.j["Torso"] then
                 recordedRigType = "R6"
-            else
+                -- print("[StarSpacePlayback] Detected R6 from joints: Left Leg/Right Leg/Torso")
+            -- Check for R15-specific joints
+            elseif firstFrame.j["LeftUpperLeg"] or firstFrame.j["RightUpperLeg"] or firstFrame.j["UpperTorso"] then
                 recordedRigType = "R15"
+                -- print("[StarSpacePlayback] Detected R15 from joints: LeftUpperLeg/RightUpperLeg/UpperTorso")
+            else
+                recordedRigType = "R15" -- Default fallback
+                -- print("[StarSpacePlayback] No matching joints found, defaulting to R15")
             end
         else
-            recordedRigType = "R15"
+            -- Flexible mode: Try to detect from recorded HipHeight
+            -- R6 HipHeight is typically 0, R15 is ~2.0
+            if firstFrame and firstFrame.hh ~= nil then
+                if firstFrame.hh < 0.5 then
+                    recordedRigType = "R6"
+                    -- print(string.format("[StarSpacePlayback] Detected R6 from HipHeight: %.2f", firstFrame.hh))
+                else
+                    recordedRigType = "R15"
+                    -- print(string.format("[StarSpacePlayback] Detected R15 from HipHeight: %.2f", firstFrame.hh))
+                end
+            else
+                -- Default to R15 (most common)
+                recordedRigType = "R15"
+                -- print("[StarSpacePlayback] No joints or HipHeight found, defaulting to R15")
+            end
         end
+    else
+        -- print("[StarSpacePlayback] Using RigType from metadata: " .. tostring(recordedRigType))
     end
-end
-
--- Case for when it's explicitly recorded but we need fallback
-if not recordedRigType then recordedRigType = "R15" end
-
--- Get recorded HipHeight
-local recordedHipHeight = currentPlaybackMetadata and currentPlaybackMetadata.HipHeight
-if not recordedHipHeight then
-    local firstFrame = frames[1]
-    recordedHipHeight = (firstFrame and firstFrame.hh) or ((recordedRigType == "R15") and 2.0 or 0)
-end
-
--- Calculate accurate offset based on Floor Level matching
-local recordedRootHeight = 3.0 -- Default guess (Standard R6/R15)
-if recordedRigType == "R15" then
-    recordedRootHeight = recordedHipHeight + 1.0
-else
-    recordedRootHeight = 3.0
-end
-
-recordedRootHeight = math.max(recordedRootHeight, 1.0)
-local crossRigHeightOffset = playbackRootHeight - recordedRootHeight
-
--- Cache for loop
-local cachedRecordedRootHeight = recordedRootHeight
-local cachedPlaybackIsR6 = playbackIsR6
-local cachedRecordedRigType = recordedRigType
-local cachedCrossRigHeightOffset = crossRigHeightOffset
-local lastRigCalcChar = char 
-local lastRigCalcHipHeight = h.HipHeight or 0
-
--- Restart Animate script for proper animation (R6 compatibility)
--- CARRY PRESERVATION: Skip Animate restart when ForceCarryMode is ON
-local animScript = char:FindFirstChild("Animate")
-if animScript and not _G.StarshipForceCarryMode and h then
-    -- SAFETY: Stop all current animation tracks before restarting
-    -- Prevents "AnimationTrack limit of 64 tracks exceeded" error
-    local animator = h:FindFirstChildOfClass("Animator") or h
-    if animator then
-        for _, track in pairs(animator:GetPlayingAnimationTracks()) do
-            pcall(function() track:Stop(0) end)
+    
+    -- CRITICAL: Ensure recordedRigType is never nil
+    if not recordedRigType then
+        recordedRigType = "R15"
+        -- print("[StarSpacePlayback] WARNING: recordedRigType was nil, forced to R15")
+    end
+    
+    -- print("[StarSpacePlayback] Final Detected Recorded RigType: " .. tostring(recordedRigType))
+    
+    -- Get recorded HipHeight (either from metadata or from first frame)
+    local recordedHipHeight = currentPlaybackMetadata and currentPlaybackMetadata.HipHeight
+    if not recordedHipHeight then
+        local firstFrame = frames[1]
+        if firstFrame and firstFrame.hh then
+            recordedHipHeight = firstFrame.hh
+        else
+            -- Estimate based on detected rig type
+            recordedHipHeight = (recordedRigType == "R15") and 2.0 or 0
         end
     end
     
-    animScript.Disabled = true
-    task.wait(0.05)
-    if char.Parent and animScript.Parent then
+    -- Calculate accurate offset based on Floor Level matching
+    -- Formula: Offset = PlaybackRootHeightFromGround - RecordedRootHeightFromGround
+    
+    local recordedRootHeight = 3.0 -- Default guess (Standard R6/R15)
+    if recordedRigType == "R15" then
+        local recordedHH = (currentPlaybackMetadata and currentPlaybackMetadata.HipHeight)
+        if not recordedHH then
+            local firstFrame = frames[1]
+            recordedHH = firstFrame and firstFrame.hh or 2.0
+        end
+        -- R15 Height: HipHeight + half of RootPart (usually 1.0, but we use a more balanced 3.0 baseline)
+        recordedRootHeight = recordedHH + 1.0
+    else
+        -- R6 Height: Standard is 3.0 (2.0 legs + 1.0 half torso)
+        recordedRootHeight = 3.0
+    end
+    
+    -- Ensure recordedRootHeight is never zero to avoid math errors
+    recordedRootHeight = math.max(recordedRootHeight, 1.0)
+    
+    local crossRigHeightOffset = playbackRootHeight - recordedRootHeight
+    
+    -- print(string.format("[StarSpacePlayback] Height Calc: Recorded(Rig:%s, RootY:%.2f) → Playback(Rig:%s, RootY:%.2f)", 
+    --    recordedRigType, recordedRootHeight, playbackRigType, playbackRootHeight))
+    -- print(string.format("[StarSpacePlayback] Final Offset Applied: %.2f", crossRigHeightOffset))
+    
+    -- Cache for loop
+    local cachedRecordedRootHeight = recordedRootHeight
+    local cachedPlaybackRootHeight = playbackRootHeight
+    cachedRecordedHipHeight = (recordedRigType == "R15") and (recordedRootHeight - 1.0) or 0
+    
+    -- Restart Animate script for proper animation (R6 compatibility)
+    -- CARRY PRESERVATION: Skip Animate restart when ForceCarryMode is ON
+    local animScript = char:FindFirstChild("Animate")
+    if animScript and not _G.StarshipForceCarryMode then
+        animScript.Disabled = true
+        task.wait(0.05)
         animScript.Disabled = false
+        -- R6 may need additional nudge to restart animations
+        if playbackIsR6 then
+            task.spawn(function()
+                task.wait(0.1)
+                h:Move(Vector3.zero) -- Trigger idle state
+            end)
+        end
     end
-    -- R6 may need additional nudge to restart animations
-    if playbackIsR6 and h.Parent then
-        task.spawn(function()
-            task.wait(0.1)
-            if h.Parent then h:Move(Vector3.zero) end -- Trigger idle state
-        end)
+    
+    h.AutoRotate = true
+    
+    -- CRITICAL: Force R6 HipHeight to 0 (R6 always has HipHeight = 0)
+    -- This prevents R6 characters from floating when they have non-zero HipHeight
+    if playbackIsR6 and h.HipHeight ~= 0 then
+        h.HipHeight = 0
+        -- print(string.format("[StarSpacePlayback] Forced R6 HipHeight to 0 (was %.2f)", h.HipHeight))
     end
-end
+    
+    -- Save original WalkSpeed for restoration on stop
+    originalWalkSpeed = h.WalkSpeed
+    
+    -- Cache for loop (these are MUTABLE — updated by real-time rig detection in heartbeat)
+    local cachedPlaybackIsR6 = playbackIsR6
+    local cachedRecordedRigType = recordedRigType
+    local cachedIsCrossRig = (recordedRigType ~= playbackRigType)
+    local cachedCrossRigHeightOffset = crossRigHeightOffset
+    local lastRigCalcChar = char 
+    local lastRigCalcHipHeight = h.HipHeight or 0
     
     -- ========================================
     -- TRAVEL PHASE (From StarshipCore)
@@ -1268,8 +1317,8 @@ end
             if dist > 5 and dist < 150 then
             -- Walk to start position naturally
             r.Anchored = false
-            -- CARRY PRESERVATION: Skip enabling Animate if ForceCarryMode is ON
-            if animScript and not _G.StarshipForceCarryMode and animScript.Parent then animScript.Disabled = false end
+            -- CARRY PRESERVATION: Skip enabling Animate if ForceCarryMode is ON (assume it's already in right state)
+            if animScript and not _G.StarshipForceCarryMode then animScript.Disabled = false end
             h.AutoRotate = true
             
             if UI and UI.Slide then
@@ -1347,21 +1396,41 @@ end
         
         local success, err = pcall(function()
         
+        -- Decrement skip snap frames
+        if skipSnapFrames > 0 then
+            skipSnapFrames = skipSnapFrames - 1
+        end
+        if not char or not char.Parent then
+            char = LocalPlayer.Character
+            if char then
+                r = char:FindFirstChild("HumanoidRootPart")
+                h = char:FindFirstChild("Humanoid")
+            end
+            return
+        end
+        
         -- ========================================
-        -- REAL-TIME RIG & SCALE DETECTION (REMASTERED)
+        -- REAL-TIME RIG & SCALE DETECTION
         -- Automatically adjusts height if player changes avatar or scales body
         -- ========================================
         local currentHH = h.HipHeight or 0
         local currentIsR6 = (char:FindFirstChild("Torso") ~= nil)
         
+        -- Detect change: Character Object OR HipHeight OR RigType
         if char ~= lastRigCalcChar or currentHH ~= lastRigCalcHipHeight or currentIsR6 ~= cachedPlaybackIsR6 then
             lastRigCalcChar = char
             lastRigCalcHipHeight = currentHH
             
+            -- Recalculate accurate offsets for the new character/scale
             cachedPlaybackRootHeight = GetCharRootHeight(char)
             cachedCrossRigHeightOffset = cachedPlaybackRootHeight - (cachedRecordedRootHeight or 3.0)
+            
             cachedPlaybackIsR6 = currentIsR6
             local currentRigType = cachedPlaybackIsR6 and "R6" or "R15"
+            cachedIsCrossRig = (cachedRecordedRigType ~= currentRigType)
+            
+            -- Update WalkSpeed reference
+            originalWalkSpeed = h.WalkSpeed
             
             -- Force re-sync frames
             skipSnapFrames = 10
@@ -1370,20 +1439,6 @@ end
             if UI and UI.Slide then
                 UI.Slide("Appearance Updated", string.format("Height adjusted for %s", currentRigType))
             end
-        end
-
-        -- Decrement skip snap frames
-        if skipSnapFrames > 0 then
-            skipSnapFrames = skipSnapFrames - 1
-        end
-        if not char or not char.Parent or not r or not r.Parent or not h or not h.Parent then
-            char = LocalPlayer.Character
-            if char then
-                r = char:FindFirstChild("HumanoidRootPart")
-                h = char:FindFirstChild("Humanoid")
-            end
-            if not r or not h then return end
-            return
         end
         
         -- Update Time
@@ -1479,13 +1534,19 @@ end
 
             -- ==== CROSS-RIG HEIGHT OFFSET CORRECTION ====
             if cachedCrossRigHeightOffset ~= 0 and smoothPos then
+                local originalY = smoothPos.Y
                 smoothPos = Vector3.new(smoothPos.X, smoothPos.Y + cachedCrossRigHeightOffset, smoothPos.Z)
+                -- Debug: Log offset application (only first few times to avoid spam)
+                -- if math.random() < 0.01 then -- 1% chance to log
+                --     print(string.format("[StarSpacePlayback] Applying offset: Y %.2f → %.2f (offset: %.2f)", 
+                --         originalY, smoothPos.Y, cachedCrossRigHeightOffset))
+                -- end
             end
 
             -- God Mode
             if isGodMode then h.Health = h.MaxHealth end
 
-            -- ==== STATE HANDLING (Matching StarshipCore.lua exactly) ====
+            -- ==== STATE HANDLING & PHYSICS OWNERSHIP ====
             if cachedStateName then
                 local stateEnum = Enum.HumanoidStateType[cachedStateName]
                 if stateEnum then
@@ -1493,60 +1554,51 @@ end
                     local isAirState = (stateEnum == Enum.HumanoidStateType.Jumping or stateEnum == Enum.HumanoidStateType.Freefall)
                     
                     if isAirState then
-                        -- PRIORITY: Use RECORDED STATE directly, not velocity
-                        -- If recording says "Jumping", use Jumping. If "Freefall", use Freefall.
+                        -- PHYSICS OWNERSHIP: Anchor character in air to prevent physics stutter
+                        r.Anchored = true
+                        
                         local isJumpState = (stateEnum == Enum.HumanoidStateType.Jumping)
                         local targetState = isJumpState and "jump" or "fall"
                         
-                        -- FALLBACK: Use velocity only if state seems wrong
-                        -- (velY > 15 but state says freefall = probably should be jumping)
+                        -- Override fall to jump if strongly upward
                         local velY = fA.velVector and fA.velVector.Y or (fA.vel and fA.vel.y or 0)
-                        if velY > 15 and not isJumpState then
-                            targetState = "jump" -- Override to jump if velocity is strongly upward
-                        end
+                        if velY > 15 and not isJumpState then targetState = "jump" end
                         
-                        -- Change state if different from last
                         if targetState ~= lastAirState then
                             lastAirState = targetState
                             if targetState == "jump" then
-                                -- Trigger jump animation
                                 if currentState ~= Enum.HumanoidStateType.Jumping then
                                     h:ChangeState(Enum.HumanoidStateType.Jumping)
                                 end
-                                -- R6 needs h.Jump = true for proper animation
-                                if cachedPlaybackIsR6 then
-                                    h.Jump = true
-                                end
+                                if cachedPlaybackIsR6 then h.Jump = true end
                             else
-                                -- Trigger freefall animation
                                 if currentState ~= Enum.HumanoidStateType.Freefall then
                                     h:ChangeState(Enum.HumanoidStateType.Freefall)
                                 end
+                                if cachedPlaybackIsR6 then h.Jump = false end
                             end
                         end
-                    elseif stateEnum == Enum.HumanoidStateType.Landed then
+                    elseif stateEnum == Enum.HumanoidStateType.Running or stateEnum == Enum.HumanoidStateType.Landed then
                         lastAirState = nil
-                        -- REMOVED: Force ChangeState(Landed) which causes stutter
-                        -- h:ChangeState(Enum.HumanoidStateType.Landed)
-                    elseif stateEnum == Enum.HumanoidStateType.Running then
-                        lastAirState = nil
-                        -- Running: Prevent unwanted freefall on small bumps
-                        if currentState == Enum.HumanoidStateType.Freefall then
-                            -- Check if we should be running instead
+                        -- PHYSICS OWNERSHIP: Give control back to physics on ground
+                        r.Anchored = false
+                        
+                        -- R6: Explicitly clear Jump flag on landing to stop jump animation
+                        if cachedPlaybackIsR6 then h.Jump = false end
+                        
+                        if currentState == Enum.HumanoidStateType.Freefall or currentState == Enum.HumanoidStateType.Jumping then
                             local velY = fA.velVector and fA.velVector.Y or (fA.vel and fA.vel.y or 0)
-                            if math.abs(velY) < 3 then
+                            if math.abs(velY) < 3 then 
                                 h:ChangeState(Enum.HumanoidStateType.Running)
+                                -- R6: Also force zero Y velocity on landing to prevent re-bounce
+                                if cachedPlaybackIsR6 then
+                                    r.AssemblyLinearVelocity = Vector3.new(r.AssemblyLinearVelocity.X, 0, r.AssemblyLinearVelocity.Z)
+                                end
                             end
                         end
-                    elseif stateEnum == Enum.HumanoidStateType.Climbing and currentState ~= stateEnum then
-                        h:ChangeState(stateEnum)
-                        if fA.velVector or fA.vel then
-                            local climbVel = fA.velVector or Vector3.new(fA.vel.x, fA.vel.y, fA.vel.z)
-                            r.AssemblyLinearVelocity = (climbVel * playbackSpeed)
-                        end
-                    elseif stateEnum == Enum.HumanoidStateType.Swimming and currentState ~= stateEnum then
-                        h:ChangeState(stateEnum)
-                        if fA.hh then h.HipHeight = fA.hh end
+                    elseif stateEnum == Enum.HumanoidStateType.Climbing or stateEnum == Enum.HumanoidStateType.Swimming then
+                        r.Anchored = false
+                        if currentState ~= stateEnum then h:ChangeState(stateEnum) end
                     end
                 end
             end
@@ -1572,8 +1624,30 @@ end
             end
             wasInAirLastFrame = isInAir
 
+            -- Variables for Unified CFrame Apply (Single Write)
+            local finalPos = smoothPos
+            local finalRot = fA.rot or 0
+
+            -- ==== Just Landed ====
+            if justLanded then
+                r.Anchored = false
+                if h:GetState() ~= Enum.HumanoidStateType.Running then
+                    h:ChangeState(Enum.HumanoidStateType.Running)
+                end
+                if cachedPlaybackIsR6 then h.Jump = false end
+                
+                -- Snap to correct height immediately on landing
+                if smoothPos then
+                    r.CFrame = CFrame.new(smoothPos.X, smoothPos.Y, smoothPos.Z) * CFrame.Angles(0, math.rad(finalRot), 0)
+                end
+                skipSnapFrames = 5
+            end
+
+            -- ==== MOVEMENT LOGIC (REMASTERED PHYSICS) ====
+            
             -- ==== Climbing/Swimming ====
             if isCurrentlyClimbing or isCurrentlySwimming then
+                r.Anchored = false
                 local vel = (fA.velVector and fB.velVector) and fA.velVector:Lerp(fB.velVector, alpha) or Vector3.zero
                 vel = vel * playbackSpeed
                 if isReversing then vel = -vel end
@@ -1582,140 +1656,104 @@ end
                     local moveDir = fA.mdVector or Vector3.new(fA.md.x, fA.md.y, fA.md.z)
                     if isReversing then moveDir = -moveDir end
                     h:Move(moveDir)
-                    h:ChangeState(Enum.HumanoidStateType.Climbing)
-                elseif vel.Magnitude > 0.1 then
-                    local worldMoveDir = vel.Unit
-                    local charCF = r.CFrame
-                    local localMoveDir = charCF:VectorToObjectSpace(worldMoveDir)
-                    local moveScale = vel.Magnitude / 16 * playbackSpeed * 25.0
-                    h:Move(Vector3.new(localMoveDir.X, localMoveDir.Y, localMoveDir.Z) * moveScale)
-                else
-                    h:Move(Vector3.zero)
                 end
                 r.AssemblyLinearVelocity = vel
+                r.CFrame = r.CFrame:Lerp(CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(finalRot), 0), 0.5)
 
-                local targetPos = (fA.posVector and fB.posVector) and fA.posVector:Lerp(fB.posVector, alpha) or r.Position
-                local currentPos = r.Position
-                local smoothedPos = currentPos:Lerp(targetPos, 0.5)
-                r.CFrame = CFrame.new(smoothedPos) * CFrame.Angles(0, math.rad(fA.rot or 0), 0)
-                h:ChangeState(Enum.HumanoidStateType.Climbing)
-
-            -- ==== In Air ====
+            -- ==== In Air (Generalized Physics for Smooth Replication) ====
             elseif isInAir and smoothPos then
-                local targetVel = (smoothVel or (fA.velVector and fB.velVector and fA.velVector:Lerp(fB.velVector, alpha)) or Vector3.zero) * playbackSpeed
+                r.Anchored = false
+                
                 local currentPos = r.Position
                 local posDiff = smoothPos - currentPos
-                local dist = posDiff.Magnitude
+                local distance = posDiff.Magnitude
                 
-                -- ADAPTIVE CORRECTION (NEW)
-                -- Gentle when close, strong when far
-                local correctionStrength = math.clamp(dist * 2, 0, 10)
-                local correctionVel = dist > 0.01 and (posDiff.Unit * correctionStrength) or Vector3.zero
+                -- [STABILITY PATCH] Reduced correction strength to prevent flings
+                local correctionStrength = math.clamp(distance * 4, 0, 40) 
+                local correctionVel = (distance > 0.01) and (posDiff.Unit * correctionStrength) or Vector3.zero
                 
+                local targetVel = (smoothVel or Vector3.zero) * playbackSpeed
                 local finalVel = targetVel + correctionVel
                 
-                -- SPEED GOVERNOR (NEW)
-                if finalVel.Magnitude > 250 then finalVel = finalVel.Unit * 250 end
+                -- [STABILITY PATCH] Velocity Governor (Air)
+                -- Increased to 350 to allow for high-speed air movement with tools
+                if finalVel.Magnitude > 350 then finalVel = finalVel.Unit * 350 end
                 
-                r.AssemblyLinearVelocity = finalVel
+                r.AssemblyLinearVelocity = r.AssemblyLinearVelocity:Lerp(finalVel, 0.6)
                 
-                if dist > 15 and skipSnapFrames <= 0 and not isTimeJump then
-                    -- Only snap for large drifts in air
-                    r.CFrame = CFrame.new(smoothPos) * r.CFrame.Rotation
-                end
-                
-                -- Apply Spin
+                -- Rotation
+                local currentRot = r.Orientation.Y
+                local diff = (finalRot - currentRot + 180) % 360 - 180
+                local rotLerp = 0.5 
                 if isSpin then
                     r.CFrame = r.CFrame * CFrame.Angles(0, dt * 10, 0)
+                else
+                    r.CFrame = CFrame.new(r.Position) * CFrame.Angles(0, math.rad(currentRot + diff * rotLerp), 0)
+                end
+                
+                -- Snap if drift is too large
+                if (distance > 10) or isTimeJump or isTeleportFrame then
+                    r.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(finalRot), 0)
                 end
 
-            -- ==== Just Landed ====
-            elseif justLanded and smoothPos then
+            -- ==== Ground Movement (Velocity-Based - Match Backup) ====
+            elseif smoothPos then
+                r.Anchored = false
                 local currentPos = r.Position
-                local newPos = currentPos:Lerp(smoothPos, 0.5) -- Smoother landing
+                local posDiff = smoothPos - currentPos
+                local distance = posDiff.Magnitude
                 
-                -- Calculate target rotation with moonwalk support
-                local targetRot = fA.rot or 0
-                if isMoonwalk and not isReversing then
-                    targetRot = targetRot + 180
+                -- 1. VELOCITY CONTROL (Restored 3D Correction for Stability)
+                -- [STABILITY PATCH] Safer correction strength for ground
+                local correctionStrength = math.clamp(distance * 6, 0, 50)
+                local correctionVel = distance > 0.02 and (posDiff.Unit * correctionStrength) or Vector3.zero
+                
+                local rawVel = (smoothVel or Vector3.zero)
+                local targetVel = rawVel * playbackSpeed
+                local finalVel = targetVel + correctionVel
+                
+                -- [STABILITY PATCH] Velocity Governor (Ground)
+                -- Increased to 350 to allow for fast tools like Speed Coils
+                if finalVel.Magnitude > 350 then finalVel = finalVel.Unit * 350 end
+                
+                -- Apply velocity with HIGHER Alpha for instant response (matches recording speed better)
+                r.AssemblyLinearVelocity = r.AssemblyLinearVelocity:Lerp(finalVel, 0.8)
+                
+                -- 2. ROTATION CONTROL
+                if not isUserMoving then
+                    local currentRot = r.Orientation.Y
+                    local diff = (finalRot - currentRot + 180) % 360 - 180
+                    local rotLerp = (cachedPlaybackIsR6 and 0.6 or 0.45)
+                    r.CFrame = CFrame.new(r.Position) * CFrame.Angles(0, math.rad(currentRot + diff * rotLerp), 0)
                 end
+
+                -- 3. DRIFT SAFETY SNAP
+                local verticalDiff = math.abs(posDiff.Y)
+                local needsSnap = (distance > 15) or (verticalDiff > 8) or isTimeJump or isTeleportFrame
                 
-                -- Use lerp for smoother rotation transition during landing
-                local targetCF = CFrame.new(newPos) * CFrame.Angles(0, math.rad(targetRot), 0)
-                r.CFrame = r.CFrame:Lerp(targetCF, 0.4) -- Smooth transition
+                if needsSnap and skipSnapFrames <= 0 then
+                    r.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(finalRot), 0)
+                end
+
+                -- 4. WALK ANIMATION & SPEED SYNC
+                -- [SYNC PATCH] Perfect speed synchronization (Physical Move = Animation Speed)
+                local rawSpeed = (fA.ws or rawVel.Magnitude)
+                local finalWalkSpeed = math.clamp(rawSpeed * playbackSpeed, 0.1, 350)
                 
-                -- Dampen velocity on landing to prevent bounce
-                local dampedVel = (smoothVel or Vector3.zero) * playbackSpeed
-                dampedVel = Vector3.new(dampedVel.X * 0.5, math.min(dampedVel.Y, 0), dampedVel.Z * 0.5)
-                r.AssemblyLinearVelocity = dampedVel
-                
-                -- Sync WalkSpeed for landing animation
-                h.WalkSpeed = math.clamp(Vector3.new(dampedVel.X, 0, dampedVel.Z).Magnitude, 0, 150)
+                h.WalkSpeed = finalWalkSpeed
                 
                 if fA.mdVector or fA.md then
                     local moveDir = fA.mdVector or Vector3.new(fA.md.x, fA.md.y, fA.md.z)
                     h:Move(moveDir, false)
-                else h:Move(Vector3.zero) end
-
-            -- ==== Ground Movement ====
-            else
-                if isPositionBasedPlayback and smoothPos then
-                    local currentPos = r.Position
-                    local posDiff = smoothPos - currentPos
-                    local distance = posDiff.Magnitude
-                    
-                    local correctionStrength = math.clamp(distance * 6, 0, 50)
-                    local correctionVel = distance > 0.01 and (posDiff.Unit * correctionStrength) or Vector3.zero
-                    local targetVel = (smoothVel or Vector3.zero) * playbackSpeed
-                    local finalVel = targetVel + correctionVel
-                    
-                    -- Unified WalkSpeed Sync (NEW)
-                    -- Apply recorded speed to humanoid for matching animations
-                    local recSpeed = Vector3.new(targetVel.X, 0, targetVel.Z).Magnitude
-                    h.WalkSpeed = math.clamp(recSpeed, 0, 150)
-                    
-                    -- SPEED GOVERNOR
-                    if finalVel.Magnitude > 200 then finalVel = finalVel.Unit * 200 end
-                    if r.Parent then
-                        r.AssemblyLinearVelocity = r.AssemblyLinearVelocity:Lerp(finalVel, 0.6)
-                    end
-                    
-                    if distance > 15 and skipSnapFrames <= 0 and not isTimeJump then
-                        -- DRIFT CORRECTION: Only snap for large drifts
-                        local targetRot = fA.rot or 0
-                        if isMoonwalk and not isReversing then
-                            targetRot = targetRot + 180
-                        end
-                        r.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(targetRot), 0)
-                    end
-                    
-                    -- Trigger Walk Animation with h:Move()
-                    -- Both Move AND AssemblyLinearVelocity = proper animation
-                    if fA.mdVector or fA.md then
-                        local moveDir = fA.mdVector or Vector3.new(fA.md.x, fA.md.y, fA.md.z)
-                        if moveDir.Magnitude > 0.01 then h:Move(moveDir, false) else h:Move(Vector3.zero) end
-                    elseif finalVel.Magnitude > 0.5 then
-                        local flatVel = Vector3.new(finalVel.X, 0, finalVel.Z)
-                        if flatVel.Magnitude > 0.1 then h:Move(flatVel.Unit, false) end
-                    else h:Move(Vector3.zero) end
+                elseif recSpeed > 0.5 then
+                    local moveDir = hDiff.Magnitude > 0.1 and hDiff.Unit or Vector3.zero
+                    h:Move(moveDir, false)
                 else
-                    -- Velocity-based fallback
-                    local vel = smoothVel or (fA.velVector and fB.velVector and fA.velVector:Lerp(fB.velVector, alpha)) or Vector3.zero
-                    r.AssemblyLinearVelocity = r.AssemblyLinearVelocity:Lerp(vel * playbackSpeed, 0.85)
-                    
-                    if smoothPos then
-                        local posDiff = (smoothPos - r.Position)
-                        r.AssemblyLinearVelocity = r.AssemblyLinearVelocity + posDiff * 0.2
-                    end
-                    
-                    if fA.md then
-                        local moveDir = Vector3.new(fA.md.x, fA.md.y, fA.md.z)
-                        if moveDir.Magnitude > 0.01 then h:Move(moveDir, false) else h:Move(Vector3.zero) end
-                    end
+                    h:Move(Vector3.zero)
                 end
             end
             
-            -- ==== Rotation via AlignOrientation (Smooth) ====
+            -- ==== ROTATION LOGIC ====
             local isUserMoving = false
             local now = tick()
             if now - lastKeyCheck > KEY_CHECK_INTERVAL then
@@ -1733,56 +1771,68 @@ end
                 h.AutoRotate = true
             elseif isCurrentlyClimbing or isCurrentlySwimming then
                 h.AutoRotate = false
-            elseif isSpin and isInAir then
-                -- Let the Spin logic handle rotation in air
-                h.AutoRotate = false
             else
                 h.AutoRotate = false
-                
                 local targetRot = fA.rot or 0
                 if fB and fB.rot then
-                    -- Interpolate rotation correctly (handling 360 wrap)
                     local rotA = fA.rot or 0
                     local rotB = fB.rot or 0
                     local diff = (rotB - rotA + 180) % 360 - 180
                     targetRot = rotA + diff * alpha
                 end
+                if isMoonwalk and not isReversing then targetRot = targetRot + 180 end
                 
-                if isMoonwalk and not isReversing then
-                    targetRot = targetRot + 180
-                end
-                
-                -- SHIFTLOCK DETECTION
-                -- If velocity direction is significantly different from rotation direction, assume strafing/shiftlock
+                -- Shiftlock detection
                 local isStrafing = false
                 if smoothVel and smoothVel.Magnitude > 2 then
                     local moveDir = Vector3.new(smoothVel.X, 0, smoothVel.Z).Unit
                     local lookDir = (CFrame.Angles(0, math.rad(targetRot), 0) * Vector3.new(0, 0, -1)).Unit
-                    local dot = moveDir:Dot(lookDir)
-                    if dot < 0.8 then -- Angle > ~37 degrees
-                        isStrafing = true
-                    end
+                    if moveDir:Dot(lookDir) < 0.8 then isStrafing = true end
                 end
                 
-                -- Apply Rotation
-                local currentCF = r.CFrame
-                local targetCF = CFrame.new(currentCF.Position) * CFrame.Angles(0, math.rad(targetRot), 0)
-                
-                -- If strafing (Shiftlock), force exact rotation match
-                -- If normal walking, allow slight smoothing
-                local lerpFactor = isStrafing and 0.8 or 0.3
-                
-                r.CFrame = currentCF:Lerp(targetCF, lerpFactor)
+                local currentRot = r.Orientation.Y
+                local diff = (targetRot - currentRot + 180) % 360 - 180
+                -- R6 needs snappier rotation (heavier model = more rotational inertia)
+                local lerpFactor = isStrafing and 0.85 or (cachedPlaybackIsR6 and 0.6 or 0.45)
+                finalRot = currentRot + diff * lerpFactor
             end
             
-            -- (State handling already done at start of frame iteration)
+            -- Disable ground correction as it might fight with the simplified offset
+            -- if not isInAir and finalPos then
+            -- ... (code commented out or removed)
+            -- end
             
-            -- ==== Subtle CFrame Drift Correction (Ground Only) ====
-            if not isInAir and not isCurrentlyClimbing and not isCurrentlySwimming and smoothPos and skipSnapFrames <= 0 and not isTimeJump then
-                local dist = (r.Position - smoothPos).Magnitude
-                if dist > 3 and dist <= 15 then
-                    -- Subtle nudge for medium drifts
-                    r.CFrame = r.CFrame:Lerp(CFrame.new(smoothPos) * r.CFrame.Rotation, 0.1)
+            -- ==== UNIFIED CFRAME APPLY (SINGLE WRITE) ====
+            if finalPos and finalRot then
+                local targetCF = CFrame.new(finalPos) * CFrame.Angles(0, math.rad(finalRot), 0)
+                
+                if isTimeJump or isTeleportFrame then
+                    r.CFrame = targetCF
+                else
+                    if isInAir then
+                        -- Air is anchored: Use strong lerp to track recording exactly
+                        r.CFrame = r.CFrame:Lerp(targetCF, 0.85)
+                        if isSpin then r.CFrame = r.CFrame * CFrame.Angles(0, dt * 10, 0) end
+                    else
+                        -- Ground movement: Adaptive lerping based on distance
+                        local dist = (r.Position - finalPos).Magnitude
+                        -- R6 needs stronger lerp to prevent drift (blockier model = more inertia)
+                        local baseLerp = cachedPlaybackIsR6 and 0.15 or 0.1
+                        local lerpMult = cachedPlaybackIsR6 and 0.08 or 0.05
+                        local maxLerp = cachedPlaybackIsR6 and 0.65 or 0.5
+                        local lerpFactor = math.clamp(baseLerp + (dist * lerpMult), baseLerp, maxLerp)
+                        
+                        -- Force accuracy if strafing
+                        local isStrafing = false
+                        if smoothVel and smoothVel.Magnitude > 2 then
+                            local moveDir = Vector3.new(smoothVel.X, 0, smoothVel.Z).Unit
+                            local lookDir = (CFrame.Angles(0, math.rad(finalRot), 0) * Vector3.new(0, 0, -1)).Unit
+                            if (moveDir:Dot(lookDir)) < 0.8 then isStrafing = true end
+                        end
+                        if isStrafing then lerpFactor = math.max(lerpFactor, 0.6) end
+                        
+                        r.CFrame = r.CFrame:Lerp(targetCF, lerpFactor)
+                    end
                 end
             end
             
@@ -1825,7 +1875,11 @@ function _G.StarSpace.StopPlaybackLegacy(silent)
         hum:Move(Vector3.zero) 
         hum.AutoRotate = true 
         hum.PlatformStand = false
-        hum.WalkSpeed = originalWalkSpeed -- RESTORE ORIGINAL SPEED
+        -- Restore original WalkSpeed
+        if originalWalkSpeed then
+            hum.WalkSpeed = originalWalkSpeed
+            originalWalkSpeed = nil
+        end
     end
     
     if root then
@@ -1861,11 +1915,14 @@ function _G.StarSpace.TogglePlayback()
                 hum:Move(Vector3.zero)
                 hum.AutoRotate = true -- Enable user rotation
                 hum:ChangeState(Enum.HumanoidStateType.Running) -- Reset to running state
-                hum.WalkSpeed = originalWalkSpeed -- RESTORE ORIGINAL SPEED
+                -- Restore official WalkSpeed when paused
+                if originalWalkSpeed then
+                    hum.WalkSpeed = originalWalkSpeed
+                end
             end
             if root then
-                root.AssemblyLinearVelocity = Vector3.zero
-                root.AssemblyAngularVelocity = Vector3.zero
+                root.Anchored = false -- IMPORTANT: unanchor so player can move while paused
+                
                 -- Remove any playback constraints
                 local att = root:FindFirstChild("PlaybackAtt")
                 if att then att:Destroy() end
@@ -1930,7 +1987,6 @@ function _G.StarSpace.TogglePlayback()
                             local maxWalkTime = math.min(dist / 10, 15) -- Max 15s timeout
                             
                             while isPlaying and isPaused do
-                                if not root or not root.Parent or not hum or not hum.Parent then break end
                                 local d = (root.Position - targetPos).Magnitude
                                 if d <= 4 then break end -- Close enough
                                 if os.clock() - moveStart > maxWalkTime then break end
@@ -1974,10 +2030,14 @@ function _G.StarSpace.PausePlayback()
             hum:Move(Vector3.zero)
             hum.AutoRotate = true
             hum:ChangeState(Enum.HumanoidStateType.Running)
+            -- Restore official WalkSpeed when paused
+            if originalWalkSpeed then
+                hum.WalkSpeed = originalWalkSpeed
+            end
         end
         if root then
-            root.AssemblyLinearVelocity = Vector3.zero
-            root.AssemblyAngularVelocity = Vector3.zero
+            root.Anchored = false -- IMPORTANT: unanchor so player can move while paused
+            
             local att = root:FindFirstChild("PlaybackAtt")
             if att then att:Destroy() end
             local ao = root:FindFirstChild("PlaybackAO")
