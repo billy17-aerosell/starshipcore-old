@@ -1309,7 +1309,8 @@ function _G.StarSpace.LoadRecording(pathOrName)
         end
     end
     
-    h.AutoRotate = true
+    h.AutoRotate = false
+    h.PlatformStand = true
     
     -- CRITICAL: Force R6 HipHeight to 0 (R6 always has HipHeight = 0)
     -- This prevents R6 characters from floating when they have non-zero HipHeight
@@ -1729,19 +1730,20 @@ function _G.StarSpace.LoadRecording(pathOrName)
                 
                 r.AssemblyLinearVelocity = r.AssemblyLinearVelocity:Lerp(finalVel, 0.6)
                 
-                -- Rotation
+                -- Rotation calculation (saved to finalRot to be applied later in Unified CFrame block)
                 local currentRot = r.Orientation.Y
                 local diff = (finalRot - currentRot + 180) % 360 - 180
                 local rotLerp = 0.5 
+                
                 if isSpin then
-                    r.CFrame = r.CFrame * CFrame.Angles(0, dt * 10, 0)
+                    -- Let rotation logic handle spin or apply directly if needed
                 else
-                    r.CFrame = CFrame.new(r.Position) * CFrame.Angles(0, math.rad(currentRot + diff * rotLerp), 0)
+                    finalRot = currentRot + diff * rotLerp
                 end
                 
                 -- Snap if drift is too large
                 if (distance > 10) or isTimeJump or isTeleportFrame then
-                    r.CFrame = CFrame.new(smoothPos) * CFrame.Angles(0, math.rad(finalRot), 0)
+                    -- Handled by snap flag logic in unified block
                 end
 
             -- ==== Ground Movement (Velocity-Based - Match Backup) ====
@@ -1768,12 +1770,12 @@ function _G.StarSpace.LoadRecording(pathOrName)
                 -- Apply velocity with Lerp for smoothness (Prevent jitter)
                 r.AssemblyLinearVelocity = r.AssemblyLinearVelocity:Lerp(finalVel, 0.5)
                 
-                -- 2. ROTATION CONTROL
+                -- 2. ROTATION CONTROL (Calculated, applied in unified block)
                 if not isUserMoving then
                     local currentRot = r.Orientation.Y
                     local diff = (finalRot - currentRot + 180) % 360 - 180
                     local rotLerp = (cachedPlaybackIsR6 and 0.6 or 0.45)
-                    r.CFrame = CFrame.new(r.Position) * CFrame.Angles(0, math.rad(currentRot + diff * rotLerp), 0)
+                    finalRot = currentRot + diff * rotLerp
                 end
 
                 -- 3. DRIFT SAFETY SNAP
