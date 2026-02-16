@@ -9,77 +9,54 @@
 -- ADONIS BYPASS (Must load FIRST before any hookmetamethod calls)
 -- Prevents "namecallInstance detector detected" kicks
 -- ══════════════════════════════════════════════════════════════════
-local SilenceActive = true
-task.delay(120, function() SilenceActive = false end) -- Increased to 120s to catch delayed detections
-
 local sg = game:GetService("StarterGui")
 local cg = game:GetService("CoreGui")
 
-local function checkBypassUI(obj)
-    -- Allow UI check to run longer or persistently if needed
-    if not SilenceActive then return end
-    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-        local t = tostring(obj.Text):lower()
-        if t:find("adonis") or t:find("pixeluted") or t:find("bypassed") then
-            local root = obj
-            local lp = game:GetService("Players").LocalPlayer
-            local pg = lp and lp:FindFirstChild("PlayerGui")
-            
-            while root.Parent and root.Parent ~= cg and root.Parent ~= pg and root.Parent ~= game do
-                root = root.Parent
-            end
-            
-            local name = root.Name:lower()
-            if not name:find("starship") and not name:find("windui") and not name:find("wind_") then
-                pcall(function() root:Destroy() end)
-            end
-        end
-    end
-end
-
--- Hook into CoreGui and wait for PlayerGui
-cg.DescendantAdded:Connect(checkBypassUI)
-task.spawn(function()
-    local lp = game:GetService("Players").LocalPlayer
-    while not lp do task.wait() lp = game:GetService("Players").LocalPlayer end
-    local pg = lp:WaitForChild("PlayerGui")
-    pg.DescendantAdded:Connect(checkBypassUI)
-    for _, v in pairs(pg:GetDescendants()) do checkBypassUI(v) end
-end)
-
--- Polling: much less frequent (every 1s) to save FPS
-task.spawn(function()
-    while SilenceActive do -- Run while SilenceActive is true
-        for _, v in pairs(cg:GetChildren()) do -- Scan top-level objects first (faster)
-            if v:IsA("ScreenGui") then
-                for _, desc in pairs(v:GetDescendants()) do
-                    checkBypassUI(desc)
-                end
-            end
-        end
-        task.wait(1.0) 
-    end
-end)
-
+-- ══════════════════════════════════════════════════════════════════
+-- CUSTOM NOTIFICATION RENAMER
+-- ══════════════════════════════════════════════════════════════════
 local old; old = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
-    if SilenceActive and self == sg and method == "SetCore" and args[1] == "SendNotification" then
+    
+    if not checkcaller() and self == sg and method == "SetCore" and args[1] == "SendNotification" then
         local data = args[2]
         if data then
             local title = tostring(data.Title or ""):lower()
             local text = tostring(data.Text or ""):lower()
+            
             if title:find("adonis") or text:find("adonis") or text:find("pixeluted") or text:find("bypassed") then
-                return
+                data.Title = "Starship Protection"
+                data.Text = "Security bypass active!"
             end
         end
     end
     return old(self, ...)
 end)
 
+-- (Rename UI elements that might appear in CoreGui/PlayerGui)
+local function renameUI(obj)
+    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+        local t = tostring(obj.Text):lower()
+        if (t:find("adonis") or t:find("pixeluted")) and (t:find("bypassed") or t:find("created")) then
+            if t:find("bypassed") then
+                obj.Text = "Starship Protection"
+            else
+                obj.Text = "Security bypass active!"
+            end
+        end
+    end
+end
+
+cg.DescendantAdded:Connect(renameUI)
+pcall(function()
+    for _, v in pairs(cg:GetDescendants()) do renameUI(v) end
+end)
+
 pcall(function()
 	loadstring(game:HttpGet('https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua'))()
 end)
+
 
 
 local Players = game:GetService("Players")
