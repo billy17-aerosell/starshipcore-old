@@ -1,10 +1,3 @@
---[[
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║                  STARSHIP MOBILE                              ║
-    ║                  Powered by WindUI                            ║
-    ╚═══════════════════════════════════════════════════════════════╝
-]]
-
 -- ══════════════════════════════════════════════════════════════════
 -- ADONIS BYPASS (Must load FIRST before any other code)
 -- Prevents "namecallInstance detector detected" kicks
@@ -9326,8 +9319,7 @@ local function DS_ApplyPrivacyHooks()
 							if key == "TouchEnabled" or key == "KeyboardEnabled" or key == "MouseEnabled" or key == "AccelerometerEnabled" or key == "GyroscopeEnabled" then return true end
 							if key == "GamepadEnabled" then return false end
 						elseif DS_DeviceSpoof == "PC" then
-							if key == "TouchEnabled" then return false end
-							if key == "KeyboardEnabled" or key == "MouseEnabled" then return true end
+							if key == "TouchEnabled" or key == "KeyboardEnabled" or key == "MouseEnabled" then return true end
 						elseif DS_DeviceSpoof == "Console" then
 							if key == "TouchEnabled" then return false end
 							if key == "GamepadEnabled" then return true end
@@ -9475,7 +9467,11 @@ local function DS_ApplyPrivacyHooks()
 							if DS_DeviceSpoof == "Console" then return Enum.Platform.XBoxOne end
 						elseif method == "GetLastInputType" then
 							if DS_DeviceSpoof == "Mobile" then return Enum.UserInputType.Touch end
-							if DS_DeviceSpoof == "PC" then return Enum.UserInputType.Keyboard end
+							if DS_DeviceSpoof == "PC" then 
+								local realInput = (oldNamecall or DS_oldNamecall)(self, ...)
+								if realInput == Enum.UserInputType.Touch then return realInput end
+								return Enum.UserInputType.Keyboard 
+							end
 							if DS_DeviceSpoof == "Console" then return Enum.UserInputType.Gamepad1 end
 						elseif method == "GetConnectedGamepads" then
 							if DS_DeviceSpoof == "Mobile" or DS_DeviceSpoof == "PC" then return {} end
