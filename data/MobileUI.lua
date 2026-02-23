@@ -2261,14 +2261,14 @@ task.spawn(function()
                 Icon = "solar:star-bold",
             })
             
-            PrivateTab:AddParagraph({
+            PrivateTab:Paragraph({
                 Title = "Welcome VIP, " .. (userData.RobloxName or "Player") .. "!",
                 Desc = "Ini adalah daftar recording yang khusus dibuat untuk kamu."
             })
             
             if userData.Recordings and type(userData.Recordings) == "table" then
                 for _, recName in ipairs(userData.Recordings) do
-                    PrivateTab:AddButton({
+                    PrivateTab:Button({
                         Title = "Load: " .. recName,
                         Desc = "Jalankan private recording ini",
                         Callback = function()
@@ -2297,8 +2297,9 @@ task.spawn(function()
                                     
                                     _G.StarshipCloud.RecordingName = recName
                                     _G.StarshipCloud.ChunkedState.isChunked = false
+                                    CloudRecordingLoaded = true
                                     
-                                    pcall(function() selectedFile = "PRIVATE:" .. recName end)
+                                    pcall(function() selectedFile = "CLOUD:" .. recName end)
                                     
                                     -- Load menggunakan StarSpacePlayback global module
                                     if getgenv().StarSpacePlayback and getgenv().StarSpacePlayback.LoadData then
