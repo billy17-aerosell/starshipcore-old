@@ -101,6 +101,66 @@ async function checkEventAccessForUser(userId) {
 // Owner userId - always has access (bypass validation)
 const OWNER_USER_ID = "9268011358";
 
+// ============================================
+// PRIVATE REQUEST ACCESS CONTROL (no data migration required)
+// Configure with env:
+// R2_PRIVATE_ACCESS_MAP='{"123456":["map_a","map_b"],"789012":["map_c"]}'
+// ============================================
+function getPrivateAccessMap() {
+  const raw = process.env.R2_PRIVATE_ACCESS_MAP || "";
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed;
+  } catch (error) {
+    console.error("[R2] Invalid R2_PRIVATE_ACCESS_MAP JSON:", error.message);
+    return {};
+  }
+}
+
+function normalizeRecordingId(id = "") {
+  return String(id).trim().replace(/\.json$/i, "");
+}
+
+function getUserPrivateRecordingSet(userId) {
+  if (!userId) return new Set();
+
+  const map = getPrivateAccessMap();
+  const list = map[String(userId)];
+  if (!Array.isArray(list)) return new Set();
+
+  const set = new Set();
+  for (const recId of list) {
+    const normalized = normalizeRecordingId(recId);
+    if (normalized) set.add(normalized);
+  }
+  return set;
+}
+
+function getAllPrivateRecordingSet() {
+  const map = getPrivateAccessMap();
+  const set = new Set();
+
+  for (const value of Object.values(map)) {
+    if (!Array.isArray(value)) continue;
+    for (const recId of value) {
+      const normalized = normalizeRecordingId(recId);
+      if (normalized) set.add(normalized);
+    }
+  }
+  return set;
+}
+
+function canAccessPrivateRecording(userId, recordingId) {
+  if (!recordingId) return false;
+  if (String(userId) === OWNER_USER_ID) return true;
+  return getUserPrivateRecordingSet(userId).has(normalizeRecordingId(recordingId));
+}
+
 // Main validation function - check if userId has ANY valid access
 async function validateUserAccess(userId) {
   // Owner bypass - always has access
@@ -545,6 +605,73 @@ export default async function handler(req, res) {
   if (method === "GET") {
     const { recordingId, list } = req.query;
 
+    // Private list for current user only
+    if (list === "private") {
+      try {
+        const userPrivateSet = getUserPrivateRecordingSet(userId);
+        const privateIds = Array.from(userPrivateSet);
+
+        if (req.query.probe === "1") {
+          return res.status(200).json({
+            success: true,
+            hasPrivateAccess: privateIds.length > 0 || String(userId) === OWNER_USER_ID,
+            count: privateIds.length,
+          });
+        }
+
+        if (privateIds.length === 0 && String(userId) !== OWNER_USER_ID) {
+          return res.status(200).json({
+            success: true,
+            recordings: [],
+            count: 0,
+          });
+        }
+
+        const sourceIds = String(userId) === OWNER_USER_ID
+          ? Array.from(getAllPrivateRecordingSet())
+          : privateIds;
+
+        const recordings = [];
+        const checks = sourceIds.map(async (id) => {
+          const key = `recordings/${id}.json`;
+          try {
+            const head = await r2Client.send(
+              new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }),
+            );
+
+            recordings.push({
+              recordingId: id,
+              name: head.Metadata?.name || id.replace(/_/g, " "),
+              size: head.ContentLength || 0,
+              lastModified: head.LastModified || null,
+              estimatedFrameCount: parseInt(head.Metadata?.framecount || "0", 10) || 0,
+              estimatedDuration: Math.round(
+                (parseInt(head.Metadata?.duration || "0", 10) || 0) / 60,
+              ),
+              isPrivate: true,
+            });
+          } catch {
+            // Ignore missing/invalid IDs from map
+          }
+        });
+
+        await Promise.all(checks);
+        recordings.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+
+        return res.status(200).json({
+          success: true,
+          recordings,
+          count: recordings.length,
+        });
+      } catch (error) {
+        console.error("[R2] Private list error:", error);
+        return res.status(500).json({
+          error: "Failed to list private recordings",
+          message: error.message,
+        });
+      }
+    }
+
     // LIST all recordings (OPTIMIZED: Use metadata only, don't read full files)
     if (list === "all") {
       try {
@@ -559,6 +686,8 @@ export default async function handler(req, res) {
 
         const recordings = [];
 
+        const privateSet = getAllPrivateRecordingSet();
+
         if (listResult.Contents) {
           // Process in parallel with Promise.all for speed
           const promises = listResult.Contents.map(async (item) => {
@@ -568,6 +697,11 @@ export default async function handler(req, res) {
                 ".json",
                 "",
               );
+
+              // Hide private recordings from global list
+              if (privateSet.has(fileName)) {
+                return null;
+              }
 
               // Return basic info from listing (no file read needed!)
               return {
@@ -629,9 +763,17 @@ export default async function handler(req, res) {
     }
 
     try {
-      const folder = req.query.folder ? req.query.folder.replace(/[^a-zA-Z0-9\-_./]/g, '') : "recordings";
-      const fileId = recordingId.endsWith('.json') ? recordingId : `${recordingId}.json`;
-      const key = `${folder}/${fileId}`;
+      const normalizedRecordingId = normalizeRecordingId(recordingId);
+      const isPrivateRecording = getAllPrivateRecordingSet().has(normalizedRecordingId);
+
+      if (isPrivateRecording && !canAccessPrivateRecording(userId, normalizedRecordingId)) {
+        return res.status(403).json({
+          error: "Access denied",
+          message: "Private recording only available for assigned user",
+        });
+      }
+
+      const key = `recordings/${normalizedRecordingId}.json`;
 
       console.log(`[R2] Loading recording: ${key}`);
 
@@ -647,9 +789,9 @@ export default async function handler(req, res) {
         return res.status(200).json({
           success: true,
           downloadUrl: url,
-          recordingId: recordingId,
+          recordingId: normalizedRecordingId,
           size: size,
-          name: head.Metadata?.name || recordingId,
+          name: head.Metadata?.name || normalizedRecordingId,
           frameCount: parseInt(head.Metadata?.framecount || "0"),
         });
       }
@@ -663,11 +805,6 @@ export default async function handler(req, res) {
 
       const content = await streamToString(getResult.Body);
       const recordingData = JSON.parse(content);
-
-      // If retrieving the raw database, just return it without restructuring
-      if (recordingId.toLowerCase() === 'database') {
-        return sendGzipJson(req, res, recordingData);
-      }
 
       // Use GZIP compression for faster download (only if client supports it)
       return sendGzipJson(req, res, {
@@ -685,7 +822,7 @@ export default async function handler(req, res) {
       if (error.name === "NoSuchKey") {
         return res.status(404).json({
           error: "Recording not found",
-          recordingId: recordingId,
+          recordingId: normalizedRecordingId,
         });
       }
 
