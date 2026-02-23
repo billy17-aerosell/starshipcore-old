@@ -51,7 +51,7 @@ async function checkVIPAccess(userId) {
   try {
     const redisClient = await getRedis();
     if (!redisClient) return false;
-    
+
     // Check PC whitelist
     const pcWhitelist = await redisClient.get("starship:whitelist");
     if (pcWhitelist) {
@@ -60,7 +60,7 @@ async function checkVIPAccess(userId) {
         return { hasAccess: true, source: "PC VIP" };
       }
     }
-    
+
     // Check Mobile whitelist
     const mobileWhitelist = await redisClient.get("starship:mobile_whitelist");
     if (mobileWhitelist) {
@@ -69,7 +69,7 @@ async function checkVIPAccess(userId) {
         return { hasAccess: true, source: "Mobile VIP" };
       }
     }
-    
+
     return { hasAccess: false };
   } catch (error) {
     console.error("[R2] VIP check error:", error.message);
@@ -82,12 +82,12 @@ async function checkEventAccessForUser(userId) {
   if (!EVENT_CODE_API_URL) {
     return { hasAccess: false };
   }
-  
+
   try {
     const apiUrl = `${EVENT_CODE_API_URL}?action=check&userId=${userId}`;
     const response = await fetch(apiUrl);
     const data = await response.json();
-    
+
     if (data.success && data.hasAccess) {
       return { hasAccess: true, source: "Event" };
     }
@@ -113,7 +113,7 @@ async function validateUserAccess(userId) {
   if (vipResult.hasAccess) {
     return vipResult;
   }
-  
+
   // Check Event access (slower - external API)
   const eventResult = await checkEventAccessForUser(userId);
   return eventResult;
@@ -122,34 +122,34 @@ async function validateUserAccess(userId) {
 // Helper: Send JSON response (GZIP only if client supports it)
 async function sendGzipJson(req, res, data, statusCode = 200) {
   const jsonString = JSON.stringify(data);
-  
+
   // Check if client supports GZIP
   const acceptEncoding = req?.headers?.['accept-encoding'] || '';
   const supportsGzip = acceptEncoding.includes('gzip');
-  
+
   // For Roblox clients (usually no Accept-Encoding), send uncompressed
   // Only compress if client explicitly accepts GZIP and data is large enough
   if (supportsGzip && jsonString.length > 10000) {
     try {
       const compressed = await gzip(Buffer.from(jsonString, "utf-8"));
-      
+
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Content-Encoding", "gzip");
       res.setHeader("Vary", "Accept-Encoding");
       res.setHeader("X-Original-Size", jsonString.length);
       res.setHeader("X-Compressed-Size", compressed.length);
-      
+
       const compressionRatio = ((1 - compressed.length / jsonString.length) * 100).toFixed(1);
-      console.log(`[R2] GZIP: ${(jsonString.length/1024/1024).toFixed(2)}MB -> ${(compressed.length/1024/1024).toFixed(2)}MB (${compressionRatio}% reduction)`);
-      
+      console.log(`[R2] GZIP: ${(jsonString.length / 1024 / 1024).toFixed(2)}MB -> ${(compressed.length / 1024 / 1024).toFixed(2)}MB (${compressionRatio}% reduction)`);
+
       return res.status(statusCode).send(compressed);
     } catch (error) {
       console.log("[R2] GZIP failed, sending uncompressed:", error.message);
     }
   }
-  
+
   // Send uncompressed (for Roblox or small responses)
-  console.log(`[R2] Sending uncompressed: ${(jsonString.length/1024/1024).toFixed(2)}MB`);
+  console.log(`[R2] Sending uncompressed: ${(jsonString.length / 1024 / 1024).toFixed(2)}MB`);
   return res.status(statusCode).json(data);
 }
 
@@ -189,7 +189,7 @@ async function streamToString(stream) {
     chunks.push(chunk);
   }
   const buffer = Buffer.concat(chunks);
-  
+
   // Check for GZIP magic bytes (1f 8b) - file might be accidentally compressed
   if (buffer[0] === 0x1f && buffer[1] === 0x8b) {
     console.log("[R2] Detected GZIP compressed file, decompressing...");
@@ -202,14 +202,14 @@ async function streamToString(stream) {
       throw new Error("File appears to be corrupted (GZIP decompression failed)");
     }
   }
-  
+
   // Check for null bytes or other binary characters that indicate corruption
   const str = buffer.toString("utf-8");
   if (str.includes('\0') || str.charCodeAt(0) === 0) {
     console.error("[R2] File contains null bytes - likely corrupted or binary");
     throw new Error("File appears to be corrupted (contains binary data)");
   }
-  
+
   return str;
 }
 
@@ -273,64 +273,64 @@ export default async function handler(req, res) {
   const EVENT_CODE = process.env.R2_EVENT_CODE || "";
   const requestCode = req.query.eventCode || req.body?.eventCode || req.headers["x-event-code"];
   const requestUserId = req.query.userId || req.body?.userId || req.headers["x-user-id"];
-  
+
   // BLACKLIST - Add userIds here that should be blocked (comma-separated in env)
   // Example: R2_BLACKLIST="123456789,987654321,111222333"
   const BLACKLIST_RAW = process.env.R2_BLACKLIST || "";
   const BLACKLIST = BLACKLIST_RAW.split(",").map(id => id.trim()).filter(id => id);
-  
+
   // ============================================
   // CRITICAL: Validate userId has ACTUAL access (VIP or Event)
   // This prevents hackers with stolen event codes from accessing R2
   // ============================================
-  
+
   // DEV MODE BYPASS - Allow localhost/dev access
   const IS_DEV = process.env.NODE_ENV === 'development' || req.headers.host?.includes('localhost');
-  
+
   if (IS_DEV) {
     console.log(`[R2] 🔧 DEV MODE DETECTED - Bypassing strict auth for ${requestUserId}`);
   } else {
     // Check if event mode is enabled
     if (!EVENT_ENABLED) {
       console.log(`[R2] ❌ Event mode disabled - access denied`);
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: "Event tidak aktif",
         message: "Cloud storage sedang tidak tersedia"
       });
     }
-    
+
     // Check event code
     if (!requestCode || requestCode !== EVENT_CODE) {
       console.log(`[R2] ❌ Invalid event code: ${requestCode ? "wrong code" : "no code"} | UserId: ${requestUserId || "none"}`);
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: "Kode event tidak valid",
         message: "Masukkan kode event yang benar untuk mengakses cloud storage"
       });
     }
-    
+
     // Check userId is provided
     if (!requestUserId) {
       console.log(`[R2] ❌ No userId provided with event code`);
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: "UserId tidak ditemukan",
         message: "Autentikasi tidak valid"
       });
     }
-    
+
     // Check if user is blacklisted
     if (BLACKLIST.includes(requestUserId.toString())) {
       console.log(`[R2] 🚫 BLACKLISTED USER BLOCKED - UserId: ${requestUserId}`);
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: "Akses ditolak",
         message: "Akun Anda telah diblokir dari layanan ini"
       });
     }
-    
+
     // Validate User Access (VIP/Event)
     const accessResult = await validateUserAccess(requestUserId);
     if (!accessResult.hasAccess) {
       console.log(`[R2] ❌ NO VALID ACCESS - UserId: ${requestUserId} (not VIP, not Event)`);
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: "Akses tidak valid",
         message: "UserId tidak memiliki akses VIP atau Event"
       });
@@ -346,25 +346,25 @@ export default async function handler(req, res) {
   // ============================================
   if (method === "POST") {
     const { action } = req.query;
-    
+
     // Generate Presigned URL for direct upload to R2
     if (action === "get_upload_url") {
       try {
         const { name, userId, gameId, gameName, frameCount, duration, mode } = req.body;
-        
+
         if (!name || !userId) {
           return res.status(400).json({ error: "Missing name or userId" });
         }
-        
+
         // Sanitize name for filename
         const sanitizedName = name
           .replace(/[^a-zA-Z0-9\s\-_]/g, "")
           .replace(/\s+/g, "_")
           .substring(0, 100);
-        
+
         const key = `recordings/${sanitizedName}.json`;
         const timestamp = new Date().toISOString();
-        
+
         // Generate presigned PUT URL (valid for 1 hour)
         const command = new PutObjectCommand({
           Bucket: R2_BUCKET_NAME,
@@ -381,11 +381,11 @@ export default async function handler(req, res) {
             createdat: timestamp,
           }
         });
-        
+
         const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
-        
+
         console.log(`[R2] Generated presigned upload URL for: ${sanitizedName}`);
-        
+
         // Log to Discord
         await sendDiscordLog({
           title: "📤 Upload Started (Presigned URL)",
@@ -395,7 +395,7 @@ export default async function handler(req, res) {
           action: "Generated Upload URL",
           details: `User requested upload URL for **${name}**\nSize: Large File (Direct Upload)`
         });
-        
+
         return res.status(200).json({
           success: true,
           uploadUrl: uploadUrl,
@@ -409,7 +409,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: "Failed to generate upload URL", details: error.message });
       }
     }
-    
+
     // Normal POST - Save recording (for small files)
     try {
       const { name, data, gameId, gameName } = req.body;
@@ -464,7 +464,7 @@ export default async function handler(req, res) {
 
       // Optimize the recording data (4 decimal places = ~0.0001 stud precision, imperceptible)
       const optimizedData = optimizeObject(data, 4);
-      
+
       console.log(`[R2] Optimizing recording with 4 decimal precision...`);
 
       // Prepare recording object with optimized data
@@ -590,7 +590,7 @@ export default async function handler(req, res) {
           });
 
           const results = await Promise.all(promises);
-          
+
           // Filter out nulls and add to recordings
           for (const rec of results) {
             if (rec) {
@@ -629,7 +629,9 @@ export default async function handler(req, res) {
     }
 
     try {
-      const key = `recordings/${recordingId}.json`;
+      const folder = req.query.folder ? req.query.folder.replace(/[^a-zA-Z0-9\-_./]/g, '') : "recordings";
+      const fileId = recordingId.endsWith('.json') ? recordingId : `${recordingId}.json`;
+      const key = `${folder}/${fileId}`;
 
       console.log(`[R2] Loading recording: ${key}`);
 
@@ -639,17 +641,17 @@ export default async function handler(req, res) {
 
       // If large (> 3.5MB to be safe), return Presigned URL
       if (size > 3.5 * 1024 * 1024) {
-          console.log(`[R2] File is large (${(size/1024/1024).toFixed(2)}MB). Generating Presigned URL...`);
-          const url = await getSignedUrl(r2Client, new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }), { expiresIn: 3600 });
-          
-          return res.status(200).json({
-              success: true,
-              downloadUrl: url,
-              recordingId: recordingId,
-              size: size,
-              name: head.Metadata?.name || recordingId,
-              frameCount: parseInt(head.Metadata?.framecount || "0"),
-          });
+        console.log(`[R2] File is large (${(size / 1024 / 1024).toFixed(2)}MB). Generating Presigned URL...`);
+        const url = await getSignedUrl(r2Client, new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }), { expiresIn: 3600 });
+
+        return res.status(200).json({
+          success: true,
+          downloadUrl: url,
+          recordingId: recordingId,
+          size: size,
+          name: head.Metadata?.name || recordingId,
+          frameCount: parseInt(head.Metadata?.framecount || "0"),
+        });
       }
 
       const getResult = await r2Client.send(

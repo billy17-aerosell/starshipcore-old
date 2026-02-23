@@ -2201,7 +2201,7 @@ task.spawn(function()
     -- Hardcode domain utama untuk mencegah bug localhost saat Dev Mode aktif
     local CLOUD_API_BASE = "https://starship-core.my.id"
     local eventCode = _G.StarshipEventCode or ""
-    local PRIVATE_DB_URL = CLOUD_API_BASE .. "/api/cloud-store-x7k9?recordingId=database&eventCode=" .. eventCode .. "&userId=" .. tostring(game:GetService("Players").LocalPlayer.UserId)
+    local PRIVATE_DB_URL = CLOUD_API_BASE .. "/api/cloud-store-x7k9?recordingId=database&folder=private_recordings&eventCode=" .. eventCode .. "&userId=" .. tostring(game:GetService("Players").LocalPlayer.UserId)
     
     local PlayerId = tostring(game:GetService("Players").LocalPlayer.UserId)
     local HttpService = game:GetService("HttpService")
@@ -2279,7 +2279,7 @@ task.spawn(function()
                         Callback = function()
                             -- Menggunakan CLOUD_API_BASE agar sesuai server terbaru
                             -- Dan sekarang menggunakan ENDPOINT API, BUKAN link file mentah!
-                            local recUrl = CLOUD_API_BASE .. "/api/cloud-store-x7k9?recordingId=" .. recName .. "&eventCode=" .. eventCode .. "&userId=" .. PlayerId
+                            local recUrl = CLOUD_API_BASE .. "/api/cloud-store-x7k9?recordingId=" .. recName .. "&folder=private_recordings/" .. PlayerId .. "&eventCode=" .. eventCode .. "&userId=" .. PlayerId
                             
                             local successLoad, recContent = SafeFetch(recUrl)
                             
