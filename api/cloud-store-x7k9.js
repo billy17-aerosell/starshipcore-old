@@ -664,6 +664,11 @@ export default async function handler(req, res) {
       const content = await streamToString(getResult.Body);
       const recordingData = JSON.parse(content);
 
+      // If retrieving the raw database, just return it without restructuring
+      if (recordingId.toLowerCase() === 'database') {
+        return sendGzipJson(req, res, recordingData);
+      }
+
       // Use GZIP compression for faster download (only if client supports it)
       return sendGzipJson(req, res, {
         success: true,
