@@ -1128,7 +1128,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 	local isSL = false
 	local slLoop = nil
 
-	local function ToggleSL(forceEnable)
+	local function ToggleSL(forceEnable, suppressToast)
 		if forceEnable ~= nil then
 			if forceEnable == isSL then
 				return
@@ -1141,12 +1141,15 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 		BtnSL.UIStroke.Color = isSL and C_GREEN or C_RED
 
 		if isSL then
-			ShowFeatureToast("Shift Lock", true)
+			if not suppressToast then ShowFeatureToast("Shift Lock", true) end
 			slLoop = RunService.RenderStepped:Connect(function()
 				local c = LocalPlayer.Character
 				local root = c and c:FindFirstChild("HumanoidRootPart")
 				local hum = c and c:FindFirstChild("Humanoid")
 				if root and hum then
+					-- Allow Spin feature to override Shiftlock CFrame
+					if _G.StarshipIsSpinning then return end
+					
 					hum.AutoRotate = false
 					UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 
@@ -1167,7 +1170,7 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 				hum.AutoRotate = true
 			end
 			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-			ShowFeatureToast("Shift Lock", false)
+			if not suppressToast then ShowFeatureToast("Shift Lock", false) end
 		end
 	end
 

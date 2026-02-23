@@ -1041,18 +1041,21 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
 		end)
 	end
 
-	CreateBindRow("StartRecording", "Start/Stop Recording")
-	CreateBindRow("PauseRecording", "Pause Recording")
-	CreateBindRow("TogglePath", "Toggle Path")
-	CreateBindRow("PlayPlayback", "Play Playback")
-	CreateBindRow("StopPlayback", "Stop Playback")
-	CreateBindRow("FollowPlayer", "Follow Player")
-	CreateBindRow("ToggleShiftLock", "Toggle Shift Lock")
-	CreateBindRow("ToggleAntiSlip", "Toggle Anti-Slip")
-	CreateBindRow("ToggleAutoJump", "Toggle Auto Jump")
-	CreateBindRow("ToggleQuickBoost", "Toggle Quick Boost")
-	CreateBindRow("ToggleRealESP", "Toggle Real Path ESP")
-	CreateBindRow("ToggleMinimize", "Minimize UI")
+	CreateBindRow("StartRecording", L("start_recording"))
+	CreateBindRow("PauseRecording", L("pause_recording"))
+	CreateBindRow("TogglePath", L("toggle_path"))
+	CreateBindRow("PlayPlayback", L("play_playback"))
+	CreateBindRow("StopPlayback", L("stop_playback"))
+	CreateBindRow("FollowPlayer", L("follow_player"))
+	CreateBindRow("ToggleShiftLock", L("toggle_shift_lock"))
+	CreateBindRow("ToggleAntiSlip", L("toggle_anti_slip"))
+	CreateBindRow("ToggleAutoJump", L("toggle_auto_jump"))
+	CreateBindRow("ToggleQuickBoost", L("toggle_quick_boost"))
+	CreateBindRow("ToggleRealESP", L("toggle_real_esp"))
+	CreateBindRow("ToggleAntiDelay", L("toggle_anti_delay"))
+	CreateBindRow("ToggleHabeg", "Toggle Habeg (Jump Bug)")
+	CreateBindRow("ToggleHabegAction", "Habeg Action Key")
+	CreateBindRow("ToggleMinimize", L("minimize_ui"))
 
 	-- Expose RefreshKeybindUI to UI for profile loading
 	if UI then

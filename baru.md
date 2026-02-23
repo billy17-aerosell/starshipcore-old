@@ -2,7 +2,7 @@
 > **Premium Path Repository v1.5.4**
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
 
-### 📂 DATABASE ENTRIES (138)
+### 📂 DATABASE ENTRIES (148)
 ✦ ⎯ `Eventide Mountain`
 ✦ ⎯ `Expired Obstacle`
 ✦ ⎯ `Gerbang Rintangan Neraka`
@@ -15,6 +15,8 @@
 ✦ ⎯ `MT Age Jalur Tali`
 ✦ ⎯ `MT Age`
 ✦ ⎯ `MT Ajadeh`
+✦ ⎯ `MT Ajani`
+✦ ⎯ `MT Allstars V2 C2`
 ✦ ⎯ `MT Allstars V2`
 ✦ ⎯ `MT Alstars 30FPS`
 ✦ ⎯ `MT Alunna 30FPS`
@@ -46,6 +48,7 @@
 ✦ ⎯ `MT Comot Pro`
 ✦ ⎯ `MT Crush`
 ✦ ⎯ `MT Devara`
+✦ ⎯ `MT Doragon`
 ✦ ⎯ `MT Elystra`
 ✦ ⎯ `MT Fall`
 ✦ ⎯ `MT Freestyle 30FPS`
@@ -66,6 +69,7 @@
 ✦ ⎯ `MT Hellvi`
 ✦ ⎯ `MT HTS 30FPS`
 ✦ ⎯ `MT Iyadeh`
+✦ ⎯ `MT Kampungan`
 ✦ ⎯ `MT Kanala WASD`
 ✦ ⎯ `MT Kanala`
 ✦ ⎯ `MT Kita`
@@ -86,6 +90,7 @@
 ✦ ⎯ `MT Miwaaa`
 ✦ ⎯ `MT Molti`
 ✦ ⎯ `MT Moonlight V2`
+✦ ⎯ `MT Morohmoy`
 ✦ ⎯ `MT Mukjizat Obstacle Jalur Tali`
 ✦ ⎯ `MT Mukjizat Obstacle`
 ✦ ⎯ `MT Muzukashi V2`
@@ -110,12 +115,15 @@
 ✦ ⎯ `MT Sibuatan`
 ✦ ⎯ `MT Socrates`
 ✦ ⎯ `MT Space X PRO`
+✦ ⎯ `MT Tera Nocturne`
 ✦ ⎯ `MT Toria`
+✦ ⎯ `MT Unyu`
 ✦ ⎯ `MT Vanguard`
 ✦ ⎯ `MT Velora Full C2`
 ✦ ⎯ `MT Veltharia`
 ✦ ⎯ `MT Verdant Matrix 30FPS`
 ✦ ⎯ `MT Vmour`
+✦ ⎯ `MT VNA`
 ✦ ⎯ `MT Vraya WASD EXPERT`
 ✦ ⎯ `MT Vraya`
 ✦ ⎯ `MT Yagesya 30FPS`
@@ -134,6 +142,8 @@
 ✦ ⎯ `MT Yubi Pro`
 ✦ ⎯ `MT Yubi`
 ✦ ⎯ `MT Yuna`
+✦ ⎯ `MT ZZZ Easy`
+✦ ⎯ `MT ZZZ Hard`
 ✦ ⎯ `Mukjizat Obstacle Jalur Tali`
 ✦ ⎯ `Mukjizat Obstacle`
 ✦ ⎯ `Pasundan Obstacle`
@@ -176,19 +186,23 @@ Latest Changes
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
 
-@everyone **Mobile Version 1.2.5**
+@everyone **Mobile Version 1.2.6**
 Join our community for mobile support:
 https://dsc.gg/starshipcore
 
 ```text
-STARSHIP MOBILE UPDATE FOR version-1.2.5
+STARSHIP MOBILE UPDATE FOR version-1.2.6
 
 Latest Changes
-- [+] Clone any Roblox avatar by entering their username
-- [+] Fixed Playback Speed: Added '+' and '-' buttons for precise control
-- [+] Improved speed synchronization between UI and playback engine
-- [+] Improved Main UI
-- [+] Mini Player Overhaul: Premium new look with instant Path & Respawn toggles!
+- [+] Admin ESP - High precision highlighting for Owners, Admins, and Staff
+- [+] Device Spoofing - Change your appearance to PC, Mobile, or Console
+- [+] Enhanced Bypass Admin with automatic safety disconnect
+- [+] Advanced Privacy Hooks with secure metamethod protection
+- [+] Anti-AFK is now permanently active for maximum protection
+- [+] Major performance improvements for mobile devices
+- [+] Control speed now inside mini player with + and - buttons
+- [+] Improved mini player structure and stability
+- [+] Enhanced Auto Walk for more smooth
 ```
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯

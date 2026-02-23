@@ -33,6 +33,7 @@ local isMoonwalk = false
 local isGodMode = false
 local isSpin = false
 local isRespawnOnEnd = false
+local isAutoEquipTool = true -- Auto equip/unequip tools during playback (default ON)
 local skipSnapFrames = 0 -- NEW: Skip position snapping for X frames
 local totalDuration = 0
 local isPositionBasedPlayback = true -- Default to position-based for smooth movement
@@ -794,6 +795,8 @@ function _G.StarSpace.SetMoonwalk(v) isMoonwalk = v end
 function _G.StarSpace.SetGodMode(v) isGodMode = v end
 function _G.StarSpace.SetSpin(v) isSpin = v end
 function _G.StarSpace.SetRespawnOnEnd(v) isRespawnOnEnd = v end
+function _G.StarSpace.SetAutoEquipTool(v) isAutoEquipTool = v end
+function _G.StarSpace.GetAutoEquipTool() return isAutoEquipTool end
 function _G.StarSpace.SetSpeed(v) playbackSpeed = v or 1.0 end
 function _G.StarSpace.SetPlaybackSpeed(v) playbackSpeed = v or 1.0 end -- Alias for MapListPlugin compatibility
 function _G.StarSpace.GetPlaybackSpeed() return playbackSpeed end
@@ -1837,8 +1840,10 @@ function _G.StarSpace.LoadRecording(pathOrName)
             end
             
             -- ==== TOOL HANDLING ====
-            -- Equip/Unequip tools based on recorded data
-            UpdateToolEquip(char, fA.tool, fA.toolTip, fA.toolColor, fA.toolConfig)
+            -- Equip/Unequip tools based on recorded data (only if Auto Equip Tool is ON)
+            if isAutoEquipTool then
+                UpdateToolEquip(char, fA.tool, fA.toolTip, fA.toolColor, fA.toolConfig)
+            end
         end
     end)
         

@@ -458,7 +458,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 	-- 4. JUMP ASSIST
 	do
-		local CardJump = CreateCard(L("jump_assist"), 100, 4)
+		local CardJump = CreateCard(L("jump_assist"), 220, 4)
 
 		-- Auto Jump
 		local BtnAutoJump, AutoJumpContainer = CreateFeatureButton(
@@ -507,6 +507,196 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			ToggleAutoJump()
 		end)
 		UIHandlers.ToggleAutoJump = ToggleAutoJump
+
+		-- Anti Delay
+		local BtnAntiDelay, AntiDelayContainer = CreateFeatureButton(
+			CardJump,
+			L("anti_delay") .. ": " .. L("off"),
+			L("anti_delay_desc"),
+			UDim2.new(0.94, 0, 0, 55),
+			UDim2.new(0.03, 0, 0, 95),
+			C_TEXT_DIM
+		)
+
+		-- Jump Gravity Slider
+		local LblJumpGrav = Instance.new("TextLabel", CardJump)
+		LblJumpGrav.Text = L("jump_gravity") .. ": -0.2"
+		LblJumpGrav.Size = UDim2.new(0.35, 0, 0, 20)
+		LblJumpGrav.Position = UDim2.new(0.03, 0, 0, 160)
+		LblJumpGrav.BackgroundTransparency = 1
+		LblJumpGrav.TextColor3 = C_TEXT_DIM
+		LblJumpGrav.Font = Enum.Font.GothamBold
+		LblJumpGrav.TextSize = 10
+		LblJumpGrav.TextXAlignment = Enum.TextXAlignment.Left
+		RegisterTheme(LblJumpGrav, "TextColor3", "TextDim")
+
+		local SldJumpGravBg = Instance.new("TextButton", CardJump)
+		SldJumpGravBg.Text = ""
+		SldJumpGravBg.Size = UDim2.new(0.55, 0, 0, 8)
+		SldJumpGravBg.Position = UDim2.new(0.42, 0, 0, 166)
+		SldJumpGravBg.BackgroundColor3 = C_SIDE
+		SldJumpGravBg.AutoButtonColor = false
+		Instance.new("UICorner", SldJumpGravBg).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldJumpGravBg, "BackgroundColor3", "Side")
+
+		local jumpGravVal = -0.2
+		local SldJumpGravFill = Instance.new("Frame", SldJumpGravBg)
+		SldJumpGravFill.Size = UDim2.new(math.clamp((jumpGravVal + 5) / 5, 0, 1), 0, 1, 0)
+		SldJumpGravFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldJumpGravFill).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldJumpGravFill, "BackgroundColor3", "Accent")
+
+		-- Fall Gravity Slider
+		local LblFallGrav = Instance.new("TextLabel", CardJump)
+		LblFallGrav.Text = L("fall_gravity") .. ": -2.0"
+		LblFallGrav.Size = UDim2.new(0.35, 0, 0, 20)
+		LblFallGrav.Position = UDim2.new(0.03, 0, 0, 185)
+		LblFallGrav.BackgroundTransparency = 1
+		LblFallGrav.TextColor3 = C_TEXT_DIM
+		LblFallGrav.Font = Enum.Font.GothamBold
+		LblFallGrav.TextSize = 10
+		LblFallGrav.TextXAlignment = Enum.TextXAlignment.Left
+		RegisterTheme(LblFallGrav, "TextColor3", "TextDim")
+
+		local SldFallGravBg = Instance.new("TextButton", CardJump)
+		SldFallGravBg.Text = ""
+		SldFallGravBg.Size = UDim2.new(0.55, 0, 0, 8)
+		SldFallGravBg.Position = UDim2.new(0.42, 0, 0, 191)
+		SldFallGravBg.BackgroundColor3 = C_SIDE
+		SldFallGravBg.AutoButtonColor = false
+		Instance.new("UICorner", SldFallGravBg).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldFallGravBg, "BackgroundColor3", "Side")
+
+		local fallGravVal = -2.0
+		local SldFallGravFill = Instance.new("Frame", SldFallGravBg)
+		SldFallGravFill.Size = UDim2.new(math.clamp((fallGravVal + 10) / 10, 0, 1), 0, 1, 0)
+		SldFallGravFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldFallGravFill).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldFallGravFill, "BackgroundColor3", "Accent")
+
+		-- Slider Drag Logic
+		local dragJump, dragFall = false, false
+		SldJumpGravBg.MouseButton1Down:Connect(function() dragJump = true end)
+		SldFallGravBg.MouseButton1Down:Connect(function() dragFall = true end)
+		UserInputService.InputEnded:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 then
+				dragJump, dragFall = false, false
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseMovement then
+				if dragJump then
+					local sc = math.clamp((i.Position.X - SldJumpGravBg.AbsolutePosition.X) / SldJumpGravBg.AbsoluteSize.X, 0, 1)
+					jumpGravVal = -5 + (sc * 5)
+					jumpGravVal = math.floor(jumpGravVal * 10) / 10
+					SldJumpGravFill.Size = UDim2.new(sc, 0, 1, 0)
+					LblJumpGrav.Text = L("jump_gravity") .. ": " .. string.format("%.1f", jumpGravVal)
+				elseif dragFall then
+					local sc = math.clamp((i.Position.X - SldFallGravBg.AbsolutePosition.X) / SldFallGravBg.AbsoluteSize.X, 0, 1)
+					fallGravVal = -10 + (sc * 10)
+					fallGravVal = math.floor(fallGravVal * 10) / 10
+					SldFallGravFill.Size = UDim2.new(sc, 0, 1, 0)
+					LblFallGrav.Text = L("fall_gravity") .. ": " .. string.format("%.1f", fallGravVal)
+				end
+			end
+		end)
+
+		local isAntiDelay, antiDelayLoop = false, nil
+		local originalProps = {}
+
+		local function ToggleAntiDelay(forceEnable)
+			if forceEnable ~= nil then
+				if forceEnable == isAntiDelay then
+					return
+				end
+			end
+
+			isAntiDelay = not isAntiDelay
+			BtnAntiDelay.Text = L("anti_delay") .. ": " .. (isAntiDelay and L("on") or L("off"))
+			BtnAntiDelay.TextColor3 = isAntiDelay and C_GREEN or C_TEXT_DIM
+			BtnAntiDelay.UIStroke.Color = isAntiDelay and C_GREEN or C_TEXT_DIM
+			ShowFeatureToast("Anti Delay", isAntiDelay)
+
+			if isAntiDelay then
+				-- Connect to JumpRequest for INSTANT firing
+				Connections.AntiDelayJump = UserInputService.JumpRequest:Connect(function()
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChild("Humanoid")
+					if h and h.FloorMaterial ~= Enum.Material.Air then
+						h:ChangeState(Enum.HumanoidStateType.Jumping)
+					end
+				end)
+
+				antiDelayLoop = RunService.Heartbeat:Connect(function()
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChild("Humanoid")
+					local r = c and c:FindFirstChild("HumanoidRootPart")
+					if not h or not r then return end
+
+					-- 1. PHYSICAL PROPERTIES (Zero Friction to prevent sticking)
+					for _, p in ipairs(c:GetChildren()) do
+						if p:IsA("BasePart") then
+							if not originalProps[p] then
+								originalProps[p] = p.CustomPhysicalProperties or "Default"
+							end
+							p.CustomPhysicalProperties = PhysicalProperties.new(
+								p.CurrentPhysicalProperties.Density,
+								0, -- Friction: 0
+								0, -- Elasticity
+								100, -- FrictionWeight: Max
+								1 -- ElasticityWeight
+							)
+						end
+					end
+
+					-- 2. SNAPPY AIR CONTROL & OPTIMIZED FALL
+					if h.FloorMaterial == Enum.Material.Air then
+						local vel = r.AssemblyLinearVelocity
+						
+						-- Apply Gravity Compensation/Boost from Sliders
+						if vel.Y > 0 then
+							-- Upward: Jump Gravity
+							r.AssemblyLinearVelocity = vel + Vector3.new(0, jumpGravVal, 0)
+						else
+							-- Downward: Fall Gravity
+							r.AssemblyLinearVelocity = vel + Vector3.new(0, fallGravVal, 0)
+						end
+
+						-- Snappy Air Control
+						if h.MoveDirection.Magnitude > 0.1 then
+							local horizontalVel = Vector3.new(vel.X, 0, vel.Z)
+							local speed = math.max(horizontalVel.Magnitude, h.WalkSpeed)
+							local targetVel = h.MoveDirection * speed
+							
+							-- Apply horizontal correction without flattening Vertical Velocity
+							r.AssemblyLinearVelocity = Vector3.new(targetVel.X, r.AssemblyLinearVelocity.Y, targetVel.Z)
+						end
+					end
+				end)
+				table.insert(Connections, antiDelayLoop)
+			else
+				if Connections.AntiDelayJump then
+					Connections.AntiDelayJump:Disconnect()
+					Connections.AntiDelayJump = nil
+				end
+				if antiDelayLoop then
+					antiDelayLoop:Disconnect()
+					antiDelayLoop = nil
+				end
+				-- Restore Physical Properties
+				for p, prop in pairs(originalProps) do
+					if p and p.Parent then
+						p.CustomPhysicalProperties = (prop == "Default") and nil or prop
+					end
+				end
+				originalProps = {}
+			end
+		end
+
+		BtnAntiDelay.MouseButton1Click:Connect(function()
+			ToggleAntiDelay()
+		end)
+		UIHandlers.ToggleAntiDelay = ToggleAntiDelay
 
 		-- Air Lock (Edge Assist + Velocity Boost for Obby)
 		local BtnAirLock, AirLockContainer = CreateFeatureButton(
@@ -902,6 +1092,306 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			ToggleAirLock()
 		end)
 		UIHandlers.ToggleAirLock = ToggleAirLock
+	end
+
+	-- 4.35 HABEG (JUMP BUG)
+	-- Automates the "Habeg" technique: release shiftlock, face opposite direction, then jump + move
+	do
+		local CardHabeg = CreateCard("HABEG (JUMP BUG)", 210, 4.35)
+
+		-- Toggle Button
+		local BtnHabeg, HabegContainer = CreateFeatureButton(
+			CardHabeg,
+			"HABEG: " .. L("off"),
+			"Auto Jump Bug — face away then jump forward",
+			UDim2.new(0.45, 0, 0, 55),
+			UDim2.new(0.03, 0, 0, 35),
+			C_TEXT_DIM
+		)
+
+		-- Mode: "hold" or "toggle"
+		local BtnHabegMode = Instance.new("TextButton", CardHabeg)
+		BtnHabegMode.Text = "MODE: HOLD"
+		BtnHabegMode.Size = UDim2.new(0.45, 0, 0, 35)
+		BtnHabegMode.Position = UDim2.new(0.52, 0, 0, 35)
+		StyleBtn(BtnHabegMode, C_ACCENT)
+
+		local habegModeHold = true -- true = hold mode, false = toggle per-press
+
+		BtnHabegMode.MouseButton1Click:Connect(function()
+			habegModeHold = not habegModeHold
+			BtnHabegMode.Text = "MODE: " .. (habegModeHold and "HOLD" or "TOGGLE")
+		end)
+
+		-- Angle Offset Slider (how many degrees the body faces away from movement)
+		local LblHabegAngle = Instance.new("TextLabel", CardHabeg)
+		LblHabegAngle.Text = "ANGLE: 135°"
+		LblHabegAngle.Size = UDim2.new(0.35, 0, 0, 20)
+		LblHabegAngle.Position = UDim2.new(0.03, 0, 0, 100)
+		LblHabegAngle.BackgroundTransparency = 1
+		LblHabegAngle.TextColor3 = C_TEXT_DIM
+		LblHabegAngle.Font = Enum.Font.GothamBold
+		LblHabegAngle.TextSize = 10
+		LblHabegAngle.TextXAlignment = Enum.TextXAlignment.Left
+		RegisterTheme(LblHabegAngle, "TextColor3", "TextDim")
+
+		local SldHabegAngleBg = Instance.new("TextButton", CardHabeg)
+		SldHabegAngleBg.Text = ""
+		SldHabegAngleBg.Size = UDim2.new(0.55, 0, 0, 8)
+		SldHabegAngleBg.Position = UDim2.new(0.42, 0, 0, 106)
+		SldHabegAngleBg.BackgroundColor3 = C_SIDE
+		SldHabegAngleBg.AutoButtonColor = false
+		Instance.new("UICorner", SldHabegAngleBg).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldHabegAngleBg, "BackgroundColor3", "Side")
+
+		local habegAngle = 135 -- Default: 135 degrees offset (classic habeg)
+		local SldHabegAngleFill = Instance.new("Frame", SldHabegAngleBg)
+		SldHabegAngleFill.Size = UDim2.new(math.clamp((habegAngle - 90) / 90, 0, 1), 0, 1, 0) -- Range 90-180
+		SldHabegAngleFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldHabegAngleFill).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldHabegAngleFill, "BackgroundColor3", "Accent")
+
+		-- Jump Boost Slider (upward velocity boost, 0 = natural)
+		local LblHabegPower = Instance.new("TextLabel", CardHabeg)
+		LblHabegPower.Text = "JUMP BOOST: 0"
+		LblHabegPower.Size = UDim2.new(0.35, 0, 0, 20)
+		LblHabegPower.Position = UDim2.new(0.03, 0, 0, 125)
+		LblHabegPower.BackgroundTransparency = 1
+		LblHabegPower.TextColor3 = C_TEXT_DIM
+		LblHabegPower.Font = Enum.Font.GothamBold
+		LblHabegPower.TextSize = 10
+		LblHabegPower.TextXAlignment = Enum.TextXAlignment.Left
+		RegisterTheme(LblHabegPower, "TextColor3", "TextDim")
+
+		local SldHabegPowerBg = Instance.new("TextButton", CardHabeg)
+		SldHabegPowerBg.Text = ""
+		SldHabegPowerBg.Size = UDim2.new(0.55, 0, 0, 8)
+		SldHabegPowerBg.Position = UDim2.new(0.42, 0, 0, 131)
+		SldHabegPowerBg.BackgroundColor3 = C_SIDE
+		SldHabegPowerBg.AutoButtonColor = false
+		Instance.new("UICorner", SldHabegPowerBg).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldHabegPowerBg, "BackgroundColor3", "Side")
+
+		local habegPower = 0 -- Default: 0 = pure natural habeg (range 0-100)
+		local SldHabegPowerFill = Instance.new("Frame", SldHabegPowerBg)
+		SldHabegPowerFill.Size = UDim2.new(0, 0, 1, 0) -- Start at 0
+		SldHabegPowerFill.BackgroundColor3 = C_ACCENT
+		Instance.new("UICorner", SldHabegPowerFill).CornerRadius = UDim.new(0, 4)
+		RegisterTheme(SldHabegPowerFill, "BackgroundColor3", "Accent")
+
+		-- Status Indicator
+		local LblHabegStatus = Instance.new("TextLabel", CardHabeg)
+		LblHabegStatus.Text = "⏸ Ready — Press keybind or click to activate"
+		LblHabegStatus.Size = UDim2.new(0.94, 0, 0, 20)
+		LblHabegStatus.Position = UDim2.new(0.03, 0, 0, 155)
+		LblHabegStatus.BackgroundTransparency = 1
+		LblHabegStatus.TextColor3 = C_TEXT_DIM
+		LblHabegStatus.Font = Enum.Font.Gotham
+		LblHabegStatus.TextSize = 10
+		LblHabegStatus.TextXAlignment = Enum.TextXAlignment.Left
+		LblHabegStatus.TextWrapped = true
+		RegisterTheme(LblHabegStatus, "TextColor3", "TextDim")
+
+		-- Keybind display (dynamically shows configured key)
+		local LblHabegKey = Instance.new("TextLabel", CardHabeg)
+		local function UpdateHabegKeyLabel()
+			local actionKey = (Config.Keybinds and Config.Keybinds.ToggleHabegAction)
+			local toggleKey = (Config.Keybinds and Config.Keybinds.ToggleHabeg)
+			local actionName = actionKey and actionKey.Name or "H"
+			local toggleName = toggleKey and toggleKey.Name or "(set in Config)"
+			LblHabegKey.Text = "ACTION: " .. actionName .. "  |  TOGGLE: " .. toggleName .. " (set in Config tab)"
+		end
+		UpdateHabegKeyLabel()
+		LblHabegKey.Size = UDim2.new(0.94, 0, 0, 18)
+		LblHabegKey.Position = UDim2.new(0.03, 0, 0, 178)
+		LblHabegKey.BackgroundTransparency = 1
+		LblHabegKey.TextColor3 = C_TEXT_DIM
+		LblHabegKey.Font = Enum.Font.Gotham
+		LblHabegKey.TextSize = 9
+		LblHabegKey.TextXAlignment = Enum.TextXAlignment.Left
+		RegisterTheme(LblHabegKey, "TextColor3", "TextDim")
+
+		-- Slider Drag Logic
+		local draggingHabegAngle, draggingHabegPower = false, false
+
+		SldHabegAngleBg.MouseButton1Down:Connect(function() draggingHabegAngle = true end)
+		SldHabegPowerBg.MouseButton1Down:Connect(function() draggingHabegPower = true end)
+
+		UserInputService.InputEnded:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 then
+				draggingHabegAngle, draggingHabegPower = false, false
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseMovement then
+				if draggingHabegAngle then
+					local sc = math.clamp((i.Position.X - SldHabegAngleBg.AbsolutePosition.X) / SldHabegAngleBg.AbsoluteSize.X, 0, 1)
+					habegAngle = math.floor(90 + sc * 90) -- Range 90°-180°
+					SldHabegAngleFill.Size = UDim2.new(sc, 0, 1, 0)
+					LblHabegAngle.Text = "ANGLE: " .. habegAngle .. "°"
+				elseif draggingHabegPower then
+					local sc = math.clamp((i.Position.X - SldHabegPowerBg.AbsolutePosition.X) / SldHabegPowerBg.AbsoluteSize.X, 0, 1)
+					habegPower = math.floor(sc * 100) -- Range 0-100
+					SldHabegPowerFill.Size = UDim2.new(sc, 0, 1, 0)
+					LblHabegPower.Text = "JUMP BOOST: " .. habegPower
+				end
+			end
+		end)
+
+		-- Core Habeg State
+		local isHabegEnabled = false
+		local habegLoop = nil
+		local habegCooldown = false
+
+		-- Perform the Habeg action INSTANTLY — no ground check, no queue
+		local function PerformHabeg()
+			if habegCooldown then return end
+			habegCooldown = true
+
+			-- task.spawn so each press runs independently and doesn't block
+			task.spawn(function()
+				local c = LocalPlayer.Character
+				local h = c and c:FindFirstChild("Humanoid")
+				local r = c and c:FindFirstChild("HumanoidRootPart")
+				if not h or not r then
+					habegCooldown = false
+					return
+				end
+
+				LblHabegStatus.Text = "⚡ HABEG!"
+				LblHabegStatus.TextColor3 = C_YELLOW
+
+				-- Step 1: Disable ShiftLock from tools (if active)
+				local wasShiftLockOn = (UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+				if wasShiftLockOn and UIHandlers.ToggleShiftLock then
+					UIHandlers.ToggleShiftLock(false, true) -- Turn OFF silently
+				end
+
+				-- Step 2: Get movement direction
+				local moveDir = h.MoveDirection
+				if moveDir.Magnitude < 0.1 then
+					local cam = workspace.CurrentCamera
+					if cam then
+						moveDir = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
+						if moveDir.Magnitude > 0 then
+							moveDir = moveDir.Unit
+						else
+							moveDir = r.CFrame.LookVector
+						end
+					else
+						moveDir = r.CFrame.LookVector
+					end
+				end
+
+				-- Step 3: Rotate body OPPOSITE from movement direction
+				local angleRad = math.rad(habegAngle)
+				local cosA = math.cos(angleRad)
+				local sinA = math.sin(angleRad)
+				local offsetX = moveDir.X * cosA - moveDir.Z * sinA
+				local offsetZ = moveDir.X * sinA + moveDir.Z * cosA
+				local offsetDir = Vector3.new(offsetX, 0, offsetZ)
+				if offsetDir.Magnitude > 0 then
+					offsetDir = offsetDir.Unit
+				end
+
+				-- Face away from movement direction
+				local targetPos = r.Position + offsetDir * 10
+				local lookCF = CFrame.lookAt(r.Position, targetPos)
+				r.CFrame = CFrame.new(r.Position) * lookCF.Rotation
+
+				-- Step 4: Jump immediately
+				task.wait(0.03)
+				h:ChangeState(Enum.HumanoidStateType.Jumping)
+
+				-- Step 5: Apply upward boost if slider > 0
+				if habegPower > 0 and r and r.Parent then
+					task.wait(0.03)
+					local vel = r.AssemblyLinearVelocity
+					-- Only add UPWARD velocity, don't touch horizontal
+					r.AssemblyLinearVelocity = Vector3.new(vel.X, vel.Y + habegPower, vel.Z)
+					LblHabegStatus.Text = "🚀 Boost +" .. habegPower .. " up!"
+				else
+					LblHabegStatus.Text = "🚀 Jumped!"
+				end
+				LblHabegStatus.TextColor3 = C_GREEN
+
+				-- Step 6: Restore ShiftLock from tools (if was on before)
+				if wasShiftLockOn and UIHandlers.ToggleShiftLock then
+					task.delay(0.1, function()
+						UIHandlers.ToggleShiftLock(true, true) -- Turn ON silently
+					end)
+				end
+
+				-- Reset cooldown quickly so next press works fast
+				task.wait(0.1)
+				habegCooldown = false
+				if isHabegEnabled then
+					LblHabegStatus.Text = "⏸ Ready"
+					LblHabegStatus.TextColor3 = C_TEXT_DIM
+				end
+			end)
+		end
+
+		-- Toggle Habeg Feature
+		local function ToggleHabeg(forceEnable)
+			if forceEnable ~= nil then
+				if forceEnable == isHabegEnabled then return end
+			end
+
+			isHabegEnabled = not isHabegEnabled
+			BtnHabeg.Text = "HABEG: " .. (isHabegEnabled and L("on") or L("off"))
+			BtnHabeg.TextColor3 = isHabegEnabled and C_GREEN or C_TEXT_DIM
+			BtnHabeg.UIStroke.Color = isHabegEnabled and C_GREEN or C_TEXT_DIM
+			ShowFeatureToast("Habeg (Jump Bug)", isHabegEnabled)
+
+			if isHabegEnabled then
+				UpdateHabegKeyLabel()
+				local actionKey = (Config.Keybinds and Config.Keybinds.ToggleHabegAction) or Enum.KeyCode.H
+				LblHabegStatus.Text = "⏸ Ready — Press " .. actionKey.Name .. " to habeg"
+				LblHabegStatus.TextColor3 = C_TEXT_DIM
+
+				-- In hold mode, heartbeat loop for continuous habeg while holding key
+				if habegModeHold then
+					habegLoop = RunService.Heartbeat:Connect(function()
+						if not isHabegEnabled then return end
+						local habegActionKey = (Config.Keybinds and Config.Keybinds.ToggleHabegAction) or Enum.KeyCode.H
+						local hHeld = UserInputService:IsKeyDown(habegActionKey)
+						if hHeld and not habegCooldown then
+							PerformHabeg()
+						end
+					end)
+					table.insert(Connections, habegLoop)
+				end
+			else
+				habegCooldown = false
+				LblHabegStatus.Text = "⏸ Ready — Press keybind or click to activate"
+				LblHabegStatus.TextColor3 = C_TEXT_DIM
+				if habegLoop then
+					habegLoop:Disconnect()
+					habegLoop = nil
+				end
+			end
+		end
+
+		BtnHabeg.MouseButton1Click:Connect(function()
+			ToggleHabeg()
+		end)
+		UIHandlers.ToggleHabeg = ToggleHabeg
+
+		-- Habeg keybind input handler (every press = instant habeg)
+		local habegInputCon = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+			if gameProcessed then return end
+			if not isHabegEnabled then return end
+			if _G.StarshipIsBindingKeybind then return end
+
+			local habegKey = (Config.Keybinds and Config.Keybinds.ToggleHabegAction) or Enum.KeyCode.H
+			if input.KeyCode == habegKey then
+				if not habegModeHold then
+					PerformHabeg()
+				end
+			end
+		end)
+		table.insert(Connections, habegInputCon)
 	end
 
 	-- 4.5 CLIMB STRAFE
@@ -1926,7 +2416,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 	-- Technique: Press L2/R2 or A/D in air to get vertical boost
 	-- BUG JUMP: Press A/D + W together for 1.5x boost (works with Shift Lock ON/OFF)
 	do
-		local CardBoost = CreateCard("QUICK BOOST", 260, 5)
+		local CardBoost = CreateCard("QUICK BOOST", 295, 5)
 
 		local BtnQuickBoost, QuickBoostContainer = CreateFeatureButton(
 			CardBoost,
@@ -1978,8 +2468,16 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		SliderRow.Position = UDim2.new(0.03, 0, 0, 110)
 		SliderRow.BackgroundTransparency = 1
 
-		-- Clamp existing config value to new max of 25
-		Config.QuickBoostPower = math.clamp(Config.QuickBoostPower or 12, 0, 25)
+		-- Migrate old defaults to new ones
+		if Config.QuickBoostPower == 10 or Config.QuickBoostPower == 12 then
+			Config.QuickBoostPower = 3
+		end
+		if Config.BugJumpForward == 8 then
+			Config.BugJumpForward = 1
+		end
+
+		-- Clamp existing config value to new max of 25 (Default: 3)
+		Config.QuickBoostPower = math.clamp(Config.QuickBoostPower or 3, 0, 25)
 		local LblBoostPower = Instance.new("TextLabel", SliderRow)
 		LblBoostPower.Text = "BOOST POWER: " .. Config.QuickBoostPower
 		LblBoostPower.Size = UDim2.new(0.35, 0, 0, 20)
@@ -2009,7 +2507,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		SliderRow2.Position = UDim2.new(0.03, 0, 0, 145)
 		SliderRow2.BackgroundTransparency = 1
 
-		Config.BugJumpForward = Config.BugJumpForward or 8
+		Config.BugJumpForward = Config.BugJumpForward or 1
 		local LblForward = Instance.new("TextLabel", SliderRow2)
 		LblForward.Text = "FORWARD: " .. Config.BugJumpForward
 		LblForward.Size = UDim2.new(0.35, 0, 0, 20)
@@ -2077,26 +2575,26 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 		-- Auto Rotate + Jump Toggle (Combined feature when Quick Boost is ON)
 		local BtnAutoRotateJump = Instance.new("TextButton", CardBoost)
-		BtnAutoRotateJump.Text = "🔄 AUTO SPIN+JUMP: OFF"
+		BtnAutoRotateJump.Text = "🔄 AUTO SPIN+JUMP: ON"
 		BtnAutoRotateJump.Size = UDim2.new(0.55, 0, 0, 30)
 		BtnAutoRotateJump.Position = UDim2.new(0.03, 0, 0, 180)
 		BtnAutoRotateJump.BackgroundColor3 = C_SIDE
-		BtnAutoRotateJump.TextColor3 = C_TEXT_DIM
+		BtnAutoRotateJump.TextColor3 = C_YELLOW
 		BtnAutoRotateJump.Font = Enum.Font.GothamBold
 		BtnAutoRotateJump.TextSize = 11
 		Instance.new("UICorner", BtnAutoRotateJump).CornerRadius = UDim.new(0, 6)
 		local autoRotateJumpStroke = Instance.new("UIStroke", BtnAutoRotateJump)
-		autoRotateJumpStroke.Color = C_TEXT_DIM
+		autoRotateJumpStroke.Color = C_YELLOW
 		autoRotateJumpStroke.Transparency = 0.7
 
 		RegisterTheme(BtnAutoRotateJump, "BackgroundColor3", "Side")
 
 		-- Spin Degree Selector
 		local SPIN_OPTIONS = {45, 90, 180, 360}
-		local currentSpinIndex = 3 -- Default 180°
+		local currentSpinIndex = 2 -- Default 90°
 		local ROTATE_AMOUNT = SPIN_OPTIONS[currentSpinIndex]
-		local SPIN_DURATION = 0.25 -- Default spin duration (smooth)
-		local isSpinning = false -- Prevent multiple spins at once
+		local SPIN_DURATION = 0.05 -- Default spin duration (smooth)
+		_G.StarshipIsSpinning = false -- Global state for cross-module override
 
 		local BtnSpinDegree = Instance.new("TextButton", CardBoost)
 		BtnSpinDegree.Text = "🎯 " .. ROTATE_AMOUNT .. "°"
@@ -2151,6 +2649,22 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		LblSpinSpeed.TextXAlignment = Enum.TextXAlignment.Left
 		RegisterTheme(LblSpinSpeed, "TextColor3", "TextDim")
 
+		-- NEW: SL POWER OVERRIDE Toggle
+		Config.SmartSLOverride = Config.SmartSLOverride or false
+		local BtnSLOverride = Instance.new("TextButton", CardBoost)
+		BtnSLOverride.Text = "🚀 SL POWER OVERRIDE: " .. (Config.SmartSLOverride and "ON" or "OFF")
+		BtnSLOverride.Size = UDim2.new(0.94, 0, 0, 30)
+		BtnSLOverride.Position = UDim2.new(0.03, 0, 0, 245)
+		StyleBtn(BtnSLOverride, Config.SmartSLOverride and C_GREEN or C_RED)
+
+		BtnSLOverride.MouseButton1Click:Connect(function()
+			Config.SmartSLOverride = not Config.SmartSLOverride
+			BtnSLOverride.Text = "🚀 SL POWER OVERRIDE: " .. (Config.SmartSLOverride and "ON" or "OFF")
+			BtnSLOverride.TextColor3 = Config.SmartSLOverride and C_GREEN or C_RED
+			BtnSLOverride.UIStroke.Color = Config.SmartSLOverride and C_GREEN or C_RED
+			ShowFeatureToast("SL Override", Config.SmartSLOverride)
+		end)
+
 		local SldSpinBg = Instance.new("TextButton", SliderRowSpin)
 		SldSpinBg.Text = ""
 		SldSpinBg.Size = UDim2.new(0.6, 0, 0, 8)
@@ -2161,7 +2675,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		RegisterTheme(SldSpinBg, "BackgroundColor3", "Side")
 
 		local SldSpinFill = Instance.new("Frame", SldSpinBg)
-		SldSpinFill.Size = UDim2.new(SPIN_DURATION / 0.5, 0, 1, 0) -- 0.0s to 0.5s range
+		SldSpinFill.Size = UDim2.new(SPIN_DURATION / 5.0, 0, 1, 0) -- 0.0s to 5.0s range
 		SldSpinFill.BackgroundColor3 = C_ACCENT
 		Instance.new("UICorner", SldSpinFill).CornerRadius = UDim.new(0, 4)
 		RegisterTheme(SldSpinFill, "BackgroundColor3", "Accent")
@@ -2171,7 +2685,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		local function UpdateSpinSlider(input)
 			local rx = input.Position.X - SldSpinBg.AbsolutePosition.X
 			local sc = math.clamp(rx / SldSpinBg.AbsoluteSize.X, 0, 1)
-			SPIN_DURATION = sc * 0.5 -- Range 0.0s (instant) to 0.5s (slow)
+			SPIN_DURATION = sc * 5.0 -- Range 0.0s (instant) to 5.0s (slow)
 			SldSpinFill.Size = UDim2.new(sc, 0, 1, 0)
 			if SPIN_DURATION < 0.03 then
 				LblSpinSpeed.Text = "🌀 SPIN: INSTANT"
@@ -2196,43 +2710,96 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			end
 		end)
 
-		-- Smooth Spin Function
-		local function SmoothSpin(rootPart, degrees, duration)
-			if isSpinning then return end -- Prevent overlapping spins
-			if duration < 0.05 then
-				-- Instant rotation for very low duration
-				local rotateRad = math.rad(degrees)
-				rootPart.CFrame = rootPart.CFrame * CFrame.Angles(0, rotateRad, 0)
-				return
+		-- Smooth Spin Function (PHASE 8: MOTOR6D VISUAL SPIN)
+		-- Smooth Spin Function (PHASE 17: ADAPTIVE DURATION)
+		-- Automatically adds 0.3s extra duration if Shiftlock is ON for a more 'legit' feel
+		local function SmoothSpin(rootPart, degrees, duration, onComplete)
+			if _G.StarshipIsSpinning then return end
+			local character = rootPart.Parent
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			local camera = workspace.CurrentCamera
+			if not humanoid or not rootPart or not camera then return end
+			
+			-- Adaptive Logic: Add +0.03s if Shiftlock is active
+			local isShiftLock = (UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+			
+			-- NEW: Force Revert Logic
+			local wasOriginallySL = false
+			if Config.SmartSLOverride and isShiftLock and UIHandlers.ToggleShiftLock then
+				wasOriginallySL = true
+				UIHandlers.ToggleShiftLock(false, true) -- Turn OFF Shift-Lock (Muted notification)
+				isShiftLock = false -- Force Normal Duration
+			end
+
+			local actualDuration = isShiftLock and (duration + 0.03) or duration
+			
+			_G.StarshipIsSpinning = true
+			
+			-- Preparation
+			local oldAutoRotate = humanoid.AutoRotate
+			humanoid.AutoRotate = false
+			
+			local startTime = tick()
+			local targetRotation = math.rad(degrees)
+			
+			-- Capture starting orientation but isolate it from position (Liquid Smooth Phase 9)
+			local _, startY, _ = rootPart.CFrame:ToEulerAnglesYXZ()
+			
+			-- Sound FX (Updated to a stable ID)
+			local s = Instance.new("Sound", rootPart)
+			s.SoundId = "rbxassetid://77878671889615"
+			s.Volume = 0.1
+			s:Play()
+			task.delay(1, function() s:Destroy() end)
+
+			local spinBindName = "StarshipAdaptiveSpin_" .. tostring(math.random(1000, 9999))
+			
+			local function UpdateSpin()
+				local now = tick()
+				local elapsed = now - startTime
+				local progress = math.min(elapsed / actualDuration, 1)
+				
+				if not rootPart.Parent or progress >= 1 then
+					RunService:UnbindFromRenderStep(spinBindName)
+					
+					-- Final Snap with Current Position
+					rootPart.CFrame = CFrame.new(rootPart.Position) * CFrame.Angles(0, startY + targetRotation, 0)
+					
+					-- Restore AutoRotate
+					if humanoid.Parent then humanoid.AutoRotate = oldAutoRotate end
+					
+					-- Execute jump/boost callback FIRST
+					if onComplete then onComplete() end
+					
+					-- Restore Shift-Lock with a tiny delay so it doesn't "snap" the jump
+					if wasOriginallySL and UIHandlers.ToggleShiftLock then
+						task.delay(0.1, function()
+							UIHandlers.ToggleShiftLock(true, true) -- Turn ON Shift-Lock (Muted notification)
+						end)
+					end
+					
+					-- Final small delay before allowing another spin
+					task.delay(0.05, function() _G.StarshipIsSpinning = false end)
+					return
+				end
+				
+				-- Ensure AutoRotate stays off
+				humanoid.AutoRotate = false
+				
+				-- CLASSIC EASING: Ease Out Quad (Snappy & Smooth)
+				local easedProgress = 1 - (1 - progress) * (1 - progress)
+				local currentRot = targetRotation * easedProgress
+				
+				-- LIQUID MOTION: Only override Rotation, leave Position to the physics engine
+				-- This prevents the "stuck/laggy" feeling
+				rootPart.CFrame = CFrame.new(rootPart.Position) * CFrame.Angles(0, startY + currentRot, 0)
 			end
 			
-			isSpinning = true
-			local startCFrame = rootPart.CFrame
-			local targetRotation = math.rad(degrees)
-			local elapsed = 0
-			
-			task.spawn(function()
-				while elapsed < duration do
-					local dt = RunService.Heartbeat:Wait()
-					elapsed = elapsed + dt
-					local progress = math.min(elapsed / duration, 1)
-					
-					-- Smooth easing (ease out quad)
-					local easedProgress = 1 - (1 - progress) * (1 - progress)
-					
-					local currentRotation = targetRotation * easedProgress
-					local pos = rootPart.Position
-					local _, originalY, _ = startCFrame:ToEulerAnglesYXZ()
-					
-					-- Apply rotation while keeping current position (player might be moving)
-					rootPart.CFrame = CFrame.new(pos) * CFrame.Angles(0, originalY + currentRotation, 0)
-				end
-				isSpinning = false
-			end)
+			RunService:BindToRenderStep(spinBindName, 200000, UpdateSpin)
 		end
 
 		-- Auto Rotate + Jump State (activated on R2/L2 or A/D press like Quick Boost)
-		local isAutoRotateJump = false
+		local isAutoRotateJump = true
 
 		local function ToggleAutoRotateJump()
 			isAutoRotateJump = not isAutoRotateJump
@@ -2318,36 +2885,61 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 						lastWPressed = wPressed
 						lastSPressed = sPressed
 
-						-- GAMEPAD LT/RT DETECTION
-						local ltPressed =
-							UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonL2)
-						local rtPressed =
-							UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonR2)
-
-						-- Gamepad left stick full detection (all directions)
-						local gamepadState = UserInputService:GetGamepadState(Enum.UserInputType.Gamepad1)
-						local lsForward = false  -- W equivalent
-						local lsBackward = false -- S equivalent
-						local lsLeft = false     -- A equivalent
-						local lsRight = false    -- D equivalent
+						-- Gamepad Trigger & Bumper Detection (All Gamepads)
+						local ltPressed = false
+						local rtPressed = false
+						local l1Pressed = false
+						local r1Pressed = false
 						
-						for _, input in ipairs(gamepadState) do
-							if input.KeyCode == Enum.KeyCode.Thumbstick1 then
-								lsForward = input.Position.Y > 0.3   -- Analog up (W)
-								lsBackward = input.Position.Y < -0.3 -- Analog down (S)
-								lsLeft = input.Position.X < -0.3     -- Analog left (A)
-								lsRight = input.Position.X > 0.3     -- Analog right (D)
-								break
+						-- Check all possible gamepads
+						for g = 1, 8 do
+							local gType = Enum.UserInputType["Gamepad" .. g]
+							if UserInputService:GetGamepadState(gType) then
+								local gState = UserInputService:GetGamepadState(gType)
+								for _, input in ipairs(gState) do
+									if input.KeyCode == Enum.KeyCode.ButtonL2 then
+										ltPressed = ltPressed or input.Position.Z > 0.1
+									elseif input.KeyCode == Enum.KeyCode.ButtonR2 then
+										rtPressed = rtPressed or input.Position.Z > 0.1
+									elseif input.KeyCode == Enum.KeyCode.ButtonL1 then
+										l1Pressed = l1Pressed or input.UserInputState == Enum.UserInputState.Begin or input.UserInputState == Enum.UserInputState.Change
+									elseif input.KeyCode == Enum.KeyCode.ButtonR1 then
+										r1Pressed = r1Pressed or input.UserInputState == Enum.UserInputState.Begin or input.UserInputState == Enum.UserInputState.Change
+									end
+								end
+							end
+						end
+						
+						local lsForward = false
+						local lsBackward = false
+						local lsLeft = false
+						local lsRight = false
+						
+						for g = 1, 8 do
+							local gType = Enum.UserInputType["Gamepad" .. g]
+							local success, gState = pcall(function() return UserInputService:GetGamepadState(gType) end)
+							if success and gState then
+								for _, input in ipairs(gState) do
+									if input.KeyCode == Enum.KeyCode.Thumbstick1 then
+										lsForward = lsForward or input.Position.Y > 0.3
+										lsBackward = lsBackward or input.Position.Y < -0.3
+										lsLeft = lsLeft or input.Position.X < -0.3
+										lsRight = lsRight or input.Position.X > 0.3
+										break
+									end
+								end
 							end
 						end
 
-						-- Detect button press transitions
-						local ltJustPressed = ltPressed and not lastLTPressed
-						local rtJustPressed = rtPressed and not lastRTPressed
+						-- Detect button press transitions (Triggers or Bumpers)
+						local ltJustPressed = (ltPressed and not lastLTPressed) or (l1Pressed and not lastL1Pressed)
+						local rtJustPressed = (rtPressed and not lastRTPressed) or (r1Pressed and not lastR1Pressed)
 						local lsUpJustPressed = lsForward and not lastLSUp
 
 						lastLTPressed = ltPressed
 						lastRTPressed = rtPressed
+						lastL1Pressed = l1Pressed
+						lastR1Pressed = r1Pressed
 						lastLSUp = lsForward
 
 						-- Combine keyboard and gamepad triggers
@@ -2363,7 +2955,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 						-- Gamepad Option 1: L2 = Spin left + jump, R2 = Spin right + jump
 						-- Gamepad Option 2: Analog down+left+up or down+right+up
 						-- HOLD the button to keep spin+jumping!
-						if isAutoRotateJump and isOnGround and not isSpinning then
+						if isAutoRotateJump and isOnGround and not _G.StarshipIsSpinning then
 							-- KEYBOARD: Detect spin combo S + (A or D) + W HELD together
 							local spinComboLeftKB = sPressed and aPressed and wPressed  -- S+A+W = spin left
 							local spinComboRightKB = sPressed and dPressed and wPressed -- S+D+W = spin right
@@ -2394,34 +2986,21 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 									spinDirection = 1  -- Spin to right (clockwise)
 								end
 								
-								-- Spin first on ground
-								SmoothSpin(r, ROTATE_AMOUNT * spinDirection, SPIN_DURATION)
-								lastBoostTime = currentTime
-								
-								-- Get boost settings
-								local baseBoost = Config.QuickBoostPower or 12
-								local forwardBoost = Config.BugJumpForward or 8
-								
-								-- Jump after spin completes (or immediately if instant) WITH BOOST
-								local jumpDelay = SPIN_DURATION > 0.05 and SPIN_DURATION or 0
-								task.delay(jumpDelay, function()
+								-- Spin first on ground, then jump in callback
+								SmoothSpin(r, ROTATE_AMOUNT * spinDirection, SPIN_DURATION, function()
 									if h and h.Parent and r and r.Parent then
-										-- First, make character jump
+										-- 1. JUMP
 										h:ChangeState(Enum.HumanoidStateType.Jumping)
 										
-										-- Then apply boost after a tiny delay (let jump physics start)
+										-- 2. BOOST AFTER MICRO DELAY
 										task.delay(0.05, function()
 											if r and r.Parent then
 												local currentVel = r.AssemblyLinearVelocity
+												local baseBoost = Config.QuickBoostPower or 12
+												local forwardBoost = Config.BugJumpForward or 8
 												
-												-- Calculate boosted velocity
-												local boostedYVel = currentVel.Y + baseBoost
-												local maxYVel = 55 + baseBoost
-												if boostedYVel > maxYVel then
-													boostedYVel = maxYVel
-												end
+												local boostedYVel = math.min(currentVel.Y + baseBoost, 55 + baseBoost)
 												
-												-- Get forward direction (camera direction for shift lock support)
 												local camera = workspace.CurrentCamera
 												local camLook = camera and camera.CFrame.LookVector or r.CFrame.LookVector
 												local horizontalLook = Vector3.new(camLook.X, 0, camLook.Z)
@@ -2431,15 +3010,17 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 													horizontalLook = Vector3.new(r.CFrame.LookVector.X, 0, r.CFrame.LookVector.Z).Unit
 												end
 												
-												-- Apply boost with forward momentum
-												local boostedVelX = currentVel.X + horizontalLook.X * forwardBoost
-												local boostedVelZ = currentVel.Z + horizontalLook.Z * forwardBoost
-												
-												r.AssemblyLinearVelocity = Vector3.new(boostedVelX, boostedYVel, boostedVelZ)
+												r.AssemblyLinearVelocity = Vector3.new(
+													currentVel.X + horizontalLook.X * forwardBoost,
+													boostedYVel,
+													currentVel.Z + horizontalLook.Z * forwardBoost
+												)
 											end
 										end)
 									end
 								end)
+								
+								lastBoostTime = currentTime
 							end
 						end
 
@@ -2503,6 +3084,30 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 									end
 
 									r.AssemblyLinearVelocity = Vector3.new(forwardVelX, newYVel, forwardVelZ)
+
+									-- SHIFTLOCK SPIN INTEGRATION: Apply spin in air if enabled
+									if isAutoRotateJump then
+										local spinDir = 0
+										
+										-- Detect standard Shiftlocked inputs or Controller
+										local isShiftLocking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+
+										-- Prioritize triggers L2/R2 and bumpers L1/R1
+										if ltPressed or l1Pressed then 
+											spinDir = -1
+										elseif rtPressed or r1Pressed then 
+											spinDir = 1 
+										elseif aJustPressed then
+											spinDir = -1
+										elseif dJustPressed then
+											spinDir = 1
+										end
+										
+										if spinDir ~= 0 then
+											-- Use the duration from the UI slider
+											SmoothSpin(r, ROTATE_AMOUNT * spinDir, SPIN_DURATION)
+										end
+									end
 
 									boostCount = boostCount + 1
 									lastBoostTime = currentTime
@@ -3841,6 +4446,20 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		if Config.Keybinds and Config.Keybinds.ToggleRealESP and input.KeyCode == Config.Keybinds.ToggleRealESP then
 			if UIHandlers.ToggleRealESP then
 				UIHandlers.ToggleRealESP()
+			end
+		end
+
+		-- ToggleAntiDelay
+		if Config.Keybinds and Config.Keybinds.ToggleAntiDelay and input.KeyCode == Config.Keybinds.ToggleAntiDelay then
+			if UIHandlers.ToggleAntiDelay then
+				UIHandlers.ToggleAntiDelay()
+			end
+		end
+
+		-- ToggleHabeg
+		if Config.Keybinds and Config.Keybinds.ToggleHabeg and input.KeyCode == Config.Keybinds.ToggleHabeg then
+			if UIHandlers.ToggleHabeg then
+				UIHandlers.ToggleHabeg()
 			end
 		end
 	end)

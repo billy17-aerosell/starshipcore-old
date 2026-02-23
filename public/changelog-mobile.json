@@ -1,7 +1,15 @@
 {
-    "currentVersion": "1.2.6",
+    "currentVersion": "1.2.7",
     "lastUpdated": "2026-02-14",
     "updates": [
+        {
+            "version": "1.2.7",
+            "date": "2026-02-20",
+            "title": "Security & Admin Visuals Update",
+            "changes": [
+                "Add Auto Equip Tool"
+            ]
+        },
         {
             "version": "1.2.6",
             "date": "2026-02-14",

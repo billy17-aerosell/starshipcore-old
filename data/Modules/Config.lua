@@ -11,7 +11,7 @@ return {
         Theme = "Default",
         Language = "en",
         AccentColor = { R = 90, G = 110, B = 245 },
-        QuickBoostPower = 10,
+        QuickBoostPower = 3,
         Keybinds = {
             StartRecording = Enum.KeyCode.F5,
             PauseRecording = Enum.KeyCode.F6,

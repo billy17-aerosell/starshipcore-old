@@ -69,7 +69,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
-local VERSION = "1.2.6"
+local VERSION = "1.2.7"
 local CLOUD_API_BASE = _G.StarshipServerURL or "https://starship-core.my.id"
 
 -- ══════════════════════════════════════════════════════════════════
@@ -485,28 +485,69 @@ end)
 getgenv().StarshipAntiMultiScript = AntiMultiScript
 
 -- ══════════════════════════════════════════════════════════════════
--- LOAD WINDUI
+-- LOAD WINDUI (Boreal first, original as fallback)
 -- ══════════════════════════════════════════════════════════════════
 local WindUI = nil
-local function LoadWindUI()
-    local urls = {
-        "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua",
-        "https://raw.githubusercontent.com/Footagesus/WindUI/main/Source.lua"
-    }
-    for _, url in ipairs(urls) do
-        local success, content = pcall(game.HttpGet, game, url)
-        if success and content and #content > 500 then
-            local func, err = loadstring(content)
-            if func then
-                local execSuccess, result = pcall(func)
-                if execSuccess and result then return result end
-            end
+_G.WindUIIsBoreal = false
+
+-- 🛡️ ROBUST LOADER SYSTEM (Try multiple sources for Boreal)
+local function AttemptLoad(url)
+    local success, content = pcall(game.HttpGet, game, url)
+    if success and content and #content > 100 then
+        local func, err = loadstring(content)
+        if func then
+            local ok, result = pcall(func)
+            return ok and result or nil
         end
     end
     return nil
 end
 
- WindUI = LoadWindUI()
+-- Primary: Boreal (Most features)
+-- Verified working URL for Boreal
+WindUI = AttemptLoad('https://raw.githubusercontent.com/orialdev/WindUI-Boreal/main/WindUI%20Boreal')
+
+if WindUI then 
+    _G.WindUIIsBoreal = true 
+else
+    -- Fallback: Original WindUI (If Boreal fails, we load this but features will be limited)
+    WindUI = AttemptLoad('https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua')
+end
+
+-- Final check & Notification
+if not WindUI then
+    warn("[STARSHIP] ❌ ERROR: Failed to load UI library. Please check your internet.")
+    return 
+end
+
+-- Inform user about current mode
+task.spawn(function()
+    task.wait(1)
+    if _G.WindUIIsBoreal then
+        WindUI:Notify({ Title = "Boreal Active", Content = "All premium UI features are loaded!", Duration = 3 })
+    else
+        warn("[STARSHIP] ⚠️ WARNING: Boreal failed to load! Falling back to standard WindUI. Some features will be hidden.")
+    end
+end)
+
+-- ══════════════════════════════════════════════════════════════════
+-- SAFE API HELPERS (stored in _G to save local slots)
+-- ══════════════════════════════════════════════════════════════════
+_G.SafeToggleKeybind = function(container, config)
+    local ok, result = pcall(function() return container:ToggleKeybind(config) end)
+    if ok and result then return result end
+    config.Keybind = nil
+    config.CanChange = nil
+    return container:Toggle(config)
+end
+
+_G.SafeButtonKeybind = function(container, config)
+    local ok, result = pcall(function() return container:ButtonKeybind(config) end)
+    if ok and result then return result end
+    config.Value = nil
+    config.CanChange = nil
+    return container:Button(config)
+end
 
 -- ══════════════════════════════════════════════════════════════════
 -- LOAD STARSPACE PLAYBACK ENGINE
@@ -1078,21 +1119,18 @@ local Window = WindUI:CreateWindow({
 	Transparent = true,
 	BackgroundImageTransparency = 0.92,
 	Background = "rbxassetid://123840945153526",
-	Theme = Settings.Theme or "Indigo",
-	NewElements = true, -- WindUI V2 feature
+	Theme = Settings.Theme or "Crimson",
+	ModernLayout = _G.WindUIIsBoreal or true, -- Boreal: compact layout
+	BottomDragBarEnabled = _G.WindUIIsBoreal or true, -- Boreal: mobile drag handle
+	TransparentNav = false, -- Disabled to maintain consistent boxed styling for all tabs
 	User = {
 		Enabled = true,
 		Anonymous = true,
 		Callback = function()
 			WindUI:Notify({
-				Title = "👤 Profile",
-				Content = "Welcome back, " .. Players.LocalPlayer.DisplayName .. "!",
-				Duration = 3,
-			})
-			WindUI:Notify({
-				Title = "⚙️ Config Status",
-				Content = ConfigStatus,
-				Duration = 4,
+				Title = "👤 Welcome, " .. Players.LocalPlayer.DisplayName .. "!",
+				Content = "Config: " .. ConfigStatus .. " • Version " .. VERSION,
+				Duration = 5,
 			})
 		end,
 	},
@@ -1125,8 +1163,7 @@ local Window = WindUI:CreateWindow({
 _G.STARSHIP_MOBILE_ACTIVE = AntiMultiScript.UniqueToken
 pcall(function() getgenv().STARSHIP_MOBILE_ACTIVE = AntiMultiScript.UniqueToken end)
 
-
--- Store Window reference globally for ban system
+-- Window reference stored below in the main cleanup section
 getgenv().StarshipWindow = Window
 getgenv().StarshipWindUI = WindUI
 
@@ -1171,9 +1208,17 @@ else
 	end
 end
 
-if not AntiMultiScript.OurGUI then
-	if DEV_MODE then warn("[STARSHIP] ⚠️ WARNING: Could not tag GUI!") end
-end
+-- 📌 PRE-DECLARE TABS FOR SIDEBAR CALLBACKS
+local DashboardTab, AccountTab, CustomAnimTab, AvatarTab, SkyBoxTab, ListMapTab, ToolsTab, SpoofTab, SettingsTab
+
+-- 📌 SIDEBAR ELEMENTS (Boreal Premium)
+    -- Consolidate Watermark here to keep it clean
+    Window:Watermark({
+        Text = "STARSHIP PREMIUM┃v" .. VERSION,
+        Position = "bottom-right",
+        Opacity = 0.45,
+        Size = 12,
+    })
 
 -- ══════════════════════════════════════════════════════════════════
 -- CONTINUOUS PROTECTION LOOP (Background Monitoring)
@@ -2083,10 +2128,34 @@ function AvatarSystem.Morph(target)
 	if applySuccess then
 		AvatarSystem.ApplyEffect(character)
 		WindUI:Notify({
-			Title = "Morph Avatar",
-			Content = "Successfully morphed to " .. targetName .. "!",
-			Duration = 5,
+			Title = "✨ Morph Success",
+			Content = "Morphed to " .. targetName .. "!",
+			Duration = 10,
 			Icon = targetThumbnail,
+			Buttons = {
+				{
+					Title = "Revert",
+					Icon = "undo-2",
+					Variant = "Secondary",
+					CloseOnClick = true,
+					Callback = function()
+						pcall(function()
+							local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+							if hum then
+								local desc = Players:GetHumanoidDescriptionFromUserId(LocalPlayer.UserId)
+								if desc then hum:ApplyDescription(desc) end
+							end
+						end)
+						WindUI:Notify({ Title = "Morph Avatar", Content = "Reverted to original!", Duration = 3 })
+					end,
+				},
+				{
+					Title = "OK",
+					Icon = "check",
+					Variant = "Primary",
+					CloseOnClick = true,
+				},
+			},
 		})
 	else
 		WindUI:Notify({ Title = "Morph Avatar", Content = "Failed to apply morph!", Duration = 3 })
@@ -2099,29 +2168,188 @@ end
 -- ══════════════════════════════════════════════════════════════════
 -- 🏠 TABS SETUP
 -- ══════════════════════════════════════════════════════════════════
-local DashboardTab = Window:Tab({
+DashboardTab = Window:Tab({
 	Title = "Dashboard",
 	Icon = "solar:home-bold",
 })
 RunService.Heartbeat:Wait()
 
-local AccountTab = Window:Tab({
+AccountTab = Window:Tab({
 	Title = "Account",
 	Icon = "solar:user-bold",
 })
 RunService.Heartbeat:Wait()
 
-local CustomAnimTab = Window:Tab({
+CustomAnimTab = Window:Tab({
 	Title = "Animations",
 	Icon = "solar:accessibility-bold",
 })
 RunService.Heartbeat:Wait()
 
-local AvatarTab = Window:Tab({
+AvatarTab = Window:Tab({
 	Title = "Avatar",
 	Icon = "solar:user-plus-bold",
 })
 RunService.Heartbeat:Wait()
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🌟 PRIVATE RECORDINGS SYSTEM (CLOUDFLARE R2)
+-- ══════════════════════════════════════════════════════════════════
+task.spawn(function()
+    -- URL menuju file database.json di Cloudflare R2 kamu.
+    -- URL menuju file database.json
+    -- Hardcode domain utama untuk mencegah bug localhost saat Dev Mode aktif
+    local CLOUD_API_BASE = "https://starship-core.my.id"
+    local eventCode = _G.StarshipEventCode or ""
+    local PRIVATE_DB_URL = CLOUD_API_BASE .. "/api/cloud-store-x7k9?recordingId=database&eventCode=" .. eventCode .. "&userId=" .. tostring(game:GetService("Players").LocalPlayer.UserId)
+    
+    local PlayerId = tostring(game:GetService("Players").LocalPlayer.UserId)
+    local HttpService = game:GetService("HttpService")
+    
+    -- Fungsi fetch custom untuk menghindari 'Callback crashed' dari game:HttpGet
+    local function SafeFetch(url)
+        local requestFunc = (syn and syn.request) or (http and http.request) or http_request or fluxus and fluxus.request or request
+        if requestFunc then
+            local success, res = pcall(function()
+                return requestFunc({
+                    Url = url,
+                    Method = "GET"
+                })
+            end)
+            if success and res and res.Body then
+                return true, res.Body
+            end
+            return false, "Request function failed or no body returned."
+        else
+            -- Fallback
+            local success, res = pcall(function() return game:HttpGet(url) end)
+            return success, res
+        end
+    end
+
+    local success, response = SafeFetch(PRIVATE_DB_URL)
+    
+    print("[STARSHIP DEBUG] Fetching PRIVATE_DB_URL:", PRIVATE_DB_URL)
+    print("[STARSHIP DEBUG] PlayerId:", PlayerId)
+    print("[STARSHIP DEBUG] Fetch Success:", success)
+    
+    if not success then
+        print("[STARSHIP ERROR] HTTP GET FAILED:", tostring(response))
+    end
+    
+    if success and response then
+        print("[STARSHIP DEBUG] Response Length:", #response)
+        
+        local parseSuccess, dbData = pcall(function()
+            return HttpService:JSONDecode(response)
+        end)
+        
+        print("[STARSHIP DEBUG] Parse JSON Success:", parseSuccess)
+        if not parseSuccess then
+            print("[STARSHIP ERROR] Failed parsing JSON. Raw Output (First 150 chars):")
+            print(string.sub(tostring(response), 1, 150))
+        end
+        
+        if parseSuccess and type(dbData) == "table" and dbData[PlayerId] then
+            -- Pastikan UI belum dimatikan/di-destroy oleh user
+            if not CoreGui:FindFirstChild("StarshipMobileUI") then
+                print("[STARSHIP DEBUG] UI destroyed before tab could be added. Aborting.")
+                return
+            end
+            
+            print("[STARSHIP DEBUG] User found in database!")
+            local userData = dbData[PlayerId]
+            
+            -- User ada di database! Buat tab khusus
+            local PrivateTab = Window:Tab({
+                Title = "Private",
+                Icon = "solar:star-bold",
+            })
+            
+            PrivateTab:AddParagraph({
+                Title = "Welcome VIP, " .. (userData.RobloxName or "Player") .. "!",
+                Desc = "Ini adalah daftar recording yang khusus dibuat untuk kamu."
+            })
+            
+            if userData.Recordings and type(userData.Recordings) == "table" then
+                for _, recName in ipairs(userData.Recordings) do
+                    PrivateTab:AddButton({
+                        Title = "Load: " .. recName,
+                        Desc = "Jalankan private recording ini",
+                        Callback = function()
+                            -- Menggunakan CLOUD_API_BASE agar sesuai server terbaru
+                            -- Dan sekarang menggunakan ENDPOINT API, BUKAN link file mentah!
+                            local recUrl = CLOUD_API_BASE .. "/api/cloud-store-x7k9?recordingId=" .. recName .. "&eventCode=" .. eventCode .. "&userId=" .. PlayerId
+                            
+                            local successLoad, recContent = SafeFetch(recUrl)
+                            
+                            if successLoad and recContent then
+                                local parseSuccess, data = pcall(function()
+                                    return HttpService:JSONDecode(recContent)
+                                end)
+                                
+                                if parseSuccess and data then
+                                    _G.StarshipCloud = _G.StarshipCloud or {}
+                                    _G.StarshipCloud.ChunkedState = _G.StarshipCloud.ChunkedState or {}
+                                    
+                                    if data.data then
+                                        _G.StarshipCloud.RecordingData = data.data
+                                    elseif data.recording then
+                                        _G.StarshipCloud.RecordingData = data.recording
+                                    else
+                                        _G.StarshipCloud.RecordingData = data
+                                    end
+                                    
+                                    _G.StarshipCloud.RecordingName = recName
+                                    _G.StarshipCloud.ChunkedState.isChunked = false
+                                    
+                                    pcall(function() selectedFile = "PRIVATE:" .. recName end)
+                                    
+                                    -- Load menggunakan StarSpacePlayback global module
+                                    if getgenv().StarSpacePlayback and getgenv().StarSpacePlayback.LoadData then
+                                        getgenv().StarSpacePlayback.LoadData(recContent)
+                                    end
+                                    
+                                    -- Munculkan GUI Mini Player & Buka section Playback
+                                    pcall(function()
+                                        if CreatePlaybackControls then
+                                            CreatePlaybackControls()
+                                        end
+                                    end)
+                                    
+                                    WindUI:Notify({
+                                        Title = "🔐 Private Load",
+                                        Content = "Berhasil memuat: " .. recName,
+                                        Duration = 4
+                                    })
+                                else
+                                    WindUI:Notify({
+                                        Title = "Private Error",
+                                        Content = "JSON rusak atau gagal di-parse (Format salah).",
+                                        Duration = 4
+                                    })
+                                end
+                            else
+                                WindUI:Notify({
+                                    Title = "Private Error",
+                                    Content = "Gagal mengunduh file " .. recName .. " dari server.",
+                                    Duration = 4
+                                })
+                            end
+                        end
+                    })
+                end
+            else
+                PrivateTab:AddParagraph({
+                    Title = "Kosong",
+                    Desc = "Belum ada file recording untuk akun kamu saat ini."
+                })
+            end
+        end
+    end
+end)
+RunService.Heartbeat:Wait()
+
 
 -- ══════════════════════════════════════════════════════════════════
 -- UTILITY FUNCTIONS FOR DASHBOARD
@@ -2348,21 +2576,82 @@ end
 -- ══════════════════════════════════════════════════════════════════
 -- 🏠 DASHBOARD CONTENT
 -- ══════════════════════════════════════════════════════════════════
-DashboardTab:Section({
+-- 🏠 DASHBOARD CONTENT (Boreal MultiSection)
+pcall(function()
+	_G.DashboardMulti = DashboardTab:MultiSection({
+		Title = "Dashboard Overview",
+		Icon = "solar:widget-bold",
+		Box = true,
+		BoxBorder = true,
+		Opened = true, -- Default open
+	})
+
+	_G.DashStatusTab = _G.DashboardMulti:Tab({ Title = "Status", Icon = "solar:chart-bold" })
+	_G.DashActionsTab = _G.DashboardMulti:Tab({ Title = "Actions", Icon = "solar:settings-bold" })
+end)
+
+-- Use fallback to DashboardTab if MultiSection fails
+_G.DashStatusContainer = _G.DashStatusTab or DashboardTab
+_G.DashActionsContainer = _G.DashActionsTab or DashboardTab
+
+_G.DashStatusContainer:Section({
 	Title = GetGreeting() .. ", " .. LocalPlayer.DisplayName .. "!",
 	Desc = "Welcome to Starship Mobile • Version " .. VERSION,
 })
-DashboardTab:Space({ Columns = 0.5 })
+_G.DashStatusContainer:Space({ Columns = 1 })
 
-DashboardTab:Space({ Columns = 1 })
 
-local StatsGroup = DashboardTab:Group()
+-- Boreal: Divider for visual separation
+pcall(function()
+	_G.DashStatusContainer:Divider({
+		Title = "Performance",
+		TitleAlignment = "Center",
+		Thickness = 1,
+	})
+end)
+
+_G.DashStatusContainer:Space({ Columns = 1 })
+
+local StatsGroup = _G.DashStatusContainer:Group()
 StatsGroup:Section({ Title = "Performance Stats", Desc = "Current system metrics" })
-DashboardTab:Space({ Columns = 0.5 })
+
+local execName, execVersion = GetExecutorInfo()
+_G.LiveStatsCard = _G.DashStatusContainer:Paragraph({
+	Title = "Live Stats",
+	Desc = "Executor: "
+		.. execName
+		.. " ("
+		.. execVersion
+		.. ")\n"
+		.. "Players: "
+		.. #Players:GetPlayers()
+		.. "/"
+		.. Players.MaxPlayers
+		.. "\n"
+		.. "Ping: "
+		.. GetPing()
+		.. " ms\n"
+		.. "FPS: "
+		.. GetFPS()
+		.. "\n"
+		.. "Server Age: "
+		.. GetServerAge(),
+})
+
+_G.DashStatusContainer:Space({ Columns = 1 })
+
+-- Boreal: Divider before additional content
+pcall(function()
+	_G.DashStatusContainer:Divider({
+		Title = "Session Info",
+		TitleAlignment = "Center",
+		Thickness = 1,
+	})
+end)
 
 -- Placeholder for live stats if needed, or just grouped buttons/info
 -- For now let's just use the space for layout
-DashboardTab:Space({ Columns = 2 })
+_G.DashStatusContainer:Space({ Columns = 2 })
 
 -- ══════════════════════════════════════════════════════════════════
 -- SESSION DATA & HELPERS
@@ -2399,11 +2688,29 @@ local function FormatRole(role)
 	return roleColors[role] or '<font color="#FFFFFF">' .. role .. '</font>'
 end
 
+-- 👤 ACCOUNT CONTENT (Boreal MultiSection)
+pcall(function()
+	_G.AccountMulti = AccountTab:MultiSection({
+		Title = "Account Management",
+		Icon = "solar:user-bold",
+		Box = true,
+		BoxBorder = true,
+		Opened = true, -- Auto-expand as requested
+	})
+
+	_G.AccUserTab = _G.AccountMulti:Tab({ Title = "User", Icon = "solar:user-speak-bold" })
+	_G.AccVIPTab = _G.AccountMulti:Tab({ Title = "VIP", Icon = "solar:star-bold" })
+end)
+
+-- Use fallback to AccountTab if MultiSection fails
+_G.AccUserContainer = _G.AccUserTab or AccountTab
+_G.AccVIPContainer = _G.AccVIPTab or AccountTab
+
 -- ══════════════════════════════════════════════════════════════════
 -- VIP STATUS
 -- ══════════════════════════════════════════════════════════════════
-AccountTab:Section({ Title = "VIP Status", Desc = "Manage your subscription details" })
-AccountTab:Space({ Columns = 0.5 })
+_G.AccVIPContainer:Section({ Title = "VIP Status", Desc = "Manage your subscription details" })
+_G.AccVIPContainer:Space({ Columns = 0.5 })
 
 -- Parse VIP expiry time from sessionData
 local vipExpiryTime = nil
@@ -2481,7 +2788,7 @@ local function GetVIPStatusDesc()
 		.. "Status: Active</font>"
 end
 
-vipParagraph = AccountTab:Paragraph({
+vipParagraph = _G.AccVIPContainer:Paragraph({
 	Title = "Subscription",
 	Desc = GetVIPStatusDesc(),
 })
@@ -2521,11 +2828,14 @@ end
 -- ══════════════════════════════════════════════════════════════════
 -- GAME DETECTION
 -- ══════════════════════════════════════════════════════════════════
-DashboardTab:Section({ Title = "Current Game", Desc = "Information about the activity you are playing" })
-DashboardTab:Space({ Columns = 0.5 })
+-- ══════════════════════════════════════════════════════════════════
+-- GAME DETECTION
+-- ══════════════════════════════════════════════════════════════════
+_G.DashStatusContainer:Section({ Title = "Current Game", Desc = "Information about the activity you are playing" })
+_G.DashStatusContainer:Space({ Columns = 1 })
 
 local gameName = GetGameName()
-DashboardTab:Paragraph({
+_G.DashStatusContainer:Paragraph({
 	Title = gameName,
 	Desc = "Place ID: " .. game.PlaceId,
 })
@@ -2533,8 +2843,8 @@ DashboardTab:Paragraph({
 -- ══════════════════════════════════════════════════════════════════
 -- ACCOUNT INFORMATION
 -- ══════════════════════════════════════════════════════════════════
-AccountTab:Section({ Title = "Account Info", Desc = "Detailed information about your Roblox account" })
-AccountTab:Space({ Columns = 0.5 })
+_G.AccUserContainer:Section({ Title = "Account Info", Desc = "Detailed information about your Roblox account" })
+_G.AccUserContainer:Space({ Columns = 1 })
 
 local accountDesc = '<font size="16">Display Name: '
 	.. LocalPlayer.DisplayName
@@ -2550,18 +2860,23 @@ local accountDesc = '<font size="16">Display Name: '
 	.. " days\n"
 	.. "Status: Premium Member</font>"
 
-local AccountCard = AccountTab:Paragraph({
+local AccountCard = _G.AccUserContainer:Paragraph({
 	Title = "Profile",
 	Desc = accountDesc,
 })
 
+_G.AccUserContainer:Space({ Columns = 1 })
+
 -- ══════════════════════════════════════════════════════════════════
 -- SERVER INFORMATION
 -- ══════════════════════════════════════════════════════════════════
-DashboardTab:Section({ Title = "Server Details", Desc = "Technical details about the current instance" })
-DashboardTab:Space({ Columns = 0.5 })
+-- ══════════════════════════════════════════════════════════════════
+-- SERVER INFORMATION
+-- ══════════════════════════════════════════════════════════════════
+_G.DashStatusContainer:Section({ Title = "Server Details", Desc = "Technical details about the current instance" })
+_G.DashStatusContainer:Space({ Columns = 1 })
 
-DashboardTab:Button({
+_G.DashStatusContainer:Button({
 	Title = "Copy Job ID",
 	Desc = "Copy server Job ID to clipboard",
 	Icon = "solar:copy-bold",
@@ -2578,8 +2893,8 @@ DashboardTab:Button({
 -- ══════════════════════════════════════════════════════════════════
 -- FRIENDS IN SERVER
 -- ══════════════════════════════════════════════════════════════════
-AccountTab:Section({ Title = "Friends in Server", Desc = "Friends currently playing with you" })
-AccountTab:Space({ Columns = 0.5 })
+_G.AccUserContainer:Section({ Title = "Friends in Server", Desc = "Friends currently playing with you" })
+_G.AccUserContainer:Space({ Columns = 1 })
 
 local function GetFriendsInServer()
 	local friends = {}
@@ -2599,7 +2914,7 @@ local function GetFriendsInServer()
 	return '<font size="16">' .. table.concat(friends, "\n") .. "</font>"
 end
 
-local FriendsCard = AccountTab:Paragraph({
+_G.FriendsCard = _G.AccUserContainer:Paragraph({
 	Title = "Friends Here",
 	Desc = GetFriendsInServer(),
 })
@@ -2607,12 +2922,15 @@ local FriendsCard = AccountTab:Paragraph({
 -- ══════════════════════════════════════════════════════════════════
 -- QUICK ACTIONS
 -- ══════════════════════════════════════════════════════════════════
-DashboardTab:Section({ Title = "Quick Actions", TextSize = 16 })
-DashboardTab:Space({ Columns = 0.5 })
+-- ══════════════════════════════════════════════════════════════════
+-- QUICK ACTIONS
+-- ══════════════════════════════════════════════════════════════════
+_G.DashActionsContainer:Section({ Title = "Quick Actions", TextSize = 16 })
+_G.DashActionsContainer:Space({ Columns = 0.5 })
 
-DashboardTab:Divider()
+_G.DashActionsContainer:Divider()
 
-DashboardTab:Button({
+_G.DashActionsContainer:Button({
 	Title = "Refresh Dashboard",
 	Desc = "Update all statistics",
 	Callback = function()
@@ -2636,7 +2954,7 @@ DashboardTab:Button({
 			.. "\n"
 			.. "Server Age: "
 			.. GetServerAge()
-		LiveStatsCard:SetDesc(newStatsDesc)
+		_G.LiveStatsCard:SetDesc(newStatsDesc)
 
 		-- Update Server Card
 		local newServerDesc = "Players: "
@@ -2652,16 +2970,16 @@ DashboardTab:Button({
 			.. " ms\n"
 			.. "FPS: "
 			.. GetFPS()
-		ServerCard:SetDesc(newServerDesc)
+		_G.ServerCard:SetDesc(newServerDesc)
 
 		-- Update Friends
-		FriendsCard:SetDesc(GetFriendsInServer())
+		_G.FriendsCard:SetDesc(GetFriendsInServer())
 
 		WindUI:Notify({ Title = "Refreshed", Content = "Dashboard updated!", Duration = 2 })
 	end,
 })
 
-DashboardTab:Button({
+_G.DashActionsContainer:Button({
 	Title = "Copy Discord Invite",
 	Desc = "Get Starship Discord link",
 	Callback = function()
@@ -2675,10 +2993,13 @@ DashboardTab:Button({
 -- ══════════════════════════════════════════════════════════════════
 -- SERVER ACTIONS (Moved to ServerTab)
 -- ══════════════════════════════════════════════════════════════════
-DashboardTab:Section({ Title = "Server Actions", Desc = "Quick commands for server management" })
-DashboardTab:Space({ Columns = 0.5 })
+-- ══════════════════════════════════════════════════════════════════
+-- SERVER ACTIONS (Moved to ServerTab)
+-- ══════════════════════════════════════════════════════════════════
+_G.DashActionsContainer:Section({ Title = "Server Actions", Desc = "Quick commands for server management" })
+_G.DashActionsContainer:Space({ Columns = 0.5 })
 
-local ServerActions = DashboardTab:Group()
+local ServerActions = _G.DashActionsContainer:Group()
 
 ServerActions:Button({
 	Title = "Rejoin",
@@ -3190,8 +3511,29 @@ local function SetAnimation(animType, animId)
 	end
 end
 
-CustomAnimTab:Section({ Title = "Animation Preset", TextSize = 16 })
-CustomAnimTab:Divider()
+-- 🎭 ANIMATIONS CONTENT (Boreal MultiSection)
+pcall(function()
+	_G.AnimMulti = CustomAnimTab:MultiSection({
+		Title = "Animations",
+		Icon = "solar:accessibility-bold",
+		Box = true,
+		BoxBorder = true,
+		Opened = true,
+	})
+
+	_G.AnimLibTab = _G.AnimMulti:Tab({ Title = "Library", Icon = "solar:book-bold" })
+	_G.AnimManageTab = _G.AnimMulti:Tab({ Title = "Manage", Icon = "solar:settings-bold" })
+end)
+
+-- Use fallback to CustomAnimTab if MultiSection fails
+_G.AnimGeneralContainer = _G.AnimLibTab or CustomAnimTab
+_G.AnimMoveContainer = _G.AnimLibTab or CustomAnimTab
+_G.AnimSwimContainer = _G.AnimLibTab or CustomAnimTab
+_G.AnimManageContainer = _G.AnimManageTab or CustomAnimTab
+
+_G.AnimGeneralContainer:Section({ Title = "Animation Preset", TextSize = 16 })
+_G.AnimGeneralContainer:Divider()
+_G.AnimGeneralContainer:Space({ Columns = 1 })
 
 local function ApplyAnim(animType, animName)
 	local id = nil
@@ -3217,7 +3559,15 @@ for _, animType in ipairs(AnimTypes) do
 		table.insert(values, name)
 	end
 
-	CustomAnimTab:Dropdown({
+	-- Pick destination based on type
+	local targetContainer = _G.AnimGeneralContainer
+	if animType == "Jump" or animType == "Fall" or animType == "Climb" then
+		targetContainer = _G.AnimMoveContainer
+	elseif animType == "Swim" or animType == "SwimIdle" then
+		targetContainer = _G.AnimSwimContainer
+	end
+
+	targetContainer:Dropdown({
 		Title = "[◎] " .. animType .. " Animation",
 		Values = values,
 		Default = "Original",
@@ -3228,13 +3578,13 @@ for _, animType in ipairs(AnimTypes) do
 	RunService.Heartbeat:Wait()
 end
 
-CustomAnimTab:Section({ Title = "➕ Add New", TextSize = 16 })
-CustomAnimTab:Divider()
+_G.AnimManageContainer:Section({ Title = "➕ Animation Manager", TextSize = 16 })
+_G.AnimManageContainer:Divider()
 
 local newAnimName = ""
 local newAnimID = ""
 
-CustomAnimTab:Dropdown({
+_G.AnimManageContainer:Dropdown({
 	Title = "Animation Type",
 	Values = AnimTypes,
 	Default = "Idle",
@@ -3243,7 +3593,7 @@ CustomAnimTab:Dropdown({
 	end,
 })
 
-CustomAnimTab:Input({
+_G.AnimManageContainer:Input({
 	Title = "Name",
 	Placeholder = "e.g. Griddy",
 	Callback = function(txt)
@@ -3251,7 +3601,7 @@ CustomAnimTab:Input({
 	end,
 })
 
-CustomAnimTab:Input({
+_G.AnimManageContainer:Input({
 	Title = "Asset ID",
 	Placeholder = "Numeric ID",
 	Callback = function(txt)
@@ -3259,7 +3609,7 @@ CustomAnimTab:Input({
 	end,
 })
 
-CustomAnimTab:Button({
+_G.AnimManageContainer:Button({
 	Title = "Save & Apply",
 	Desc = "Save to list and apply",
 	Callback = function()
@@ -3273,22 +3623,39 @@ CustomAnimTab:Button({
 			return
 		end
 
-		AnimDB[CurrentAnimType][NewAnimName] = id
+		AnimDB[CurrentAnimType][newAnimName] = newAnimID
 		SaveAnimDB()
-		SetAnimation(CurrentAnimType, id)
+		SetAnimation(CurrentAnimType, newAnimID)
 		WindUI:Notify({ Title = "Saved", Content = "Added custom animation", Duration = 2 })
 	end,
 })
 
+-- 🎭 AVATAR CONTENT (Boreal MultiSection)
+pcall(function()
+	_G.AvatarMulti = AvatarTab:MultiSection({
+		Title = "Avatar Customizer",
+		Icon = "solar:user-plus-bold",
+		Box = true,
+		BoxBorder = true,
+		Opened = true,
+	})
+
+	_G.AvMorphTab = _G.AvatarMulti:Tab({ Title = "Morph", Icon = "solar:user-plus-bold" })
+	_G.AvCloneTab = _G.AvatarMulti:Tab({ Title = "Clone", Icon = "solar:copy-bold" })
+end)
+
+-- Use fallback to AvatarTab if MultiSection fails
+_G.AvMorphContainer = _G.AvMorphTab or AvatarTab
+_G.AvCloneContainer = _G.AvCloneTab or AvatarTab
+
 -- ══════════════════════════════════════════════════════════════════
--- 🎭 AVATAR TAB
+-- 🎭 MORPH AVATAR
 -- ══════════════════════════════════════════════════════════════════
-AvatarTab:Section({ Title = "🎭 Morph Avatar", Desc = "Change your appearance to look like other players" })
-AvatarTab:Space({ Columns = 0.5 })
+_G.AvMorphContainer:Section({ Title = "🎭 Morph Avatar", Desc = "Change your appearance to look like other players" })
+_G.AvMorphContainer:Space({ Columns = 0.5 })
 
 -- 🖼️ PREVIEW CARD
--- 🖼️ PREVIEW CARD
-AvatarSystem.PreviewCard = AvatarTab:Paragraph({
+AvatarSystem.PreviewCard = _G.AvMorphContainer:Paragraph({
 	Title = "No Player Selected",
 	Desc = "Select a player from the dropdown to see preview",
 })
@@ -3322,10 +3689,12 @@ task.spawn(function()
 	end
 end)
 
-AvatarTab:Divider()
+_G.AvMorphContainer:Space({ Columns = 1 })
+_G.AvMorphContainer:Divider()
+_G.AvMorphContainer:Space({ Columns = 1 })
 
 -- 👥 PLAYER DROPDOWN
-AvatarSystem.PlayerDropdown = AvatarTab:Dropdown({
+AvatarSystem.PlayerDropdown = _G.AvMorphContainer:Dropdown({
 	Title = "Select Player",
 	Values = AvatarSystem.GetPlayerList(),
 	Default = "Select a player...",
@@ -3338,7 +3707,7 @@ AvatarSystem.PlayerDropdown = AvatarTab:Dropdown({
 	end,
 })
 
-AvatarTab:Button({
+_G.AvMorphContainer:Button({
 	Title = "🔄 Refresh Player List",
 	Desc = "Update the list of players in server",
 	Callback = function()
@@ -3349,7 +3718,7 @@ AvatarTab:Button({
 	end,
 })
 
-AvatarTab:Button({
+_G.AvMorphContainer:Button({
 	Title = "Apply Morph",
 	Desc = "Morph into the selected player",
 	Callback = function()
@@ -3362,16 +3731,14 @@ AvatarTab:Button({
 	end,
 })
 
--- ══════════════════════════════════════════════════════════════════
--- 📋 COPY AVATAR BY USERNAME
--- ══════════════════════════════════════════════════════════════════
-AvatarTab:Section({ Title = "📋 Clone by Username", Desc = "Enter any Roblox username to clone their avatar" })
-AvatarTab:Space({ Columns = 0.5 })
+-- 📋 CLONE BY USERNAME
+_G.AvCloneContainer:Section({ Title = "📋 Clone by Username", Desc = "Enter any Roblox username to clone their avatar" })
+_G.AvCloneContainer:Space({ Columns = 1 })
 
 -- Store username input
 local avatarUsernameInput = ""
 
-AvatarTab:Input({
+_G.AvCloneContainer:Input({
 	Title = "Roblox Username",
 	Desc = "Enter any Roblox username to clone their avatar",
 	Placeholder = "Enter username...",
@@ -3380,7 +3747,7 @@ AvatarTab:Input({
 	end,
 })
 
-AvatarTab:Button({
+_G.AvCloneContainer:Button({
 	Title = "🎭 Clone Username Avatar",
 	Desc = "Clone the avatar of the entered username",
 	Callback = function()
@@ -3535,7 +3902,7 @@ task.spawn(function()
 				.. "\n"
 				.. "Server Age: "
 				.. GetServerAge()
-			LiveStatsCard:SetDesc(newStatsDesc)
+			_G.LiveStatsCard:SetDesc(newStatsDesc)
 		end)
 	end
 end)
@@ -3543,7 +3910,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════
 -- 🌌 SKYBOX TAB
 -- ══════════════════════════════════════════════════════════════════
-local SkyBoxTab = Window:Tab({
+SkyBoxTab = Window:Tab({
 	Title = "Sky Box",
 	Icon = "solar:cloud-bold",
 })
@@ -3736,26 +4103,85 @@ end
 -- ══════════════════════════════════════════════════════════════════
 -- 🚶 AUTO WALK TAB (Declaration Only - Content Below)
 -- ══════════════════════════════════════════════════════════════════
-local ListMapTab = Window:Tab({
+ListMapTab = Window:Tab({
 	Title = "Auto Walk",
 	Icon = "solar:folder-open-bold",
 })
 task.wait(0.1)
 
+-- 🚶 AUTO WALK CONTENT (Synchronous Initialization to prevent race conditions)
+pcall(function()
+	_G.AutoWalkMulti = ListMapTab:MultiSection({
+		Title = "Auto Walk System",
+		Icon = "solar:folder-open-bold",
+		Box = true,
+		BoxBorder = true,
+		Opened = true,
+	})
+
+	_G.AWRecordingTab = _G.AutoWalkMulti:Tab({ Title = "Recording", Icon = "solar:folder-2-bold" })
+	_G.AWPlaybackTab = _G.AutoWalkMulti:Tab({ Title = "Playback", Icon = "solar:play-bold" })
+	_G.AWProtectionTab = _G.AutoWalkMulti:Tab({ Title = "Protection", Icon = "solar:shield-bold" })
+
+	-- Pre-create sections (Containers for elements)
+	_G.PlaybackSectionRef = _G.AWPlaybackTab:Section({
+		Title = "Playback Controls",
+		Box = true,
+		BoxBorder = true,
+		Opened = true,
+		Locked = true,
+		LockedTitle = "Select recording first please",
+	})
+	
+	_G.ProtectionSectionRef = _G.AWProtectionTab:Section({
+		Title = "Protection & Safety",
+		Box = true,
+		BoxBorder = true,
+		Opened = true,
+		Locked = true,
+		LockedTitle = "Select recording first please",
+	})
+
+	-- Initialize containers
+	_G.AWRecordingContainer = _G.AWRecordingTab
+	_G.AWPlaybackContainer = _G.PlaybackSectionRef
+	_G.AWProtectionContainer = _G.ProtectionSectionRef
+end)
+
+-- Finalize containers
+_G.AWRecordingContainer = _G.AWRecordingTab or ListMapTab
+
 -- ══════════════════════════════════════════════════════════════════
 -- 👤 PLAYER TAB
 -- ══════════════════════════════════════════════════════════════════
-local ToolsTab = Window:Tab({
+ToolsTab = Window:Tab({
 	Title = "Player",
 	Icon = "solar:bolt-bold",
 })
 task.wait(0.1)
 
--- 🏃 MOVEMENT
-ToolsTab:Section({ Title = "🏃 Player Settings", Desc = "Modify your character's physical properties" })
-ToolsTab:Space({ Columns = 0.5 })
+pcall(function()
+	_G.PlayerMulti = ToolsTab:MultiSection({
+		Title = "Player Enhancement",
+		Icon = "solar:bolt-bold",
+		Box = true,
+		BoxBorder = true,
+		Opened = true,
+	})
 
-ToolsTab:Slider({
+	_G.PlayerSettingsTab = _G.PlayerMulti:Tab({ Title = "Settings", Icon = "solar:settings-bold" })
+	_G.PlayerESPTab = _G.PlayerMulti:Tab({ Title = "ESP", Icon = "solar:accessibility-bold" })
+end)
+
+-- Fallback to ToolsTab if MultiSection fails
+_G.PlayerSettingsContainer = _G.PlayerSettingsTab or ToolsTab
+_G.PlayerESPContainer = _G.PlayerESPTab or ToolsTab
+
+-- 🏃 MOVEMENT
+_G.PlayerSettingsContainer:Section({ Title = "🏃 Player Settings", Desc = "Modify your character's physical properties" })
+_G.PlayerSettingsContainer:Space({ Columns = 1 })
+
+_G.PlayerSettingsContainer:Slider({
 	Title = "WalkSpeed",
 	Desc = "Running speed (Default: 16)",
 	IsTooltip = true,
@@ -4687,8 +5113,8 @@ local function StartESPHandler()
 end
 
 -- 👁️ VISUALS
-ToolsTab:Section({ Title = "👁️ Visuals", Desc = "Visual assistance and player highlighting" })
-AdminESPToggle = ToolsTab:Toggle({
+_G.PlayerESPContainer:Section({ Title = "👁️ Visuals", Desc = "Visual assistance and player highlighting" })
+AdminESPToggle = _G.PlayerESPContainer:Toggle({
 	Title = "Admin ESP",
 	Desc = "Deteksi & highlight Admin/Mod/Staff (HTTP + Group + Tools + Chat)",
 	Value = Settings.AdminESP,
@@ -4735,7 +5161,7 @@ AdminESPToggle = ToolsTab:Toggle({
 	end,
 })
 
-ToolsTab:Toggle({
+_G.PlayerESPContainer:Toggle({
 	Title = "┗ Box ESP",
 	Desc = "Kotak 2D di sekitar admin (+ Health Bar)",
 	Value = Settings.AdminESPBox,
@@ -4754,7 +5180,7 @@ ToolsTab:Toggle({
 	end,
 })
 
-ToolsTab:Toggle({
+_G.PlayerESPContainer:Toggle({
 	Title = "┗ Chams (Highlight)",
 	Desc = "Warna transparan tembus dinding pada admin",
 	Value = Settings.AdminESPChams,
@@ -4812,8 +5238,8 @@ if not espOk then
 	-- Buat toggle dummy supaya safeSet tidak error
 	if not AdminESPToggle then
 		pcall(function()
-			ToolsTab:Section({ Title = "👁️ Visuals", Desc = "Visual assistance and player highlighting" })
-			AdminESPToggle = ToolsTab:Toggle({
+			_G.PlayerESPContainer:Section({ Title = "👁️ Visuals", Desc = "Visual assistance and player highlighting" })
+			AdminESPToggle = _G.PlayerESPContainer:Toggle({
 				Title = "Admin ESP (ERROR)",
 				Desc = "ESP crashed: " .. tostring(espErr):sub(1, 50),
 				Value = false,
@@ -4823,12 +5249,14 @@ if not espOk then
 	end
 end
 
-ToolsTab:Divider()
+_G.PlayerSettingsContainer:Divider()
 
-ToolsTab:Toggle({
+_G.SafeToggleKeybind(_G.PlayerSettingsContainer, {
 	Title = "Infinite Jump",
-	Desc = "Jump in mid-air",
+	Desc = "Jump in mid-air (Press J to toggle)",
 	Value = false,
+	Keybind = Enum.KeyCode.J,
+	CanChange = true,
 	Callback = function(state)
 		InfiniteJumpState.isOn = state
 
@@ -4863,10 +5291,10 @@ ToolsTab:Toggle({
 ToolsTab:Divider()
 
 -- 🚀 TELEPORT
-ToolsTab:Section({ Title = "🚀 Teleportation", Desc = "Quickly travel across the map" })
+_G.PlayerSettingsContainer:Section({ Title = "🚀 Teleportation", Desc = "Quickly travel across the map" })
 ToolsTab:Space({ Columns = 0.5 })
 
-ToolsTab:Dropdown({
+_G.PlayerSettingsContainer:Dropdown({
 	Title = "Teleport to Player",
 	Desc = "Select target player",
 	Values = (function()
@@ -4890,9 +5318,11 @@ ToolsTab:Dropdown({
 	end,
 })
 
-ToolsTab:Button({
+_G.SafeButtonKeybind(_G.PlayerSettingsContainer, {
 	Title = "Click Teleport",
-	Desc = "Teleport to mouse click position",
+	Desc = "Teleport to mouse position (Press T)",
+	Value = Enum.KeyCode.T,
+	CanChange = true,
 	Callback = function()
 		local mouse = LocalPlayer:GetMouse()
 		if mouse.Hit then
@@ -4904,12 +5334,12 @@ ToolsTab:Button({
 	end,
 })
 
-ToolsTab:Divider()
+_G.PlayerSettingsContainer:Divider()
 
 -- ══════════════════════════════════════════════════════════════════
 -- ✈️ FLY SYSTEM (Matched with PC Version + Mobile Controls)
 -- ══════════════════════════════════════════════════════════════════
-ToolsTab:Section({ Title = "✈️ Flight Mode", Desc = "Take to the skies with advanced flight controls" })
+_G.PlayerSettingsContainer:Section({ Title = "✈️ Flight Mode", Desc = "Take to the skies with advanced flight controls" })
 ToolsTab:Space({ Columns = 0.5 })
 
 -- Consolidated fly state to reduce local variable count (Lua 200 limit)
@@ -5223,10 +5653,12 @@ local function StartFly()
 	return true
 end
 
-FlyState.toggleRef = ToolsTab:Toggle({
+FlyState.toggleRef = _G.SafeToggleKeybind(_G.PlayerSettingsContainer, {
 	Title = "Enable Fly",
-	Desc = "Toggle flight mode (works with keyboard & mobile joystick)",
+	Desc = "Flight mode (Press F to toggle)",
 	Value = false,
+	Keybind = Enum.KeyCode.F,
+	CanChange = true,
 	Callback = function(state)
 		if state then
 			local success = StartFly()
@@ -5273,7 +5705,7 @@ LocalPlayer.CharacterAdded:Connect(function()
 	end
 end)
 
-ToolsTab:Slider({
+_G.PlayerSettingsContainer:Slider({
 	Title = "Fly Speed",
 	Desc = "Adjust flight speed (Default: 50)",
 	IsTooltip = true,
@@ -5288,9 +5720,8 @@ ToolsTab:Slider({
 	end,
 })
 
-ToolsTab:Divider()
 
--- ══════════════════════════════════════════════════════════�������������═══════
+-- ═════════════════════════════════════════════════════════════════
 -- 🚶 AUTO WALK TAB CONTENT
 -- ══════════════════════════════════════════════════════════════════
 
@@ -6999,7 +7430,7 @@ end
 -- ══════════════════════════════════════════════════════════════════
 -- CLOUD RECORDINGS (Main file source for mobile)
 -- ══════════════════════════════════════════════════════════════════
-ListMapTab:Space()
+_G.AWRecordingContainer:Space()
 
 local CloudRecordingDropdown = nil
 
@@ -7011,6 +7442,10 @@ local function UpdateCloudUI()
 	if #values == 0 then values = {"No cloud recordings"} end
 	
 	pcall(function()
+		if not CloudRecordingDropdown then return end
+		-- Safety check for Boreal internal objects
+		if typeof(CloudRecordingDropdown) ~= "table" then return end
+		
 		if CloudRecordingDropdown.SetValues then
 			CloudRecordingDropdown:SetValues(values)
 		elseif CloudRecordingDropdown.Refresh then
@@ -7031,7 +7466,7 @@ local function UpdateCloudUI()
 	end
 end
 
-CloudParagraph = ListMapTab:Paragraph({
+CloudParagraph = _G.AWRecordingContainer:Paragraph({
 	Title = "☁️ Cloud Recordings (Loading...)",
 	Desc = "Recordings uploaded by Dev/Owner",
 })
@@ -7082,7 +7517,7 @@ task.spawn(function()
 end)
 
 -- Refresh Button
-ListMapTab:Button({
+_G.AWRecordingContainer:Button({
 	Title = "🔄 Refresh Cloud List",
 	Desc = "Reload recordings from cloud",
 	Callback = function()
@@ -7148,37 +7583,37 @@ ListMapTab:Button({
 })
 
 -- Clear Cache Button
-ListMapTab:Button({
-	Title = "🗑️ Clear Cache",
-	Desc = "Delete locally saved recordings",
-	Callback = function()
-		local cacheInfo = GetCacheInfo()
-		if cacheInfo.count == 0 then
-			WindUI:Notify({
-				Title = "ℹ️ Cache Empty",
-				Content = "No cached recordings to clear",
-				Duration = 2,
-			})
-			return
-		end
+-- _G.AWRecordingContainer:Button({
+-- 	Title = "🗑️ Clear Cache",
+-- 	Desc = "Delete locally saved recordings",
+-- 	Callback = function()
+-- 		local cacheInfo = GetCacheInfo()
+-- 		if cacheInfo.count == 0 then
+-- 			WindUI:Notify({
+-- 				Title = "ℹ️ Cache Empty",
+-- 				Content = "No cached recordings to clear",
+-- 				Duration = 2,
+-- 			})
+-- 			return
+-- 		end
 
-		if ClearCache() then
-			WindUI:Notify({
-				Title = "🗑️ Cache Cleared",
-				Content = cacheInfo.count .. " recordings removed from cache",
-				Duration = 3,
-			})
-		else
-			WindUI:Notify({
-				Title = "❌ Error",
-				Content = "Failed to clear cache",
-				Duration = 2,
-			})
-		end
-	end,
-})
+-- 		if ClearCache() then
+-- 			WindUI:Notify({
+-- 				Title = "🗑️ Cache Cleared",
+-- 				Content = cacheInfo.count .. " recordings removed from cache",
+-- 				Duration = 3,
+-- 			})
+-- 		else
+-- 			WindUI:Notify({
+-- 				Title = "❌ Error",
+-- 				Content = "Failed to clear cache",
+-- 				Duration = 2,
+-- 			})
+-- 		end
+-- 	end,
+-- })
 
-ListMapTab:Space()
+_G.AWRecordingContainer:Space()
 
 -- Cloud Recordings Dropdown
 local selectedCloudRecording = nil
@@ -7656,8 +8091,15 @@ LoadCloudRecordingDirect = function(recInfo)
 	end)
 end
 
+-- Instructions for the user
+_G.AWRecordingContainer:Paragraph({
+	Title = "📖 How to use",
+	Desc = "Select a recording from the cloud list below. Once loaded, the playback and protection settings will automatically unlock.",
+})
+_G.AWRecordingContainer:Space()
+
 -- Simple Dropdown with Search (supports SearchBarEnabled)
-CloudRecordingDropdown = ListMapTab:Dropdown({
+CloudRecordingDropdown = _G.AWRecordingContainer:Dropdown({
 	Title = "Select Cloud Recording",
 	Desc = "Sorted A-Z • Use search to find",
 	Values = _G.StarshipCloud.DropdownValues,
@@ -8026,31 +8468,93 @@ local function ToggleMiniPlayer(state)
 		end
 	end
 end
-ListMapTab:Divider()
-ListMapTab:Space()
+_G.AWRecordingContainer:Divider()
+_G.AWRecordingContainer:Space()
 
 -- Selected File Display
-selectedFileDisplay = ListMapTab:Paragraph({
+selectedFileDisplay = _G.AWRecordingContainer:Paragraph({
 	Title = "📭 No file selected",
 	Desc = "Select a file above to play",
 })
 
 local PlaybackControlsCreated = false
 
-function CreatePlaybackControls()
+function CreatePlaybackControls(isInit)
 	if PlaybackControlsCreated then
-		if MiniPlayerToggle then
-			MiniPlayerToggle:SetValue(true)
+		if not isInit then
+			-- Unlock Sections and auto-expand them
+			pcall(function()
+				if _G.PlaybackSectionRef then 
+					_G.PlaybackSectionRef:Unlock()
+					pcall(function() _G.PlaybackSectionRef:Open(true) end)
+				end
+			end)
+			
+			pcall(function()
+				if _G.ProtectionSectionRef then 
+					_G.ProtectionSectionRef:Unlock()
+					pcall(function() _G.ProtectionSectionRef:Open(true) end)
+				end
+			end)
+			
+			task.wait(0.1)
+			
+			pcall(function()
+				if _G.AutoWalkMulti and _G.AutoWalkMulti.SelectTab then
+					-- FIX: Force Roblox AutomaticSize layout to recalculate on hidden tabs
+					_G.AutoWalkMulti:SelectTab(2, true) -- Playback Tab
+					task.wait()
+					_G.AutoWalkMulti:SelectTab(3, true) -- Protection Tab
+					task.wait()
+					_G.AutoWalkMulti:SelectTab(2, true) -- Back to Playback Tab
+				end
+			end)
+
+			if MiniPlayerToggle then
+				local s = pcall(function() MiniPlayerToggle:Set(true) end)
+				if not s then pcall(function() MiniPlayerToggle:SetValue(true) end) end
+				-- Fallback if library didn't auto-trigger
+				pcall(function() ToggleMiniPlayer(true) end)
+			end
 		end
 		-- Return true if mini player was already active (for auto-play feature)
 		return MiniPlayerGui ~= nil
 	end
+
+	-- Safety: Don't create if no file is selected AND this isn't pre-initialization
+	if not selectedFile and not isInit then return false end
+	
 	PlaybackControlsCreated = true
 
-	local PlaybackSection = ListMapTab:Section({
-		Title = "🎮 Playback Controls",
-		Opened = true,
-	})
+	-- If this is a normal call (not pre-init), unlock sections immediately
+	if not isInit then
+		pcall(function()
+			if _G.PlaybackSectionRef then 
+				_G.PlaybackSectionRef:Unlock()
+				pcall(function() _G.PlaybackSectionRef:Open(true) end)
+			end
+		end)
+		pcall(function()
+			if _G.ProtectionSectionRef then 
+				_G.ProtectionSectionRef:Unlock()
+				pcall(function() _G.ProtectionSectionRef:Open(true) end)
+			end
+		end)
+		task.wait(0.1)
+		pcall(function()
+			if _G.AutoWalkMulti and _G.AutoWalkMulti.SelectTab then
+				-- FIX: Force Roblox AutomaticSize layout to recalculate on hidden tabs
+				_G.AutoWalkMulti:SelectTab(2, true) -- Playback Tab
+				task.wait()
+				_G.AutoWalkMulti:SelectTab(3, true) -- Protection Tab
+				task.wait()
+				_G.AutoWalkMulti:SelectTab(2, true) -- Back to Playback Tab
+			end
+		end)
+	end
+
+	local PlaybackSection = _G.PlaybackSectionRef or _G.AWPlaybackContainer
+	if not PlaybackSection then return end
 
 	MiniPlayerToggle = PlaybackSection:Toggle({
 		Title = "Show Mini Player",
@@ -8060,11 +8564,14 @@ function CreatePlaybackControls()
 	})
 
 	-- Auto-show mini player immediately on first file load
-	task.defer(function()
-		if MiniPlayerToggle then
-			pcall(function() MiniPlayerToggle:SetValue(true) end)
-		end
-	end)
+	if not isInit then
+		task.delay(0.1, function()
+			if MiniPlayerToggle then
+				local s = pcall(function() MiniPlayerToggle:Set(true) end)
+				if not s then pcall(function() MiniPlayerToggle:SetValue(true) end) end
+			end
+		end)
+	end
 
 	-- Path Visualization and Respawn On End are in Mini Player buttons
 
@@ -8093,10 +8600,12 @@ function CreatePlaybackControls()
 	local isGodMode = false
 	local godModeLoop = nil
 
-	PlaybackSection:Toggle({
+	_G.SafeToggleKeybind(PlaybackSection, {
 		Title = "⚡ God Mode",
-		Desc = "Infinite health - Cannot die",
+		Desc = "Infinite health (Press G to toggle)",
 		Value = false,
+		Keybind = Enum.KeyCode.G,
+		CanChange = true,
 		Callback = function(state)
 			isGodMode = state
 			
@@ -8139,6 +8648,42 @@ function CreatePlaybackControls()
 				WindUI:Notify({
 					Title = "⚡ God Mode",
 					Content = "DISABLED - Normal health restored",
+					Duration = 2,
+				})
+			end
+		end,
+	})
+
+	-- ══════════════════════════════════════════════════════════════════
+	-- 🔧 AUTO EQUIP TOOL FEATURE
+	-- ══════════════════════════════════════════════════════════════════
+	PlaybackSection:Toggle({
+		Title = "🔧 Auto Equip Tool",
+		Desc = "Auto equip/unequip tools during playback based on recorded data",
+		Value = true,
+		Callback = function(state)
+			-- Sync with StarSpacePlayback module
+			if _G.StarSpace and _G.StarSpace.SetAutoEquipTool then
+				_G.StarSpace.SetAutoEquipTool(state)
+			end
+
+			if state then
+				WindUI:Notify({
+					Title = "🔧 Auto Equip Tool",
+					Content = "ENABLED - Tools will auto equip during playback",
+					Duration = 2,
+				})
+			else
+				-- Unequip current tool when turning off
+				pcall(function()
+					local char = LocalPlayer.Character
+					local hum = char and char:FindFirstChildOfClass("Humanoid")
+					if hum then hum:UnequipTools() end
+				end)
+
+				WindUI:Notify({
+					Title = "🔧 Auto Equip Tool",
+					Content = "DISABLED - Tools will NOT be equipped during playback",
 					Duration = 2,
 				})
 			end
@@ -8220,7 +8765,10 @@ function CreatePlaybackControls()
 	-- Always start Anti-AFK
 	task.defer(function() setAfkState(true) end)
 
-	PlaybackSection:Toggle({
+	local ProtectionSection = _G.ProtectionSectionRef or _G.AWProtectionContainer
+	if not ProtectionSection then return end
+
+	ProtectionSection:Toggle({
 		Title = "Anti-AFK (Fixed ON)",
 		Desc = "Permanently enabled for maximum protection",
 		Value = true,
@@ -8661,7 +9209,10 @@ function CreatePlaybackControls()
 		end,
 	})
 
-	PlaybackSection:Toggle({
+	local ProtectionSection = _G.ProtectionSectionRef or _G.AWProtectionContainer
+	if not ProtectionSection then return end
+	
+	ProtectionSection:Toggle({
 		Title = "🛡️ Bypass Admin",
 		Desc = "Deteksi admin via rank, role, tools & chat commands",
 		Value = false,
@@ -8702,45 +9253,90 @@ function CreatePlaybackControls()
 		end,
 	})
 	-- Auto-enable Mini Player (delayed to ensure UI is ready)
-	task.delay(0.2, function()
-		if MiniPlayerToggle then
-			local s = pcall(function()
-				MiniPlayerToggle:Set(true)
-			end)
-			if not s then
-				s = pcall(function()
-					MiniPlayerToggle:SetValue(true)
+	if not isInit then
+		task.delay(0.2, function()
+			if MiniPlayerToggle then
+				local s = pcall(function()
+					MiniPlayerToggle:Set(true)
 				end)
+				if not s then
+					s = pcall(function()
+						MiniPlayerToggle:SetValue(true)
+					end)
+				end
+				if not s then
+					-- Fallback: Manual callback + property set
+					pcall(function()
+						MiniPlayerToggle.Value = true
+					end)
+					ToggleMiniPlayer(true)
+				end
 			end
-			if not s then
-				-- Fallback: Manual callback + property set
-				pcall(function()
-					MiniPlayerToggle.Value = true
-				end)
-				ToggleMiniPlayer(true)
-			end
-		end
-	end)
+		end)
+	end
 end
+
+-- 🛠️ PRE-INITIALIZE UI SO LOCKED SECTIONS HAVE PROPER HEIGHT AND RENDER THE LOCK OVERLAY
+task.spawn(function()
+	pcall(function()
+		CreatePlaybackControls(true)
+		
+		-- FIX: Force Roblox AutomaticSize layout to recalculate on hidden tabs
+		task.delay(0.2, function()
+			if _G.AutoWalkMulti and _G.AutoWalkMulti.SelectTab then
+				pcall(function()
+					-- Rapidly flick through tabs so the UI engine computes AbsoluteContentSize
+					_G.AutoWalkMulti:SelectTab(2, true) -- Playback Tab
+					task.wait()
+					_G.AutoWalkMulti:SelectTab(3, true) -- Protection Tab
+					task.wait()
+					_G.AutoWalkMulti:SelectTab(1, true) -- Native Recording Tab
+				end)
+			end
+		end)
+	end)
+end)
+
 -- ══════════════════════════════════════════════════════════════════
 -- 📱 DEVICE SPOOF TAB
 -- Ported from StarSpace.lua — Full device spoofing system
 -- ══════════════════════════════════════════════════════════════════
-local DeviceSpoofTab = Window:Tab({
-	Title = "Device Spoof",
-	Icon = "solar:smartphone-bold",
+SpoofTab = Window:Tab({
+	Title = "Spoof System",
+	Icon = "solar:tuning-square-bold",
 })
+
 RunService.Heartbeat:Wait()
 
--- Load Device Spoof content asynchronously to avoid blocking
+-- Load Spoof content asynchronously to avoid blocking
 task.spawn(function()
 task.wait(0.5) -- Let UI settle first
 local dsOk, dsErr = pcall(function()
 
-DeviceSpoofTab:Section({ Title = "📱 Device Spoof System", Desc = "Spoof your device type to appear as PC, Mobile, or Console" })
-DeviceSpoofTab:Space({ Columns = 0.5 })
+_G.SpoofMulti = SpoofTab:MultiSection({
+	Title = "Spoof System",
+	Icon = "solar:tuning-square-bold",
+	Box = true,
+	BoxBorder = true,
+	Opened = true,
+})
 
-DeviceSpoofTab:Paragraph({
+_G.NameSpoofContainer = _G.SpoofMulti:Tab({ Title = "Name Spoof", Icon = "solar:user-id-bold" })
+_G.DeviceSpoofContainer = _G.SpoofMulti:Tab({ Title = "Device Spoof", Icon = "solar:smartphone-bold" })
+
+-- 👑 Independent System Flags
+_G.NameSpoofEnabled = false
+_G.DeviceSpoofEnabled = false
+local DS_HooksApplied = false
+local DS_OriginalValues = {}
+local DS_ScanRunning = false
+
+SpoofTab:Divider()
+
+_G.DeviceSpoofContainer:Section({ Title = "📱 Device Spoof System", Desc = "Spoof your device type to appear as PC, Mobile, or Console" })
+_G.DeviceSpoofContainer:Space({ Columns = 1 })
+
+_G.DeviceSpoofContainer:Paragraph({
 	Title = "💡 Tips",
 	Desc = "• Pilih 'PC' untuk menampilkan ikon 💻 di atas kepala\\n"
 		.. "• Pilih 'Mobile' untuk menampilkan ikon 📱 (terlihat sebagai pemain HP)\\n"
@@ -8749,15 +9345,11 @@ DeviceSpoofTab:Paragraph({
 		.. "• Pengaturan tersimpan otomatis & diterapkan saat rejoin\\n"
 		.. "• Berfungsi di sebagian besar game yang menggunakan ikon device overhead",
 })
-DeviceSpoofTab:Space({ Columns = 0.5 })
+_G.DeviceSpoofContainer:Space({ Columns = 1 })
 
 -- ═══ Device Spoof State ═══
 local DS_SpoofName = ""
 local DS_DeviceSpoof = "Default"
-local DS_SpoofEnabled = false
-local DS_HooksApplied = false
-local DS_OriginalValues = {}
-local DS_SpoofToggleRef = nil
 
 -- No persistent settings for spoof — always starts fresh (Default/OFF)
 
@@ -8781,6 +9373,414 @@ for _, iconSet in pairs(DS_GameIconSets) do
 	DS_AssetToIconSet[iconSet.Mobile:lower()] = iconSet
 	DS_AssetToIconSet[iconSet.Console:lower()] = iconSet
 end
+
+-- ═══ Name Spoof Section ═══
+_G.NameSpoofContainer:Section({ Title = "👤 Name Spoofing", Desc = "Temporarily change how your name appears to YOU only" })
+_G.NameSpoofContainer:Paragraph({
+	Title = "💡 Info",
+	Desc = "This only changes your name on the client-side (labels, chat if supported, etc). Other players will still see your real name unless the game uses client-side labels we can intercept.",
+})
+
+local NameInput = ""
+_G.StarshipSpoofNameInput = _G.StarshipSpoofNameInput or ""
+_G.NameSpoofContainer:Input({
+	Title = "Rename Spoof",
+	Placeholder = "Enter new name...",
+	Value = _G.StarshipSpoofNameInput,
+	Callback = function(v)
+		NameInput = v
+		_G.StarshipSpoofNameInput = v
+		if DEV_MODE then warn("[STARSHIP] Name input set to: " .. tostring(v)) end
+	end,
+})
+
+local NameToHideInput = ""
+_G.NameSpoofContainer:Input({
+	Title = "Target Name to Hide",
+	Placeholder = "Optional: Enter name/nick to replace...",
+	Value = "",
+	Callback = function(v)
+		NameToHideInput = v
+	end,
+})
+
+_G.NameSpoofContainer:Toggle({
+	Title = "🔄 Enable Name Spoofing",
+	Desc = "Toggle ON to instantly replace your name everywhere",
+	Value = _G.NameSpoofEnabled,
+	Callback = function(v)
+		if DEV_MODE then warn("[STARSHIP] Toggle callback fired, v=" .. tostring(v)) end
+		_G.NameSpoofEnabled = v
+		if v then
+			-- Read current input values (try both local and global)
+			DS_SpoofName = NameInput
+			if DS_SpoofName == "" then DS_SpoofName = _G.StarshipSpoofNameInput or "" end
+			
+			if DEV_MODE then warn("[STARSHIP] DS_SpoofName = '" .. tostring(DS_SpoofName) .. "'") end
+			
+			if DS_SpoofName == "" then
+				WindUI:Notify({ Title = "⚠️ Name Spoof", Content = "Enter a name in 'Rename Spoof' first! (Press Enter after typing)", Duration = 5 })
+				_G.NameSpoofEnabled = false
+				return
+			end
+			_G.ManualTargetName = NameToHideInput ~= "" and NameToHideInput or nil
+			
+			-- Hooks (wrapped in pcall to prevent crash)
+			local hOk, hErr = pcall(function()
+				if not DS_HooksApplied then
+					DS_ApplyPrivacyHooks()
+					DS_HooksApplied = true
+				end
+			end)
+			if DEV_MODE then warn("[STARSHIP] Hooks: " .. tostring(hOk) .. " " .. tostring(hErr)) end
+			
+			-- Kill old loop if running
+			if _G.StarshipOmegaLoop then _G.StarshipOmegaLoop = false task.wait(0.3) end
+			_G.StarshipOmegaLoop = true
+			
+			-- Full scan (wrapped in pcall)
+			local sOk, sErr = pcall(DS_fullScan)
+			if DEV_MODE then warn("[STARSHIP] FullScan: " .. tostring(sOk) .. " " .. tostring(sErr)) end
+			
+			-- 🚀 SMART NAME SPOOF (only replaces name labels, not everything)
+			task.spawn(function()
+				local lp = LocalPlayer
+				if DEV_MODE then warn("[STARSHIP] Spoof loop started, name=" .. DS_SpoofName) end
+				
+				-- Step 1: DISCOVER what name is shown above our head
+				local realName = lp.Name
+				local realDisplay = lp.DisplayName
+				local overheadName = nil -- will be discovered from BillboardGui
+				
+				local function discoverOverheadName()
+					local char = lp.Character
+					if not char then return end
+					
+					-- Read from BillboardGui on our character
+					for _, desc in pairs(char:GetDescendants()) do
+						if desc:IsA("BillboardGui") then
+							for _, label in pairs(desc:GetDescendants()) do
+								if (label:IsA("TextLabel") or label:IsA("TextButton")) and label.Text ~= "" then
+									local labelName = label.Name:lower()
+									-- Look for the NAME label specifically (skip device, level, role labels)
+									if labelName:find("name") or labelName == "textlabel" then
+										local txt = label.Text:gsub("<[^>]+>", "") -- strip RichText
+										if txt ~= "" and txt ~= DS_SpoofName then
+											overheadName = txt
+											if DEV_MODE then warn("[STARSHIP] Discovered overhead name: " .. txt .. " (from " .. label.Name .. ")") end
+											return
+										end
+									end
+								end
+							end
+						end
+					end
+					
+					-- Also check workspace adorned BillboardGuis
+					pcall(function()
+						local head = char:FindFirstChild("Head")
+						for _, desc in pairs(workspace:GetDescendants()) do
+							if desc:IsA("BillboardGui") and desc.Adornee then
+								if desc.Adornee:IsDescendantOf(char) or desc.Adornee == head then
+									for _, label in pairs(desc:GetDescendants()) do
+										if (label:IsA("TextLabel") or label:IsA("TextButton")) and label.Text ~= "" then
+											local labelName = label.Name:lower()
+											if labelName:find("name") or labelName == "textlabel" then
+												local txt = label.Text:gsub("<[^>]+>", "")
+												if txt ~= "" and txt ~= DS_SpoofName then
+													overheadName = txt
+													if DEV_MODE then warn("[STARSHIP] Discovered overhead name (workspace): " .. txt) end
+													return
+												end
+											end
+										end
+									end
+								end
+							end
+						end
+					end)
+					
+					-- Fallback: check Humanoid DisplayName
+					pcall(function()
+						local hum = char:FindFirstChildOfClass("Humanoid")
+						if hum and hum.DisplayName ~= "" and hum.DisplayName ~= DS_SpoofName then
+							if not overheadName then
+								overheadName = hum.DisplayName
+								if DEV_MODE then warn("[STARSHIP] Using Humanoid.DisplayName: " .. overheadName) end
+							end
+						end
+					end)
+				end
+				
+				-- Step 2: Build list of names to replace
+				local function getTargets()
+					local targets = {realName, realDisplay}
+					if overheadName and overheadName ~= "" then
+						table.insert(targets, overheadName)
+					end
+					if _G.ManualTargetName and _G.ManualTargetName ~= "" then
+						table.insert(targets, _G.ManualTargetName)
+					end
+					-- Add cached names
+					for _, c in ipairs(_G.StarshipOriginalNames or {}) do
+						local exists = false
+						for _, t in ipairs(targets) do if t == c then exists = true break end end
+						if not exists then table.insert(targets, c) end
+					end
+					return targets
+				end
+				
+				-- Step 3: Replace function (only replaces if text matches a target)
+				_G.StarshipSpoofedOriginals = _G.StarshipSpoofedOriginals or {}
+				local function smartReplace(obj, targets)
+					if not obj or not obj.Parent then return false end
+					local text = obj.Text
+					if not text or text == "" then return false end
+					
+					local newText = text
+					for _, target in ipairs(targets) do
+						if target ~= DS_SpoofName and newText:find(target, 1, true) then
+							newText = newText:gsub(target:gsub("([^%w])", "%%%1"), DS_SpoofName)
+						end
+					end
+					
+					if newText ~= text then
+						-- Save ORIGINAL text (only if not already saved)
+						if not _G.StarshipSpoofedOriginals[obj] then
+							_G.StarshipSpoofedOriginals[obj] = text
+						end
+						pcall(function() obj.Text = newText end)
+						return true
+					end
+					return false
+				end
+
+				
+				-- Step 4: Main spoofing function
+				local discoveredOnce = false
+				local function doSpoof()
+					DS_SpoofName = NameInput
+					if DS_SpoofName == "" then DS_SpoofName = _G.StarshipSpoofNameInput or "" end
+					if DS_SpoofName == "" then return 0 end
+					
+					local char = lp.Character
+					if not char then return 0 end
+					
+					-- Discover name ONLY ONCE (before first replacement)
+					if not discoveredOnce then
+						discoverOverheadName()
+						discoveredOnce = true
+						if DEV_MODE then warn("[STARSHIP] Targets: " .. table.concat(getTargets(), ", ")) end
+					end
+					local targets = getTargets()
+					local count = 0
+
+					
+					-- A. Replace in our character's BillboardGuis
+					for _, desc in pairs(char:GetDescendants()) do
+						if desc:IsA("BillboardGui") then
+							for _, label in pairs(desc:GetDescendants()) do
+								if label:IsA("TextLabel") or label:IsA("TextButton") then
+									if smartReplace(label, targets) then count = count + 1 end
+								end
+							end
+						end
+					end
+					
+					-- B. Replace in workspace BillboardGuis adorned to our char
+					pcall(function()
+						local head = char:FindFirstChild("Head")
+						for _, desc in pairs(workspace:GetDescendants()) do
+							if desc:IsA("BillboardGui") and desc.Adornee then
+								if desc.Adornee:IsDescendantOf(char) or desc.Adornee == head then
+									for _, label in pairs(desc:GetDescendants()) do
+										if label:IsA("TextLabel") or label:IsA("TextButton") then
+											if smartReplace(label, targets) then count = count + 1 end
+										end
+									end
+								end
+							end
+						end
+					end)
+					
+					-- C. Replace in PlayerGui (leaderboard, chat, etc)
+					pcall(function()
+						for _, obj in pairs(lp.PlayerGui:GetDescendants()) do
+							if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+								smartReplace(obj, targets)
+							end
+						end
+					end)
+					
+					-- D. Humanoid DisplayName (save original first)
+					pcall(function()
+						local hum = char:FindFirstChildOfClass("Humanoid")
+						if hum then
+							if not _G.StarshipOriginalHumDisplayName then
+								_G.StarshipOriginalHumDisplayName = hum.DisplayName
+							end
+							hum.DisplayName = DS_SpoofName
+						end
+					end)
+					
+					-- E. Force Attributes (save originals first)
+					_G.StarshipOriginalAttributes = _G.StarshipOriginalAttributes or {}
+					pcall(function()
+						for attr, val in pairs(lp:GetAttributes()) do
+							if typeof(val) == "string" and val ~= "" and val ~= DS_SpoofName then
+								local newVal = val
+								for _, target in ipairs(targets) do
+									if target ~= DS_SpoofName and newVal:find(target, 1, true) then
+										newVal = newVal:gsub(target:gsub("([^%w])", "%%%1"), DS_SpoofName)
+									end
+								end
+								if newVal ~= val then
+									if not _G.StarshipOriginalAttributes[attr] then
+										_G.StarshipOriginalAttributes[attr] = val
+									end
+									lp:SetAttribute(attr, newVal)
+								end
+							end
+						end
+					end)
+
+					
+					return count
+				end
+				
+				-- Initial run
+				task.wait(0.1)
+				local changed = doSpoof()
+				WindUI:Notify({ 
+					Title = "🔍 Name Spoof",
+					Content = "Active! Overhead: " .. tostring(overheadName or "?") .. " → " .. DS_SpoofName .. " | Changed: " .. changed,
+					Duration = 5
+				})
+				
+				-- Continue loop
+				while _G.NameSpoofEnabled and _G.StarshipOmegaLoop and task.wait(0.3) do
+					doSpoof()
+				end
+			end)
+
+
+
+			
+			WindUI:Notify({ Title = "👤 Name Spoof", Content = "ACTIVE! Your name is now: " .. DS_SpoofName, Duration = 3 })
+		else
+			_G.StarshipOmegaLoop = false
+			
+			-- RESTORE all spoofed labels back to original
+			local restored = 0
+			if _G.StarshipSpoofedOriginals then
+				for obj, origText in pairs(_G.StarshipSpoofedOriginals) do
+					pcall(function()
+						if obj and obj.Parent then
+							obj.Text = origText
+							restored = restored + 1
+						end
+					end)
+				end
+				_G.StarshipSpoofedOriginals = {}
+			end
+			
+			-- Restore Humanoid DisplayName
+			pcall(function()
+				local lp = LocalPlayer
+				if lp and lp.Character then
+					local hum = lp.Character:FindFirstChildOfClass("Humanoid")
+					if hum and _G.StarshipOriginalHumDisplayName then
+						hum.DisplayName = _G.StarshipOriginalHumDisplayName
+					end
+				end
+			end)
+			
+			-- Restore attributes
+			pcall(function()
+				local lp = LocalPlayer
+				if lp and _G.StarshipOriginalAttributes then
+					for attr, val in pairs(_G.StarshipOriginalAttributes) do
+						pcall(function() lp:SetAttribute(attr, val) end)
+					end
+					_G.StarshipOriginalAttributes = {}
+				end
+			end)
+			
+			-- Disconnect spoof listeners
+			if _G.StarshipSpoofConnections then
+				for _, con in pairs(_G.StarshipSpoofConnections) do
+					pcall(function() con:Disconnect() end)
+				end
+				_G.StarshipSpoofConnections = {}
+			end
+			
+			-- Clear listener attributes
+			pcall(function()
+				local lp = LocalPlayer
+				if lp and lp.Character then
+					for _, desc in pairs(lp.Character:GetDescendants()) do
+						pcall(function()
+							if desc:GetAttribute("StarshipSpoofListener") then
+								desc:SetAttribute("StarshipSpoofListener", nil)
+							end
+						end)
+					end
+				end
+			end)
+			
+			WindUI:Notify({ Title = "👤 Name Spoof", Content = "Disabled — Restored " .. restored .. " labels", Duration = 3 })
+		end
+	end,
+})
+
+_G.NameSpoofContainer:Button({
+	Title = "Reset Name",
+	Variant = "Secondary",
+	Callback = function()
+		_G.NameSpoofEnabled = false
+		_G.StarshipOmegaLoop = false
+		DS_SpoofName = ""
+		
+		-- Restore all
+		local restored = 0
+		if _G.StarshipSpoofedOriginals then
+			for obj, origText in pairs(_G.StarshipSpoofedOriginals) do
+				pcall(function()
+					if obj and obj.Parent then
+						obj.Text = origText
+						restored = restored + 1
+					end
+				end)
+			end
+			_G.StarshipSpoofedOriginals = {}
+		end
+		
+		pcall(function()
+			local lp = LocalPlayer
+			if lp and lp.Character then
+				local hum = lp.Character:FindFirstChildOfClass("Humanoid")
+				if hum and _G.StarshipOriginalHumDisplayName then
+					hum.DisplayName = _G.StarshipOriginalHumDisplayName
+				end
+			end
+		end)
+		
+		pcall(function()
+			local lp = LocalPlayer
+			if lp and _G.StarshipOriginalAttributes then
+				for attr, val in pairs(_G.StarshipOriginalAttributes) do
+					pcall(function() lp:SetAttribute(attr, val) end)
+				end
+				_G.StarshipOriginalAttributes = {}
+			end
+		end)
+		
+		WindUI:Notify({ Title = "👤 Name Spoof", Content = "Reset — Restored " .. restored .. " labels", Duration = 2 })
+	end,
+})
+
+
+_G.NameSpoofContainer:Divider()
 
 local DS_DeviceAssets = {
 	PC = { Emojis = {"💻","🖥️","🖥","⌨️","🖱️"}, Keywords = {"pc","computer","desktop","windows","keyboard"}, TargetEmoji = "💻" },
@@ -8831,10 +9831,74 @@ local function DS_isOwnedByLocalPlayer(obj)
 	return false
 end
 
--- Cache for DS_isDeviceRelated results (cleared on respawn/toggle)
-local DS_DeviceRelatedCache = {}
+-- Helper to escape string for gsub
+local function DS_escape(str)
+	return str:gsub("([^%w])", "%%%1")
+end
+
+-- Force name replacement on a string
+local DS_inProcessing = false -- CRITICAL: recursion guard
+_G.StarshipOriginalNames = _G.StarshipOriginalNames or {} -- Cache of discovered original names
+local function DS_processNameReplacement(text)
+	if DS_inProcessing then return text end -- prevent infinite loop!
+	if not text or text == "" or not _G.NameSpoofEnabled or DS_SpoofName == "" then return text end
+	local lp = LocalPlayer
+	if not lp then return text end
+	
+	DS_inProcessing = true -- lock
+	
+	local result = text
+	
+	-- Function to clean RichText tags for matching
+	local function cleanRichText(str)
+		return str:gsub("<[^>]+>", "")
+	end
+	
+	local function doReplace(target)
+		if not target or target == "" or target == DS_SpoofName then return end
+		local cleaned = cleanRichText(result)
+		local lowerCleaned = cleaned:lower()
+		local lowerTar = target:lower()
+		
+		if lowerCleaned:find(lowerTar, 1, true) then
+			result = result:gsub(DS_escape(target), DS_SpoofName)
+			result = result:gsub(DS_escape(target:upper()), DS_SpoofName:upper())
+			result = result:gsub(DS_escape(target:lower()), DS_SpoofName:lower())
+		end
+	end
+	
+	-- 1. Check Manual Target Name (highest priority)
+	if _G.ManualTargetName then doReplace(_G.ManualTargetName) end
+	
+	-- 2. Check CACHED original nicknames (these are preserved before attribute overwrite)
+	for _, cachedName in ipairs(_G.StarshipOriginalNames) do
+		doReplace(cachedName)
+	end
+	
+	-- 3. Check current Attribute values (backup)
+	local attrCheck = {"OverheadNameText", "RoleTitle", "RoleDisplayText", "LevelText", "TerminologyName", "Nickname", "CustomName", "PlayerName"}
+	for _, a in ipairs(attrCheck) do
+		pcall(function()
+			local v = lp:GetAttribute(a)
+			if v and typeof(v) == "string" and v ~= "" and v ~= DS_SpoofName then
+				doReplace(v)
+			end
+		end)
+	end
+	
+	-- 4. Check Roblox Name and DisplayName
+	doReplace(lp.Name)
+	doReplace(lp.DisplayName)
+	
+	DS_inProcessing = false -- unlock
+	return result
+end
+
 
 local function DS_isDeviceRelated(obj)
+	-- For Name Spoof, we care about ALL text objects
+	if _G.NameSpoofEnabled and (obj:IsA("TextLabel") or obj:IsA("TextButton")) then return true end
+	
 	-- Fast cache check
 	if DS_DeviceRelatedCache[obj] ~= nil then return DS_DeviceRelatedCache[obj] end
 	
@@ -8912,39 +9976,49 @@ local function DS_spoof(obj)
 	
 	-- TEXT SPOOFING
 	if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-		if not DS_OriginalValues[obj] then 
-			DS_OriginalValues[obj] = { Text = obj.Text, Type = "Text" }
-			-- Instant lock for text (only create once per object lifetime)
-			if not DS_PropertyConnections[obj] then
-				local conn = obj:GetPropertyChangedSignal("Text"):Connect(function()
-					if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" and not _G.StarshipInternalChange then
-						_G.StarshipInternalChange = true
-						DS_spoof(obj)
-						_G.StarshipInternalChange = false
-					end
-				end)
-				DS_trackConnection(obj, conn)
-			end
+		-- Keep track of what we're doing to avoid recursion
+		if not DS_PropertyConnections[obj] then
+			local conn = obj:GetPropertyChangedSignal("Text"):Connect(function()
+				if not _G.StarshipInternalChange and (_G.NameSpoofEnabled or _G.DeviceSpoofEnabled) then
+					_G.StarshipInternalChange = true
+					DS_spoof(obj)
+					_G.StarshipInternalChange = false
+				end
+			end)
+			DS_trackConnection(obj, conn)
 		end
 		
-		if DS_SpoofEnabled then
-			local currentText = DS_OriginalValues[obj].Text
+		if _G.NameSpoofEnabled or _G.DeviceSpoofEnabled then
+			local currentText = obj.Text
 			local modified = false
-			if DS_SpoofName ~= "" and lp then
-				if currentText:find(lp.Name) or currentText:find(lp.DisplayName) then
-					currentText = currentText:gsub(lp.Name, DS_SpoofName):gsub(lp.DisplayName, DS_SpoofName)
+			
+			if _G.NameSpoofEnabled and DS_SpoofName ~= "" then
+				local newText = DS_processNameReplacement(currentText)
+				if newText ~= currentText then
+					currentText = newText
 					modified = true
 				end
 			end
-			if DS_DeviceSpoof ~= "Default" and DS_isDeviceRelated(obj) then
+			
+			-- 2. Device Emoji Replacement
+			if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" and DS_isDeviceRelated(obj) then
 				local targetEmoji = DS_DeviceAssets[DS_DeviceSpoof].TargetEmoji
 				for emoji, _ in pairs(DS_AllDeviceEmojis) do
-					if currentText:find(emoji) then currentText = currentText:gsub(emoji, targetEmoji); modified = true end
+					if currentText:find(emoji, 1, true) then 
+						currentText = currentText:gsub(DS_escape(emoji), targetEmoji)
+						modified = true 
+					end
 				end
 			end
-			if modified and obj.Text ~= currentText then obj.Text = currentText end
-		else
-			if DS_OriginalValues[obj] then obj.Text = DS_OriginalValues[obj].Text end
+			
+			if modified and obj.Text ~= currentText then 
+				pcall(function()
+					_G.StarshipInternalChange = true
+					obj.Text = currentText 
+					_G.StarshipInternalChange = false
+				end)
+				_G.StarshipInternalChange = false
+			end
 		end
 	end
 	
@@ -8962,7 +10036,7 @@ local function DS_spoof(obj)
 			-- INSTANT RE-APPLY (only create once per object lifetime)
 			if not DS_PropertyConnections[obj] then
 				local conn = obj:GetPropertyChangedSignal("Image"):Connect(function()
-					if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" and not _G.StarshipInternalChange then
+					if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" and not _G.StarshipInternalChange then
 						if DS_isDeviceRelated(obj) then
 							local target = DS_getTargetImage(DS_DeviceSpoof, obj.Image)
 							if obj.Image ~= target then
@@ -8978,7 +10052,7 @@ local function DS_spoof(obj)
 		end
 		
 		if DS_isDeviceRelated(obj) then
-			if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
+			if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" then
 				local origImg = DS_OriginalValues[obj] and DS_OriginalValues[obj].Image or obj.Image
 				local targetImg = DS_getTargetImage(DS_DeviceSpoof, origImg)
 				if targetImg and obj.Image ~= targetImg then
@@ -9010,7 +10084,7 @@ local function DS_spoof(obj)
 				DS_OriginalValues[obj] = { Visible = obj.Visible, Type = "Frame" }
 				if not DS_PropertyConnections[obj] then
 					local conn = obj:GetPropertyChangedSignal("Visible"):Connect(function()
-						if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" and not _G.StarshipInternalChange then
+						if (_G.NameSpoofEnabled or _G.DeviceSpoofEnabled) and not _G.StarshipInternalChange then
 							_G.StarshipInternalChange = true
 							DS_spoof(obj)
 							_G.StarshipInternalChange = false
@@ -9020,7 +10094,7 @@ local function DS_spoof(obj)
 				end
 			end
 			
-			if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
+			if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" then
 				local targetKws = DS_DeviceAssets[DS_DeviceSpoof].Keywords
 				local isTarget = false
 				for _, kw in ipairs(targetKws) do if nameLower:find(kw) then isTarget = true; break end end
@@ -9262,13 +10336,12 @@ local function DS_proactiveDeviceSpoof()
 	end
 end
 
--- ═══ Privacy Hooks (FULL - hookmetamethod __index + __namecall) ═══
-local DS_oldIndex = (getrawmetatable and getrawmetatable(game).__index) or nil
-local DS_oldNamecall = (getrawmetatable and getrawmetatable(game).__namecall) or nil
+-- ═══ PRIVACY HOOKS (Unified System — Full Device + Name + Anti-AFK) ═══
+local DS_oldIndex = nil
+local DS_oldNamecall = nil
 local function DS_ApplyPrivacyHooks()
 	if DS_HooksApplied then return end
-
-	-- Check all required functions exist
+	
 	if not hookmetamethod or not checkcaller or not getnamecallmethod then
 		warn("[STARSHIP] ⚠️ hookmetamethod/checkcaller/getnamecallmethod not available — visual spoof only")
 		DS_HooksApplied = true
@@ -9278,25 +10351,21 @@ local function DS_ApplyPrivacyHooks()
 	local lp = LocalPlayer
 	local UIS = game:GetService("UserInputService")
 	local GS = game:GetService("GuiService")
+	local _deviceEmojiMap = { Mobile = "📱", PC = "💻", Console = "🎮" }
 
-	-- Pre-cache device remote references for fast comparison
+	-- Pre-cache device remote references
 	local _cachedDeviceRemotes = {}
-	local _deviceEmojiMap = {
-		Mobile = "\240\159\147\177", PC = "\240\159\146\187", Console = "\240\159\142\174",
-	}
-	task.spawn(function()
-		pcall(function()
-			local RS = game:GetService("ReplicatedStorage")
-			local overhead = RS:FindFirstChild("Overhead")
-			if overhead then
-				local de = overhead:FindFirstChild("DeviceUpdateEvent")
-				if de then _cachedDeviceRemotes[de] = "DeviceUpdateEvent" end
-			end
-			local de2 = RS:FindFirstChild("DeviceUpdateEvent")
-			if de2 then _cachedDeviceRemotes[de2] = "DeviceUpdateEvent" end
-			local dd = RS:FindFirstChild("DeviceDetected")
-			if dd then _cachedDeviceRemotes[dd] = "DeviceDetected" end
-		end)
+	pcall(function()
+		local RS = game:GetService("ReplicatedStorage")
+		local overhead = RS:FindFirstChild("Overhead")
+		if overhead then
+			local de = overhead:FindFirstChild("DeviceUpdateEvent")
+			if de then _cachedDeviceRemotes[de] = "DeviceUpdateEvent" end
+		end
+		local de2 = RS:FindFirstChild("DeviceUpdateEvent")
+		if de2 then _cachedDeviceRemotes[de2] = "DeviceUpdateEvent" end
+		local dd = RS:FindFirstChild("DeviceDetected")
+		if dd then _cachedDeviceRemotes[dd] = "DeviceDetected" end
 	end)
 
 	-- Hook __index
@@ -9304,7 +10373,7 @@ local function DS_ApplyPrivacyHooks()
 		local oldIndex
 		oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
 			if not checkcaller() then
-				-- Anti-AFK hooks (Always block if AntiTabDetect is on)
+				-- ANTI-AFK
 				if _G.StarshipAntiTabDetect then
 					if self == UIS then
 						if key == "IsWindowFocused" then return function() return true end end
@@ -9312,8 +10381,15 @@ local function DS_ApplyPrivacyHooks()
 					end
 				end
 
-				if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
-					-- Optimization: Check common services first
+				-- NAME SPOOFING (intercept .Text reads)
+				if _G.NameSpoofEnabled and DS_SpoofName ~= "" then
+					if key == "Text" and (self:IsA("TextLabel") or self:IsA("TextButton")) then
+						return DS_processNameReplacement(oldIndex(self, key))
+					end
+				end
+
+				-- DEVICE SPOOFING (FULL)
+				if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" then
 					if self == UIS then
 						if DS_DeviceSpoof == "Mobile" then
 							if key == "TouchEnabled" or key == "KeyboardEnabled" or key == "MouseEnabled" or key == "AccelerometerEnabled" or key == "GyroscopeEnabled" then return true end
@@ -9329,14 +10405,13 @@ local function DS_ApplyPrivacyHooks()
 					elseif DS_DeviceSpoof == "Mobile" and key == "ViewportSize" and self:IsA("Camera") then
 						return Vector2.new(896, 414)
 					end
-					-- FIX: Intercept DeviceIcon read via indexing
 					if key == "DeviceIcon" then
 						return _deviceEmojiMap[DS_DeviceSpoof] or _deviceEmojiMap.PC
 					end
-					-- Also handle GetAttribute via indexing
 					if key == "GetAttribute" then
 						return function(inst, name)
-							local val = (oldNamecall or DS_oldNamecall)(inst, "GetAttribute", name)
+							local val = oldIndex(inst, "GetAttribute")
+							val = val(inst, name)
 							local nameL = tostring(name):lower()
 							if nameL == "device" or nameL == "platform" or nameL == "devicetype" then
 								return DS_DeviceSpoof
@@ -9348,7 +10423,7 @@ local function DS_ApplyPrivacyHooks()
 					end
 				end
 			end
-			return (oldIndex or DS_oldIndex)(self, key)
+			return oldIndex(self, key)
 		end))
 		if oldIndex then DS_oldIndex = oldIndex end
 	end)
@@ -9358,15 +10433,14 @@ local function DS_ApplyPrivacyHooks()
 	end
 
 	-- Hook __namecall
-	-- Hook __namecall
 	local hookOk2, hookErr2 = pcall(function()
 		local oldNamecall
 		oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
 			local method = getnamecallmethod()
 
 			if not checkcaller() then
+				-- ANTI-AFK
 				if _G.StarshipAntiTabDetect then
-					-- 1. Block focus signals
 					if (method == "Connect" or method == "connect") and self == UIS.WindowFocusReleased then
 						return {
 							Connected = true,
@@ -9374,17 +10448,14 @@ local function DS_ApplyPrivacyHooks()
 							disconnect = function(s) if type(s) == "table" then s.Connected = false end end,
 						}
 					end
-					-- 2. Block focus checks
 					if method == "IsWindowFocused" then return true end
 					if method == "GetLastInputTime" then return tick() end
-					-- 3. Block AFK remotes
 					if method == "FireServer" or method == "InvokeServer" then
 						local nm = tostring(self.Name):lower()
 						if nm:find("afk") or nm:find("focus") or nm:find("tab") or nm:find("idle") or nm:find("activity") then
 							return
 						end
 					end
-					-- 4. Block AFK attributes
 					if method == "SetAttribute" then
 						local attr = tostring(...):lower()
 						if attr:find("afk") or attr:find("focus") or attr:find("tab") or attr:find("idle") then
@@ -9393,24 +10464,31 @@ local function DS_ApplyPrivacyHooks()
 					end
 				end
 
-				if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
-					-- 0. DEVICE REMOTE INTERCEPT (fast path)
+				-- NAME SPOOFING via GetAttribute
+				if method == "GetAttribute" and _G.NameSpoofEnabled and DS_SpoofName ~= "" then
+					local val = (oldNamecall or DS_oldNamecall)(self, ...)
+					if typeof(val) == "string" then
+						return DS_processNameReplacement(val)
+					end
+					return val
+				end
+
+				-- DEVICE SPOOFING (FULL)
+				if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" then
+					-- Device Remote Intercept
 					if method == "FireServer" or method == "InvokeServer" then
 						local isDeviceRemote = _cachedDeviceRemotes[self] ~= nil
 						local remoteName = not isDeviceRemote and tostring(self.Name):lower() or ""
 						
-						-- ONLY process if it's a known device remote or name contains keywords
 						if isDeviceRemote or remoteName:find("device") or remoteName:find("platform") or remoteName:find("input") then
 							if _cachedDeviceRemotes[self] == "DeviceUpdateEvent" then
-								local spoofVal2 = (DS_DeviceSpoof == "Mobile") and "Phone" or
+								local spoofVal = (DS_DeviceSpoof == "Mobile") and "Phone" or
 									(DS_DeviceSpoof == "PC") and "Computer" or DS_DeviceSpoof
-								return (oldNamecall or DS_oldNamecall)(self, spoofVal2)
+								return (oldNamecall or DS_oldNamecall)(self, spoofVal)
 							elseif _cachedDeviceRemotes[self] == "DeviceDetected" then
-								-- FIX: Server expects 2 args (deviceString, emoji)
 								return (oldNamecall or DS_oldNamecall)(self, DS_DeviceSpoof, _deviceEmojiMap[DS_DeviceSpoof] or _deviceEmojiMap.PC)
 							end
 
-							-- Deep spoof only when potentially relevant
 							local args = {...}
 							local argCount = select("#", ...)
 							local changed = false
@@ -9422,23 +10500,20 @@ local function DS_ApplyPrivacyHooks()
 						end
 					end
 
-					-- 2. ATTRIBUTE SPOOFING (READ)
+					-- Attribute Read
 					if method == "GetAttribute" then
 						local name = ...
 						local nameLower = name and tostring(name):lower() or ""
 						if nameLower == "device" or nameLower == "platform" or nameLower == "devicetype" or
 						   nameLower == "inputtype" or nameLower == "playerdevice" or nameLower == "playerplatform" then
-							if DS_DeviceSpoof == "Mobile" then return "Mobile" end
-							if DS_DeviceSpoof == "PC" then return "PC" end
-							if DS_DeviceSpoof == "Console" then return "Console" end
+							return DS_DeviceSpoof
 						end
-						-- FIX: Intercept DeviceIcon read
 						if nameLower == "deviceicon" then
 							return _deviceEmojiMap[DS_DeviceSpoof] or _deviceEmojiMap.PC
 						end
 					end
 
-					-- 2b. ATTRIBUTE SPOOFING (WRITE)
+					-- Attribute Write
 					if method == "SetAttribute" then
 						local args = {...}
 						local name = args[1]
@@ -9450,14 +10525,13 @@ local function DS_ApplyPrivacyHooks()
 							args[2] = DS_getGameTermForTarget()
 							return (oldNamecall or DS_oldNamecall)(self, unpack(args, 1, select("#", ...)))
 						end
-						-- FIX: Intercept DeviceIcon write
 						if nameLower == "deviceicon" then
 							args[2] = _deviceEmojiMap[DS_DeviceSpoof] or _deviceEmojiMap.PC
 							return (oldNamecall or DS_oldNamecall)(self, unpack(args, 1, select("#", ...)))
 						end
 					end
 
-					-- 3. CORE SERVICE SPOOFING
+					-- Core Service Spoofing
 					if self == GS and method == "IsTenFootInterface" then
 						return DS_DeviceSpoof == "Console"
 					elseif self == UIS then
@@ -9467,10 +10541,10 @@ local function DS_ApplyPrivacyHooks()
 							if DS_DeviceSpoof == "Console" then return Enum.Platform.XBoxOne end
 						elseif method == "GetLastInputType" then
 							if DS_DeviceSpoof == "Mobile" then return Enum.UserInputType.Touch end
-							if DS_DeviceSpoof == "PC" then 
+							if DS_DeviceSpoof == "PC" then
 								local realInput = (oldNamecall or DS_oldNamecall)(self, ...)
 								if realInput == Enum.UserInputType.Touch then return realInput end
-								return Enum.UserInputType.Keyboard 
+								return Enum.UserInputType.Keyboard
 							end
 							if DS_DeviceSpoof == "Console" then return Enum.UserInputType.Gamepad1 end
 						elseif method == "GetConnectedGamepads" then
@@ -9478,7 +10552,7 @@ local function DS_ApplyPrivacyHooks()
 							if DS_DeviceSpoof == "Console" then return {{}} end
 						elseif method == "GetSupportedGamepadKeyCodes" then
 							if DS_DeviceSpoof == "Console" then
-								return {Enum.KeyCode.ButtonX, Enum.KeyCode.ButtonY, Enum.KeyCode.ButtonA, Enum.KeyCode.ButtonB}
+								return {Enum.KeyCode.ButtonA, Enum.KeyCode.ButtonB, Enum.KeyCode.ButtonX, Enum.KeyCode.ButtonY}
 							else return {} end
 						end
 					end
@@ -9510,7 +10584,9 @@ local function DS_ApplyPrivacyHooks()
 	end
 
 	DS_HooksApplied = true
+	if DEV_MODE then warn("[STARSHIP] 🕵️ Starship Privacy System ACTIVE (Full Device + Name + Anti-AFK)") end
 end
+
 
 -- ═══ Full Scan & Listen Functions (Batched to avoid FPS drops) ═══
 local DS_ScanRunning = false
@@ -9530,8 +10606,13 @@ local function DS_fullScan()
 				if g:IsA("GuiObject") then
 					batchCount = batchCount + 1
 					if batchCount % BATCH_SIZE == 0 then RunService.Heartbeat:Wait() end
-					if DS_isDeviceRelated(g) then
-						_G.StarshipDeviceElements[g] = true
+					
+					-- Process if device-related OR name-related (text)
+					local isDevice = DS_isDeviceRelated(g)
+					local isNameText = _G.NameSpoofEnabled and (g:IsA("TextLabel") or g:IsA("TextButton"))
+					
+					if isDevice or isNameText then
+						if isDevice then _G.StarshipDeviceElements[g] = true end
 						pcall(DS_spoof, g)
 					end
 				end
@@ -9541,13 +10622,30 @@ local function DS_fullScan()
 	
 	-- Scan PlayerGui descendants (batched)
 	pcall(function()
-		for _, g in pairs(lp.PlayerGui:GetDescendants()) do
-			if g:IsA("GuiObject") then
-				batchCount = batchCount + 1
-				if batchCount % BATCH_SIZE == 0 then RunService.Heartbeat:Wait() end
-				if DS_isDeviceRelated(g) then
-					_G.StarshipDeviceElements[g] = true
+		local scannables = {lp.PlayerGui}
+		-- For Workspace, we only scan billboard/surface guis to avoid huge lag
+		if _G.NameSpoofEnabled then 
+			for _, v in pairs(workspace:GetChildren()) do
+				if v:IsA("BillboardGui") or v:IsA("SurfaceGui") or v:IsA("Model") or v:IsA("Folder") then
+					table.insert(scannables, v)
+				end
+			end
+		end
+		
+		for _, container in ipairs(scannables) do
+			local descendants = container:IsA("Instance") and container:GetDescendants() or {}
+			for _, g in pairs(descendants) do
+				if g:IsA("TextLabel") or g:IsA("TextButton") then
+					batchCount = batchCount + 1
+					if batchCount % BATCH_SIZE == 0 then RunService.Heartbeat:Wait() end
 					pcall(DS_spoof, g)
+				elseif not _G.NameSpoofEnabled and DS_isDeviceRelated(g) then
+					batchCount = batchCount + 1
+					if batchCount % BATCH_SIZE == 0 then RunService.Heartbeat:Wait() end
+					if g:IsA("ImageLabel") or g:IsA("ImageButton") then
+						_G.StarshipDeviceElements[g] = true
+						pcall(DS_spoof, g)
+					end
 				end
 			end
 		end
@@ -9556,26 +10654,36 @@ local function DS_fullScan()
 	DS_ScanRunning = false
 end
 
-local function DS_listenToCharacter(char)
-	if not char then return end
-	local conn = char.DescendantAdded:Connect(function(g)
-		if DS_SpoofEnabled and g:IsA("GuiObject") and DS_isDeviceRelated(g) then
-			_G.StarshipDeviceElements = _G.StarshipDeviceElements or {}
-			_G.StarshipDeviceElements[g] = true
-			task.defer(function() pcall(DS_spoof, g) end)
+local function DS_listenToUI(container)
+	if not container then return end
+	local conn = container.DescendantAdded:Connect(function(g)
+		if (_G.NameSpoofEnabled or _G.DeviceSpoofEnabled) and g:IsA("GuiObject") then
+			task.defer(function()
+				if DS_isDeviceRelated(g) then
+					if _G.DeviceSpoofEnabled then 
+						_G.StarshipDeviceElements = _G.StarshipDeviceElements or {}
+						_G.StarshipDeviceElements[g] = true
+					end
+					pcall(DS_spoof, g)
+				end
+			end)
 		end
 	end)
 	_G.StarshipSpoofConnections = _G.StarshipSpoofConnections or {}
 	table.insert(_G.StarshipSpoofConnections, conn)
 end
 
+local function DS_listenToCharacter(char)
+	DS_listenToUI(char)
+end
+
 -- ═══ UI ELEMENTS ═══
-DeviceSpoofTab:Paragraph({
+_G.DeviceSpoofContainer:Paragraph({
 	Title = "⚙️ Configuration",
 	Desc = "Select your target device and enable spoofing below.",
 })
 
-DeviceSpoofTab:Dropdown({
+_G.DeviceSpoofContainer:Dropdown({
 	Title = "🎯 Device Type",
 	Desc = "Choose which device to appear as",
 	Values = {"Default", "PC", "Mobile", "Console"},
@@ -9584,7 +10692,7 @@ DeviceSpoofTab:Dropdown({
 		local prev = DS_DeviceSpoof
 		DS_DeviceSpoof = v
 		DS_DeviceRelatedCache = {} -- Clear cache when device type changes
-		if DS_SpoofEnabled then
+		if _G.DeviceSpoofEnabled then
 			DS_ApplyPrivacyHooks()
 			-- Re-spoof confirmed elements (batched)
 			if _G.StarshipDeviceElements then
@@ -9606,20 +10714,25 @@ DeviceSpoofTab:Dropdown({
 	end,
 })
 
-DS_SpoofToggleRef = DeviceSpoofTab:Toggle({
-	Title = "🔄 Enable Spoofing",
-	Desc = "Activate device spoofing hooks",
-	Value = DS_SpoofEnabled,
+_G.DeviceSpoofContainer:Toggle({
+	Title = "🔄 Enable Device Spoofing",
+	Desc = "Activate device-specific icons and attributes",
+	Value = _G.DeviceSpoofEnabled,
 	Callback = function(v)
-		DS_SpoofEnabled = v
+		_G.DeviceSpoofEnabled = v
 		if v then
-			DS_ApplyPrivacyHooks()
+			if not DS_HooksApplied then
+				DS_ApplyPrivacyHooks()
+				DS_HooksApplied = true
+			end
 			task.spawn(function() task.wait(0.3); DS_proactiveDeviceSpoof() end)
 			if DS_DeviceSpoof ~= "Default" then
-				_G.StarshipSpoofConnections = {}
-				_G.StarshipDeviceElements = {}
-				DS_fullScan()
-				-- Listen to all characters
+				_G.StarshipSpoofConnections = _G.StarshipSpoofConnections or {}
+				_G.StarshipDeviceElements = _G.StarshipDeviceElements or {}
+				
+				-- Monitor UI and Characters
+				DS_listenToUI(lp:FindFirstChild("PlayerGui"))
+				
 				for _, player in pairs(Players:GetPlayers()) do
 					if player.Character then DS_listenToCharacter(player.Character) end
 					local cc = player.CharacterAdded:Connect(function(char)
@@ -9633,88 +10746,67 @@ DS_SpoofToggleRef = DeviceSpoofTab:Toggle({
 					table.insert(_G.StarshipSpoofConnections, cc)
 				end)
 				table.insert(_G.StarshipSpoofConnections, jc)
-				-- Periodic re-spoof (10s interval, batched to avoid FPS drop)
+				
+				DS_fullScan()
+				
+				-- Periodic re-spoof
 				task.spawn(function()
 					_G.StarshipRespoofLoopActive = true
-					while DS_SpoofEnabled and _G.StarshipRespoofLoopActive and task.wait(10) do
+					while (_G.NameSpoofEnabled or _G.DeviceSpoofEnabled) and _G.StarshipRespoofLoopActive and task.wait(10) do
 						if _G.StarshipDeviceElements then
 							local count = 0
 							for obj, isD in pairs(_G.StarshipDeviceElements) do
 								if isD and typeof(obj) == "Instance" and obj.Parent then 
 									pcall(DS_spoof, obj) 
 									count = count + 1
-									if count % 15 == 0 then RunService.Heartbeat:Wait() end -- Yield every 15 objects
+									if count % 15 == 0 then RunService.Heartbeat:Wait() end
 								end
 							end
 						end
 					end
 				end)
-				WindUI:Notify({ Title = "📱 Device Spoof", Content = "Spoofing ACTIVE → " .. DS_DeviceSpoof, Duration = 3 })
+				WindUI:Notify({ Title = "📱 Device Spoof", Content = "Device spoofing ACTIVE", Duration = 3 })
 			else
 				WindUI:Notify({ Title = "📱 Device Spoof", Content = "Spoofing enabled. Select a device type above!", Duration = 3 })
 			end
 		else
-			_G.StarshipRespoofLoopActive = false -- Stop periodic re-spoof loop
-			-- Disconnect ALL connections (property watchers + character listeners)
-			if _G.StarshipSpoofConnections then
-				for _, conn in pairs(_G.StarshipSpoofConnections) do pcall(function() conn:Disconnect() end) end
-				_G.StarshipSpoofConnections = {}
-			end
-			-- Also clear per-object property connections
-			for obj, conns in pairs(DS_PropertyConnections) do
-				for _, conn in pairs(conns) do pcall(function() conn:Disconnect() end) end
-			end
-			DS_PropertyConnections = {}
-			
-			-- Restore originals
-			for obj, orig in pairs(DS_OriginalValues) do
-				if typeof(obj) == "Instance" and obj.Parent then
-					pcall(function()
-						if orig.Type == "Image" then
-							obj.Image = orig.Image; obj.ImageRectOffset = orig.ImageRectOffset; obj.ImageRectSize = orig.ImageRectSize
-						elseif orig.Type == "Text" then obj.Text = orig.Text
-						elseif orig.Type == "Frame" then obj.Visible = orig.Visible 
-						elseif orig.Type == "Remote" then obj.OnClientInvoke = orig.OnClientInvoke end
-					end)
+			-- Check if Name spoofing is also off before full cleanup
+			if not _G.NameSpoofEnabled then
+				_G.StarshipRespoofLoopActive = false
+				if _G.StarshipSpoofConnections then
+					for _, conn in pairs(_G.StarshipSpoofConnections) do pcall(function() conn:Disconnect() end) end
+					_G.StarshipSpoofConnections = {}
 				end
+				for obj, conns in pairs(DS_PropertyConnections) do
+					for _, conn in pairs(conns) do pcall(function() conn:Disconnect() end) end
+				end
+				DS_PropertyConnections = {}
+				
+				-- Restore originals
+				for obj, orig in pairs(DS_OriginalValues) do
+					if typeof(obj) == "Instance" and obj.Parent then
+						pcall(function()
+							if orig.Type == "Image" then
+								obj.Image = orig.Image; obj.ImageRectOffset = orig.ImageRectOffset; obj.ImageRectSize = orig.ImageRectSize
+							elseif orig.Type == "Text" then obj.Text = orig.Text
+							elseif orig.Type == "Frame" then obj.Visible = orig.Visible 
+							elseif orig.Type == "Remote" then obj.OnClientInvoke = orig.OnClientInvoke end
+						end)
+					end
+				end
+				DS_OriginalValues = {}
+				_G.StarshipDeviceElements = {}
+				DS_DeviceRelatedCache = {}
+				DS_HooksApplied = false
 			end
-			DS_OriginalValues = {}
-			_G.StarshipDeviceElements = {}
-			DS_DeviceRelatedCache = {} -- Clear device detection cache
-			
-			-- Restore device attributes & remotes with accurate detection
-			pcall(function()
-				local RS = game:GetService("ReplicatedStorage")
-				local UIS2 = game:GetService("UserInputService")
-				
-				-- Detect Real Device
-				local realDevice = "Computer"
-				if UIS2.TouchEnabled and not (UIS2.MouseEnabled or UIS2.KeyboardEnabled) then 
-					realDevice = "Phone"
-				elseif UIS2.GamepadEnabled and not (UIS2.MouseEnabled or UIS2.KeyboardEnabled) then 
-					realDevice = "Console" 
-				end
-				
-				LocalPlayer:SetAttribute("Device", realDevice)
-				if LocalPlayer.Character then LocalPlayer.Character:SetAttribute("Device", realDevice) end
-				
-				-- Notify server of back-to-normal state
-				local overhead = RS:FindFirstChild("Overhead") or RS:FindFirstChild("Nametags")
-				if overhead then
-					local de = overhead:FindFirstChild("DeviceUpdateEvent") or overhead:FindFirstChild("UpdateDevice")
-					if de and de:IsA("RemoteEvent") then de:FireServer(realDevice) end
-				end
-				local deRoot = RS:FindFirstChild("DeviceUpdateEvent") or RS:FindFirstChild("UpdateDevice")
-				if deRoot and deRoot:IsA("RemoteEvent") then deRoot:FireServer(realDevice) end
-			end)
-			WindUI:Notify({ Title = "📱 Device Spoof", Content = "Spoofing DISABLED & restored to normal", Duration = 3 })
+			WindUI:Notify({ Title = "📱 Device Spoof", Content = "Device spoofing DISABLED", Duration = 3 })
 		end
 	end,
 })
 
-DeviceSpoofTab:Divider()
+_G.DeviceSpoofContainer:Divider()
 
-DeviceSpoofTab:Button({
+_G.DeviceSpoofContainer:Button({
 	Title = "🔄 Force Respawn",
 	Desc = "Respawn character to apply spoofing",
 	Callback = function()
@@ -9733,7 +10825,7 @@ end) -- end pcall
 if not dsOk then
 	warn("[STARSHIP] ⚠️ Device Spoof tab error:", tostring(dsErr))
 	pcall(function()
-		DeviceSpoofTab:Paragraph({ Title = "❌ Error", Desc = "Device Spoof failed to load: " .. tostring(dsErr) })
+		_G.DeviceSpoofContainer:Paragraph({ Title = "❌ Error", Desc = "Device Spoof failed to load: " .. tostring(dsErr) })
 	end)
 end
 end) -- end task.spawn for Device Spoof Tab
@@ -9742,17 +10834,50 @@ end) -- end task.spawn for Device Spoof Tab
 
 -- ⚙️ SETTINGS TAB
 -- ══════════════════════════════════════════════════════════════════
-local SettingsTab = Window:Tab({
+SettingsTab = Window:Tab({
 	Title = "Settings",
 	Icon = "settings",
 })
 
 -- ══════════════════════════════════════════════════════════════════
--- 🎨 APPEARANCE SETTINGS
+-- 🎨 SETTINGS - MULTI SECTION (Boreal: tabbed sub-containers)
+-- All vars stored in _G to avoid local limit
 -- ══════════════════════════════════════════════════════════════════
-SettingsTab:Section({ Title = "🎨 Appearance", TextSize = 16 })
+_G._SettingsMulti = nil
+_G._AppearanceTab_S = nil
+_G._GeneralTab_S = nil
 
-local ShowNotificationsToggle = SettingsTab:Toggle({
+pcall(function()
+	_G._SettingsMulti = SettingsTab:MultiSection({
+		Title = "Settings",
+		Desc = "Configure your Starship experience",
+		Icon = "sliders-horizontal",
+		Box = true,
+		BoxBorder = true,
+		Opened = true,
+	})
+	_G._AppearanceTab_S = _G._SettingsMulti:Tab({
+		Title = "Appearance",
+		Icon = "palette",
+		Selected = true,
+	})
+	_G._GeneralTab_S = _G._SettingsMulti:Tab({
+		Title = "General",
+		Icon = "settings-2",
+	})
+end)
+
+-- Fallback: if MultiSection failed, use SettingsTab directly
+_G._AppCont = _G._AppearanceTab_S or SettingsTab
+_G._GenCont = _G._GeneralTab_S or SettingsTab
+
+-- ═══ APPEARANCE CONTENT ═══
+if not _G._AppearanceTab_S then
+	SettingsTab:Section({ Title = "🎨 Appearance", TextSize = 16 })
+end
+_G._AppCont:Space({ Columns = 1 })
+
+local ShowNotificationsToggle = _G._AppCont:Toggle({
 	Title = "Show Notifications",
 	Desc = "Display popup notifications",
 	Value = Settings.ShowNotifications,
@@ -9769,13 +10894,13 @@ pcall(function()
 	for themeName, _ in pairs(themes) do
 		table.insert(availableThemes, themeName)
 	end
-	table.sort(availableThemes) -- Sort alphabetically
+	table.sort(availableThemes)
 end)
 if #availableThemes == 0 then
-	availableThemes = { "Dark", "Light" } -- Fallback
+	availableThemes = { "Dark", "Light" }
 end
 
-local ThemeDropdown = SettingsTab:Dropdown({
+local ThemeDropdown = _G._AppCont:Dropdown({
 	Title = "🎨 Theme",
 	Desc = "Choose UI color theme (" .. #availableThemes .. " themes)",
 	Values = availableThemes,
@@ -9789,8 +10914,7 @@ local ThemeDropdown = SettingsTab:Dropdown({
 	end,
 })
 
--- UI Transparency Slider (Background Image)
-SettingsTab:Slider({
+_G._AppCont:Slider({
 	Title = "🔍 Background Transparency",
 	Desc = "Adjust background image transparency (0 = visible, 1 = hidden)",
 	Step = 0.05,
@@ -9806,15 +10930,14 @@ SettingsTab:Slider({
 	end,
 })
 
-SettingsTab:Divider()
+-- ═══ GENERAL CONTENT ═══
+if not _G._GeneralTab_S then
+	SettingsTab:Divider()
+	SettingsTab:Section({ Title = "🔧 General", TextSize = 16 })
+end
+_G._GenCont:Space({ Columns = 1 })
 
--- ══════════════════════════════════════════════════════════════════
--- 🔧 GENERAL SETTINGS
--- ══════════════════════════════════════════════════════════════════
-SettingsTab:Section({ Title = "🔧 General", TextSize = 16 })
-
-
-local RememberPositionToggle = SettingsTab:Toggle({
+local RememberPositionToggle = _G._GenCont:Toggle({
 	Title = "Remember Position",
 	Desc = "Save UI position between sessions",
 	Value = Settings.RememberPosition,
@@ -9830,89 +10953,133 @@ local RememberPositionToggle = SettingsTab:Toggle({
 })
 
 -- SYNC TOGGLES WITH LOADED SETTINGS
--- WindUI might not respect Default parameter, so we force-set the values
 task.defer(function()
 	if ConfigStatus == "Loaded" then
-		getgenv().isSyncingSettings = true -- Suppress notifications
-
-		-- Helper to safely set value
+		getgenv().isSyncingSettings = true
 		local function safeSet(obj, value)
-			if not obj then
-				return
-			end
-			-- Try SetValue first (most common in modern UI libs)
-			local s = pcall(function()
-				obj:SetValue(value)
-			end)
-			if not s then
-				s = pcall(function()
-					obj:Set(value)
-				end)
-			end
-			if not s then
-				pcall(function()
-					obj.Value = value
-				end)
-			end
+			if not obj then return end
+			local s = pcall(function() obj:SetValue(value) end)
+			if not s then s = pcall(function() obj:Set(value) end) end
+			if not s then pcall(function() obj.Value = value end) end
 		end
-
-		-- Sync all settings toggles
 		safeSet(ShowNotificationsToggle, Settings.ShowNotifications)
 		safeSet(RememberPositionToggle, Settings.RememberPosition)
 		safeSet(ThemeDropdown, Settings.Theme)
 		safeSet(AdminESPToggle, Settings.AdminESP)
-
-		task.wait(0.5) -- Wait for any delayed callbacks
-		getgenv().isSyncingSettings = false -- Re-enable notifications
+		task.wait(0.5)
+		getgenv().isSyncingSettings = false
 	end
 end)
 
-SettingsTab:Divider()
+SettingsTab:Space({ Columns = 2 })
 
 -- ══════════════════════════════════════════════════════════════════
--- ⚠️ DANGER ZONE
+-- ⚠️ DANGER ZONE (Boreal: collapsible Section with Box)
 -- ══════════════════════════════════════════════════════════════════
-SettingsTab:Section({ Title = "⚠️ Danger Zone", TextSize = 16 })
+_G._DangerSection = nil
+pcall(function()
+	_G._DangerSection = SettingsTab:Section({
+		Title = "Danger Zone",
+		Desc = "Destructive actions — use with caution",
+		Icon = "solar:danger-triangle-bold",
+		Box = true,
+		BoxBorder = true,
+		Opened = false,
+	})
+end)
 
-SettingsTab:Button({
+_G._DangerCont = _G._DangerSection or SettingsTab
+if not _G._DangerSection then
+	SettingsTab:Divider()
+	SettingsTab:Section({ Title = "⚠️ Danger Zone", TextSize = 16 })
+end
+
+_G._DangerCont:Button({
 	Title = "🔄 Reset All Settings",
 	Desc = "Reset all settings to default",
 	Callback = function()
-		Settings = {
-			AutoAntiAFK = false,
-			RememberPosition = false,
-			ShowNotifications = true,
-			Theme = "Midnight",
-		}
-		SaveSettings()
 		WindUI:Notify({
-			Title = "Reset",
-			Content = "Settings have been reset! Re-execute script to apply.",
-			Duration = 3,
+			Title = "⚠️ Confirm Reset",
+			Content = "Are you sure you want to reset all settings?",
+			Duration = 10,
+			Buttons = {
+				{
+					Title = "Reset",
+					Icon = "trash-2",
+					Variant = "Primary",
+					CloseOnClick = true,
+					Callback = function()
+						Settings = {
+							AutoAntiAFK = false,
+							RememberPosition = false,
+							ShowNotifications = true,
+							Theme = "Midnight",
+						}
+						SaveSettings()
+						WindUI:Notify({
+							Title = "Reset",
+							Content = "Settings have been reset! Re-execute script to apply.",
+							Duration = 3,
+						})
+					end,
+				},
+				{
+					Title = "Cancel",
+					Icon = "x",
+					Variant = "Secondary",
+					CloseOnClick = true,
+				},
+			},
 		})
 	end,
 })
 
-SettingsTab:Button({
-	Title = "����️ Clear Cache",
+_G._DangerCont:Button({
+	Title = "🗑️ Clear Cache",
 	Desc = "Clear saved data and cache",
 	Callback = function()
-		pcall(function()
-			if delfolder then
-				delfolder("StarshipMobile")
-				WindUI:Notify({ Title = "✅ Cleared", Content = "Cache has been cleared!", Duration = 2 })
-			else
-				WindUI:Notify({ Title = "Info", Content = "No cache to clear", Duration = 2 })
-			end
-		end)
+		WindUI:Notify({
+			Title = "⚠️ Clear Cache?",
+			Content = "This will delete all cached recordings and saved data.",
+			Duration = 10,
+			Buttons = {
+				{
+					Title = "Clear",
+					Icon = "trash",
+					Variant = "Primary",
+					CloseOnClick = true,
+					Callback = function()
+						pcall(function()
+							if delfolder then
+								delfolder("StarshipMobile")
+								WindUI:Notify({ Title = "✅ Cleared", Content = "Cache has been cleared!", Duration = 2 })
+							else
+								WindUI:Notify({ Title = "Info", Content = "No cache to clear", Duration = 2 })
+							end
+						end)
+					end,
+				},
+				{
+					Title = "Cancel",
+					Icon = "x",
+					Variant = "Secondary",
+					CloseOnClick = true,
+				},
+			},
+		})
 	end,
 })
 
-SettingsTab:Space()
+
+_G._DangerCont:Space({ Columns = 1 })
+
+SettingsTab:Divider()
+SettingsTab:Space({ Columns = 2 })
 
 SettingsTab:Button({
 	Title = "❌ Close Starship",
 	Desc = "Close UI and Mini Player completely",
+	Variant = "Secondary",
 	Callback = function()
 		-- Cleanup Mini Player
 		if MiniPlayerGui then

@@ -113,6 +113,10 @@ local Translations = {
 		cyan_ladder = "● CYAN = Ladder WALKABLE (CanCollide ON)",
 		orange_ladder = "● ORANGE = Ladder NOT WALKABLE (CanCollide OFF)",
 		red_fake = "● RED = FAKE (CanCollide OFF - Will Fall!)",
+		anti_delay = "ANTI DELAY",
+		anti_delay_desc = "Bypass humanoid jump delays for high speed",
+		jump_gravity = "JUMP GRAVITY",
+		fall_gravity = "FALL GRAVITY",
 		character_fly = "CHARACTER & FLY",
 
 		-- Config Tab
@@ -128,6 +132,7 @@ local Translations = {
 		toggle_auto_jump = "Toggle Auto Jump",
 		toggle_quick_boost = "Toggle Quick Boost",
 		toggle_real_esp = "Toggle Real Path ESP",
+		toggle_anti_delay = "Toggle Anti Delay",
 		minimize_ui = "Minimize UI",
 		click_to_bind = "Click to bind...",
 		press_key = "Press any key...",
@@ -639,6 +644,10 @@ local Translations = {
 		cyan_ladder = "● CYAN = Tangga BISA JALAN (CanCollide AKTIF)",
 		orange_ladder = "● ORANYE = Tangga TIDAK BISA JALAN (CanCollide MATI)",
 		red_fake = "● MERAH = PALSU (CanCollide MATI - Akan Jatuh!)",
+		anti_delay = "ANTI DELAY",
+		anti_delay_desc = "Lewati delay lompat humanoid untuk kecepatan tinggi",
+		jump_gravity = "GRAVITASI LOMPAT",
+		fall_gravity = "GRAVITASI JATUH",
 		character_fly = "KARAKTER & TERBANG",
 
 		-- Config Tab
@@ -654,6 +663,7 @@ local Translations = {
 		toggle_auto_jump = "Toggle Lompat Otomatis",
 		toggle_quick_boost = "Toggle Boost Cepat",
 		toggle_real_esp = "Toggle ESP Jalur Nyata",
+		toggle_anti_delay = "Toggle Anti Delay",
 		minimize_ui = "Minimalkan UI",
 		click_to_bind = "Klik untuk bind...",
 		press_key = "Tekan tombol apa saja...",

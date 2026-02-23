@@ -4077,7 +4077,32 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 		-- CROSS-RIG HEIGHT OFFSET SYSTEM
 		-- Handles: R6→R15, R15→R6, and same-rig playback
 		-- ========================================
-		local playbackIsR6 = (c:FindFirstChild("Torso") ~= nil)
+		-- Detect R6: Check for Torso (R6) vs LowerTorso (R15) - more accurate than just Torso
+		local torso = c:FindFirstChild("Torso")
+		local lowerTorso = c:FindFirstChild("LowerTorso")
+		local upperTorso = c:FindFirstChild("UpperTorso")
+		local leftLeg = c:FindFirstChild("Left Leg")
+		local rightLeg = c:FindFirstChild("Right Leg")
+		local leftUpperLeg = c:FindFirstChild("LeftUpperLeg")
+		local rightUpperLeg = c:FindFirstChild("RightUpperLeg")
+		local hipHeight = h.HipHeight or 0
+		
+		-- R6: Has Torso but NOT LowerTorso (R15 has LowerTorso)
+		-- Also check for R6 parts: Left/Right Leg (R6) vs Left/Right UpperLeg (R15)
+		local hasR6Parts = (torso ~= nil and lowerTorso == nil) or ((leftLeg ~= nil or rightLeg ~= nil) and upperTorso == nil)
+		local hasR15Parts = (lowerTorso ~= nil) or (upperTorso ~= nil) or (leftUpperLeg ~= nil or rightUpperLeg ~= nil)
+		
+		-- Determine rig type: prioritize R6 parts, then check HipHeight as tiebreaker
+		local playbackIsR6 = false
+		if hasR6Parts and not hasR15Parts then
+			playbackIsR6 = true
+		elseif hasR15Parts and not hasR6Parts then
+			playbackIsR6 = false
+		else
+			-- Ambiguous: use HipHeight as tiebreaker (R6 = 0, R15 > 0)
+			playbackIsR6 = (hipHeight < 0.5)
+		end
+		
 		local playbackRigType = playbackIsR6 and "R6" or "R15"
 
 		-- Auto-detect RigType from recording data (for old recordings without metadata)
@@ -4126,7 +4151,7 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 			playbackRootHeight = h.HipHeight + (r.Size.Y / 2)
 		end
 
-		-- Calculate Cross-Rig Height Offset based on HipHeight difference
+		-- Calculate Cross-Rig Height Offset based on actual root-to-ground distance
 		-- The key insight: R15 HipHeight (~2.0) creates a "floating" effect that R6 (HipHeight=0) doesn't have
 		-- When R15 recording is played on R6, the character appears to float because R6 doesn't have that offset
 		local crossRigHeightOffset = 0
@@ -4144,13 +4169,25 @@ local function PlayRecording(fn, force, skipDistanceCheck, forceFromStart)
 			end
 		end
 
-		-- Get playback HipHeight
-		local playbackHipHeight = h.HipHeight or 0
-
-		-- Calculate offset based on HipHeight difference
-		-- If recorded with higher HipHeight and playing with lower → need to LOWER position
-		-- If recorded with lower HipHeight and playing with higher → need to RAISE position
-		crossRigHeightOffset = playbackHipHeight - recordedHipHeight
+		-- Calculate offset based on root-to-ground height (more accurate for cross-rig)
+		if recordedRigType ~= playbackRigType then
+			-- CROSS-RIG: Use actual root-to-ground heights for accurate offset
+			-- R6 root center = legs(2) + torsoHalf(1) = 3.0 studs above ground
+			-- R15 root center = HipHeight + rootPartHalfY (~0.1) above ground
+			local calcRecordedRootHeight = recordedRootHeight
+			if calcRecordedRootHeight == 0 or not calcRecordedRootHeight then
+				if recordedRigType == "R6" then
+					calcRecordedRootHeight = 3.0 -- Standard R6 proportions
+				else
+					calcRecordedRootHeight = recordedHipHeight + 0.1 -- R15: thin root part
+				end
+			end
+			crossRigHeightOffset = playbackRootHeight - calcRecordedRootHeight
+		else
+			-- SAME-RIG: Use HipHeight difference (more precise for same rig type)
+			local playbackHipHeight = h.HipHeight or 0
+			crossRigHeightOffset = playbackHipHeight - recordedHipHeight
+		end
 
 		-- Toast notification will be shown below, no need for print
 
