@@ -15,6 +15,8 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import zlib from "zlib";
 import { promisify } from "util";
+import fs from "fs";
+import path from "path";
 
 // Promisified gzip
 const gzip = promisify(zlib.gzip);
@@ -102,24 +104,25 @@ async function checkEventAccessForUser(userId) {
 const OWNER_USER_ID = "9268011358";
 
 // ============================================
-// PRIVATE REQUEST ACCESS CONTROL (no data migration required)
-// Configure with env:
-// R2_PRIVATE_ACCESS_MAP='{"123456":["map_a","map_b"],"789012":["map_c"]}'
+// PRIVATE REQUEST ACCESS CONTROL
+// Source of truth: data/private-access.json
 // ============================================
-function getPrivateAccessMap() {
-  const raw = process.env.R2_PRIVATE_ACCESS_MAP || "";
-  if (!raw) return {};
+const PRIVATE_ACCESS_FILE = path.join(process.cwd(), "data", "private-access.json");
 
+function getPrivateAccessMap() {
+  // Source of truth: workspace file (versioned in repo)
   try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
+    if (fs.existsSync(PRIVATE_ACCESS_FILE)) {
+      const content = fs.readFileSync(PRIVATE_ACCESS_FILE, "utf8");
+      const parsed = JSON.parse(content);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed;
+      }
     }
-    return parsed;
   } catch (error) {
-    console.error("[R2] Invalid R2_PRIVATE_ACCESS_MAP JSON:", error.message);
-    return {};
+    console.error("[R2] Invalid private-access.json:", error.message);
   }
+  return {};
 }
 
 function normalizeRecordingId(id = "") {
