@@ -2251,11 +2251,6 @@ task.spawn(function()
         end
         
         if parseSuccess and type(dbData) == "table" and dbData[PlayerId] then
-            -- Pastikan UI belum dimatikan/di-destroy oleh user
-            if not CoreGui:FindFirstChild("StarshipMobileUI") then
-                print("[STARSHIP DEBUG] UI destroyed before tab could be added. Aborting.")
-                return
-            end
             
             print("[STARSHIP DEBUG] User found in database!")
             local userData = dbData[PlayerId]
