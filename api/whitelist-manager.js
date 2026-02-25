@@ -141,53 +141,47 @@ function isUserExpired(user) {
 
 /**
  * Find user in both PC and Mobile whitelists
+ * Supports searching by userId or username
  * Prioritizes active (non-expired, non-suspended) accounts
- * Returns the best available account, or the first found if all are problematic
  */
-async function findUserInAllWhitelists(redisClient, userId) {
+async function findUserInAllWhitelists(redisClient, userId, username) {
   const results = [];
 
-  // Check PC whitelist
   const pcData = await redisClient.get(PLATFORM_CONFIG.pc.whitelistKey);
   const pcWhitelist = pcData ? JSON.parse(pcData) : {};
-  if (pcWhitelist[userId]) {
-    results.push({ user: pcWhitelist[userId], platform: 'pc', whitelist: pcWhitelist });
-  }
 
-  // Check Mobile whitelist
   const mobileData = await redisClient.get(PLATFORM_CONFIG.mobile.whitelistKey);
   const mobileWhitelist = mobileData ? JSON.parse(mobileData) : {};
-  if (mobileWhitelist[userId]) {
-    results.push({ user: mobileWhitelist[userId], platform: 'mobile', whitelist: mobileWhitelist });
-  }
 
-  // No results found
-  if (results.length === 0) {
-    return null;
-  }
+  // Helper to search by ID or Username
+  const searchInWhitelist = (whitelist, platform) => {
+    if (userId && whitelist[userId]) {
+      results.push({ user: whitelist[userId], platform, whitelist, userId });
+    } else if (username) {
+      // Find by username (case-insensitive search)
+      const lowerUsername = username.toLowerCase();
+      const foundId = Object.keys(whitelist).find(id =>
+        whitelist[id].username && whitelist[id].username.toLowerCase() === lowerUsername
+      );
+      if (foundId) {
+        results.push({ user: whitelist[foundId], platform, whitelist, userId: foundId });
+      }
+    }
+  };
 
-  // Prioritize: active & non-expired > suspended > expired
-  // Find the best account
-  const activeAccounts = results.filter(r =>
-    r.user.status === 'active' && !isUserExpired(r.user)
-  );
+  searchInWhitelist(pcWhitelist, 'pc');
+  searchInWhitelist(mobileWhitelist, 'mobile');
 
-  if (activeAccounts.length > 0) {
-    // Return the first active account (could be PC or Mobile)
-    return activeAccounts[0];
-  }
+  if (results.length === 0) return null;
 
-  // No active accounts, check for suspended (non-expired)
-  const suspendedAccounts = results.filter(r =>
-    r.user.status === 'suspended' && !isUserExpired(r.user)
-  );
+  // Prioritize active and non-expired accounts
+  const activeAccounts = results.filter(r => r.user.status === 'active' && !isUserExpired(r.user));
+  if (activeAccounts.length > 0) return activeAccounts[0];
 
-  if (suspendedAccounts.length > 0) {
-    return suspendedAccounts[0];
-  }
+  // Then suspended but non-expired
+  const suspendedAccounts = results.filter(r => r.user.status === 'suspended' && !isUserExpired(r.user));
+  if (suspendedAccounts.length > 0) return suspendedAccounts[0];
 
-  // All accounts are expired or inactive, return the first one
-  // (will show appropriate error message)
   return results[0];
 }
 
@@ -927,13 +921,13 @@ async function handleSelfService(req, res, redisClient, action) {
     });
   }
 
-  const { userId } = req.body;
+  const { userId, username } = req.body;
 
-  if (!userId) {
+  if (!userId && !username) {
     return res.status(400).json({
       success: false,
-      error: 'MISSING_USER_ID',
-      message: 'User ID diperlukan'
+      error: 'MISSING_IDENTIFIER',
+      message: 'User ID atau Username diperlukan'
     });
   }
 
@@ -948,7 +942,7 @@ async function handleSelfService(req, res, redisClient, action) {
   // ==== SELF VERIFY ====
   if (action === 'self_verify') {
     try {
-      const result = await findUserInAllWhitelists(redisClient, userId);
+      const result = await findUserInAllWhitelists(redisClient, userId, username);
 
       if (!result) {
         return res.status(404).json({
@@ -993,7 +987,7 @@ async function handleSelfService(req, res, redisClient, action) {
       return res.status(200).json({
         success: true,
         user: {
-          userId: userId,
+          userId: result.userId,
           username: user.username,
           type: user.type,
           status: user.status,
@@ -1018,7 +1012,7 @@ async function handleSelfService(req, res, redisClient, action) {
   // ==== SELF RESET HWID ====
   if (action === 'self_reset_hwid') {
     try {
-      const result = await findUserInAllWhitelists(redisClient, userId);
+      const result = await findUserInAllWhitelists(redisClient, userId, username);
 
       if (!result) {
         return res.status(404).json({
@@ -1028,7 +1022,7 @@ async function handleSelfService(req, res, redisClient, action) {
         });
       }
 
-      const { user, platform, whitelist } = result;
+      const { user, platform, whitelist, userId: targetUserId } = result;
 
       if (isUserExpired(user)) {
         return res.status(403).json({
@@ -1082,20 +1076,20 @@ async function handleSelfService(req, res, redisClient, action) {
       user.updatedAt = new Date().toISOString();
 
       // Save to Redis
-      whitelist[userId] = user;
+      whitelist[targetUserId] = user;
       const whitelistKey = PLATFORM_CONFIG[platform].whitelistKey;
       await redisClient.set(whitelistKey, JSON.stringify(whitelist));
 
       // Delete HWID registry key
-      const hwidKey = `hwid:${platform}:${userId}`;
+      const hwidKey = `hwid:${platform}:${targetUserId}`;
       await redisClient.del(hwidKey);
-      console.log(`[Self-Service] HWID reset for ${user.username} (${userId}) on ${platform}`);
+      console.log(`[Self-Service] HWID reset for ${user.username} (${targetUserId}) on ${platform}`);
 
       return res.status(200).json({
         success: true,
         message: 'HWID berhasil direset',
         user: {
-          userId: userId,
+          userId: targetUserId,
           username: user.username,
           type: user.type,
           status: user.status,
