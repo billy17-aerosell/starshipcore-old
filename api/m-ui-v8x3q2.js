@@ -280,7 +280,7 @@ export default async function handler(req, res) {
   const OWNER_USER_ID = "9268011358";
   if (userId !== OWNER_USER_ID && await isIPBanned(clientIP)) {
     console.log(`[${timestamp}] 🚫 BANNED IP BLOCKED on mobile-ui: ${clientIP}`);
-    return res.status(403).send(`error("\\n\\n🚫 IP BANNED\\n\\nYour IP (${clientIP}) has been banned for suspicious activity.\\nThis usually happens when someone tries to access the API from a browser.\\n\\nContact admin to request unban.\\n")`);
+    return res.status(403).send('error("You have been banned for attempting to access the script via unauthorized methods. Contact admin to request unban.")');
   }
 
   if (!userId) {
