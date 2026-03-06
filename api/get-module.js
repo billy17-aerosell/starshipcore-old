@@ -97,6 +97,11 @@ const OWNER_ID = "9268011358";
 export default async function handler(req, res) {
   // Only allow GET requests
   if (req.method !== "GET") {
+    const platform = req.query.platform;
+    if (platform === "mobile") {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return res.status(405).send(`error("Method Not Allowed")`);
+    }
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
@@ -184,6 +189,11 @@ export default async function handler(req, res) {
 
   // Validate module name
   if (!name) {
+    const platform = req.query.platform;
+    if (platform === "mobile") {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return res.status(400).send(`error("Module name required")`);
+    }
     return res.status(400).json({ error: "Module name required" });
   }
 
@@ -234,10 +244,12 @@ export default async function handler(req, res) {
       res.setHeader("X-Mode", "development");
       return res.status(200).send(content);
     } catch (error) {
-      console.error(
-        `[${timestamp}] ❌ [DEV] Error reading module:`,
-        error.message,
-      );
+      console.error(`[${timestamp}] ❌ [DEV] Error reading module:`, error.message);
+      const platform = req.query.platform;
+      if (platform === "mobile") {
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        return res.status(500).send(`error("Failed to read module in dev mode: ${error.message}")`);
+      }
       return res.status(500).json({ error: "Failed to read module" });
     }
   }
@@ -493,6 +505,11 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error(`[${timestamp}] ❌ Error:`, error.message);
+    const platform = req.query.platform;
+    if (platform === "mobile") {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return res.status(500).send(`error("Internal Server Error: ${error.message}")`);
+    }
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }
