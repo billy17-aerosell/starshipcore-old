@@ -22,6 +22,10 @@
       "destination": "/api/load?platform=mobile"
     },
     {
+      "source": "/api/m-vd-x7k2",
+      "destination": "/api/get-module?name=violence-district.lua&platform=mobile"
+    },
+    {
       "source": "/api/protected/(.*)",
       "destination": "/404"
     }
