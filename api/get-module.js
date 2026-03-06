@@ -198,6 +198,7 @@ export default async function handler(req, res) {
   }
 
   // Security: Check if module is in allowed list (prevent path traversal)
+  const normalizedName = name.replace(/\\/g, "/");
   if (!ALLOWED_MODULES.includes(normalizedName)) {
     console.log(`[${timestamp}] ❌ Invalid module requested: ${name}`);
     const platform = req.query.platform;
