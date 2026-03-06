@@ -467,6 +467,7 @@ export default async function handler(req, res) {
     }
 
     // Read module file - handle Modules/ prefix
+    let modulePath;
     if (normalizedName === "violence-district.lua") {
       modulePath = path.join(process.cwd(), "data", normalizedName);
     } else if (normalizedName.startsWith("Modules/")) {
