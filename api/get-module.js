@@ -188,9 +188,13 @@ export default async function handler(req, res) {
   }
 
   // Security: Check if module is in allowed list (prevent path traversal)
-  const normalizedName = name.replace(/\\/g, "/");
   if (!ALLOWED_MODULES.includes(normalizedName)) {
     console.log(`[${timestamp}] ❌ Invalid module requested: ${name}`);
+    const platform = req.query.platform;
+    if (platform === "mobile") {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return res.status(403).send(`error("Module '${name}' not allowed or invalid")`);
+    }
     return res.status(403).json({ error: "Module not found or not allowed" });
   }
 
@@ -260,6 +264,11 @@ export default async function handler(req, res) {
       }
 
       if (!fs.existsSync(modulePath)) {
+        const platform = req.query.platform;
+        if (platform === "mobile") {
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          return res.status(404).send(`error("Module '${name}' not found on server")`);
+        }
         return res.status(404).json({ error: "Module file not found" });
       }
 
@@ -416,6 +425,13 @@ export default async function handler(req, res) {
       console.log(
         `[${timestamp}] ❌ Module access denied - User: ${user}, Module: ${name}`,
       );
+
+      const platform = req.query.platform;
+      if (platform === "mobile") {
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        return res.status(403).send(`error("Not whitelisted for Mobile access. Purchase VIP to get access.")`);
+      }
+
       return res.status(403).json({
         status: "denied",
         error: "Not authorized to access modules",
@@ -432,6 +448,11 @@ export default async function handler(req, res) {
     }
 
     if (!fs.existsSync(modulePath)) {
+      const platform = req.query.platform;
+      if (platform === "mobile") {
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        return res.status(404).send(`error("Module file '${name}' not found on server")`);
+      }
       return res.status(404).json({ error: "Module file not found" });
     }
 
