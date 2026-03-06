@@ -258,6 +258,11 @@ export default async function handler(req, res) {
   // === PRODUCTION MODE ===
   // Require user ID for production
   if (!user) {
+    const platform = req.query.platform;
+    if (platform === "mobile") {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return res.status(400).send(`error("User ID required. Make sure userId parameter is included.")`);
+    }
     return res.status(400).json({ error: "User ID required" });
   }
 
