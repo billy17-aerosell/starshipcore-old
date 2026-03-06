@@ -88,6 +88,7 @@ const ALLOWED_MODULES = [
   "Tabs/Emotes.lua",
   "Tabs/ConfigTab.lua",
   "StarSpacePlayback.lua",
+  "violence-district.lua",
 ];
 
 // Owner ID - always has access without whitelist check
@@ -99,7 +100,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  const { name, user, dev, bundle } = req.query;
+  const { name, user: queryUser, userId, dev, bundle } = req.query;
+  const user = queryUser || userId;
   const timestamp = new Date().toISOString();
 
   // ══════════════════════════════════════════════════════════════════
@@ -208,7 +210,9 @@ export default async function handler(req, res) {
       // Handle path: if name starts with "Modules/", load from data/ directly
       // Otherwise, load from data/Modules/
       let modulePath;
-      if (normalizedName.startsWith("Modules/")) {
+      if (normalizedName === "violence-district.lua") {
+        modulePath = path.join(process.cwd(), "data", normalizedName);
+      } else if (normalizedName.startsWith("Modules/")) {
         modulePath = path.join(process.cwd(), "data", normalizedName);
       } else {
         modulePath = path.join(process.cwd(), "data", "Modules", normalizedName);
@@ -419,8 +423,9 @@ export default async function handler(req, res) {
     }
 
     // Read module file - handle Modules/ prefix
-    let modulePath;
-    if (normalizedName.startsWith("Modules/")) {
+    if (normalizedName === "violence-district.lua") {
+      modulePath = path.join(process.cwd(), "data", normalizedName);
+    } else if (normalizedName.startsWith("Modules/")) {
       modulePath = path.join(process.cwd(), "data", normalizedName);
     } else {
       modulePath = path.join(process.cwd(), "data", "Modules", normalizedName);
@@ -449,11 +454,16 @@ export default async function handler(req, res) {
     const encryptedBuffer = xorEncrypt(moduleBuffer, dynamicKey);
     const base64Blob = encryptedBuffer.toString("base64");
 
-    console.log(
-      `[${timestamp}] ✅ Module delivered - User: ${user}, Module: ${name}`,
-    );
+    // Return module (Check platform for response format)
+    const platform = req.query.platform;
+    if (platform === "mobile") {
+      // Mobile: Return plain text for direct execution
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      return res.status(200).send(moduleBuffer.toString("utf8"));
+    }
 
-    // Return encrypted module
+    // Default (PC): Return encrypted JSON
     return res.status(200).json({
       status: "success",
       module: normalizedName,
