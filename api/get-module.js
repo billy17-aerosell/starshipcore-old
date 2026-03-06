@@ -110,6 +110,25 @@ export default async function handler(req, res) {
   const timestamp = new Date().toISOString();
 
   // ══════════════════════════════════════════════════════════════════
+  // BROWSER DETECTION - Block browsers from accessing modules
+  // ══════════════════════════════════════════════════════════════════
+  const userAgent = req.headers["user-agent"] || "";
+  const browserPatterns = ["Mozilla", "Chrome", "Safari", "Firefox", "Edge", "Opera", "MSIE", "Trident", "WebKit", "Gecko"];
+  const robloxPatterns = ["Roblox", "RobloxApp", "synapse", "SYNAPSE_HTTP", "krnl", "fluxus", "arceus", "delta", "hydrogen", "evon", "vegax", "script-ware", "comet"];
+
+  const isRobloxExecutor = robloxPatterns.some((p) => userAgent.toLowerCase().includes(p.toLowerCase()));
+  const isBrowser = userAgent !== "" && !isRobloxExecutor && browserPatterns.some((p) => userAgent.includes(p));
+
+  // Allow dev mode to bypass browser check
+  const isLocalhost = req.headers.host?.includes("localhost") || req.headers.host?.includes("127.0.0.1");
+
+  if (isBrowser && !isLocalhost) {
+    console.log(`[${timestamp}] 🚨 BROWSER BLOCKED on get-module | IP: ${req.headers["x-forwarded-for"]?.split(",")[0] || "unknown"} | UA: ${userAgent.substring(0, 60)}`);
+    res.setHeader("Content-Type", "text/html");
+    return res.status(403).send(`<!DOCTYPE html><html><head><title>403 Forbidden</title><style>body{font-family:Arial;text-align:center;padding:50px;background:#0f0f1a;color:#eee}h1{color:#8b5cf6}</style></head><body><h1>403 Forbidden</h1><p>This endpoint is for authorized applications only.</p></body></html>`);
+  }
+
+  // ══════════════════════════════════════════════════════════════════
   // BUNDLE MODE - Return all modules in single encrypted response
   // SECURITY: Hides individual module names from HTTP spy tools
   // ══════════════════════════════════════════════════════════════════
@@ -211,9 +230,6 @@ export default async function handler(req, res) {
 
   // === DEV MODE ===
   // Check if dev mode is enabled (localhost or dev=true with secret)
-  const isLocalhost =
-    req.headers.host?.includes("localhost") ||
-    req.headers.host?.includes("127.0.0.1");
   const devSecret = process.env.DEV_SECRET || "starship-dev-2025";
   const isDevMode = isLocalhost || dev === devSecret;
 
