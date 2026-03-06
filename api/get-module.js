@@ -94,6 +94,77 @@ const ALLOWED_MODULES = [
 // Owner ID - always has access without whitelist check
 const OWNER_ID = "9268011358";
 
+// Owner IPs - NEVER ban these IPs
+const OWNER_IPS = ["36.80.245.122"];
+const BANNED_IPS_KEY = "starship:banned_ips";
+
+// Check if IP is banned
+async function isIPBanned(ip) {
+  if (OWNER_IPS.includes(ip)) return false;
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return false;
+    const isBanned = await redisClient.sismember(BANNED_IPS_KEY, ip);
+    return isBanned === 1;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Ban an IP address
+async function banIP(ip, reason) {
+  if (OWNER_IPS.includes(ip)) return false;
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return false;
+    await redisClient.sadd(BANNED_IPS_KEY, ip);
+    console.log(`[IP Ban] 🚫 BANNED IP: ${ip} - Reason: ${reason}`);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Send Discord webhook
+async function sendDiscordLog(logData) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  try {
+    const colors = {
+      success: 0x00ff00,
+      blocked: 0xff0000,
+      warning: 0xffff00,
+      suspicious: 0xff00ff,
+    };
+
+    const embed = {
+      title: logData.title || "Module Access Log",
+      color: colors[logData.status] || 0x808080,
+      fields: [
+        { name: "👤 User", value: logData.user || "Unknown", inline: true },
+        { name: "🌐 IP", value: `\`${logData.ip || "Unknown"}\``, inline: true },
+        { name: "📦 Module", value: logData.module || "N/A", inline: true },
+        { name: "✅ Status", value: logData.statusMessage || logData.status, inline: true },
+      ],
+      timestamp: new Date().toISOString(),
+      footer: { text: "📦 StarshipCore Module Security" },
+    };
+
+    if (logData.message) {
+      embed.description = logData.message;
+    }
+
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ embeds: [embed] }),
+    });
+  } catch (error) {
+    console.error("[Discord] Error:", error.message);
+  }
+}
+
 export default async function handler(req, res) {
   // Only allow GET requests
   if (req.method !== "GET") {
@@ -123,9 +194,37 @@ export default async function handler(req, res) {
   const isLocalhost = req.headers.host?.includes("localhost") || req.headers.host?.includes("127.0.0.1");
 
   if (isBrowser && !isLocalhost) {
-    console.log(`[${timestamp}] 🚨 BROWSER BLOCKED on get-module | IP: ${req.headers["x-forwarded-for"]?.split(",")[0] || "unknown"} | UA: ${userAgent.substring(0, 60)}`);
+    const clientIP = req.headers["x-forwarded-for"]?.split(",")[0] || req.headers["x-real-ip"] || "unknown";
+    console.log(`[${timestamp}] 🚨 BROWSER BLOCKED on get-module | IP: ${clientIP} | UA: ${userAgent.substring(0, 60)}`);
+
+    // Ban the IP
+    await banIP(clientIP, `Browser access on get-module - UA: ${userAgent.substring(0, 50)}`);
+
+    // Send Discord webhook
+    await sendDiscordLog({
+      title: "🚨 BROWSER ACCESS - Module Endpoint",
+      status: "suspicious",
+      ip: clientIP,
+      user: "Browser",
+      module: name || "unknown",
+      statusMessage: "🚫 BANNED",
+      message: `Browser tried accessing module endpoint\nUA: ${userAgent.substring(0, 100)}\nModule: ${name || "N/A"}`,
+    });
+
     res.setHeader("Content-Type", "text/html");
     return res.status(403).send(`<!DOCTYPE html><html><head><title>403 Forbidden</title><style>body{font-family:Arial;text-align:center;padding:50px;background:#0f0f1a;color:#eee}h1{color:#8b5cf6}</style></head><body><h1>403 Forbidden</h1><p>This endpoint is for authorized applications only.</p></body></html>`);
+  }
+
+  // Check if IP is banned
+  const clientIP = req.headers["x-forwarded-for"]?.split(",")[0] || req.headers["x-real-ip"] || "unknown";
+  if (await isIPBanned(clientIP)) {
+    console.log(`[${timestamp}] 🚫 BANNED IP BLOCKED: ${clientIP}`);
+    const platform = req.query.platform;
+    if (platform === "mobile") {
+      res.setHeader("Content-Type", "text/plain");
+      return res.status(403).send('error("Access denied")');
+    }
+    return res.status(403).json({ error: "Access denied" });
   }
 
   // ══════════════════════════════════════════════════════════════════
