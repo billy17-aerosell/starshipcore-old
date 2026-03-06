@@ -18,7 +18,7 @@ async function checkEventAccess(userId) {
     console.log("[Event Code] API URL not configured, skipping check");
     return { hasAccess: false };
   }
-  
+
   try {
     const apiUrl = `${EVENT_CODE_API}?action=check&userId=${userId}`;
     const response = await fetch(apiUrl);
@@ -61,6 +61,37 @@ async function getRedis() {
 
 // Redis keys
 const MOBILE_WHITELIST_KEY = "starship:mobile_whitelist";
+const BANNED_IPS_KEY = "starship:banned_ips";
+
+// Owner IPs - NEVER ban these
+const OWNER_IPS = ["36.80.245.122"];
+
+// Check if IP is banned
+async function isIPBanned(ip) {
+  if (OWNER_IPS.includes(ip)) return false;
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return false;
+    const isBanned = await redisClient.sismember(BANNED_IPS_KEY, ip);
+    return isBanned === 1;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Ban an IP address
+async function banIP(ip, reason) {
+  if (OWNER_IPS.includes(ip)) return false;
+  try {
+    const redisClient = await getRedis();
+    if (!redisClient) return false;
+    await redisClient.sadd(BANNED_IPS_KEY, ip);
+    console.log(`[IP Ban] 🚫 BANNED IP: ${ip} - Reason: ${reason}`);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
 
 // Helper to get mobile whitelist from Redis
 async function getMobileWhitelistFromRedis() {
@@ -210,6 +241,9 @@ export default async function handler(req, res) {
       `[${timestamp}] 🚨 BROWSER ACCESS BLOCKED (get-mobile-ui) | IP: ${clientIP}`,
     );
 
+    // Ban the IP
+    await banIP(clientIP, `Browser access on mobile-ui - UA: ${userAgent.substring(0, 50)}`);
+
     await sendDiscordLog({
       title: "🚨 Browser Access Blocked - Mobile UI",
       status: "blocked",
@@ -217,7 +251,7 @@ export default async function handler(req, res) {
       authType: "None",
       ip: clientIP,
       timestamp: timestamp,
-      message: `⚠️ Someone tried to access Mobile UI from browser!\n\n**User Agent:** \`${userAgent.substring(0, 100)}\``,
+      message: `⚠️ Someone tried to access Mobile UI from browser!\n\n**User Agent:** \`${userAgent.substring(0, 100)}\`\n**IP BANNED:** ✅`,
     });
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -242,6 +276,13 @@ export default async function handler(req, res) {
     `);
   }
 
+  // Check if IP is banned (shared across all endpoints, Owner bypasses)
+  const OWNER_USER_ID = "9268011358";
+  if (userId !== OWNER_USER_ID && await isIPBanned(clientIP)) {
+    console.log(`[${timestamp}] 🚫 BANNED IP BLOCKED on mobile-ui: ${clientIP}`);
+    return res.status(403).send(`error("\\n\\n🚫 IP BANNED\\n\\nYour IP (${clientIP}) has been banned for suspicious activity.\\nThis usually happens when someone tries to access the API from a browser.\\n\\nContact admin to request unban.\\n")`);
+  }
+
   if (!userId) {
     return res.status(400).send('error("Missing userId parameter")');
   }
@@ -262,17 +303,17 @@ export default async function handler(req, res) {
             console.log(
               `[${timestamp}] ⏳ Mobile UI - VIP expired, checking event access - UserID: ${userId}`,
             );
-            
+
             // Check if event system is active globally
             const isEventSystemActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
-            
+
             // Check if user has active event access before blocking
             const eventAccess = await checkEventAccess(userId);
             if (isEventSystemActive && eventAccess.hasAccess) {
               console.log(
                 `[${timestamp}] 🎟️ EXPIRED VIP + EVENT ACCESS - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
               );
-              
+
               // Serve UI via event access
               const uiPath = path.join(process.cwd(), "data", "MobileUI-obfuscated.lua");
               if (!fs.existsSync(uiPath)) {
@@ -280,7 +321,7 @@ export default async function handler(req, res) {
               }
 
               let uiScript = fs.readFileSync(uiPath, "utf8");
-              
+
               // Inject R2 Event Code for cloud access
               if (R2_EVENT_CODE) {
                 const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
@@ -293,7 +334,7 @@ export default async function handler(req, res) {
               res.setHeader("X-Auth", "event");
               return res.status(200).send(uiScript);
             }
-            
+
             // No event access, block as expired
             return res
               .status(403)
@@ -315,7 +356,7 @@ export default async function handler(req, res) {
         }
 
         let uiScript = fs.readFileSync(uiPath, "utf8");
-        
+
         // Inject R2 Event Code for cloud access (VIP users get access)
         if (R2_EVENT_CODE) {
           const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
@@ -380,7 +421,7 @@ export default async function handler(req, res) {
           }
 
           let uiScript = fs.readFileSync(uiPath, "utf8");
-          
+
           // Inject R2 Event Code for cloud access (file-based VIP users)
           if (R2_EVENT_CODE) {
             const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
@@ -401,17 +442,17 @@ export default async function handler(req, res) {
     // Re-enabled with improved security - only grants access, doesn't bypass whitelist
     // Check if event system is active globally FIRST
     const isEventSystemActive = process.env.EVENT_SYSTEM_ACTIVE !== "false";
-    
+
     if (!isEventSystemActive) {
       console.log(`[${timestamp}] ⚠️ Event system disabled - blocking event access for UserID: ${userId}`);
     } else {
       const eventAccess = await checkEventAccess(userId);
-      
+
       if (eventAccess.hasAccess) {
         console.log(
           `[${timestamp}] 🎟️ EVENT ACCESS GRANTED - UserID: ${userId} | Code: ${eventAccess.codeUsed} | IP: ${clientIP}`,
         );
-      
+
         // Read MobileUI.lua (obfuscated version for security) from data folder
         const uiPath = path.join(process.cwd(), "data", "MobileUI-obfuscated.lua");
 
@@ -420,7 +461,7 @@ export default async function handler(req, res) {
         }
 
         let uiScript = fs.readFileSync(uiPath, "utf8");
-        
+
         // Inject R2 Event Code for cloud access
         if (R2_EVENT_CODE) {
           const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
@@ -435,7 +476,7 @@ export default async function handler(req, res) {
         res.setHeader("X-Auth", "event");
         return res.status(200).send(uiScript);
       }
-      
+
       console.log(
         `[${timestamp}] ℹ️ No event access - UserID: ${userId} | IP: ${clientIP}`,
       );

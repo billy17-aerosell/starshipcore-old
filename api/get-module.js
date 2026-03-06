@@ -215,16 +215,21 @@ export default async function handler(req, res) {
     return res.status(403).send(`<!DOCTYPE html><html><head><title>403 Forbidden</title><style>body{font-family:Arial;text-align:center;padding:50px;background:#0f0f1a;color:#eee}h1{color:#8b5cf6}</style></head><body><h1>403 Forbidden</h1><p>This endpoint is for authorized applications only.</p></body></html>`);
   }
 
-  // Check if IP is banned
+  // Check if IP is banned (Owner bypasses IP ban)
   const clientIP = req.headers["x-forwarded-for"]?.split(",")[0] || req.headers["x-real-ip"] || "unknown";
-  if (await isIPBanned(clientIP)) {
+  const isOwner = user === OWNER_ID;
+
+  if (!isOwner && await isIPBanned(clientIP)) {
     console.log(`[${timestamp}] 🚫 BANNED IP BLOCKED: ${clientIP}`);
     const platform = req.query.platform;
     if (platform === "mobile") {
       res.setHeader("Content-Type", "text/plain");
-      return res.status(403).send('error("Access denied")');
+      return res.status(403).send(`error("\\n\\n🚫 IP BANNED\\n\\nYour IP (${clientIP}) has been banned for suspicious activity.\\nThis usually happens when someone tries to access the API from a browser.\\n\\nContact admin to request unban.\\n")`);
     }
-    return res.status(403).json({ error: "Access denied" });
+    return res.status(403).json({
+      error: "IP_BANNED",
+      message: `Your IP (${clientIP}) has been banned for suspicious activity. Contact admin to request unban.`
+    });
   }
 
   // ══════════════════════════════════════════════════════════════════
