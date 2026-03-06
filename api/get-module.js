@@ -267,9 +267,11 @@ export default async function handler(req, res) {
     if (user === OWNER_ID) {
       console.log(`[${timestamp}] 👑 [OWNER] Module requested: ${name}`);
 
-      // Handle path: if name starts with "Modules/", load from data/ directly
+      // Handle path mapping
       let modulePath;
-      if (normalizedName.startsWith("Modules/")) {
+      if (normalizedName === "violence-district.lua") {
+        modulePath = path.join(process.cwd(), "data", normalizedName);
+      } else if (normalizedName.startsWith("Modules/")) {
         modulePath = path.join(process.cwd(), "data", normalizedName);
       } else {
         modulePath = path.join(process.cwd(), "data", "Modules", normalizedName);
@@ -305,7 +307,15 @@ export default async function handler(req, res) {
 
       console.log(`[${timestamp}] 👑 [OWNER] Module delivered: ${name}`);
 
-      // Return encrypted module
+      // Return module (Check platform for response format)
+      const platform = req.query.platform;
+      if (platform === "mobile") {
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        return res.status(200).send(moduleBuffer.toString("utf8"));
+      }
+
+      // Default (PC): Return encrypted JSON
       return res.status(200).json({
         status: "success",
         module: normalizedName,
