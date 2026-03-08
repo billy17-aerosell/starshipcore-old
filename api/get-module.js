@@ -89,6 +89,8 @@ const ALLOWED_MODULES = [
   "Tabs/ConfigTab.lua",
   "StarSpacePlayback.lua",
   "violence-district.lua",
+  "SambungKata.lua",
+  "sawah-indo.lua",
 ];
 
 // Owner ID - always has access without whitelist check
@@ -345,7 +347,7 @@ export default async function handler(req, res) {
       // Handle path: if name starts with "Modules/", load from data/ directly
       // Otherwise, load from data/Modules/
       let modulePath;
-      if (normalizedName === "violence-district.lua") {
+      if (normalizedName === "violence-district.lua" || normalizedName === "SambungKata.lua" || normalizedName === "sawah-indo.lua") {
         modulePath = path.join(process.cwd(), "data", normalizedName);
       } else if (normalizedName.startsWith("Modules/")) {
         modulePath = path.join(process.cwd(), "data", normalizedName);
@@ -395,7 +397,7 @@ export default async function handler(req, res) {
 
       // Handle path mapping
       let modulePath;
-      if (normalizedName === "violence-district.lua") {
+      if (normalizedName === "violence-district.lua" || normalizedName === "SambungKata.lua" || normalizedName === "sawah-indo.lua") {
         modulePath = path.join(process.cwd(), "data", normalizedName);
       } else if (normalizedName.startsWith("Modules/")) {
         modulePath = path.join(process.cwd(), "data", normalizedName);
@@ -588,7 +590,7 @@ export default async function handler(req, res) {
 
     // Read module file - handle Modules/ prefix
     let modulePath;
-    if (normalizedName === "violence-district.lua") {
+    if (normalizedName === "violence-district.lua" || normalizedName === "SambungKata.lua" || normalizedName === "sawah-indo.lua") {
       modulePath = path.join(process.cwd(), "data", normalizedName);
     } else if (normalizedName.startsWith("Modules/")) {
       modulePath = path.join(process.cwd(), "data", normalizedName);
