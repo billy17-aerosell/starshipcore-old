@@ -117,7 +117,15 @@ local function FormatTimeRemaining(seconds)
     else return string.format("%ds", secs) end
 end
 
-local sessionData = _G.sessionData or { Role = "VIP Mobile", Duration = "30 days" }
+if not _G.sessionData then
+    _G.sessionData = (getgenv and getgenv().StarshipSession) or { 
+        Role = "VIP Mobile", 
+        Duration = "30 days",
+        UserId = LocalPlayer.UserId,
+        Username = LocalPlayer.Name
+    }
+end
+local sessionData = _G.sessionData
 
 task.spawn(function()
 while _G.StarshipActive and task.wait(5) do
@@ -8442,6 +8450,7 @@ local function InitAccountTab()
         vipExpiryTime = tonumber(sessionData.Expiry)
     else
         vipExpiryTime = ParseVIPExpiry(sessionData.Duration)
+        sessionData.Expiry = vipExpiryTime -- Persist it globally!
     end
 
     local function GetVIPStatusDesc()

@@ -804,12 +804,15 @@ local function FormatTimeRemaining(seconds)
     else return string.format("%ds", secs) end
 end
 
-local sessionData = _G.sessionData or (getgenv and getgenv().StarshipSession) or {
-    Role = "VIP Mobile",
-    Duration = "30 days",
-    UserId = LocalPlayer.UserId,
-    Username = LocalPlayer.Name,
-}
+if not _G.sessionData then
+    _G.sessionData = (getgenv and getgenv().StarshipSession) or {
+        Role = "VIP Mobile",
+        Duration = "30 days",
+        UserId = LocalPlayer.UserId,
+        Username = LocalPlayer.Name,
+    }
+end
+local sessionData = _G.sessionData
 
 local vipExpiryTime = nil
 if sessionData.Expiry and type(sessionData.Expiry) == "number" then
@@ -818,6 +821,7 @@ elseif sessionData.Expiry and type(sessionData.Expiry) == "string" and tonumber(
     vipExpiryTime = tonumber(sessionData.Expiry)
 else
     vipExpiryTime = ParseVIPExpiry(sessionData.Duration)
+    sessionData.Expiry = vipExpiryTime -- SAVE FOR SYNC
 end
 
 local function GetVIPStatusDesc()
