@@ -84,6 +84,41 @@ local function forceAdmin()
 end
 
 forceAdmin()
+
+-- [[ ACCOUNT STATUS HELPERS (PORTED FROM MOBILEUI) ]]
+local function FormatRole(role)
+    if not role then return "USER" end
+    return string.upper(role:gsub("_", " "))
+end
+
+local function ParseVIPExpiry(durationStr)
+    if not durationStr or durationStr == "Lifetime" or durationStr == "lifetime" then
+        return nil
+    end
+    local days = tonumber(durationStr:match("(%d+)%s*day"))
+    local hours = tonumber(durationStr:match("(%d+)%s*hour"))
+    if days then
+        return os.time() + (days * 24 * 60 * 60)
+    elseif hours then
+        return os.time() + (hours * 60 * 60)
+    end
+    return nil
+end
+
+local function FormatTimeRemaining(seconds)
+    if seconds <= 0 then return "Expired" end
+    local days = math.floor(seconds / 86400)
+    local hours = math.floor((seconds % 86400) / 3600)
+    local mins = math.floor((seconds % 3600) / 60)
+    local secs = math.floor(seconds % 60)
+    if days > 0 then return string.format("%dd %dh %dm %ds", days, hours, mins, secs)
+    elseif hours > 0 then return string.format("%dh %dm %ds", hours, mins, secs)
+    elseif mins > 0 then return string.format("%dm %ds", mins, secs)
+    else return string.format("%ds", secs) end
+end
+
+local sessionData = _G.sessionData or { Role = "VIP Mobile", Duration = "30 days" }
+
 task.spawn(function()
 while _G.StarshipActive and task.wait(5) do
 	forceAdmin()
@@ -101,8 +136,39 @@ Library = {
     UnloadCallbacks = {},
     Drawings = {},
     IsWindUI = true,
-    KeybindFrame = { Visible = false }
+    Scheme = {
+        MainColor = Color3.fromRGB(20, 20, 20),
+        BackgroundColor = Color3.fromRGB(15, 15, 15),
+        OutlineColor = Color3.fromRGB(40, 40, 40),
+        AccentColor = Color3.fromRGB(220, 38, 38),
+        FontColor = Color3.fromRGB(255, 255, 255),
+        Font = Enum.Font.Code
+    },
+    WatermarkVisible = true,
+    ShowCustomCursor = true,
+    Registry = {},
+    Connections = {},
+    ConfigFolder = "Starship_ViolenceDistrict"
 }
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Stats = game:GetService("Stats")
+
+Options = Library.Options
+Toggles = Library.Toggles
+_G.StarshipOptions = Options
+_G.StarshipToggles = Toggles
+
+
+function Library:AddToRegistry(obj, properties)
+    table.insert(self.Registry, { Instance = obj, Properties = properties })
+end
+
+
 
 -- [[ NUCLEAR CLEANUP FUNCTIONS ]]
 local function ClearDrawings()
@@ -186,12 +252,22 @@ function SafeInit(fn, name)
 end
 
 function Library:SetWatermarkVisibility(state)
-    if self.Window and self.Window.SetWatermarkVisibility then
-        self.Window:SetWatermarkVisibility(state)
+    self.WatermarkVisible = state
+    if self.Window then
+        if self.Window.SetWatermarkVisibility then
+            self.Window:SetWatermarkVisibility(state)
+        end
+        -- Fallback: Force hide internal watermark frame
+        pcall(function()
+            local internal = self.Window.Internal or self.Window.Instance
+            local wm = internal and internal:FindFirstChild("Watermark", true)
+            if wm then wm.Visible = state end
+        end)
     end
 end
 
 function Library:SetWatermark(text)
+    if not self.WatermarkVisible then return end
     if self.Window and self.Window.Watermark then
         pcall(function() self.Window.Watermark:SetTitle(text) end)
     end
@@ -266,6 +342,141 @@ function Library:Unload()
     print("[starship] Successfully cleaned up all features and connections.")
 end
 
+function Library:GetConfigs()
+    if not isfolder(self.ConfigFolder) then makefolder(self.ConfigFolder) end
+    local configs = {}
+    local files = listfiles(self.ConfigFolder)
+    
+    for _, file in ipairs(files) do
+        if file:sub(-5) == ".json" then
+            local name = file:match("([^/\\]+)%.json$")
+            if name then
+                table.insert(configs, name)
+            end
+        end
+    end
+    
+    return configs
+end
+
+function Library:SaveConfig(name)
+    if not name or name == "" then return end
+    if not isfolder(self.ConfigFolder) then makefolder(self.ConfigFolder) end
+    
+    local data = { Toggles = {}, Options = {} }
+    
+    for flag, toggle in pairs(self.Toggles) do
+        data.Toggles[flag] = toggle.Value
+    end
+    
+    for flag, option in pairs(self.Options) do
+        if option.Type == "Keybind" then
+            data.Options[flag] = tostring(option.Value)
+        else
+            data.Options[flag] = option.Value
+        end
+    end
+    
+    local success, encoded = pcall(function() return game:GetService("HttpService"):JSONEncode(data) end)
+    if success then
+        writefile(self.ConfigFolder .. "/" .. name .. ".json", encoded)
+        self:Notify("Config saved: " .. name, 3)
+    else
+        self:Notify("Failed to save config: " .. tostring(encoded), 3)
+    end
+end
+
+function Library:LoadConfig(name)
+    local path = self.ConfigFolder .. "/" .. name .. ".json"
+    if not isfile(path) then 
+        self:Notify("Config file not found: " .. name, 3)
+        return 
+    end
+    
+    local content = readfile(path)
+    local success, data = pcall(function() return game:GetService("HttpService"):JSONDecode(content) end)
+    
+    if success then
+        -- Silently load to avoid notification spam
+        local gfs = _G.GameFeatureState
+        local originalHide = gfs and gfs.HideNotification or false
+        if gfs then gfs.HideNotification = true end
+
+        if data.Toggles then
+            for flag, value in pairs(data.Toggles) do
+                -- Skip camera-altering toggles during load to prevent displacement
+                if flag ~= "Freecam" and flag ~= "Desync" and flag ~= "ThirdPersonKiller" then
+                    if self.Toggles[flag] and self.Toggles[flag].SetValue then
+                        pcall(function() self.Toggles[flag]:SetValue(value) end)
+                    end
+                end
+            end
+        end
+        if data.Options then
+            for flag, value in pairs(data.Options) do
+                if self.Options[flag] and self.Options[flag].SetValue then
+                    if self.Options[flag].Type == "Keybind" then
+                        pcall(function()
+                            local keyStr = tostring(value):gsub("Enum.KeyCode.", "")
+                            self.Options[flag]:SetValue(Enum.KeyCode[keyStr])
+                        end)
+                    else
+                        pcall(function() self.Options[flag]:SetValue(value) end)
+                    end
+                end
+            end
+        end
+        
+        -- Force Camera Reset after load to prevent 'Zoom into Body' bug
+        pcall(function()
+            local cam = workspace.CurrentCamera
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if cam and hum then
+                cam.CameraSubject = hum
+                cam.CameraType = Enum.CameraType.Custom
+                cam.FieldOfView = 70
+            end
+        end)
+        
+        -- Restore notification state
+        if gfs then gfs.HideNotification = originalHide end
+        
+        self:Notify("Config loaded: " .. name .. " successfully!", 3)
+    else
+        self:Notify("Failed to load config: Corrupt file", 3)
+    end
+end
+
+function Library:DeleteConfig(name)
+    if not name or name == "" then return end
+    if not isfolder(self.ConfigFolder) then return end
+    
+    local found = false
+    local files = listfiles(self.ConfigFolder)
+    for _, file in ipairs(files) do
+        local fileName = file:match("([^/\\]+)%.json$")
+        if fileName == name then
+            local success, err = pcall(function() delfile(file) end)
+            if success then
+                found = true
+                self:Notify("Config deleted: " .. name, 3)
+            else
+                self:Notify("Delete error: " .. tostring(err), 3)
+            end
+            break
+        end
+    end
+    
+    if not found then
+        -- Fallback attempt with direct path
+        local path = self.ConfigFolder .. "/" .. name .. ".json"
+        if isfile(path) then
+            pcall(function() delfile(path) end)
+            self:Notify("Config deleted (fallback): " .. name, 2)
+        end
+    end
+end
+
 local function wrappedSetDisabled(obj, state)
     obj._disabled = state
 end
@@ -303,11 +514,48 @@ local function createLinoriaObject(windElement, flag, default, text, parentSecti
         Display = function(self) return self end,
         Refresh = function(self) return self end,
         SetValues = function(self, v)
-            if self.Element and self.Element.SetValues then
-                self.Element:SetValues(v)
-            elseif self.Element and self.Element.Values then
-                self.Element.Values = v
-                if self.Element.Refresh then self.Element:Refresh() end
+            if not self.Element then return end
+            
+            local updated = false
+            
+            -- Method 1: SetValues
+            if self.Element.SetValues then
+                local ok = pcall(function() self.Element:SetValues(v) end)
+                if ok then updated = true end
+            end
+            
+            -- Method 2: SetOptions
+            if not updated and self.Element.SetOptions then
+                local ok = pcall(function() self.Element:SetOptions(v) end)
+                if ok then updated = true end
+            end
+            
+            -- Method 3: Clear and Re-add (Native WindUI Boreal style)
+            if not updated and self.Element.Clear and (self.Element.Option or self.Element.AddOption) then
+                pcall(function()
+                    self.Element:Clear()
+                    for _, val in ipairs(v) do
+                        local optMethod = self.Element.Option or self.Element.AddOption
+                        optMethod(self.Element, {
+                            Title = tostring(val),
+                            Callback = function(selected)
+                                self:SetValue(selected)
+                            end
+                        })
+                    end
+                    updated = true
+                end)
+            end
+            
+            -- Method 4: Internal Table Update + Refresh
+            if not updated or true then -- Always try this as safety fallback
+                if self.Element.Values then
+                    self.Element.Values = v
+                    if self.Element.Refresh then pcall(function() self.Element:Refresh() end) end
+                elseif self.Element.Options and type(self.Element.Options) == "table" then
+                    self.Element.Options = v
+                    if self.Element.Refresh then pcall(function() self.Element:Refresh() end) end
+                end
             end
         end
     }
@@ -324,7 +572,9 @@ local function createLinoriaObject(windElement, flag, default, text, parentSecti
                 if config2.Callback then config2.Callback(v) end
             end
         })
-        Library.Options[flag2] = createLinoriaObject(key, flag2, config2.Default, config2.Text or flag2, self.ParentSection)
+        local linObj = createLinoriaObject(key, flag2, config2.Default, config2.Text or flag2, self.ParentSection)
+        linObj.Type = "Keybind"
+        Library.Options[flag2] = linObj
         return Library.Options[flag2]
     end
     
@@ -453,6 +703,11 @@ function GroupboxShim:AddDivider()
     return self
 end
 
+function GroupboxShim:AddParagraph(config)
+    pcall(function() self.Section:Paragraph(config) end)
+    return self
+end
+
 function GroupboxShim:AddColorPicker(flag, config)
     local cp = self.Section:Colorpicker({
         Title = config.Title or flag,
@@ -479,8 +734,10 @@ function GroupboxShim:AddKeyPicker(flag, config)
             if config.Callback then config.Callback(v) end
         end
     })
-    Library.Options[flag] = createLinoriaObject(key, flag, config.Default, config.Text or flag, self.Section)
-    return Library.Options[flag]
+    local linObj = createLinoriaObject(key, flag, config.Default or Enum.KeyCode.None, config.Text or flag, self.Section)
+    linObj.Type = "Keybind"
+    Library.Options[flag] = linObj
+    return linObj
 end
 
 local TabShim = {}
@@ -489,19 +746,50 @@ TabShim.__index = TabShim
 local MultiSectionShim = {}
 MultiSectionShim.__index = MultiSectionShim
 
+local StarshipIconMap = {
+    ["book-marked"] = "book",
+    ["hat-glasses"] = "swords",
+    ["users"] = "users",
+    ["navigation-2-off"] = "map",
+    ["palette"] = "palette",
+    ["cloud-off"] = "cloud-off",
+    ["circle-ellipsis"] = "more-horizontal",
+    ["rectangle-ellipsis"] = "more-horizontal",
+    ["settings"] = "settings",
+    ["shield-alert"] = "shield",
+    ["swords"] = "swords",
+    ["rabbit"] = "zap",
+    ["arrow-big-up-dash"] = "tuning",
+    ["drama"] = "masks",
+    ["camera"] = "camera",
+    ["menu"] = "menu",
+    ["layout-grid"] = "house",
+    ["zap"] = "zap",
+    ["eye"] = "view",
+    ["mountain"] = "mountain",
+    ["info"] = "info",
+    ["star"] = "star",
+    ["user"] = "user",
+    ["user-circle"] = "user-id",
+    ["user-round"] = "user-check",
+    ["layout"] = "layout",
+    ["swatch-book"] = "book",
+    ["pickaxe"] = "hammer",
+    ["crosshair"] = "target",
+    ["laugh"] = "smile",
+    ["eye-off"] = "view",
+    ["dollar-sign"] = "dollar",
+}
+
 function MultiSectionShim:AddTab(tabName, icon)
     -- Create the sub-tab inside the MultiSection
     local subTab = self.MultiSection:Tab({ 
         Title = tabName, 
-        Icon = icon or "circle",
+        Icon = StarshipIconMap[icon] or icon or "circle",
         IconThemed = true
     })
     
-    -- Visual Header (Replaces the buggy nested Section title)
-    subTab:Paragraph({
-        Title = "✨ " .. tabName,
-        Content = "Configure your modules below"
-    })
+    -- Sub-tab visualization removed to match sawah-indo.lua (clean look)
     
     -- Direct return of subTab to ensure all elements use the main scrolling container.
     -- This fixes the clipping bug permanently.
@@ -510,14 +798,17 @@ end
 
 function TabShim:AddLeftGroupbox(name, icon)
     -- Initialize a shared MultiSection for this specific Sidebar Tab if it doesn't exist
-    if not self.SharedMulti then
-        self.SharedMulti = self.Tab:MultiSection({
+    -- We store it on the Tab object itself to survive shim re-creation
+    if not self.Tab.SharedMulti then
+        self.Tab.SharedMulti = self.Tab:MultiSection({
             Title = "Module Configuration",
             Icon = "layout-grid",
             Box = true,
             BoxBorder = true,
             Opened = true
         })
+    end
+    self.SharedMulti = self.Tab.SharedMulti
         
         -- Fast Staggered Tab-Cycling (Inspired by MobileUI.lua)
         task.spawn(function()
@@ -545,7 +836,6 @@ function TabShim:AddLeftGroupbox(name, icon)
                 end)
             end
         end)
-    end
     
     local shim = setmetatable({ MultiSection = self.SharedMulti, Tab = self.Tab }, MultiSectionShim)
     return shim:AddTab(name, icon)
@@ -566,30 +856,17 @@ function TabShim:AddLeftTabbox(name)
 end
 TabShim.AddRightTabbox = TabShim.AddLeftTabbox
 
+function TabShim:AddSection(name, icon)
+    return self:AddLeftGroupbox(name, icon)
+end
+
 function TabShim:OnUnload(fn) return self end
 
 local WindowShim = {}
 WindowShim.__index = WindowShim
 
 function WindowShim:AddTab(name, icon)
-    local iconMap = {
-        ["book-marked"] = "book",
-        ["hat-glasses"] = "sword",
-        ["users"] = "users",
-        ["navigation-2-off"] = "navigation-off",
-        ["palette"] = "palette",
-        ["cloud-off"] = "cloud-off",
-        ["circle-ellipsis"] = "more-horizontal",
-        ["settings"] = "settings",
-        ["shield-alert"] = "shield",
-        ["swords"] = "swords",
-        ["rabbit"] = "zap",
-        ["arrow-big-up-dash"] = "arrow-up-circle",
-        ["drama"] = "masks",
-        ["camera"] = "camera",
-        ["menu"] = "menu",
-    }
-    local rawTab = self.Window:Tab({ Title = name, Icon = iconMap[icon] or icon or "circle" })
+    local rawTab = self.Window:Tab({ Title = name, Icon = StarshipIconMap[icon] or icon or "circle" })
     return setmetatable({ Tab = rawTab }, TabShim)
 end
 
@@ -640,7 +917,7 @@ function Library:CreateWindow(config)
     })
 
     -- [UI TOGGLE KEY]
-    self.Window:SetToggleKey(Enum.KeyCode.RightControl)
+    self.Window:SetToggleKey(Enum.KeyCode.End)
     
     -- [CLEANUP TRIGGER: WINDOW DESTROYED]
     if self.Window then
@@ -709,7 +986,7 @@ function Library:CreateWindow(config)
                             end
                         end
                         forceMouse.Visible = isVisible
-                        if isVisible then
+                        if isVisible and Library.ShowCustomCursor ~= false then
                             UserInputService.MouseIconEnabled = true
                             UserInputService.MouseBehavior = Enum.MouseBehavior.Default
                         end
@@ -768,16 +1045,18 @@ function Library:CreateWindow(config)
             shield.Modal = isVisible
             
             if isVisible then
-                UIS.MouseIconEnabled = true
-                UIS.MouseBehavior = Enum.MouseBehavior.Default
+                if Library.ShowCustomCursor ~= false then
+                    UIS.MouseIconEnabled = true
+                    UIS.MouseBehavior = Enum.MouseBehavior.Default
+                end
                 if LocalPlayer.CameraMode ~= Enum.CameraMode.Classic then
                     LocalPlayer.CameraMode = Enum.CameraMode.Classic
                 end
                 local mouse = LocalPlayer:GetMouse()
                 if mouse then mouse.Icon = "rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png" end
                 
-                -- Aggressive focus steal
-                pcall(function() GUI.SelectedObject = shield end)
+                -- Removed aggressive focus steal as it blocks keybind processing
+                -- pcall(function() GUI.SelectedObject = shield end)
             end
         end
 
@@ -789,7 +1068,12 @@ function Library:CreateWindow(config)
     end) -- Closes task.spawn from line 726
     
     
-    -- Add FPS and Ping Tags
+    -- Add Role, FPS and Ping Tags
+    local RoleTag = self.Window:Tag({
+        Title = FormatRole(sessionData.Role),
+        Color = Color3.fromRGB(255, 170, 0),
+    })
+
     local FpsTag = self.Window:Tag({
         Title = "FPS: 0",
         Icon = "zap",
@@ -826,6 +1110,8 @@ function Library:CreateWindow(config)
         end)
     end)
 
+    -- Removed non-functional native config call
+
     return setmetatable({ Window = self.Window }, WindowShim)
 end
 
@@ -837,19 +1123,10 @@ function Library:SetWatermark(text)
     -- Dummy
 end
 
-local Options = Library.Options
-local Toggles = Library.Toggles
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
-local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
-local Stats = game:GetService("Stats")
 local VirtualUser = game:GetService("VirtualUser")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local VIM = nil
@@ -8102,6 +8379,7 @@ end
 
 local Tabs = {
     Dashboard = Window:AddTab('Dashboard', 'layout-grid'),
+    Account = Window:AddTab('Account', 'user'),
     Global = Window:AddTab('Elite', 'star'),
     Killer = Window:AddTab('Killer', 'swords'),
     Survivor = Window:AddTab('Survivor', 'shield'),
@@ -8111,40 +8389,95 @@ local Tabs = {
     ESP = Window:AddTab('ESP', 'eye'),
     Chams = Window:AddTab('Chams', 'users'),
     World = Window:AddTab('World', 'mountain'),
-    Misc = Window:AddTab('Extras', 'rectangle-ellipsis'),
+    Misc = Window:AddTab('Misc', 'text-wrap'),
     Settings = Window:AddTab('Config', 'settings'),
 }
 
 local InitKillerAlertScope
 local InitSurvivorScripts
 local function InitDashboardTab()
-	local DashboardMain = Tabs.Dashboard:AddLeftGroupbox('Statistics', 'layout-grid')
-	
-	DashboardMain:AddLabel('Welcome to Starship Premium'):AddLabel('User: ' .. (LocalPlayer.DisplayName or LocalPlayer.Name))
-	DashboardMain:AddLabel('Account: ' .. (IsPremium and "PREMIUM EDITION" or "FREE EDITION"))
-	DashboardMain:AddDivider()
-	DashboardMain:AddLabel('Status: Running')
-	DashboardMain:AddLabel('Version: 2.6.0')
-	
-	local DashboardRight = Tabs.Dashboard:AddRightGroupbox('Quick Info', 'info')
-	DashboardRight:AddLabel('Place: ' .. game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name)
-	DashboardRight:AddLabel('JobId: ' .. game.JobId:sub(1, 10) .. "...")
-	DashboardRight:AddButton({
-		Text = 'Copy Discord Link',
-		Func = function()
-			if setclipboard then
-				setclipboard("https://dsc.gg/starshipcore")
-				Library:Notify("Discord link copied to clipboard!")
-			end
-		end
-	})
-	DashboardRight:AddButton({
-		Text = 'Rejoin Server',
-		Func = function()
-			game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
-		end
-	})
-	pcall(function() Tabs.Dashboard.Tab:Select() end)
+    local DashboardMain = Tabs.Dashboard:AddSection('Bot Overview', 'layout-grid')
+    
+    DashboardMain:AddParagraph({ 
+        Title = 'Welcome, ' .. (LocalPlayer.DisplayName or LocalPlayer.Name),
+        Desc = 'Account: ' .. (IsPremium and "PREMIUM EDITION" or "FREE EDITION") .. '\n' ..
+               'Status: Running\nVersion: 2.6.0'
+    })
+
+    local DashboardActions = Tabs.Dashboard:AddSection('Quick Actions', 'info')
+    DashboardActions:AddParagraph({
+        Title = 'Server Info',
+        Desc = 'Place: ' .. game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name .. '\n' ..
+               'JobId: ' .. game.JobId:sub(1, 10) .. "..."
+    })
+
+    DashboardActions:AddButton({
+        Text = 'Copy Discord Link',
+        Func = function()
+            if setclipboard then
+                setclipboard("https://dsc.gg/starshipcore")
+                Library:Notify("Discord link copied to clipboard!")
+            end
+        end
+    })
+
+    DashboardActions:AddButton({
+        Text = 'Rejoin Server',
+        Func = function()
+            game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
+        end
+    })
+
+    pcall(function() Tabs.Dashboard.Tab:Select() end)
+end
+
+local function InitAccountTab()
+    local VIPSection = Tabs.Account:AddSection('VIP Status', 'star')
+    
+    local vipExpiryTime = nil
+    if sessionData.Expiry then
+        vipExpiryTime = tonumber(sessionData.Expiry)
+    else
+        vipExpiryTime = ParseVIPExpiry(sessionData.Duration)
+    end
+
+    local function GetVIPStatusDesc()
+        local timeRemaining = "Lifetime"
+        if vipExpiryTime then
+            local remaining = vipExpiryTime - os.time()
+            timeRemaining = FormatTimeRemaining(remaining)
+        end
+        return "Role: " .. FormatRole(sessionData.Role) .. "\n" ..
+               "Time Remaining: " .. timeRemaining .. "\n" ..
+               "Status: Active"
+    end
+
+    local vipPara = VIPSection:AddParagraph({
+        Title = 'Subscription Information',
+        Desc = GetVIPStatusDesc()
+    })
+
+    if vipExpiryTime then
+        task.spawn(function()
+            while _G.StarshipActive do
+                task.wait(1)
+                pcall(function()
+                    if vipPara then
+                        vipPara:SetDesc(GetVIPStatusDesc())
+                    end
+                end)
+                if (vipExpiryTime - os.time()) <= 0 then break end
+            end
+        end)
+    end
+
+    local ProfileSection = Tabs.Account:AddSection('User Profile', 'user-round')
+    ProfileSection:AddParagraph({
+        Title = LocalPlayer.DisplayName,
+        Desc = 'Username: ' .. LocalPlayer.Name .. '\n' ..
+               'User ID: ' .. LocalPlayer.UserId .. '\n' ..
+               'Account Age: ' .. LocalPlayer.AccountAge .. ' days'
+    })
 end
 
 local function InitGlobalTab()
@@ -8411,12 +8744,13 @@ end
 })
 end
 InitDashboardTab()
+InitAccountTab()
 InitGlobalTab()
 VDSurvivorState = VDSurvivorState or {}
 InitSurvivorScripts = function()
 local AbilityBox = Tabs.Survivor:AddLeftGroupbox('Ability', 'swords')
 local AgilityBox = Tabs.Survivor:AddLeftGroupbox('Agility', 'rabbit')
-local UtilityBox = Tabs.Survivor:AddLeftGroupbox('Utility', 'arrow-big-up-dash')
+local UtilityBox = Tabs.Survivor:AddLeftGroupbox('Utility', 'utility-pole')
 local antiChaseConnection = nil
 local antiChaseSoundConns = {}
 local _chaseSoundIds = {
@@ -12431,7 +12765,7 @@ end)
 end
 local KillerAbilityBox = Tabs.Killer:AddLeftGroupbox('Ability', 'swords')
 local KillerAgilityBox = Tabs.Killer:AddLeftGroupbox('Agility', 'rabbit')
-local KillerUtilityBox = Tabs.Killer:AddLeftGroupbox('Utility', 'arrow-big-up-dash')
+local KillerUtilityBox = Tabs.Killer:AddLeftGroupbox('Utility', 'utility-pole')
 local KillerAimbotBox = Tabs.Killer:AddRightGroupbox('Aimbot (Veil)', 'crosshair')
 KillerAimbotBox:AddToggle('SpearAimbotToggle', {
 Text = 'Spear Silent Aim',
@@ -13983,7 +14317,7 @@ function InitAimbotScope()
 	if not AimbotState.fovCircle then
 		AimbotState.fovCircle = Drawing.new("Circle")
 		AimbotState.fovCircle.Visible = false
-		AimbotState.fovCircle.Radius = AimbotState.aimFOV
+		AimbotState.fovCircle.Radius = AimbotState.aimFOV or 100
 		AimbotState.fovCircle.Thickness = 1
 		AimbotState.fovCircle.Color = Color3.fromRGB(255, 255, 255)
 		AimbotState.fovCircle.Transparency = 1
@@ -14137,6 +14471,10 @@ else
 	if AimbotState.fovCircle then AimbotState.fovCircle.Visible = false end
 	if AimbotState.targetIndicator then AimbotState.targetIndicator.Visible = false end
 	if AimbotState.aimLine then AimbotState.aimLine.Visible = false end
+    
+    -- Ensure everything is hidden if no toggles are on
+    local fovOn = Toggles.ShowFOV and Toggles.ShowFOV.Value or false
+    if AimbotState.fovCircle then AimbotState.fovCircle.Visible = fovOn end
 end
 end
 AimbotBox:AddToggle('Aimlock', {
@@ -14231,7 +14569,7 @@ AimbotState.aimVisCheck = Toggles.AimVisCheck.Value
 end)
 AimbotBox:AddCheckbox('ShowFOV', {
 Text = 'Show FOV Circle',
-Default = true,
+Default = false,
 Callback = function(Value)
 AimbotState.manageAimLoop()
 end
@@ -14254,7 +14592,7 @@ end
 end)
 AimbotBox:AddCheckbox('ShowTarget', {
 Text = 'Show Target Indicator',
-Default = true,
+Default = false,
 Callback = function(Value)
 AimbotState.manageAimLoop()
 end
@@ -14714,7 +15052,7 @@ GFS.CrosshairOutline = Value
 end
 })
 end
-local VDStatsBox = Tabs.Global:AddRightGroupbox('Fun', 'dollar-sign')
+local VDStatsBox = Tabs.Global:AddRightGroupbox('Fun', 'badge-cent')
 VDStatsBox:AddInput('LevelInput', {
 Text = 'Set Level',
 Default = '',
@@ -17359,25 +17697,27 @@ Max = 120,
 Rounding = 1,
 Suffix = '°',
 Callback = function(Value)
-currentFovValue = Value
-if Value == 70 then
-	if fovBound then
-		pcall(function() RunService:UnbindFromRenderStep("StarshipFOV") end)
-		fovBound = false
-	end
-else
-	if not fovBound then
-		if not Camera.OriginalFieldOfView and CameraObj then
-			Camera.OriginalFieldOfView = CameraObj.FieldOfView
-		end
-		RunService:BindToRenderStep("StarshipFOV", Enum.RenderPriority.Camera.Value + 1, function()
-		if CameraObj then
-			CameraObj.FieldOfView = currentFovValue
-		end
-	end)
-	fovBound = true
-end
-end
+    currentFovValue = Value
+    if math.abs(Value - 70) < 0.1 then
+        pcall(function() RunService:UnbindFromRenderStep("StarshipFOV") end)
+        fovBound = false
+        if CameraObj then 
+            pcall(function() CameraObj.FieldOfView = 70 end)
+        end
+    else
+        if not fovBound then
+            if not Camera.OriginalFieldOfView and CameraObj then
+                Camera.OriginalFieldOfView = CameraObj.FieldOfView
+            end
+            pcall(function() RunService:UnbindFromRenderStep("StarshipFOV") end)
+            RunService:BindToRenderStep("StarshipFOV", Enum.RenderPriority.Camera.Value + 1, function()
+                if CameraObj then
+                    CameraObj.FieldOfView = currentFovValue
+                end
+            end)
+            fovBound = true
+        end
+    end
 end
 })
 CameraSettingsBox:AddSlider('AspectRatioSlider', {
@@ -17388,27 +17728,43 @@ Max = 1,
 Rounding = 2,
 Tooltip = 'Default = 1 | Lower = Wider (Stretched) | Higher = Taller',
 Callback = function(Value)
-local transformValue = Value
-if Value > 1 then
-	transformValue = 2 - Value
+    local transformValue = Value
+    currentAspectModifier = CFrame.new(0, 0, 0, 1, 0, 0, 0, transformValue, 0, 0, 0, 1)
+    if math.abs(Value - 1) < 0.01 then
+        pcall(function() RunService:UnbindFromRenderStep("StarshipAspectRatio") end)
+        aspectBound = false
+        if CameraObj then
+            -- Note: We can't easily 'reset' CFrame from here as it's modified in RenderStep
+            -- Unbinding should stop the modification
+        end
+    else
+        if not aspectBound then
+            pcall(function() RunService:UnbindFromRenderStep("StarshipAspectRatio") end)
+            RunService:BindToRenderStep("StarshipAspectRatio", Enum.RenderPriority.Camera.Value + 1, function()
+                if CameraObj then
+                    CameraObj.CFrame = CameraObj.CFrame * currentAspectModifier
+                end
+            end)
+            aspectBound = true
+        end
+    end
 end
-currentAspectModifier = CFrame.new(0, 0, 0, 1, 0, 0, 0, transformValue, 0, 0, 0, 1)
-if Value == 1 then
-	if aspectBound then
-		pcall(function() RunService:UnbindFromRenderStep("StarshipAspectRatio") end)
-		aspectBound = false
-	end
-else
-	if not aspectBound then
-		RunService:BindToRenderStep("StarshipAspectRatio", Enum.RenderPriority.Camera.Value + 1, function()
-		if CameraObj then
-			CameraObj.CFrame = CameraObj.CFrame * currentAspectModifier
-		end
-	end)
-	aspectBound = true
-end
-end
-end
+})
+
+CameraSettingsBox:AddButton({
+    Text = 'Reset Camera',
+    Func = function()
+        Options.FOVChanger:SetValue(70)
+        Options.AspectRatioSlider:SetValue(1)
+        pcall(function()
+            RunService:UnbindFromRenderStep("StarshipFOV")
+            RunService:UnbindFromRenderStep("StarshipAspectRatio")
+            if CameraObj then
+                CameraObj.FieldOfView = 70
+            end
+        end)
+        Library:Notify("Camera settings reset!", 2)
+    end
 })
 LocalPlayer.CharacterAdded:Connect(function()
 task.wait(1)
@@ -18947,20 +19303,6 @@ SafeInit(Init.MiscTab, 'InitMiscTab')
 Init.SettingsTab = function()
 local MenuBox = Tabs.Settings:AddLeftGroupbox('Menu', 'menu')
 
-MenuBox:AddButton({
-    Text = "Unload Script",
-    Func = function()
-        Library:Unload()
-    end,
-    Tooltip = "Completely remove the script and stop all background tasks."
-})
-MenuBox:AddToggle('KeybindMenuOpen', {
-Default = false,
-Text = 'Open Keybind',
-Callback = function(value)
-pcall(function() Library.KeybindFrame.Visible = value end)
-end
-})
 MenuBox:AddToggle('ShowCustomCursor', {
 Text = 'Custom Cursor',
 Default = true,
@@ -18968,48 +19310,21 @@ Callback = function(Value)
 Library.ShowCustomCursor = Value
 end
 })
-MenuBox:AddDropdown('NotificationSide', {
-Values = { 'Left', 'Right' },
-Default = 'Right',
-Text = 'Notification Side',
-Callback = function(Value)
-if Value == nil or Value == '' then return end
-Library:SetNotifySide(Value)
-end
-})
-MenuBox:AddDropdown('DPIDropdown', {
-Values = { '50%', '75%', '100%', '125%', '150%', '175%', '200%' },
-Default = '100%',
-Text = 'DPI Scale',
-Callback = function(Value)
-if Value == nil or Value == '' then return end
-Value = Value:gsub('%%', '')
-local DPI = tonumber(Value)
-if DPI then Library:SetDPIScale(DPI) end
-end
-})
-MenuBox:AddLabel('Menu bind'):AddKeyPicker('MenuKeybind', {
+MenuBox:AddKeyPicker('MenuKeybind', {
 Default = 'End',
 NoUI = true,
-Text = 'Menu keybind'
-})
-MenuBox:AddButton({
-Text = 'Unload Script',
-DoubleClick = true,
-Func = function()
-Library:Unload()
-end
-})
-local WatermarkToggle = MenuBox:AddToggle('WatermarkVisible', {
-Text = 'Show Watermark',
-Default = true,
-Tooltip = IsPremium and 'Toggle the Starship watermark overlay' or nil,
-DisabledTooltip = 'Unlock this with premium',
+Text = 'Menu keybind',
 Callback = function(Value)
-Library:SetWatermarkVisibility(Value)
+    local key = Value
+    if type(key) == "string" then
+        pcall(function() key = Enum.KeyCode[key] end)
+    end
+    if Library.Window and Library.Window.SetToggleKey and typeof(key) == "EnumItem" then
+        Library.Window:SetToggleKey(key)
+        Library:Notify("Menu keybind updated to: " .. tostring(key.Name), 2)
+    end
 end
 })
-PremiumOnly(WatermarkToggle)
 local HideNotifToggle = MenuBox:AddToggle('HideNotification', {
 Text = 'Hide Notification',
 Default = false,
@@ -19020,16 +19335,81 @@ GFS.HideNotification = Value
 end
 })
 Library.ToggleKeybind = Options.MenuKeybind
--- Config section handled by WindUI Boreal shim or native configs
-if Tabs.Settings then
-    local ConfigSection = Tabs.Settings:AddLeftGroupbox('Config', 'settings')
-    ConfigSection:AddButton({
-        Text = 'Reset Config',
-        Func = function()
-            Library:Notify("Config systems are being migrated to Boreal.", 3)
+
+-- Manual Config Management (in MenuBox)
+MenuBox:AddDivider()
+MenuBox:AddLabel('--- Configurations ---')
+
+MenuBox:AddInput('ConfigName', {
+    Text = 'New Name',
+    Placeholder = 'Config name...',
+    Default = ""
+})
+
+local ConfigList = MenuBox:AddDropdown('ConfigList', {
+    Text = 'Saved Configs',
+    Values = Library:GetConfigs(),
+    Default = ""
+})
+
+MenuBox:AddButton({
+    Text = 'Save Settings',
+    Func = function()
+        local name = (Options.ConfigName.Value ~= "") and Options.ConfigName.Value or Options.ConfigList.Value
+        if name and name ~= "" then
+            Library:SaveConfig(name)
+            task.wait(0.2) -- File system delay
+            local configs = Library:GetConfigs()
+            ConfigList:SetValues(configs)
+            ConfigList:SetValue(name)
+            Library:Notify("Config saved & selected: " .. name, 2)
+        else
+            Library:Notify("Please specify a name!", 3)
         end
-    })
-end
+    end
+})
+
+MenuBox:AddButton({
+    Text = 'Load Settings',
+    Func = function()
+        local name = Options.ConfigList.Value
+        if name and name ~= "" then
+            Library:LoadConfig(name)
+        else
+            Library:Notify("Please select a config!", 3)
+        end
+    end
+})
+
+MenuBox:AddButton({
+    Text = 'Delete Config',
+    Func = function()
+        local name = Options.ConfigList.Value
+        if name and name ~= "" then
+            Library:DeleteConfig(name)
+            task.wait(0.2)
+            local configs = Library:GetConfigs()
+            ConfigList:SetValues(configs)
+            if #configs == 0 then
+                ConfigList:SetValue("")
+            else
+                ConfigList:SetValue(configs[#configs] or "")
+            end
+            Library:Notify("Config deleted and list updated!", 2)
+        end
+    end
+})
+
+MenuBox:AddButton({
+    Text = 'Refresh List',
+    Func = function()
+        task.wait(0.1)
+        local configs = Library:GetConfigs()
+        ConfigList:SetValues(configs)
+        Options.ConfigName:SetValue("")
+        Library:Notify("Configs refreshed: " .. tostring(#configs) .. " found", 2)
+    end
+})
 
 end
 SafeInit(Init.SettingsTab, 'InitSettingsTab')
@@ -19096,6 +19476,7 @@ FPS = 60,
 Connection = nil
 }
 Library.Watermark.Connection = RunService.RenderStepped:Connect(function()
+if not Library.WatermarkVisible then return end
 Library.Watermark.FrameCounter = Library.Watermark.FrameCounter + 1
 if (tick() - Library.Watermark.FrameTimer) >= 1 then
 	Library.Watermark.FPS = Library.Watermark.FrameCounter
@@ -19114,7 +19495,7 @@ end)
 if SaveManager then SaveManager:LoadAutoloadConfig() end
 local function InitMaskedDetection_Legacy()
 	if not Tabs or not Tabs.Survivor then return end
-	local MaskBox = Tabs.Survivor:AddRightGroupbox('The Masked Detection', 'drama')
+	local MaskBox = Tabs.Survivor:AddRightGroupbox('The Masked Detection', 'hat-glasses')
 	local MaskState = {
 	Enabled = false,
 	GUI = nil,
@@ -19500,7 +19881,7 @@ end)
 end
 local function InitMaskedDetection()
 	if not Tabs or not Tabs.Survivor then return end
-	local MaskBox = Tabs.Survivor:AddRightGroupbox('The Masked Detection', 'drama')
+	local MaskBox = Tabs.Survivor:AddRightGroupbox('The Masked Detection', 'hat-glasses')
 	local MaskState = {
 	Enabled = false,
 	GUI = nil
@@ -19666,69 +20047,73 @@ else
 		MaskState.GUI:Destroy()
 		MaskState.GUI = nil
 	end
-	if game.CoreGui:FindFirstChild("StarshipMaskInfo") then
-		game.CoreGui.StarshipMaskInfo:Destroy()
+    local CoreGui = game:GetService("CoreGui")
+	if CoreGui:FindFirstChild("StarshipMaskInfo") then
+		CoreGui.StarshipMaskInfo:Destroy()
 	end
 end
 end
 })
 task.spawn(function()
 while _G.StarshipActive and task.wait(0.5) do
-	if MaskState.Enabled then
-		local killer = nil
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= LocalPlayer and IsKiller(p) then
-				killer = p
-				break
-			end
-		end
-		if MaskState.GUI and MaskState.GUI:FindFirstChild("MainFrame") then
-			local mf = MaskState.GUI.MainFrame
-			local ct = mf:FindFirstChild("Content")
-			local sLabel = ct and ct:FindFirstChild("StatusLabel")
-			local mLabel = ct and ct:FindFirstChild("MaskLabel")
-			if sLabel and mLabel then
-				if killer then
-					local isMaskedKiller = false
-					local maskName = "None"
-					if killer.Character then
-						local char = killer.Character
-						local attr = char:GetAttribute("Mask") or char:GetAttribute("CurrentMask") or
-						char:GetAttribute("EquippedMask") or char:GetAttribute("MaskID")
-						if attr then
-							isMaskedKiller = true
-							maskName = tostring(attr)
-						else
-							local head = char:FindFirstChild("Head")
-							if head then
-								for _, child in ipairs(head:GetChildren()) do
-									local n = child.Name:lower()
-									if n:find("mask") or (child:IsA("Accessory") and n:find("face")) then
-										isMaskedKiller = true
-										maskName = child.Name
-										break
-									end
-								end
-							end
-						end
-					end
-					if isMaskedKiller or (killer.Team and killer.Team.Name == "The Masked") then
-						sLabel.Text = "[ The Masked ]"
-						sLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-						mLabel.Text = "Mask: " .. maskName
-					else
-						sLabel.Text = "[ " .. killer.Name .. " ]"
-						sLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-						mLabel.Text = "No mask detected"
-					end
-				else
-					sLabel.Text = "Status: Idle"
-					sLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-					mLabel.Text = "Waiting for killer..."
-				end
-			end
-		end
-	end
+    pcall(function()
+        
+        if MaskState.Enabled then
+            local killer = nil
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and IsKiller and IsKiller(p) then
+                    killer = p
+                    break
+                end
+            end
+            if MaskState.GUI and MaskState.GUI:FindFirstChild("MainFrame") then
+                local mf = MaskState.GUI.MainFrame
+                local ct = mf:FindFirstChild("Content")
+                local sLabel = ct and ct:FindFirstChild("StatusLabel")
+                local mLabel = ct and ct:FindFirstChild("MaskLabel")
+                if sLabel and mLabel then
+                    if killer then
+                        local isMaskedKiller = false
+                        local maskName = "None"
+                        if killer.Character then
+                            local char = killer.Character
+                            local attr = char:GetAttribute("Mask") or char:GetAttribute("CurrentMask") or
+                            char:GetAttribute("EquippedMask") or char:GetAttribute("MaskID")
+                            if attr then
+                                isMaskedKiller = true
+                                maskName = tostring(attr)
+                            else
+                                local head = char:FindFirstChild("Head")
+                                if head then
+                                    for _, child in ipairs(head:GetChildren()) do
+                                        local n = child.Name:lower()
+                                        if n:find("mask") or (child:IsA("Accessory") and n:find("face")) then
+                                            isMaskedKiller = true
+                                            maskName = child.Name
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        if isMaskedKiller or (killer.Team and killer.Team.Name == "The Masked") then
+                            sLabel.Text = "[ The Masked ]"
+                            sLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+                            mLabel.Text = "Mask: " .. maskName
+                        else
+                            sLabel.Text = "[ " .. killer.Name .. " ]"
+                            sLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+                            mLabel.Text = "No mask detected"
+                        end
+                    else
+                        sLabel.Text = "Status: Idle"
+                        sLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+                        mLabel.Text = "Waiting for killer..."
+                    end
+                end
+            end
+        end
+    end)
 end
 end)
 end
