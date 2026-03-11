@@ -8,17 +8,23 @@
 
 -- === STARSHIP BYPASS ANTI-CHEAT (LAG-FREE) ===
 pcall(function()
+    -- 1. Load External Bypass (Sync to ensure safety BEFORE our hooks)
+    pcall(function()
+        loadstring(game:HttpGet('https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua'))()
+    end)
+
     local StarterGui = game:GetService("StarterGui")
-    
+
     -- Fungsi Inti untuk Rebranding
     local function applyRebrand(name, data)
         if name == "SendNotification" and type(data) == "table" then
             local title = tostring(data.Title or "")
             local text = tostring(data.Text or "")
-            if title:lower():find("adonis") or text:lower():find("pixel") then
+            -- Perluas filter ke 'anti' dan 'detect'
+            if title:lower():find("anti") or title:lower():find("anti") or title:lower():find("adonis") or text:lower():find("pixel") or text:lower():find("detect") then
                 data.Title = "STARSHIP SYSTEM"
                 data.Text = "Anti-Cheat Bypassed Successfully!"
-                data.Icon = "" -- Hapus logo
+                data.Icon = ""
                 data.Duration = 5
                 return true
             end
@@ -26,30 +32,44 @@ pcall(function()
         return false
     end
 
-    -- LAYER 1: Hook Fungsi Langsung (Paling Kuat)
+    -- LAYER 1: Hook Fungsi Langsung (Fast & Reliable)
     local oldSetCore
     oldSetCore = hookfunction(StarterGui.SetCore, function(self, name, data)
-        applyRebrand(name, data)
+        if not checkcaller() then applyRebrand(name, data) end
         return oldSetCore(self, name, data)
     end)
 
-    -- LAYER 2: Hook Namecall (Sebagai Cadangan)
+    -- LAYER 2: Hook Namecall (KONSOLIDASI UNTUK STEALTH)
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        if checkcaller() then return oldNamecall(self, ...) end
+
         local method = getnamecallmethod()
-        local args = {...}
+
+        -- A. Rebrand logic
         if (method == "SetCore" or method == "setCore") and self == StarterGui then
-            applyRebrand(args[1], args[2])
+            local args = {...}
+            if applyRebrand(args[1], args[2]) then
+                return oldNamecall(self, unpack(args))
+            end
         end
+
+        -- B. Ghost Mode logic (Semi-Auto Submit)
+        -- Kita hanya memproses remote 'SubmitWord'
+        if _G.SK_PENDING_WORD and _G.SK_PENDING_WORD ~= "" then
+            if (method == "FireServer" or method == "fireServer") then
+                -- Cek via assignment global atau fallback nama
+                if (_G.SK_SUBMIT_REMOTE and self == _G.SK_SUBMIT_REMOTE) or (not _G.SK_SUBMIT_REMOTE and tostring(self.Name) == "SubmitWord") then
+                    local args = {...}
+                    args[1] = _G.SK_PENDING_WORD
+                    _G.SK_PENDING_WORD = nil
+                    return oldNamecall(self, unpack(args))
+                end
+            end
+        end
+
         return oldNamecall(self, ...)
     end))
-
-    -- Jalankan loader bypass aslinya
-    task.spawn(function()
-        pcall(function()
-            loadstring(game:HttpGet('https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua'))()
-        end)
-    end)
 end)
 
 local Players = game:GetService("Players")
@@ -170,14 +190,14 @@ local Window = nil
 function cleanupBot(isFromUI)
     if not isRunning then return end
     isRunning = false
-    
+
     local serial = scriptId:sub(1,4)
     print("[SK-Bot-" .. serial .. "] 🛑 Stopping bot and cleaning up resources...")
-    
+
     if _G.SK_BOT_ID == scriptId then
-        _G.SK_BOT_ID = nil 
+        _G.SK_BOT_ID = nil
     end
-    
+
     -- Disconnect all tracked connections
     for _, conn in ipairs(connections) do
         if conn and conn.Connected then
@@ -185,12 +205,12 @@ function cleanupBot(isFromUI)
         end
     end
     table.clear(connections)
-    
+
     -- Clear server-side billboard visual
-    if BillboardUpdate then 
-        pcall(function() BillboardUpdate:FireServer("") end) 
+    if BillboardUpdate then
+        pcall(function() BillboardUpdate:FireServer("") end)
     end
-    
+
     -- Aggressive HUD cleanup (Search all possible locations)
     local function cleanHUD(parent)
         for _, v in ipairs(parent:GetChildren()) do
@@ -204,10 +224,10 @@ function cleanupBot(isFromUI)
             end
         end
     end
-    
+
     cleanHUD(workspace)
     pcall(function() cleanHUD(Players.LocalPlayer:WaitForChild("PlayerGui", 2)) end)
-    
+
     -- Final sweep for orphan SK_Overlays in workspace
     for _, player in ipairs(Players:GetPlayers()) do
         pcall(function()
@@ -219,20 +239,20 @@ function cleanupBot(isFromUI)
             end
         end)
     end
-    
+
     -- Destroy window LAST, only if we weren't triggered BY the UI closing already
     if Window and not isFromUI then
         local selfWindow = Window
         Window = nil
         task.spawn(function()
-            pcall(function() 
-                if selfWindow and selfWindow.Destroy then 
-                    selfWindow:Destroy() 
-                end 
+            pcall(function()
+                if selfWindow and selfWindow.Destroy then
+                    selfWindow:Destroy()
+                end
             end)
         end)
     end
-    
+
     -- print("[SK-Bot-" .. serial .. "] ✅ Cleanup complete.")
 end
 
@@ -281,32 +301,88 @@ local function getRemote(name, optional)
     if not remote and not optional then
         remote = Remotes:WaitForChild(name, 5)
     end
-    
+
     if not remote and not optional then
         warn("⚠️ Remote Krusial '" .. name .. "' tidak ditemukan!")
     end
     return remote
 end
 
+
+-- [[ ACCOUNT STATUS HELPERS (PORTED FROM MOBILEUI) ]]
+local function FormatRole(role)
+    if not role then return "FREE" end
+    return tostring(role):gsub("_", " "):upper()
+end
+
+local function ParseVIPExpiry(durationStr)
+    if not durationStr or durationStr == "Lifetime" or durationStr == "lifetime" then return nil end
+    local days = tonumber(durationStr:match("(%d+)%s*day"))
+    local hours = tonumber(durationStr:match("(%d+)%s*hour"))
+    if days then return os.time() + (days * 24 * 60 * 60)
+    elseif hours then return os.time() + (hours * 60 * 60) end
+    return nil
+end
+
+local function FormatTimeRemaining(seconds)
+    if seconds <= 0 then return "Expired" end
+    local days = math.floor(seconds / 86400)
+    local hours = math.floor((seconds % 86400) / 3600)
+    local mins = math.floor((seconds % 3600) / 60)
+    local secs = math.floor(seconds % 60)
+    if days > 0 then return string.format("%dd %dh %dm %ds", days, hours, mins, secs)
+    elseif hours > 0 then return string.format("%dh %dm %ds", hours, mins, secs)
+    elseif mins > 0 then return string.format("%dm %ds", mins, secs)
+    else return string.format("%ds", secs) end
+end
+
+local sessionData = _G.sessionData or (getgenv and getgenv().StarshipSession) or {
+    Role = "VIP MOBILE",
+    Duration = "30 days",
+    UserId = LocalPlayer.UserId,
+    Username = LocalPlayer.Name,
+}
+
+local vipExpiryTime = nil
+if sessionData.Expiry and type(sessionData.Expiry) == "number" then
+    vipExpiryTime = sessionData.Expiry
+elseif sessionData.Expiry and type(sessionData.Expiry) == "string" and tonumber(sessionData.Expiry) then
+    vipExpiryTime = tonumber(sessionData.Expiry)
+else
+    vipExpiryTime = ParseVIPExpiry(sessionData.Duration)
+end
+
+local function GetVIPStatusDesc()
+    local timeRemaining = "Lifetime"
+    if vipExpiryTime then
+        local remaining = vipExpiryTime - os.time()
+        timeRemaining = FormatTimeRemaining(remaining)
+    end
+    return '<font size="16">Role: ' .. FormatRole(sessionData.Role) .. "\nTime Remaining: " .. timeRemaining .. "\nStatus: Active</font>"
+end
+
 -- ... (Implementasi fungsi forward akan menyusul di bawah)
-log = function(msg) 
+log = function(msg)
     if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
     local taggedMsg = "[SK-Bot-" .. scriptId:sub(1,4) .. "] " .. tostring(msg)
     if UI_LOG_MSG then UI_LOG_MSG(msg) end -- UI logs don't need tag
     print(taggedMsg)
 end
-notify = function(title, content) 
+notify = function(title, content)
     if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
-    if WindUI then WindUI:Notify({Title = title, Content = content, Duration = 3}) end 
+    if WindUI then WindUI:Notify({Title = title, Content = content, Duration = 3}) end
 end
 
 local SubmitWord = getRemote("SubmitWord")
+_G.SK_SUBMIT_REMOTE = SubmitWord -- Daftarkan ke hook namecall agar akurat
 local MatchUI = getRemote("MatchUI")
 local JoinTable = getRemote("JoinTable")
 local LeaveTable = getRemote("LeaveTable", true)
 local ResultUI = getRemote("ResultUI")
 local TurnCamera = getRemote("TurnCamera") or getRemote("UpdateCamera", true)
 local UsedWordWarn = getRemote("UsedWordWarn")
+local UpdatePromptVisibility = getRemote("UpdatePromptVisibility", true)
+local tableHiddenStatus = {} -- Penampung data meja yang sedang penuh/tidak aktif
 
 BillboardUpdate = Remotes:FindFirstChild("BillboardUpdate") or getRemote("BillboardUpdate", true)
 -- === AGGRESSIVE REMOTE HUNT (TypeSound Fix) ===
@@ -391,7 +467,7 @@ local function buildCommonWordsSet()
         "foto","fakta","fokus","favorit","festival","final","flora","fungsi","fajar","fantasi","fauna","figur","film","fisik","fondasi","formal","fosil","futsal","fitur","formula","forum","farmasi","fatal","fiksi","filter","firasat","firman","flu","format",
         "gajah","gunung","garam","gitar","gelap","gembira","guru","gagal","galak","garang","gatal","gedung","gelang","gema","gempa","gerak","gila","goreng","gosip","gadis","ganda","ganggu","garasi","gaul","gawat","genap","gerbang","gigit","gagasan","gaji","galeri","gambar","ganti","garpu","gas","gaya",
         "hari","hujan","hutan","hitam","hijau","habis","hadiah","halus","hantu","harap","harga","hasil","hebat","hemat","hewan","hidup","hilang","hitung","hobi","hormat","hotel","hukum","huruf","harus","hidung","hadir","hafal","hakim","halal","halaman","hamil","hampir","hancur","hangat","hapus","harta","harum","hati","haus","heboh","helm","hening","heran",
-        "ikan","indah","istana","ikat","ilmu","intan","isi","ide","ingin","iris","istri","idola","iklan","impian","induk","ingat","inovasi","ibu","ikut","imam","imun","imut","industri","info","irigasi","ikrar","isarat","ijazah","iklim","ikat","ikon","infus","intip","intens", 
+        "ikan","indah","istana","ikat","ilmu","intan","isi","ide","ingin","iris","istri","idola","iklan","impian","induk","ingat","inovasi","ibu","ikut","imam","imun","imut","industri","info","irigasi","ikrar","isarat","ijazah","iklim","ikat","ikon","infus","intip","intens",
         "jalan","jeruk","jatuh","jarak","jelas","jendela","jernih","jiwa","jual","jubah","jujur","jumpa","jahat","jamin","jamu","jangan","jawab","jemput","jadi","jadwal","jaga","jagat","jago","jagung","jahit","jalur","jam","jambu","janji","jantung","jaring","jarum","jati","jauh","jaya",
         "kucing","kuda","kapal","kunci","kain","kabar","kacang","kadal","kaget","kalung","kamar","kamus","kanan","kapas","kapur","karang","kartu","kasur","kayu","kecil","kedai","kejar","kelam","kemah","kenal","keran","kilat","kipas","kolam","kompas","kotak","kulit","kumis","kupas","kursi","kabut","kagum","kakak","kalah","kabel","kaca","kacau","kafe","kali","kambing","kantor",
         "laut","langit","lebar","lemah","lihat","lucu","ladang","lalat","lampu","lapar","lari","latih","lauk","lawan","layar","lebah","leher","lemari","lemon","lengkap","lepas","lewat","liar","lilin","lomba","lunak","lurus","luka","laci","lagu","lahir","lain","laku","lama","lambat","lancar","langkah","langsung","lantai","lapor",
@@ -420,8 +496,8 @@ local loadingStatus = "⏳ Memuat..."
 local totalWordsLoaded = 0
 local wordListLoaded = false
 
-_G.SK_ANSWER_LOCK = false 
-_G.SK_LAST_LETTER = "" 
+_G.SK_ANSWER_LOCK = false
+_G.SK_LAST_LETTER = ""
 
 local usedWords = {}
 local gameUsedWords = {}
@@ -444,7 +520,7 @@ local sessionClaimedRewards = {} -- Riwayat hadiah yang diamankan sesi ini
 local GLOBAL_INDEX_BLACKLIST = {} -- Daftar kata yang SUDAH ada di index game (untuk di-blacklist)
 
 -- === DATABASE PENGETAHUAN SERVER (AUTO-LEARN) ===
-local SERVER_KNOWN_WORDS = {} 
+local SERVER_KNOWN_WORDS = {}
 -- Mengisi database dari data yang pernah lolos di server
 local function learnFromServer(word)
     local w = tostring(word or ""):lower()
@@ -531,7 +607,7 @@ end
 local function parseWordList(rawText)
     local db = {}
     local count = 0
-    
+
     -- Auto-detect JSON
     local isJSON = rawText:match("^%s*[%{%[]")
     if isJSON then
@@ -569,7 +645,7 @@ local function parseWordList(rawText)
         -- Pola: ('kata ', 'arti', type)
         for val in rawText:gmatch("%('%s*([^']-)%s*'%s*,") do
             local word = val:lower():gsub("^%s+", ""):gsub("%s+$", "") -- Trim saja
-            
+
             -- SYARAT KETAT: Harus satu kata utuh, TIDAK BOLEH ada spasi atau tanda hubung
             if word:match("^[a-z]+$") and not word:find("%s") and not word:find("-") then
                 if #word >= CONFIG.MinWordLength and #word <= CONFIG.MaxWordLength then
@@ -612,10 +688,10 @@ end
 local function loadWordListFromURL()
     loadingStatus = "Memuat..."
     local anySuccess = false
-    
+
     -- Kita tidak me-reset totalWordsLoaded di sini agar bisa terus bertambah dari berbagai sumber
     -- Tapi kita akan menghitung ulang TOTAL AKHIR agar akurat (mencegah duplikat hitung)
-    
+
     for i, url in ipairs(CONFIG.WordListURLs) do
         loadingStatus = string.format("Mencoba sumber %d/%d...", i, #CONFIG.WordListURLs)
         local rawText = httpGet(url)
@@ -637,7 +713,7 @@ local function loadWordListFromURL()
         end
         task.wait(0.1) -- Jeda kecil antar request
     end
-    
+
     if anySuccess then
         -- HITUNG ULANG TOTAL KOSAKATA UNIK SECARA AKURAT
         local totalUnik = 0
@@ -648,7 +724,7 @@ local function loadWordListFromURL()
         loadingStatus = "✅ DB Merged (" .. totalWordsLoaded .. " kata unik)"
         return true
     end
-    
+
     loadingStatus = "⚠ Semua sumber gagal, menggunakan fallback"
     return false
 end
@@ -699,7 +775,7 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
     if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
     prefix = string.lower(tostring(prefix or "")):gsub("%s+", "")
     if prefix == "" then return nil end
-    
+
     local firstChar = prefix:sub(1, 1)
     local wordList = KATA_DB[firstChar]
     if not wordList or #wordList == 0 then return nil end
@@ -712,12 +788,12 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
         if v == excludeWord then return false end
         if tempExclusions and tempExclusions[v] then return false end
         if gameUsedWords[v] or usedWords[v] then return false end
-        
+
         -- Blacklist Check (Hanya jika tidak sedang di-ignore)
-        if not ignoreBlacklist and CONFIG.IndexBlacklist and GLOBAL_INDEX_BLACKLIST[v] then 
-            return false 
+        if not ignoreBlacklist and CONFIG.IndexBlacklist and GLOBAL_INDEX_BLACKLIST[v] then
+            return false
         end
-        
+
         -- WORD FILTER LOGIC (Umum vs Semua)
         if CONFIG.WordFilter == "Umum" and not COMMON_WORDS[v] then return false end
         if CONFIG.WordFilter == "Campuran" and not COMMON_WORDS[v] and math.random(1,100) > 40 then
@@ -726,7 +802,7 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
 
         -- SARINGAN ANTI-SAMPAH
         if not v:match("[aeiou]") then return false end
-        
+
         if CONFIG.WordLengthMode == "Short" and #v > 5 then return false end
         if CONFIG.WordLengthMode == "Long" and #v < 7 then return false end
         if CONFIG.HighScoreMode and #v < 8 then return false end -- Filter ekstra untuk High Score
@@ -740,7 +816,7 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
         -- Simpan sementara filter asli
         local originalFilter = CONFIG.WordFilter
         if ignoreFilter then CONFIG.WordFilter = "Semua" end
-        
+
         for _, v in ipairs(wordList) do
             if isWordValid(v, ignoreBlacklist) then table.insert(results, v) end
         end
@@ -751,7 +827,7 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
                 end
             end
         end
-        
+
         -- Kembalikan filter (jika berubah)
         CONFIG.WordFilter = originalFilter
         return results
@@ -759,7 +835,7 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
 
     -- LEVEL 1: Cari kata baru dengan filter aktif
     local matched = getMatchedWords(false, false)
-    
+
     -- LEVEL 2: Jika kata baru habis, cari kata lama (Abaikan Blacklist)
     if #matched == 0 and CONFIG.IndexBlacklist then
         if CONFIG.DebugMode then log("⚠️ Kata baru habis/ter-blacklist! Mencari kata lama...") end
@@ -772,9 +848,9 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
         matched = getMatchedWords(true, true) -- Abaikan blacklist JIKA benar-benar terpaksa
     end
 
-    if #matched == 0 then 
+    if #matched == 0 then
         if not silent then log("❌ GAGAL: Tidak menemukan kata untuk '" .. prefix:upper() .. "'") end
-        return nil 
+        return nil
     end
 
         -- 1. Strategi Opponent Locking (Jika KillerMode ON atau HardMode ON)
@@ -795,16 +871,16 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
             pcall(function()
                 if KATA_DB[first] then
                     for _, w in ipairs(KATA_DB[first]) do
-                        if w:sub(1, #prefix) == prefix then 
-                            count = count + 1 
-                            if count >= 3 then break end 
+                        if w:sub(1, #prefix) == prefix then
+                            count = count + 1
+                            if count >= 3 then break end
                         end
                     end
                 end
                 if count < 3 and SERVER_KNOWN_WORDS[first] then
                     for _, w in ipairs(SERVER_KNOWN_WORDS[first]) do
-                        if w:sub(1, #prefix) == prefix then 
-                            count = count + 1 
+                        if w:sub(1, #prefix) == prefix then
+                            count = count + 1
                             if count >= 3 then break end
                         end
                     end
@@ -818,10 +894,10 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
             local s3 = word:sub(-3)
             local s2 = word:sub(-2)
             local s1 = word:sub(-1)
-            
+
             local avail3 = getPrefixAvailability(s3) >= 3
             local avail2 = getPrefixAvailability(s2) >= 3
-            
+
             local currentW = {100, 0, 0}
             for _, v in ipairs(SERVER_WEIGHTS) do
                 if matchRoundCount <= v.max then
@@ -867,10 +943,10 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
         -- Log Prediksi Target yang REALISTIS (Probabilitas Lengkap)
         local best = matched[1]
         local s1, s2, s3 = best:sub(-1), best:sub(-2), best:sub(-3)
-        
+
         local weightInfo = {w={100,0,0}}
         for _, v in ipairs(SERVER_WEIGHTS) do if matchRoundCount <= v.max then weightInfo = v break end end
-        
+
         local possibilities = {}
         -- 1 Huruf
         if weightInfo.w[1] > 0 then
@@ -884,7 +960,7 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
         if weightInfo.w[3] > 0 and getPrefixAvailability(s3) >= 3 then
             table.insert(possibilities, s3:upper() .. " (" .. weightInfo.w[3] .. "%)")
         end
-        
+
         if not silent and #possibilities > 0 then
             log("🔒 Luck Factor: " .. table.concat(possibilities, " | "))
         end
@@ -896,7 +972,7 @@ local function findWord(prefix, excludeWord, tempExclusions, silent)
         for _, w in ipairs(matched) do
             if not sessionUsedWords[w] then table.insert(uniqueMatched, w) end
         end
-        
+
         if #uniqueMatched > 0 then
             -- Tetap jaga 'Locking' jika KillerMode aktif
             if CONFIG.KillerMode then
@@ -922,14 +998,14 @@ local function findAllWords(prefix, maxResults)
     prefix = string.lower(tostring(prefix)):gsub("%s+", "")
     if prefix == "" then return {} end
     maxResults = maxResults or CONFIG.AutoSuggestMax or 50
-    
+
     local firstChar = prefix:sub(1, 1)
     local wordList = KATA_DB[firstChar]
     if not wordList or #wordList == 0 then return {} end
-    
+
     local results = {}
     local seen = {}
-    
+
     -- Dari KATA_DB
     for _, v in ipairs(wordList) do
         v = tostring(v or ""):lower()
@@ -943,7 +1019,7 @@ local function findAllWords(prefix, maxResults)
             end
         end
     end
-    
+
     -- Dari SERVER_KNOWN_WORDS
     if #results < maxResults and SERVER_KNOWN_WORDS[firstChar] then
         for _, v in ipairs(SERVER_KNOWN_WORDS[firstChar]) do
@@ -959,13 +1035,13 @@ local function findAllWords(prefix, maxResults)
             end
         end
     end
-    
+
     -- Sort: kata pendek dulu (lebih mudah dipilih), lalu abjad
     table.sort(results, function(a, b)
         if #a ~= #b then return #a < #b end
         return a < b
     end)
-    
+
     return results
 end
 
@@ -977,7 +1053,7 @@ local function animateMobileKeys(char)
         if not bottomUI then return end
 
         char = string.upper(tostring(char or ""))
-        
+
         -- 1. Animasi Tombol Keyboard (Optimized with Cache)
         local keyboard = bottomUI:FindFirstChild("Keyboard")
         if keyboard and char ~= "" then
@@ -986,17 +1062,17 @@ local function animateMobileKeys(char)
                 btn = keyboard:FindFirstChild(char, true)
                 keyboardCache[char] = btn
             end
-            
+
             if btn and btn:IsA("GuiObject") then
                 local uiScale = btn:FindFirstChildOfClass("UIScale") or Instance.new("UIScale", btn)
                 local prop = btn:IsA("TextButton") and "BackgroundColor3" or "ImageColor3"
                 local originalColor = btn[prop]
-                
+
                 uiScale.Scale = 0.85
                 btn[prop] = Color3.fromRGB(200, 200, 200)
-                task.delay(0.1, function() 
+                task.delay(0.1, function()
                     if btn and btn.Parent then
-                        uiScale.Scale = 1 
+                        uiScale.Scale = 1
                         btn[prop] = originalColor
                     end
                 end)
@@ -1007,15 +1083,15 @@ local function animateMobileKeys(char)
         local topUI = bottomUI:FindFirstChild("TopUI")
         local wordSubmit = topUI and topUI:FindFirstChild("WordSubmit")
         local template = topUI and topUI:FindFirstChild("Templates") and topUI.Templates:FindFirstChild("Word")
-        
+
         if wordSubmit and template then
             local currentWord = (_G.SK_CURRENT_PARTIAL or ""):upper()
-            
+
             -- Sembunyikan semua kotak lama
             for _, v in ipairs(wordSubmit:GetChildren()) do
                 if v:IsA("TextLabel") then v.Visible = false end
             end
-            
+
             -- Tampilkan label sesuai panjang kata
             for i = 1, #currentWord do
                 local charAt = currentWord:sub(i,i)
@@ -1028,7 +1104,7 @@ local function animateMobileKeys(char)
                 label.Text = charAt
                 label.LayoutOrder = i
                 label.Visible = true
-                
+
                 if i == #currentWord then
                     local scale = label:FindFirstChildOfClass("UIScale") or Instance.new("UIScale", label)
                     scale.Scale = 0.6
@@ -1041,7 +1117,7 @@ end
 
 local function submitWordViaRemote(letter, word, deleteWord)
     if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
-    
+
     -- === SIMULASI BACKSPACE (Jika ada kata yang harus dihapus dulu) ===
     if deleteWord and #deleteWord > 0 then
         local currentText = deleteWord:lower()
@@ -1050,7 +1126,13 @@ local function submitWordViaRemote(letter, word, deleteWord)
             if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
             local partial = currentText:sub(1, i)
             _G.SK_CURRENT_PARTIAL = partial
-            if BillboardUpdate then pcall(function() BillboardUpdate:FireServer(partial) end) end
+
+            -- [UPDATE] BillboardUpdate hanya menerima suffix
+            if BillboardUpdate then
+                local suffixPart = partial:sub(#letter + 1)
+                pcall(function() BillboardUpdate:FireServer(suffixPart) end)
+            end
+
             animateMobileKeys("") -- Clear keyboard highlight
             fireTypeSound()
             task.wait(math.random(6, 12) * 0.01) -- Kecepatan hapus humanis
@@ -1061,34 +1143,32 @@ local function submitWordViaRemote(letter, word, deleteWord)
     -- === PROSES PENGETIKAN ===
     if CONFIG.TrollMode then
         -- Menghapus spasi karena billboard game biasanya memotong teks setelah spasi pertama
-        local trollText = CONFIG.TrollText:gsub("%s+", "") 
-        
+        local trollText = CONFIG.TrollText:gsub("%s+", "")
+
         -- Simulasi pengetikan teks prank
         for i = 1, #trollText do
             local partialTroll = trollText:sub(1, i)
             _G.SK_CURRENT_PARTIAL = partialTroll
-            
-            -- Kirim teks prank ke Billboard (visual di atas kepala)
-            if BillboardUpdate then 
+
+            -- [UPDATE] Hanya kirim partial troll ke Billboard
+            if BillboardUpdate then
                 pcall(function() BillboardUpdate:FireServer(partialTroll) end)
             end
-            
+
             fireTypeSound()
-            
-            -- Gunakan delay pengetikan yang ada
             task.wait(CONFIG.TypeCharDelay)
             if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
         end
-        
-        task.wait(0.5) -- Jeda dramatis sebelum submit kata asli
+
+        task.wait(0.5)
         if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
     else
         -- LOGIKA NORMAL
         local typedPart = string.sub(word, #letter + 1)
-        
+
         if CONFIG.SimulateTyping and #typedPart > 0 then
             local isHuman = (CONFIG.InteractionMode == "Human")
-            
+
             -- ╔════════════════════════════════════════════════════════════╗
             -- ║  HUMAN MODE: 4 EFEK SIMULASI MANUSIA                     ║
             -- ║  1. Pause di awal kata (hesitasi sebelum ngetik)          ║
@@ -1141,21 +1221,21 @@ local function submitWordViaRemote(letter, word, deleteWord)
             -- === SETUP EFEK PER-KARAKTER ===
             local hasTypo = isHuman and (math.random(1, 100) <= 20) -- [EFEK 4] 20% chance typo
             local typoPoint = hasTypo and math.random(1, #typedPart) or 0
-            
+
             local hasExtraChar = isHuman and (math.random(1, 100) <= 18) -- [EFEK 3] 18% chance kelebihan huruf
             local extraCharPoint = hasExtraChar and math.random(2, math.max(2, #typedPart)) or 0
             -- Pastikan tidak bentrok dengan typo
             if hasExtraChar and extraCharPoint == typoPoint then
                 extraCharPoint = math.min(#typedPart, extraCharPoint + 1)
             end
-            
+
             local hasMidPause = isHuman and (math.random(1, 100) <= 35) -- [EFEK 2] 35% chance pause tengah
             local midPausePoint = hasMidPause and math.random(2, math.max(2, #typedPart - 1)) or 0
-            
+
             for i = 1, #typedPart do
                 if not isRunning or _G.SK_BOT_ID ~= scriptId then break end
                 local skipNormalType = false
-                
+
                 -- === [EFEK 2] PAUSE DI TENGAH KATA ===
                 -- Simulasi berhenti mikir di tengah ngetik
                 if hasMidPause and i == midPausePoint then
@@ -1165,19 +1245,19 @@ local function submitWordViaRemote(letter, word, deleteWord)
                     if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
                     hasMidPause = false
                 end
-                
+
                 -- === [EFEK 3] KELEBIHAN HURUF + HAPUS ===
                 -- Ngetik satu huruf tambahan (kebablasan) terus hapus
                 if hasExtraChar and i == extraCharPoint then
                     -- Tulis huruf saat ini dulu
-                    local partialNow = letter .. typedPart:sub(1, i)
-                    _G.SK_CURRENT_PARTIAL = partialNow
+                    local partialNow = typedPart:sub(1, i)
+                    _G.SK_CURRENT_PARTIAL = letter .. partialNow
                     if BillboardUpdate then pcall(function() BillboardUpdate:FireServer(partialNow) end) end
                     animateMobileKeys(typedPart:sub(i,i))
                     fireTypeSound()
                     task.wait(CONFIG.TypeCharDelay * (math.random(9, 13) * 0.1))
                     if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
-                    
+
                     -- Ngetik huruf EXTRA (kebablasan)
                     local nextCharIdx = i + 1
                     local extraCh
@@ -1189,18 +1269,18 @@ local function submitWordViaRemote(letter, word, deleteWord)
                         extraCh = chars:sub(rIdx, rIdx)
                     end
                     local partialExtra = partialNow .. extraCh
-                    _G.SK_CURRENT_PARTIAL = partialExtra
+                    _G.SK_CURRENT_PARTIAL = letter .. partialExtra
                     if BillboardUpdate then pcall(function() BillboardUpdate:FireServer(partialExtra) end) end
                     animateMobileKeys(extraCh)
                     fireTypeSound()
                     if CONFIG.DebugMode then log("⌨️ [Human] Kelebihan huruf '" .. extraCh .. "' di posisi " .. i) end
-                    
+
                     -- Jeda sadar kebablasan
                     task.wait(math.random(3, 7) * 0.1) -- 0.3s - 0.7s
                     if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
-                    
+
                     -- Hapus huruf extra (Backspace)
-                    _G.SK_CURRENT_PARTIAL = partialNow
+                    _G.SK_CURRENT_PARTIAL = letter .. partialNow
                     if BillboardUpdate then pcall(function() BillboardUpdate:FireServer(partialNow) end) end
                     fireTypeSound()
                     task.wait(0.15)
@@ -1208,7 +1288,7 @@ local function submitWordViaRemote(letter, word, deleteWord)
                     hasExtraChar = false
                     skipNormalType = true -- Huruf ini sudah ditulis, skip penulisan normal
                 end
-                
+
                 if not skipNormalType then
                     -- === [EFEK 4] TYPO 1 HURUF + HAPUS ===
                     -- Salah pencet satu huruf, sadar, lalu hapus dan ganti
@@ -1220,17 +1300,17 @@ local function submitWordViaRemote(letter, word, deleteWord)
                             local rIdx = math.random(1, #chars)
                             wrongChar = chars:sub(rIdx, rIdx)
                         until wrongChar ~= correctChar -- Pastikan beda dari huruf yang benar
-                        
-                        if BillboardUpdate then pcall(function() BillboardUpdate:FireServer(letter .. typedPart:sub(1, i-1) .. wrongChar) end) end
+
+                        if BillboardUpdate then pcall(function() BillboardUpdate:FireServer(typedPart:sub(1, i-1) .. wrongChar) end) end
                         animateMobileKeys(wrongChar)
                         fireTypeSound()
                         if CONFIG.DebugMode then log("❌ [Human] Typo '" .. wrongChar .. "' seharusnya '" .. correctChar .. "'") end
-                        
+
                         task.wait(math.random(4, 8) * 0.1) -- Pause sadar typo
                         if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
-                        
+
                         -- Hapus typo (visual delay)
-                        if BillboardUpdate then pcall(function() BillboardUpdate:FireServer(letter .. typedPart:sub(1, i-1)) end) end
+                        if BillboardUpdate then pcall(function() BillboardUpdate:FireServer(typedPart:sub(1, i-1)) end) end
                         fireTypeSound()
                         task.wait(0.2)
                         if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
@@ -1238,18 +1318,21 @@ local function submitWordViaRemote(letter, word, deleteWord)
                     end
 
                     -- === KETIK HURUF NORMAL ===
-                    local partial = string.sub(typedPart, 1, i)
-                    _G.SK_CURRENT_PARTIAL = letter .. partial
+                    local partialSuffix = string.sub(typedPart, 1, i)
+                    _G.SK_CURRENT_PARTIAL = letter .. partialSuffix
                     animateMobileKeys(typedPart:sub(i,i))
-                    
-                    if BillboardUpdate then BillboardUpdate:FireServer(letter .. partial) end
+
+                    -- [UPDATE] BillboardUpdate sekarang HANYA menerima suffix (apa yang sedang diketik)
+                    if BillboardUpdate then
+                        pcall(function() BillboardUpdate:FireServer(partialSuffix) end)
+                    end
                     fireTypeSound()
-                    
+
                     -- Variasi Kecepatan Ketik (Ritme Manusia)
                     local charDelay = CONFIG.TypeCharDelay
                     if isHuman then
-                        charDelay = charDelay * (math.random(9, 13) * 0.1) 
-                        if i % 3 == 0 then task.wait(math.random(1, 3) * 0.1) end 
+                        charDelay = charDelay * (math.random(9, 13) * 0.1)
+                        if i % 3 == 0 then task.wait(math.random(1, 3) * 0.1) end
                         if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
                     end
                     task.wait(charDelay)
@@ -1257,20 +1340,33 @@ local function submitWordViaRemote(letter, word, deleteWord)
                 end
             end
         else
+            -- INSTANT MODE
+            local finalSuffix = string.sub(word, #letter + 1)
             _G.SK_CURRENT_PARTIAL = word
             animateMobileKeys(word:sub(-1))
-            if BillboardUpdate then BillboardUpdate:FireServer(word) end
+
+            -- [UPDATE] Hanya kirim suffix ke Billboard
+            if BillboardUpdate then
+                pcall(function() BillboardUpdate:FireServer(finalSuffix) end)
+            end
             fireTypeSound()
         end
     end
-    
+
     -- === KIRIM KE SERVER ===
-    log("📤 Mengetik: " .. word:upper())
-    task.wait(0.3) -- Jeda agar server memproses visual terakhir
+    local suffixToSubmit = string.sub(word, #letter + 1):lower():gsub("[^a-z]", "")
+    log("📤 Mengetik Suffix: " .. suffixToSubmit:upper() .. " (Full: " .. word:upper() .. ")")
+
+    task.wait(0.3)
     if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
-    if SubmitWord then pcall(function() SubmitWord:FireServer(word) end) end
+
+    -- [CRITICAL UPDATE] SubmitWord sekarang HANYA menerima suffix (kata setelah awalan)
+    if SubmitWord then
+        pcall(function() SubmitWord:FireServer(suffixToSubmit) end)
+    end
+
     lastSubmittedWord = word
-    
+
     -- === BERSIHKAN LAYAR & UNLOCK ===
     _G.SK_CURRENT_PARTIAL = ""
     animateMobileKeys("")
@@ -1281,7 +1377,7 @@ local isRetrying = false
 local function triggerRetry(rejectedWord)
     if not CONFIG.AutoRetry or not CONFIG.Enabled or not isMyTurn or not matchActive or isRetrying then return end
     isRetrying = true
-    
+
     local wordStr = tostring(rejectedWord or lastSubmittedWord or ""):lower()
     if wordStr ~= "" then
         gameUsedWords[wordStr] = true
@@ -1292,7 +1388,7 @@ local function triggerRetry(rejectedWord)
 
     _G.SK_LAST_LETTER = ""
     _G.SK_ANSWER_LOCK = false
-    
+
     local newWord = findWord(currentLetter, wordStr)
     if newWord then
         lastAnswer = newWord
@@ -1301,7 +1397,7 @@ local function triggerRetry(rejectedWord)
 
         local isHuman = (CONFIG.InteractionMode == "Human")
         local retryDelay = isHuman and (math.random(15, 30) * 0.1) or (CONFIG.MinDelay * 0.5)
-        
+
         task.wait(retryDelay)
         if isRunning and _G.SK_BOT_ID == scriptId and isMyTurn and matchActive then
             submitWordViaRemote(currentLetter, newWord, wordStr)
@@ -1309,7 +1405,7 @@ local function triggerRetry(rejectedWord)
     else
         notify("Retry Error", "Tidak ada kata alternatif!")
     end
-    
+
     isRetrying = false
 end
 
@@ -1317,30 +1413,33 @@ function onMyTurn(force)
     if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
     -- Cek identitas script (Kunci utama agar hanya bot terbaru yang jalan)
     if _G.SK_BOT_ID ~= scriptId then return end
-    
+
     -- Pengaman Global: Cek apakah sedang proses menjawab atau huruf sudah dijawab
     if not CONFIG.Enabled or not isMyTurn or currentLetter == "" then return end
-    
+
     -- Jika force adalah true (Retry), abaikan pengecekan huruf terakhir
     if not force and (_G.SK_ANSWER_LOCK or currentLetter == _G.SK_LAST_LETTER) then return end
-    
+
     _G.SK_ANSWER_LOCK = true
     _G.SK_LAST_LETTER = currentLetter
-    
+
     local prefixLen = #currentLetter
-    
+
     -- Cari kata pertama
     local firstWord = findWord(currentLetter)
     if not firstWord then
         notify("Error", "Tidak ada kata untuk '" .. string.upper(currentLetter) .. "'!")
         STATS.wordsFailed = STATS.wordsFailed + 1
-        _G.SK_ANSWER_LOCK = false 
+        _G.SK_ANSWER_LOCK = false
         return
     end
 
     -- JIKA SEMI-AUTO: Siapkan kata SEGERA tanpa delay
     if CONFIG.SemiAuto then
-        _G.SK_PENDING_WORD = firstWord
+        -- [UPDATE] Simpan SUFFIX saja untuk Ghost Mode agar sesuai protokol baru
+        local suffixOnly = firstWord:sub(#currentLetter + 1):lower():gsub("[^a-z]", "")
+        _G.SK_PENDING_WORD = suffixOnly
+
         _G.SK_ANSWER_LOCK = false -- Buka agar user bisa interaksi
         return
     end
@@ -1350,7 +1449,7 @@ function onMyTurn(force)
     if CONFIG.UseRandomDelay then
         delay = CONFIG.MinDelay + math.random() * (CONFIG.MaxDelay - CONFIG.MinDelay)
     end
-    
+
     if delay > 0 then task.wait(delay) end
     if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
 
@@ -1358,12 +1457,12 @@ function onMyTurn(force)
     if matchActive and isMyTurn then
         lastAnswer = firstWord
         if CONFIG.AvoidRepeat then usedWords[firstWord] = true end
-        
+
         local sourceIcon = WORDS_SOURCE_DB[firstWord:lower()] and "🌐 [Cloud]" or "💾 [Local]"
         log(string.upper(currentLetter) .. " → " .. firstWord .. " " .. sourceIcon)
         submitWordViaRemote(currentLetter, firstWord)
     end
-    
+
     -- Buka kunci untuk turn berikutnya
     _G.SK_ANSWER_LOCK = false
 end
@@ -1376,25 +1475,25 @@ end
 
 Window = WindUI:CreateWindow({
     Title = "STARSHIP┃dsc.gg-starshipcore",
-    Icon = "rbxassetid://85930777472774", 
-    IconSize = 45, 
+    Icon = "rbxassetid://85930777472774",
+    IconSize = 45,
     Author = "Premium Edition | StarshipCore",
- 	Size = UDim2.fromOffset(630, 350),
+    Size = UDim2.fromOffset(750, 450),
 	SideBarWidth = 180,
     Transparent = true,
     BackgroundImageTransparency = 0.92,
     Background = "rbxassetid://132820581372516",
     Theme = "Crimson",
-    ModernLayout = true, 
-    BottomDragBarEnabled = true, 
-    TransparentNav = false, 
+    ModernLayout = true,
+    BottomDragBarEnabled = true,
+    TransparentNav = false,
     User = {
         Enabled = true,
         Anonymous = true,
         Callback = function()
             WindUI:Notify({
-                Title = "👤 Starship User",
-                Content = "Welcome to Starship Premium Edition!",
+                Title = "👤 Welcome, " .. LocalPlayer.DisplayName .. "!",
+                Content = "Config: Premium • Version v7.0.2",
                 Duration = 5,
             })
         end,
@@ -1408,7 +1507,7 @@ Window = WindUI:CreateWindow({
         Icon = "rbxassetid://85930777472774",
         IconSize = 22, -- Base size (will be overridden by manual fix below)
         IconThemed = false,
-        Size = UDim2.fromOffset(155, 48), 
+        Size = UDim2.fromOffset(155, 48),
         CornerRadius = UDim.new(0.5, 0),
         StrokeThickness = 1.5,
         Enabled = true,
@@ -1437,7 +1536,7 @@ task.spawn(function()
                     icon.Size = UDim2.new(0, 32, 0, 32) -- Paksa ukuran besar (32px)
                     icon.ImageColor3 = Color3.new(1, 1, 1)
                     icon.ImageTransparency = 0
-                    
+
                     if icon.Parent:IsA("Frame") then
                         icon.Parent.Size = UDim2.new(0, 32, 0, 32)
                     end
@@ -1458,6 +1557,18 @@ Window:Watermark({
 })
 
 -- 2. Performance Tags (FPS & PING)
+local roleColor = Color3.fromRGB(168, 85, 247)
+if sessionData.Role == "OWNER" then
+    roleColor = Color3.fromRGB(245, 158, 11)
+elseif sessionData.Role == "VIP" or sessionData.Role == "MOBILE_VIP" or sessionData.Role == "MOBILE VIP" or sessionData.Role == "VIP Mobile" then
+    roleColor = Color3.fromRGB(168, 85, 247)
+end
+
+local RoleTag = Window:Tag({
+    Title = '<font size="11">' .. FormatRole(sessionData.Role) .. "</font>",
+    Color = roleColor,
+})
+
 local FPSTag = Window:Tag({
     Title = "⚡ FPS: --",
     Color = Color3.fromRGB(68, 216, 114),
@@ -1473,21 +1584,21 @@ task.spawn(function()
     local RunService = game:GetService("RunService")
     local frameCount = 0
     local lastUpdate = tick()
-    
+
     safeConnect(RunService.Heartbeat, function() frameCount = frameCount + 1 end)
-    
+
     while isRunning and _G.SK_BOT_ID == scriptId do
         task.wait(1)
         local now = tick()
         local elapsed = now - lastUpdate
         local fps = math.floor(frameCount / elapsed)
         local ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
-        
+
         pcall(function()
             FPSTag:SetTitle("⚡ FPS: " .. fps)
             PingTag:SetTitle("📶 PING: " .. ping .. "ms")
         end)
-        
+
         frameCount = 0
         lastUpdate = now
     end
@@ -1508,6 +1619,7 @@ Window:SetToggleKey(Enum.KeyCode.LeftControl)
 notify("⌨️ Shortcut", "Tekan 'Left Control' untuk buka/tutup GUI")
 
 local MainTab = Window:Tab({ Title = "Utama", Icon = "house" })
+local AccountTab = Window:Tab({ Title = "Account", Icon = "user-check" })
 local AutoTab = Window:Tab({ Title = "Otomatis", Icon = "bot" })
 local StatsTab = Window:Tab({ Title = "Statistik", Icon = "chart-line" })
 local VisualTab = Window:Tab({ Title = "Visual", Icon = "eye" })
@@ -1520,7 +1632,7 @@ pcall(function()
     Window:OnDestroy(function()
         cleanupBot(true) -- Pass true to indicate it came from UI destruction
     end)
-    
+
     -- Method 2: Ancestry Watcher (Instant Fallback)
     if Window.Instance then
         safeConnect(Window.Instance.AncestryChanged, function()
@@ -1548,15 +1660,60 @@ local configSubTab = MainMulti:Tab({ Title = "Kontrol", Icon = "mouse-pointer" }
 local strategySubTab = MainMulti:Tab({ Title = "Strategi", Icon = "crosshair" })
 local systemSubTab = MainMulti:Tab({ Title = "Sistem", Icon = "cpu" })
 
+-- --- ACCOUNT TAB CONTENT ---
+AccountTab:Section({ Title = "Subscription & Profile", Desc = "Manage your Starship access" })
+local vipParagraph = AccountTab:Paragraph({
+    Title = "Subscription Status",
+    Desc = GetVIPStatusDesc(),
+    Icon = "star"
+})
+
+-- Update VIP timer every second
+if vipExpiryTime then
+    task.spawn(function()
+        while isRunning and task.wait(1) do
+            if _G.SK_BOT_ID ~= scriptId then break end
+            local remaining = vipExpiryTime - os.time()
+            if remaining <= 0 then
+                pcall(function()
+                    if vipParagraph then
+                        vipParagraph:SetDesc('<font size="16">Role: '
+                            .. FormatRole(sessionData.Role)
+                            .. "\n"
+                            .. "Time Remaining: Expired\n"
+                            .. "Status: Inactive</font>")
+                    end
+                end)
+                break
+            else
+                pcall(function()
+                    if vipParagraph then
+                        vipParagraph:SetDesc(GetVIPStatusDesc())
+                    end
+                end)
+            end
+        end
+    end)
+end
+
+AccountTab:Paragraph({
+    Title = "Profile Info",
+    Desc = '<font size="16">Display Name: ' .. LocalPlayer.DisplayName .. "\n" ..
+           "Username: @" .. LocalPlayer.Name .. "\n" ..
+           "User ID: " .. LocalPlayer.UserId .. "\n" ..
+           "Account Age: " .. LocalPlayer.AccountAge .. " days</font>",
+    Icon = "user"
+})
+
 -- 1. Tab Kontrol
 configSubTab:Section({ Title = "Primary Controls" })
 configSubTab:Toggle({
     Title = "Auto Answer",
     Desc = "Otomatis menjawab saat giliran kamu",
     Value = CONFIG.Enabled,
-    Callback = function(v) 
+    Callback = function(v)
         CONFIG.Enabled = v
-        CONFIG.AutoSubmit = v 
+        CONFIG.AutoSubmit = v
         refreshUI()
     end
 })
@@ -1566,8 +1723,8 @@ configSubTab:Dropdown({
     Desc = "Human: Pause awal/tengah, typo, kelebihan huruf",
     Values = {"Bot", "Human"},
     Value = "Bot",
-    Callback = function(v) 
-        CONFIG.InteractionMode = v 
+    Callback = function(v)
+        CONFIG.InteractionMode = v
         log("🎭 Mode diatur ke: " .. v)
         refreshUI()
     end
@@ -1577,8 +1734,8 @@ configSubTab:Toggle({
     Title = "Semi-Auto (Manual Type)",
     Desc = "Ketik Sembarang → Akan Selalu Benar",
     Value = CONFIG.SemiAuto,
-    Callback = function(v) 
-        CONFIG.SemiAuto = v 
+    Callback = function(v)
+        CONFIG.SemiAuto = v
         if v then
             notify("⌨️ Semi-Auto Aktif", "Kamu bisa ngetik ejekan, bot bakal benerin pas di Enter!")
         end
@@ -1589,8 +1746,8 @@ configSubTab:Toggle({
     Title = "Auto Suggester 💡",
     Desc = "Tampilkan panel saran kata saat giliran kamu (Pilih kata → bot ketik otomatis) pastikan auto answer off",
     Value = CONFIG.AutoSuggest,
-    Callback = function(v) 
-        CONFIG.AutoSuggest = v 
+    Callback = function(v)
+        CONFIG.AutoSuggest = v
         if v then
             notify("💡 Suggester ON", "Panel saran kata akan muncul saat giliranmu!")
         else
@@ -1613,13 +1770,13 @@ configSubTab:Dropdown({
     Values = {"Slow", "Normal", "Fast", "Instant"},
     Value = "Normal",
     Callback = function(v)
-        if v == "Slow" then 
+        if v == "Slow" then
             CONFIG.MinDelay=5.0; CONFIG.MaxDelay=8.0; CONFIG.TypeCharDelay=0.8; CONFIG.SimulateTyping=true
-        elseif v == "Normal" then 
+        elseif v == "Normal" then
             CONFIG.MinDelay=2.5; CONFIG.MaxDelay=4.0; CONFIG.TypeCharDelay=0.35; CONFIG.SimulateTyping=true
-        elseif v == "Fast" then 
+        elseif v == "Fast" then
             CONFIG.MinDelay=1.0; CONFIG.MaxDelay=2.0; CONFIG.TypeCharDelay=0.15; CONFIG.SimulateTyping=true
-        elseif v == "Instant" then 
+        elseif v == "Instant" then
             CONFIG.MinDelay=0.01; CONFIG.MaxDelay=0.02; CONFIG.TypeCharDelay=0; CONFIG.SimulateTyping=false
         end
         log("🐢 Speed: " .. v .. " | Delay: " .. CONFIG.TypeCharDelay .. "s/char")
@@ -1631,8 +1788,8 @@ configSubTab:Toggle({
     Title = "High Score Mode",
     Desc = "Prioritaskan kata panjang untuk mendapatkan koin/hadiah maksimal",
     Value = CONFIG.HighScoreMode,
-    Callback = function(v) 
-        CONFIG.HighScoreMode = v 
+    Callback = function(v)
+        CONFIG.HighScoreMode = v
         if v then
             notify("💰 High Score Active", "Bot akan mencari kata yang lebih panjang!")
         end
@@ -1698,7 +1855,7 @@ systemSubTab:Section({ Title = "System Management" })
 systemSubTab:Button({
     Title = "Stop Bot & Cleanup",
     Desc = "Hapus semua koneksi dan matikan bot sepenuhnya",
-    Callback = function() 
+    Callback = function()
         cleanupBot()
         WindUI:Notify({
             Title = "Bot Terminated",
@@ -1757,8 +1914,8 @@ generalAutoSubTab:Toggle({
     Title = "Auto Join Table",
     Desc = "Otomatis cari & masuk meja setelah match",
     Value = CONFIG.AutoJoinTable,
-    Callback = function(v) 
-        CONFIG.AutoJoinTable = v 
+    Callback = function(v)
+        CONFIG.AutoJoinTable = v
         if v then autoJoinTable() end
         refreshUI()
     end
@@ -1901,7 +2058,7 @@ local function createWordButton(word, index)
     local isCommon = COMMON_WORDS[word] and true or false
     local isServerWord = SERVER_KNOWN_WORDS[word:sub(1,1)] and table.find(SERVER_KNOWN_WORDS[word:sub(1,1)], word) and true or false
     local isCloudWord = WORDS_SOURCE_DB[word] and true or false
-    
+
     local btn = Instance.new("TextButton")
     btn.Name = "Word_" .. index
     btn.Size = UDim2.new(1, -4, 0, 36)
@@ -1912,17 +2069,17 @@ local function createWordButton(word, index)
     btn.LayoutOrder = index
     btn.Text = ""
     btn.Parent = scrollFrame
-    
+
     local btnCorner = Instance.new("UICorner")
     btnCorner.CornerRadius = UDim.new(0, 8)
     btnCorner.Parent = btn
-    
+
     local btnStroke = Instance.new("UIStroke")
     btnStroke.Color = Color3.fromRGB(60, 60, 80)
     btnStroke.Thickness = 1
     btnStroke.Transparency = 0.5
     btnStroke.Parent = btn
-    
+
     -- Word Label
     local wordLabel = Instance.new("TextLabel")
     wordLabel.Name = "WordText"
@@ -1935,13 +2092,13 @@ local function createWordButton(word, index)
     wordLabel.TextSize = 13
     wordLabel.TextXAlignment = Enum.TextXAlignment.Left
     wordLabel.Parent = btn
-    
+
     -- Info badges
     local badges = ""
     if isCommon then badges = badges .. "⭐" end
     if isServerWord then badges = badges .. "🌐" end
     if isCloudWord then badges = badges .. "☁️" else badges = badges .. "💾" end
-    
+
     local infoLabel = Instance.new("TextLabel")
     infoLabel.Name = "Info"
     infoLabel.Size = UDim2.new(0.3, -4, 1, 0)
@@ -1953,7 +2110,7 @@ local function createWordButton(word, index)
     infoLabel.TextSize = 10
     infoLabel.TextXAlignment = Enum.TextXAlignment.Right
     infoLabel.Parent = btn
-    
+
     -- Hover Effects
     btn.MouseEnter:Connect(function()
         TweenService:Create(btn, TweenInfo.new(0.15), {
@@ -1965,7 +2122,7 @@ local function createWordButton(word, index)
             Transparency = 0
         }):Play()
     end)
-    
+
     btn.MouseLeave:Connect(function()
         TweenService:Create(btn, TweenInfo.new(0.15), {
             BackgroundColor3 = Color3.fromRGB(30, 30, 40),
@@ -1976,7 +2133,7 @@ local function createWordButton(word, index)
             Transparency = 0.5
         }):Play()
     end)
-    
+
     -- CLICK HANDLER (Ini yang penting!)
     btn.MouseButton1Click:Connect(function()
         if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
@@ -1984,30 +2141,30 @@ local function createWordButton(word, index)
             notify("⚠️ Bukan Giliran", "Tunggu giliranmu dulu!")
             return
         end
-        
+
         -- Visual feedback: flash hijau
         TweenService:Create(btn, TweenInfo.new(0.1), {
             BackgroundColor3 = Color3.fromRGB(0, 200, 80)
         }):Play()
-        
+
         log("💡 [Suggester] Dipilih: " .. word:upper())
         notify("✅ Mengirim", word:upper())
-        
+
         -- Mark as used
         lastAnswer = word
         if CONFIG.AvoidRepeat then usedWords[word] = true end
-        
+
         -- Kirim kata
         task.spawn(function()
             submitWordViaRemote(currentLetter, word)
         end)
-        
+
         -- Refresh suggestions after sending
         task.delay(1.5, function()
             if isMyTurn then updateSuggestions() end
         end)
     end)
-    
+
     return btn
 end
 
@@ -2019,7 +2176,7 @@ function updateSuggestions()
             suggestScreenGui.Enabled = false
             return
         end
-        
+
         -- Jika bukan giliran, sembunyikan panel dan clear
         if not isMyTurn or currentLetter == "" or currentLetter == "-" then
             suggestScreenGui.Enabled = false
@@ -2031,29 +2188,29 @@ function updateSuggestions()
             letterBadge.Text = "-"
             return
         end
-        
+
         -- Tampilkan panel
         suggestScreenGui.Enabled = true
-        
+
         local prefix = currentLetter:lower()
         local words = findAllWords(prefix, CONFIG.AutoSuggestMax)
-        
+
         -- Update header
         letterBadge.Text = prefix:upper()
         headerStatus.Text = "📊 " .. #words .. " kata | Klik untuk kirim!"
-        
+
         -- Clear daftar lama
         for _, child in ipairs(scrollFrame:GetChildren()) do
             if child:IsA("TextButton") then child:Destroy() end
         end
-        
+
         -- Buat tombol baru untuk setiap kata
         for i, word in ipairs(words) do
             createWordButton(word, i)
             -- Yield setiap 20 tombol agar tidak lag
             if i % 20 == 0 then task.wait() end
         end
-        
+
         -- Animasi muncul
         suggestMainFrame.Position = UDim2.new(1, -10, 0.5, -175)
         suggestMainFrame.BackgroundTransparency = 1
@@ -2112,8 +2269,8 @@ VisualTab:Toggle({
     Title = "Opponent HUD",
     Desc = "Tampilkan status & statistik lawan di atas kepala mereka",
     Value = CONFIG.ShowOverlays,
-    Callback = function(v) 
-        CONFIG.ShowOverlays = v 
+    Callback = function(v)
+        CONFIG.ShowOverlays = v
         if not v then
             -- Cleanup opponent overlays immediately
             for _, p in ipairs(game.Players:GetPlayers()) do
@@ -2138,7 +2295,7 @@ VisualTab:Dropdown({
     Desc = "Ganti warna tema UI secara instan",
     Values = {"Dark", "Light", "Midnight", "Rose", "Emerald", "Plant", "Red", "Indigo", "Sky", "Violet", "Amber", "Crimson", "Rainbow"},
     Value = CONFIG.Theme,
-    Callback = function(v) 
+    Callback = function(v)
         CONFIG.Theme = v
         pcall(function()
             WindUI:SetTheme(v)
@@ -2152,8 +2309,8 @@ VisualTab:Toggle({
     Title = "Streaming Mode",
     Desc = "Aktifkan spoofing nama & data (Visual Saja)",
     Value = CONFIG.StreamingMode,
-    Callback = function(v) 
-        CONFIG.StreamingMode = v 
+    Callback = function(v)
+        CONFIG.StreamingMode = v
         if v then
             notify("🎥 Streaming HUD", "Mode streaming diaktifkan.")
         end
@@ -2175,8 +2332,8 @@ TrollTab:Toggle({
     Title = "Troll Mode",
     Desc = "Kirim teks palsu ke billboard kepala, tapi kata asli ke server",
     Value = CONFIG.TrollMode,
-    Callback = function(v) 
-        CONFIG.TrollMode = v 
+    Callback = function(v)
+        CONFIG.TrollMode = v
         if v then
             notify("👻 Troll Mode ON", "Pemain lain akan melihat teks palsumu!")
         end
@@ -2271,7 +2428,7 @@ function refreshUI()
             for i = 1, 100 do
                 local id = "Reward" .. i
                 local status = _G.SK_LAST_REWARD_DATA[id]
-                
+
                 if status == "AVAILABLE" then
                     rewardText = rewardText .. "✅ " .. id .. " : SIAP DIAMBIL\n"
                     count = count + 1
@@ -2281,7 +2438,7 @@ function refreshUI()
                 end
             end
             if count == 0 then rewardText = "Belum ada hadiah baru yang terdeteksi..." end
-            
+
             if UIElements.RewardParagraph.SetDesc then
                 UIElements.RewardParagraph:SetDesc(rewardText)
             elseif UIElements.RewardParagraph.SetContent then
@@ -2354,7 +2511,7 @@ local function scanGameState()
                 end
                 playerCount = math.max(playerCount, count)
             end
-            
+
             STATS.playersAtTable = playerCount
         else
             lastTrackedTable = nil
@@ -2378,8 +2535,8 @@ local function scanGameState()
             -- Cek di UI Utama Game
             if mainMatchUI and mainMatchUI:FindFirstChild("Main") and mainMatchUI.Main:FindFirstChild("Letter") then
                 local uiLetter = mainMatchUI.Main.Letter.Text:match("%a+")
-                if uiLetter then 
-                    currentLetter = uiLetter:lower() 
+                if uiLetter then
+                    currentLetter = uiLetter:lower()
                 end
             end
         end
@@ -2410,7 +2567,7 @@ local function getPlayerStats(player)
         -- Try attributes
         stats.wins = player:GetAttribute("Wins") or player:GetAttribute("Victory") or 0
         stats.losses = player:GetAttribute("Losses") or player:GetAttribute("Defeats") or 0
-        
+
         -- Try leaderstats
         local ls = player:FindFirstChild("leaderstats")
         if ls then
@@ -2431,7 +2588,7 @@ end
 
 local function updateOverlays()
     -- Jika fitur mati, sedang tidak dalam match, atau ID script tidak valid, bersihkan HUD
-    if not isRunning or _G.SK_BOT_ID ~= scriptId or not CONFIG.ShowOverlays or not matchActive then 
+    if not isRunning or _G.SK_BOT_ID ~= scriptId or not CONFIG.ShowOverlays or not matchActive then
         for _, player in ipairs(game.Players:GetPlayers()) do
             pcall(function()
                 local char = player.Character
@@ -2440,21 +2597,21 @@ local function updateOverlays()
                 if overlay then overlay:Destroy() end
             end)
         end
-        return 
+        return
     end
-    
+
     for _, player in ipairs(game.Players:GetPlayers()) do
         pcall(function()
             -- Mode HUD: Lawan atau Diri Sendiri
             local isMe = (player == LocalPlayer)
-            
+
             if isMe then
                 if not CONFIG.ShowSelfHUD then
                     local char = player.Character
                     local head = char and (char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart"))
                     local overlay = char and char:FindFirstChild("SK_Overlay") or head and head:FindFirstChild("SK_Overlay")
                     if overlay then overlay:Destroy() end
-                    return 
+                    return
                 end
             else
                 -- Check if Opponent HUD is enabled
@@ -2471,7 +2628,7 @@ local function updateOverlays()
                 local targetTable = player:GetAttribute("CurrentTable")
                 local inMyTable = (myTable and myTable ~= "")
                 local inTargetTable = (targetTable and targetTable ~= "")
-                
+
                 if not inMyTable or not inTargetTable or targetTable ~= myTable then
                     local char = player.Character
                     local head = char and (char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart"))
@@ -2489,7 +2646,7 @@ local function updateOverlays()
             if not char then return end
             local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
             if not head then return end
-            
+
             local overlay = char:FindFirstChild("SK_Overlay") or head:FindFirstChild("SK_Overlay")
             if not overlay then
                 overlay = Instance.new("BillboardGui")
@@ -2499,12 +2656,12 @@ local function updateOverlays()
                 overlay.StudsOffset = Vector3.new(0, 4.5, 0) -- Lebih tinggi agar tidak tumpang tindih
                 overlay.Adornee = head
                 overlay.Parent = head -- Parent ke Head lebih aman
-                
+
                 local frame = Instance.new("Frame")
                 frame.Size = UDim2.new(1, 0, 1, 0)
                 frame.BackgroundTransparency = 1
                 frame.Parent = overlay
-                
+
                 local content = Instance.new("TextLabel")
                 content.Name = "Content"
                 content.Size = UDim2.new(1, 0, 1, 0)
@@ -2516,21 +2673,21 @@ local function updateOverlays()
                 content.RichText = true
                 content.Parent = frame
             end
-            
+
             local isPlaying = (player == currentPlayerTurn)
             local stats = getPlayerStats(player)
             local currentWord = player:GetAttribute("CurrentWord") or ""
             local mistakes = playerMistakes[player.UserId] or 0
-            
+
             if isMe then
                 text = string.format("<font color='#00FFFF'><b>[ PREDIKSI JAWABAN ]</b></font>\n")
                 if isMyTurn then
                     text = text .. "<font color='#00FF7F'>⚡ GILIRAN KAMU!</font>\n"
                 end
-                
+
                 local previewWord = (lastAnswer ~= "") and lastAnswer or "Mencari..."
                 if currentLetter == "" or currentLetter == "-" then previewWord = "Menunggu Huruf..." end
-                
+
                 text = text .. "🎯 Target: <font color='#FFFF00'>" .. previewWord:upper() .. "</font>\n"
                 text = text .. string.format("<font color='#FF4500'>⚠️ Mistake: %d</font>", mistakes)
             else
@@ -2540,15 +2697,15 @@ local function updateOverlays()
                 else
                     text = text .. "<font color='#AAAAAA'>[ ⏳ MENUNGGU ]</font>\n"
                 end
-                
+
                 if currentWord ~= "" then
                     text = text .. "✍️ Word: <font color='#FFFF00'>" .. currentWord .. "</font>\n"
                 end
-                
+
                 text = text .. string.format("<font color='#FF4500'>⚠️ Mistake: %d</font>\n", mistakes)
                 text = text .. string.format("<font color='#00BFFF'>🏆 W: %d</font> | <font color='#FF4500'>❌ L: %d</font> | <font color='#FFD700'>📊 %d%%</font>", stats.wins, stats.losses, stats.winRate)
             end
-            
+
             local label = overlay.Frame.Content
             label.Text = text
         end)
@@ -2560,11 +2717,11 @@ local nameLabelsCache = {}
 local lastScanTime = 0
 
 local function handleStreamingMode()
-    if not isRunning or not CONFIG.StreamingMode then 
+    if not isRunning or not CONFIG.StreamingMode then
         if #nameLabelsCache > 0 then table.clear(nameLabelsCache) end
-        return 
+        return
     end
-    
+
     local now = tick()
     local name = LocalPlayer.Name
     local disp = LocalPlayer.DisplayName
@@ -2572,14 +2729,14 @@ local function handleStreamingMode()
     -- 1. Full Scan Ringan (Hanya setiap 5 detik untuk mencari elemen UI baru)
     if now - lastScanTime > 5 then
         table.clear(nameLabelsCache)
-        
+
         -- Cari di UI
         local pg = LocalPlayer:FindFirstChild("PlayerGui")
         if pg then
             for _, v in ipairs(pg:GetDescendants()) do
                 if (v:IsA("TextLabel") or v:IsA("TextBox") or v:IsA("TextButton")) then
-                    local success, containsName = pcall(function() 
-                        return v.Text:find(name) or v.Text:find(disp) 
+                    local success, containsName = pcall(function()
+                        return v.Text:find(name) or v.Text:find(disp)
                     end)
                     if success and containsName then
                         table.insert(nameLabelsCache, v)
@@ -2587,14 +2744,14 @@ local function handleStreamingMode()
                 end
             end
         end
-        
+
         -- Cari di Billboard Karakter
         local char = LocalPlayer.Character
         if char then
             for _, v in ipairs(char:GetDescendants()) do
                 if v:IsA("TextLabel") then
-                    local success, containsName = pcall(function() 
-                        return v.Text:find(name) or v.Text:find(disp) 
+                    local success, containsName = pcall(function()
+                        return v.Text:find(name) or v.Text:find(disp)
                     end)
                     if success and containsName then
                         table.insert(nameLabelsCache, v)
@@ -2627,17 +2784,26 @@ end
 -- ║           EVENT LISTENERS (LATE BINDING)                  ║
 -- ╚════════════════════════════════════════════════════════════╝
 
+local isJoiningTable = false -- Flag debounce agar tidak spam join
 function autoJoinTable()
-    if not isRunning or not CONFIG.AutoJoinTable or matchActive or LocalPlayer:GetAttribute("CurrentTable") then return end
+    if isJoiningTable or not isRunning or not CONFIG.AutoJoinTable or matchActive or LocalPlayer:GetAttribute("CurrentTable") then return end
+
     local tables = workspace:FindFirstChild("Tables")
     if not tables then return end
-    
+
+    isJoiningTable = true -- Kunci proses
+
+    -- Jeda awal agar tidak terlalu instan (terlihat lebih natural)
     task.wait(CONFIG.AutoJoinDelay)
-    if not isRunning or _G.SK_BOT_ID ~= scriptId then return end
-    if matchActive or LocalPlayer:GetAttribute("CurrentTable") then return end
-    
+
+    -- Re-check kondisi setelah wait
+    if not isRunning or _G.SK_BOT_ID ~= scriptId or matchActive or LocalPlayer:GetAttribute("CurrentTable") then
+        isJoiningTable = false
+        return
+    end
+
     local joinableTables = {}
-    
+
     -- Helper untuk hitung pemain di meja tertentu
     local function getPlayerCount(tbl)
         local count = 0
@@ -2662,14 +2828,16 @@ function autoJoinTable()
 
     for _, tbl in ipairs(tables:GetChildren()) do
         local state = tbl:GetAttribute("TableState")
-        if not state or state == "" or state == "Waiting" then
+        local isHidden = tableHiddenStatus[tbl.Name] -- [NEW] Cek dari sistem visibility game
+
+        if (not state or state == "" or state == "Waiting") and not isHidden then
             local pCount = getPlayerCount(tbl)
             table.insert(joinableTables, {Instance = tbl, Players = pCount})
         end
     end
-    
+
     if #joinableTables == 0 then return end
-    
+
     -- PRIORITAS 1: Cari meja yang sudah ada 1 orang (biar langsung mulai)
     local prioritizedTable = nil
     for _, data in ipairs(joinableTables) do
@@ -2678,46 +2846,61 @@ function autoJoinTable()
             break
         end
     end
-    
+
     -- PRIORITAS 2: Jika tidak ada yang isi 1, cari yang paling ramai tapi belum penuh (max 4-6 biasanya)
     -- Tapi untuk request user, kita cukup: "Jika ada 1 orang, ambil itu. Jika tidak, ambil sembarang."
     local targetTable = prioritizedTable or joinableTables[1].Instance
-    
+
     if targetTable then
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+
+        if root then
+            -- [CRITICAL] Teleport ke meja agar server menerima request Join (Distance Check Bypass)
+            local tablePos = targetTable:GetModelCFrame().p
+            root.CFrame = CFrame.new(tablePos + Vector3.new(0, 3, 0))
+            task.wait(0.2) -- Jeda tipis agar physics sinkron
+        end
+
         JoinTable:FireServer(targetTable.Name)
         STATS.tablesJoined = (STATS.tablesJoined or 0) + 1
         local msg = prioritizedTable and ("Mencari lawan di " .. targetTable.Name) or ("Bergabung ke " .. targetTable.Name)
         notify("🪑 Auto Join", msg)
         log("🚀 Auto Join: " .. msg)
+
+        -- Tunggu 5 detik untuk memastikan status terupdate, jika gagal buka kunci lagi
+        task.wait(5)
     end
+
+    isJoiningTable = false
 end
 
 local retryConn = safeConnect(UsedWordWarn.OnClientEvent, function(rejectedWord)
     -- CLEANUP: Jika saya bukan script terbaru, putus koneksi saya!
-    if _G.SK_BOT_ID ~= scriptId then 
+    if _G.SK_BOT_ID ~= scriptId then
         if retryConn then retryConn:Disconnect() end
-        return 
+        return
     end
     task.spawn(triggerRetry, rejectedWord)
 end)
 
 
 local rewardConn = safeConnect(IndexRewardStatus.OnClientEvent, function(data)
-    if _G.SK_BOT_ID ~= scriptId then 
+    if _G.SK_BOT_ID ~= scriptId then
         if rewardConn then rewardConn:Disconnect() end
-        return 
+        return
     end
 
     if type(data) == "table" then
         _G.SK_LAST_REWARD_DATA = data -- Simpan data secara global untuk UI
-        
+
         if CONFIG.AutoClaim then
             local currentAvailable = 0
-            
+
             for id, status in pairs(data) do
                 if status == "AVAILABLE" then
                     currentAvailable = currentAvailable + 1
-                    
+
                     -- Logika Ambil Hadiah
                     log("💰 Hadiah " .. id .. " tersedia! Mengambil secara otomatis...")
                     ClaimIndexReward:FireServer(id)
@@ -2725,7 +2908,7 @@ local rewardConn = safeConnect(IndexRewardStatus.OnClientEvent, function(data)
                     task.wait(0.3) -- Jeda anti-spam
                 end
             end
-            
+
             -- Deteksi jika ada reward baru yang terbuka
             if currentAvailable > lastRewardCount then
                 local diff = currentAvailable - lastRewardCount
@@ -2739,18 +2922,18 @@ end)
 
 local matchConn = safeConnect(MatchUI.OnClientEvent, function(eventName, value)
     -- CLEANUP: Jika saya bukan script terbaru, putus koneksi saya!
-    if _G.SK_BOT_ID ~= scriptId then 
+    if _G.SK_BOT_ID ~= scriptId then
         if matchConn then matchConn:Disconnect() end
-        return 
+        return
     end
-    
+
     if eventName == "ShowMatchUI" then
         matchActive, isMyTurn = true, false
         matchRoundCount = 0 -- Mulai dari 0 (akan jadi 1 saat StartTurn pertama)
         gameUsedWords = {}
         playerMistakes = {} -- Reset mistakes for new match
         STATS.matchesPlayed = STATS.matchesPlayed + 1
-        _G.SK_LAST_LETTER = "" 
+        _G.SK_LAST_LETTER = ""
     elseif eventName == "HideMatchUI" or eventName == "Eliminated" or eventName == "Victory" or eventName == "Winner" then
         matchActive, isMyTurn, currentLetter = false, false, ""
         matchRoundCount = 1
@@ -2782,8 +2965,8 @@ local matchConn = safeConnect(MatchUI.OnClientEvent, function(eventName, value)
         end
     elseif eventName == "EndTurn" then
         isMyTurn = false
-        _G.SK_ANSWER_LOCK = false 
-        _G.SK_LAST_LETTER = "" 
+        _G.SK_ANSWER_LOCK = false
+        _G.SK_LAST_LETTER = ""
         -- Clear suggester saat giliran selesai
         if CONFIG.AutoSuggest then
             task.spawn(updateSuggestions)
@@ -2802,7 +2985,7 @@ local matchConn = safeConnect(MatchUI.OnClientEvent, function(eventName, value)
         if value and value.userId then
             playerMistakes[value.userId] = value.count or ((playerMistakes[value.userId] or 0) + 1)
             task.spawn(updateOverlays)
-            
+
             -- Jika saya yang melakukan kesalahan, picu AutoRetry
             if value.userId == LocalPlayer.UserId and CONFIG.Enabled and CONFIG.AutoRetry and isMyTurn then
                 log("⚠ Kata Salah/Sudah Digunakan (Mistake)! Mencoba lagi...")
@@ -2813,10 +2996,21 @@ local matchConn = safeConnect(MatchUI.OnClientEvent, function(eventName, value)
     end
 end)
 
+-- === USED WORD WARNING (RETRY TRIGGER) ===
+if UsedWordWarn then
+    safeConnect(UsedWordWarn.OnClientEvent, function(word)
+        if CONFIG.Enabled and CONFIG.AutoRetry and isMyTurn then
+            log("⚠ Kata '" .. tostring(word or "Unknown") .. "' Sudah Digunakan! Mencoba lagi...")
+            STATS.retries = STATS.retries + 1
+            task.spawn(triggerRetry, word)
+        end
+    end)
+end
+
 -- === INDEX DATA PROCESSOR ===
 function processIndexData(data)
     if not data or type(data) ~= "table" then return end
-    
+
     -- 📥 Auto-Learn kata
     if data.AllWords then
         local isGlobalDB = (data.Total and data.Total > 5000)
@@ -2826,31 +3020,31 @@ function processIndexData(data)
             learnFromServer(w)
         end
     end
-    
+
     -- 📊 Update Stats
     if data.Count then
         if not initialIndexCount then initialIndexCount = data.Count end
         currentIndexCount = data.Count
         sessionNewWordsDiscovered = currentIndexCount - (initialIndexCount or currentIndexCount)
     end
-    
+
     if data.Total then
         totalIndexPossible = data.Total
     end
-    
+
     if data.Count and CONFIG.DebugMode then
         print("[SK-Bot] 📡 Index Data Received: " .. data.Count .. " / " .. (data.Total or "?"))
     end
-    
+
     refreshUI()
 end
 
 -- === INDEX HUNTER SINKRONISASI (SEPARATE REMOTE) ===
 if UpdateWordIndex then
     local sniffConn = safeConnect(UpdateWordIndex.OnClientEvent, function(data)
-        if _G.SK_BOT_ID ~= scriptId then 
+        if _G.SK_BOT_ID ~= scriptId then
             if sniffConn then sniffConn:Disconnect() end
-            return 
+            return
         end
         processIndexData(data)
     end)
@@ -2886,17 +3080,28 @@ safeConnect(MatchUI.OnClientEvent, function(eventName)
     end
 end)
 
+-- === TABLE VISIBILITY TRACKER (AUTO JOIN ACCURACY) ===
+if UpdatePromptVisibility then
+    safeConnect(UpdatePromptVisibility.OnClientEvent, function(hiddenDict)
+        tableHiddenStatus = hiddenDict or {}
+        -- Jika AutoJoin aktif, coba scan ulang saat ada perubahan visibilitas meja
+        if CONFIG.AutoJoinTable and not matchActive and not LocalPlayer:GetAttribute("CurrentTable") then
+            task.spawn(autoJoinTable)
+        end
+    end)
+end
+
 local resultConn = safeConnect(ResultUI.OnClientEvent, function(data)
-    if _G.SK_BOT_ID ~= scriptId then 
+    if _G.SK_BOT_ID ~= scriptId then
         if resultConn then resultConn:Disconnect() end
-        return 
+        return
     end
 
     if type(data) == "table" then
         local earned = 0
         if data.AnswerMoney then earned = earned + tonumber(data.AnswerMoney) end
         if data.WinMoney then earned = earned + tonumber(data.WinMoney) end
-        
+
         if earned > 0 then
             STATS.totalCoinsEarned = STATS.totalCoinsEarned + earned
             log("💰 Sesi Ini: Mendapatkan +" .. earned .. " Koin! (Total: " .. STATS.totalCoinsEarned .. ")")
@@ -2912,15 +3117,15 @@ task.spawn(function()
     log("🛡️ Starship Bypass AntiCheat")
     if not loadWordListFromURL() then loadFallbackDB() end
     refreshUI()
-    
+
     -- TRICK: Pancing server menggunakan jalur RESMI (RequestWordIndex)
     task.wait(1.2)
-    if RequestWordIndex then 
+    if RequestWordIndex then
         pcall(function() RequestWordIndex:FireServer() end)
-    elseif BillboardUpdate then 
-        BillboardUpdate:FireServer("") 
+    elseif BillboardUpdate then
+        BillboardUpdate:FireServer("")
     end
-    
+
     if MatchUI then pcall(function() MatchUI:FireServer("GetIndex") end) end
 end)
 
@@ -2939,27 +3144,8 @@ task.spawn(function()
     end
 end)
 
--- === THE SULAP HOOK (STABLE GHOST MODE) ===
--- Ini 'Otak' Anda: Ketik apa saja -> Terkirim kata yang benar.
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    local args = {...}
-    
-    if isRunning and CONFIG.SemiAuto and method == "FireServer" and self == SubmitWord then
-        if not checkcaller() and _G.SK_PENDING_WORD and _G.SK_PENDING_WORD ~= "" then
-            local userTyped = tostring(args[1] or "")
-            args[1] = _G.SK_PENDING_WORD
-            _G.SK_PENDING_WORD = nil 
-            
-            log("🔮 [Ghost] Sulap '" .. userTyped .. "' menjadi '" .. args[1] .. "'")
-            return oldNamecall(self, unpack(args))
-        end
-    end
-    
-    return oldNamecall(self, ...)
-end))
+-- === FORCE STARTUP ===
 
 -- === FORCE STARTUP ===
-_G.SK_BOT_ID = scriptId 
+_G.SK_BOT_ID = scriptId
 isRunning = true
