@@ -704,8 +704,8 @@ function GroupboxShim:AddDivider()
 end
 
 function GroupboxShim:AddParagraph(config)
-    pcall(function() self.Section:Paragraph(config) end)
-    return self
+    local p = self.Section:Paragraph(config)
+    return p
 end
 
 function GroupboxShim:AddColorPicker(flag, config)
@@ -758,7 +758,7 @@ local StarshipIconMap = {
     ["settings"] = "settings",
     ["shield-alert"] = "shield",
     ["swords"] = "swords",
-    ["rabbit"] = "zap",
+    ["rabbit"] = "bolt",
     ["arrow-big-up-dash"] = "tuning",
     ["drama"] = "masks",
     ["camera"] = "camera",
@@ -779,6 +779,9 @@ local StarshipIconMap = {
     ["laugh"] = "smile",
     ["eye-off"] = "view",
     ["dollar-sign"] = "dollar",
+    ["utility-pole"] = "tuning",
+    ["badge-cent"] = "dollar",
+    ["text-wrap"] = "more-horizontal",
 }
 
 function MultiSectionShim:AddTab(tabName, icon)
