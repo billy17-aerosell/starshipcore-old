@@ -261,7 +261,7 @@ export default async function handler(req, res) {
   // ============================================
   
   // DEV MODE BYPASS - Allow localhost/dev access
-  const IS_DEV = process.env.NODE_ENV === 'development' || req.headers.host?.includes('localhost');
+  const IS_DEV = process.env.NODE_ENV === 'development';
   
   if (IS_DEV) {
     console.log(`[R2-Chunked] 🔧 DEV MODE DETECTED - Bypassing strict auth for ${requestUserId}`);

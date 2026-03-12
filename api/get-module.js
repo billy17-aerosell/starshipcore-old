@@ -193,7 +193,8 @@ export default async function handler(req, res) {
   const isBrowser = userAgent !== "" && !isRobloxExecutor && browserPatterns.some((p) => userAgent.includes(p));
 
   // Allow dev mode to bypass browser check
-  const isLocalhost = req.headers.host?.includes("localhost") || req.headers.host?.includes("127.0.0.1");
+  const isDevEnv = process.env.NODE_ENV === "development";
+  const isLocalhost = isDevEnv;
 
   if (isBrowser && !isLocalhost) {
     const clientIP = req.headers["x-forwarded-for"]?.split(",")[0] || req.headers["x-real-ip"] || "unknown";
@@ -335,9 +336,8 @@ export default async function handler(req, res) {
   }
 
   // === DEV MODE ===
-  // Check if dev mode is enabled (localhost or dev=true with secret)
-  const devSecret = process.env.DEV_SECRET || "starship-dev-2025";
-  const isDevMode = isLocalhost || dev === devSecret;
+  const devSecret = process.env.DEV_SECRET;
+  const isDevMode = isDevEnv || (devSecret && dev === devSecret);
 
   if (isDevMode) {
     // Dev mode: Return plain text without encryption or whitelist check
@@ -438,12 +438,13 @@ export default async function handler(req, res) {
       // Return module (Check platform for response format)
       const platform = req.query.platform;
       if (platform === "mobile") {
+        // Mobile: plain text for backward compatibility with production loader
         res.setHeader("Content-Type", "text/plain; charset=utf-8");
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         return res.status(200).send(moduleBuffer.toString("utf8"));
       }
 
-      // Default (PC): Return encrypted JSON
+      // PC: Return encrypted JSON
       return res.status(200).json({
         status: "success",
         module: normalizedName,
@@ -629,13 +630,13 @@ export default async function handler(req, res) {
     // Return module (Check platform for response format)
     const platform = req.query.platform;
     if (platform === "mobile") {
-      // Mobile: Return plain text for direct execution
+      // Mobile: plain text for backward compatibility with production loader
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       return res.status(200).send(moduleBuffer.toString("utf8"));
     }
 
-    // Default (PC): Return encrypted JSON
+    // PC: Return encrypted JSON
     return res.status(200).json({
       status: "success",
       module: normalizedName,
