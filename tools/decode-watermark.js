@@ -1,78 +1,125 @@
 /**
  * ══════════════════════════════════════════════════════════════════
  * WATERMARK DECODER TOOL
- * Use this to decode watermarks from leaked scripts to identify leakers
+ * Decode watermarks from leaked scripts to identify leakers
  * ══════════════════════════════════════════════════════════════════
+ * 
+ * Supports 2 formats:
+ *   1. Mobile Loader watermark: userId_timestamp_hwid (XOR 42 hex)
+ *   2. Module watermark (from get-module.js): JSON {u,t,i} (XOR 42 hex)
  * 
  * Usage:
  *   node decode-watermark.js <encoded_watermark>
- * 
- * Example:
- *   node decode-watermark.js "1b1017130c5f0d1a5f..."
- * 
- * The watermark signature format is:
- *   userId_timestamp_hwid8chars
- *   Each character XOR'd with 42, then hex encoded
+ *   node decode-watermark.js --scan <leaked_file.lua>
  */
 
-function decodeWatermark(encodedHex) {
-    if (!encodedHex || encodedHex.length === 0) {
-        console.error("Error: No watermark provided");
-        return null;
-    }
-
-    // Remove any whitespace
+function xorDecodeHex(encodedHex) {
     encodedHex = encodedHex.replace(/\s/g, '');
-
-    // Decode: hex -> XOR with 42
     let decoded = '';
     for (let i = 0; i < encodedHex.length; i += 2) {
         const hexByte = encodedHex.substring(i, i + 2);
         const charCode = parseInt(hexByte, 16) ^ 42;
         decoded += String.fromCharCode(charCode);
     }
+    return decoded;
+}
 
-    // Parse the signature: userId_timestamp_hwid
+function decodeModuleWatermark(encodedHex) {
+    const decoded = xorDecodeHex(encodedHex);
+    try {
+        const data = JSON.parse(decoded);
+        return {
+            type: "MODULE",
+            raw: decoded,
+            userId: data.u || "Unknown",
+            timestamp: data.t || "Unknown",
+            partialIP: data.i || "Unknown",
+            timestampDate: data.t ? new Date(data.t).toISOString() : null,
+            robloxProfileUrl: data.u && !isNaN(data.u) ? `https://www.roblox.com/users/${data.u}/profile` : null,
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+function decodeLoaderWatermark(encodedHex) {
+    const decoded = xorDecodeHex(encodedHex);
     const parts = decoded.split('_');
-    
-    const result = {
+    if (parts.length < 2) return null;
+    return {
+        type: "LOADER",
         raw: decoded,
         userId: parts[0] || 'Unknown',
         timestamp: parts[1] || 'Unknown',
         hwid: parts[2] || 'Unknown',
-        timestampDate: null,
-        robloxProfileUrl: null
+        timestampDate: parts[1] && !isNaN(parseInt(parts[1])) ? new Date(parseInt(parts[1]) * 1000).toISOString() : null,
+        robloxProfileUrl: parts[0] && !isNaN(parseInt(parts[0])) ? `https://www.roblox.com/users/${parts[0]}/profile` : null,
     };
+}
 
-    // Convert timestamp to human-readable date
-    if (parts[1] && !isNaN(parseInt(parts[1]))) {
-        const timestamp = parseInt(parts[1]);
-        result.timestampDate = new Date(timestamp * 1000).toISOString();
-    }
-
-    // Generate Roblox profile URL
-    if (parts[0] && !isNaN(parseInt(parts[0]))) {
-        result.robloxProfileUrl = `https://www.roblox.com/users/${parts[0]}/profile`;
-    }
-
+function decodeWatermark(encodedHex) {
+    let result = decodeModuleWatermark(encodedHex);
+    if (result) return result;
+    result = decodeLoaderWatermark(encodedHex);
     return result;
 }
 
-function printResult(result) {
-    console.log('\n╔════════════════════════════════════════════════════════════╗');
-    console.log('║                   WATERMARK DECODED                        ║');
-    console.log('╠════════════════════════════════════════════════════════════╣');
-    console.log(`║ Raw Signature:    ${result.raw.padEnd(40)}║`);
-    console.log(`║ User ID:          ${result.userId.padEnd(40)}║`);
-    console.log(`║ HWID (partial):   ${result.hwid.padEnd(40)}║`);
-    console.log(`║ Timestamp:        ${result.timestamp.padEnd(40)}║`);
-    console.log(`║ Date:             ${(result.timestampDate || 'N/A').padEnd(40)}║`);
-    console.log('╠════════════════════════════════════════════════════════════╣');
-    console.log(`║ Roblox Profile:   ${(result.robloxProfileUrl || 'N/A').padEnd(40)}║`);
-    console.log('╚════════════════════════════════════════════════════════════╝\n');
+function scanFile(filePath) {
+    const fs = require('fs');
+    if (!fs.existsSync(filePath)) {
+        console.error(`File not found: ${filePath}`);
+        return [];
+    }
+    const content = fs.readFileSync(filePath, 'utf8');
+    const results = [];
+
+    // Pattern: local _cXXXX="hex_encoded_data"
+    const modulePattern = /local\s+_c[0-9a-f]{4}\s*=\s*"([0-9a-f]+)"/gi;
+    let match;
+    while ((match = modulePattern.exec(content)) !== null) {
+        const decoded = decodeModuleWatermark(match[1]);
+        if (decoded) {
+            decoded.location = `Module watermark variable`;
+            results.push(decoded);
+        }
+    }
+
+    // Pattern: long hex strings in _SWM, _wm, _mcfg etc
+    const loaderPattern = /"([0-9a-f]{20,})"/gi;
+    while ((match = loaderPattern.exec(content)) !== null) {
+        if (results.some(r => r.raw && content.includes(r.raw))) continue;
+        const decoded = decodeLoaderWatermark(match[1]);
+        if (decoded && decoded.userId !== 'Unknown') {
+            decoded.location = `Loader watermark`;
+            results.push(decoded);
+        }
+    }
+
+    return results;
 }
 
-// CLI Usage
+function printResult(result) {
+    const typeLabel = result.type === "MODULE" ? "MODULE WATERMARK" : "LOADER WATERMARK";
+    console.log(`\n╔════════════════════════════════════════════════════════════╗`);
+    console.log(`║  ${typeLabel.padEnd(55)}║`);
+    console.log(`╠════════════════════════════════════════════════════════════╣`);
+    console.log(`║ User ID:          ${String(result.userId).padEnd(40)}║`);
+    if (result.partialIP) {
+        console.log(`║ Partial IP:       ${String(result.partialIP).padEnd(40)}║`);
+    }
+    if (result.hwid && result.hwid !== 'Unknown') {
+        console.log(`║ HWID (partial):   ${String(result.hwid).padEnd(40)}║`);
+    }
+    console.log(`║ Date:             ${(result.timestampDate || 'N/A').padEnd(40)}║`);
+    console.log(`╠════════════════════════════════════════════════════════════╣`);
+    console.log(`║ Roblox Profile:   ${(result.robloxProfileUrl || 'N/A').padEnd(40)}║`);
+    if (result.location) {
+        console.log(`║ Found in:         ${result.location.padEnd(40)}║`);
+    }
+    console.log(`╚════════════════════════════════════════════════════════════╝`);
+}
+
+// CLI
 const args = process.argv.slice(2);
 
 if (args.length === 0) {
@@ -80,29 +127,39 @@ if (args.length === 0) {
 ╔════════════════════════════════════════════════════════════╗
 ║            STARSHIP WATERMARK DECODER                      ║
 ╠════════════════════════════════════════════════════════════╣
-║ Usage:                                                     ║
-║   node decode-watermark.js <encoded_watermark>             ║
+║ Decode a watermark:                                        ║
+║   node decode-watermark.js <hex_encoded_watermark>         ║
+║                                                            ║
+║ Scan a leaked file:                                        ║
+║   node decode-watermark.js --scan leaked_script.lua        ║
 ║                                                            ║
 ║ How to find watermark in leaked script:                    ║
-║   1. Search for _wm or _SWM in the script                  ║
-║   2. Look for hex strings (e.g., "1b1017130c...")          ║
-║   3. Check StarshipSession._wm value                       ║
-║   4. Look for _cfg or _mcfg values in ReplicatedStorage    ║
-║                                                            ║
-║ Example:                                                   ║
-║   node decode-watermark.js "1b1017130c5f0d1a5f4d4f42494c45"║
+║   1. Look for: local _cXXXX = "hex..."  (module wm)       ║
+║   2. Search for _SWM or _wm  (loader wm)                  ║
+║   3. Or just use --scan to auto-detect                     ║
 ╚════════════════════════════════════════════════════════════╝
     `);
     process.exit(0);
 }
 
-const encoded = args[0];
-const result = decodeWatermark(encoded);
-
-if (result) {
-    printResult(result);
-    
-    // Also output as JSON for programmatic use
-    console.log('JSON Output:');
-    console.log(JSON.stringify(result, null, 2));
+if (args[0] === '--scan' && args[1]) {
+    console.log(`\nScanning: ${args[1]}...\n`);
+    const results = scanFile(args[1]);
+    if (results.length === 0) {
+        console.log('No watermarks found in file.');
+    } else {
+        console.log(`Found ${results.length} watermark(s):`);
+        results.forEach(r => printResult(r));
+        console.log('\nJSON Output:');
+        console.log(JSON.stringify(results, null, 2));
+    }
+} else {
+    const result = decodeWatermark(args[0]);
+    if (result) {
+        printResult(result);
+        console.log('\nJSON Output:');
+        console.log(JSON.stringify(result, null, 2));
+    } else {
+        console.error('Failed to decode watermark. Check the input format.');
+    }
 }

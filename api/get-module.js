@@ -66,6 +66,52 @@ function xorEncrypt(buffer, key) {
   return encrypted;
 }
 
+// Inject per-user watermark into module code for leak tracing
+function injectWatermark(content, userId, ip) {
+  const wmData = {
+    u: userId || "unknown",
+    t: Date.now(),
+    i: ip ? ip.split(".").slice(0, 2).join(".") : "x",
+  };
+  const wmJson = JSON.stringify(wmData);
+  let wmEncoded = "";
+  for (let i = 0; i < wmJson.length; i++) {
+    wmEncoded += (wmJson.charCodeAt(i) ^ 42).toString(16).padStart(2, "0");
+  }
+  const rHex = Math.random().toString(16).substring(2, 6);
+  const varName = `_c${rHex}`;
+  const wmLine = `local ${varName}="${wmEncoded}"`;
+  wmData._varName = varName;
+  wmData._encoded = wmEncoded;
+  return { content: wmLine + "\n" + content, wmData };
+}
+
+async function sendWatermarkLog(wmData, moduleName, userId) {
+  const webhookUrl = process.env.DISCORD_WATERMARK_WEBHOOK_URL || process.env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) return;
+  try {
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [{
+          title: "🔖 Module Watermark Injected",
+          color: 0x6366f1,
+          fields: [
+            { name: "👤 User ID", value: `\`${wmData.u}\``, inline: true },
+            { name: "📦 Module", value: `\`${moduleName}\``, inline: true },
+            { name: "🌐 Partial IP", value: `\`${wmData.i}\``, inline: true },
+            { name: "🔑 Variable", value: `\`${wmData._varName}\``, inline: true },
+            { name: "🔍 Decode Command", value: `\`\`\`node decode-watermark.js "${wmData._encoded}"\`\`\`` },
+          ],
+          timestamp: new Date().toISOString(),
+          footer: { text: "Starship Watermark Tracker" },
+        }],
+      }),
+    });
+  } catch (e) {}
+}
+
 // Valid module paths (whitelist of allowed modules)
 const ALLOWED_MODULES = [
   "Config.lua",
@@ -426,6 +472,12 @@ export default async function handler(req, res) {
         moduleBuffer = moduleBuffer.subarray(3);
       }
 
+      // Inject per-user watermark
+      const wm = injectWatermark(moduleBuffer.toString("utf8"), user, clientIP);
+      let moduleContent = wm.content;
+      moduleBuffer = Buffer.from(moduleContent, "utf8");
+      sendWatermarkLog(wm.wmData, normalizedName, user);
+
       // Generate dynamic encryption key
       const dynamicKey = generateKey(32);
 
@@ -438,10 +490,9 @@ export default async function handler(req, res) {
       // Return module (Check platform for response format)
       const platform = req.query.platform;
       if (platform === "mobile") {
-        // Mobile: plain text for backward compatibility with production loader
         res.setHeader("Content-Type", "text/plain; charset=utf-8");
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-        return res.status(200).send(moduleBuffer.toString("utf8"));
+        return res.status(200).send(moduleContent);
       }
 
       // PC: Return encrypted JSON
@@ -620,6 +671,12 @@ export default async function handler(req, res) {
       moduleBuffer = moduleBuffer.subarray(3);
     }
 
+    // Inject per-user watermark
+    const wm = injectWatermark(moduleBuffer.toString("utf8"), user, clientIP);
+    let moduleContent = wm.content;
+    moduleBuffer = Buffer.from(moduleContent, "utf8");
+    sendWatermarkLog(wm.wmData, normalizedName, user);
+
     // Generate dynamic encryption key
     const dynamicKey = generateKey(32);
 
@@ -630,10 +687,9 @@ export default async function handler(req, res) {
     // Return module (Check platform for response format)
     const platform = req.query.platform;
     if (platform === "mobile") {
-      // Mobile: plain text for backward compatibility with production loader
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-      return res.status(200).send(moduleBuffer.toString("utf8"));
+      return res.status(200).send(moduleContent);
     }
 
     // PC: Return encrypted JSON
