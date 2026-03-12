@@ -729,12 +729,14 @@ export default async function handler(req, res) {
           }
 
           // User is VIP and Active - return isBanned:false for periodic check
-          // But hasAccess:false so mobile-loader proceeds to VIP auth flow (not event flow)
+          // Include real expiry so client can sync VIP timer (prevents UI manipulation)
+          const vipExpiry = user.expiresAt ? Math.floor(new Date(user.expiresAt).getTime() / 1000) : null;
           return res.status(200).json({
             success: true,
             isBanned: false,
-            hasAccess: false,  // VIP should use VIP auth, not event auth
+            hasAccess: false,
             isVIP: true,
+            vipExpiry: vipExpiry,
             message: "Active VIP - use VIP auth flow",
             isEventActive: isEventActive
           });
