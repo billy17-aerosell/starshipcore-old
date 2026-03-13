@@ -1005,27 +1005,6 @@ end
       }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
-    // ═══════════════════════════════════════════════════════════════════
-    if (userId) {
-      try {
-        const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
-        const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
-        const tokenPlatform = isPlatformPC ? "pc" : "mobile";
-        const tokenData = `${userId}:${tokenExpiry}:${tokenPlatform}_loader`;
-        const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
-        const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-
-        // Multiple global assignments for maximum executor compatibility
-        const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"; getgenv().StarshipCloudToken = "${cloudToken}"; print("[STARSHIP_DEBUG] VERSION_3_LOADER_ACTIVE");\n`;
-        loaderScript = tokenInjection + loaderScript;
-        console.log(`[R2 Auth] 🎫 Token injected (Loader) for ${userId}: ${cloudToken.substring(0, 10)}...`);
-      } catch (e) {
-        console.error("Cloud token injection error:", e.message);
-      }
-    }
-
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("X-Access-Type", accessType);

@@ -1419,25 +1419,10 @@ async function handleMobileSuccess(
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
-  // ═══════════════════════════════════════════════════════════════════
-  let cloudToken = "";
-  try {
-    const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
-    const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
-    const tokenData = `${userId}:${tokenExpiry}:mobile_vip_script`;
-    const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
-    cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-  } catch (err) {
-    console.error("Cloud token generation error (Mobile VIP):", err.message);
-  }
-
   // Create the response data
   const responseData = {
     status: "success",
     platform: "mobile",
-    cloudToken: cloudToken, // Added for mobile UI access
     role: mobileUser.type || config.defaultType,
     duration: mobileUser.expiresAt ? `${remainingDays} days` : "LIFETIME",
     expiry: mobileUser.expiresAt
@@ -1496,24 +1481,6 @@ async function handlePCSuccess(
     scriptBuffer[2] === 0xbf
   ) {
     scriptBuffer = scriptBuffer.subarray(3);
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
-  // ═══════════════════════════════════════════════════════════════════
-  try {
-    const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
-    const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
-    const tokenData = `${userId}:${tokenExpiry}:pc_vip_script`;
-    const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
-    const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-
-    // Multiple global assignments for maximum executor compatibility
-    const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"; getgenv().StarshipCloudToken = "${cloudToken}"; print("[STARSHIP_DEBUG] VERSION_3_VIP_SCRIPT_ACTIVE");\n`;
-    scriptBuffer = Buffer.concat([Buffer.from(tokenInjection), scriptBuffer]);
-    console.log(`[R2 Auth] 📦 Token injected (VIP Script) for ${userId}: ${cloudToken.substring(0, 10)}...`);
-  } catch (err) {
-    console.error("Cloud token injection error:", err.message);
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -1645,24 +1612,6 @@ async function servePCScript(res, userId, userData, now, remainingDays) {
     scriptBuffer[2] === 0xbf
   ) {
     scriptBuffer = scriptBuffer.subarray(3);
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
-  // ═══════════════════════════════════════════════════════════════════
-  try {
-    const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
-    const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
-    const tokenData = `${userId}:${tokenExpiry}:pc_file_script`;
-    const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
-    const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-
-    // Multiple global assignments for maximum executor compatibility
-    const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"; getgenv().StarshipCloudToken = "${cloudToken}"; print("[STARSHIP_DEBUG] VERSION_3_FILE_SCRIPT_ACTIVE");\n`;
-    scriptBuffer = Buffer.concat([Buffer.from(tokenInjection), scriptBuffer]);
-    console.log(`[R2 Auth] 📄 Token injected (File Script) for ${userId}: ${cloudToken.substring(0, 10)}...`);
-  } catch (err) {
-    console.error("Cloud token injection error:", err.message);
   }
 
   // Generate Dynamic Key

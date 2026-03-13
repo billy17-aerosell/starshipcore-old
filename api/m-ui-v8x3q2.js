@@ -4,7 +4,6 @@
 
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
 
 // Event Code System API (from environment variable for security)
 const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
@@ -323,20 +322,10 @@ export default async function handler(req, res) {
 
               let uiScript = fs.readFileSync(uiPath, "utf8");
 
-              // ═══════════════════════════════════════════════════════════════
-              // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
-              // ═══════════════════════════════════════════════════════════════
-              try {
-                const crypto = await import("crypto");
-                const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
-                const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
-                const tokenData = `${userId}:${tokenExpiry}:event`;
-                const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
-                const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-                const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"\n`;
-                uiScript = tokenInjection + uiScript;
-              } catch (e) {
-                uiScript = `_G.StarshipCloudToken = ""\n` + uiScript;
+              // Inject R2 Event Code for cloud access
+              if (R2_EVENT_CODE) {
+                const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
+                uiScript = eventCodeInjection + uiScript;
               }
 
               res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -368,33 +357,11 @@ export default async function handler(req, res) {
 
         let uiScript = fs.readFileSync(uiPath, "utf8");
 
-        // ═══════════════════════════════════════════════════════════════
-        // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
-        // Instead of injecting raw R2_EVENT_CODE, we inject a short-lived token.
-        // ═══════════════════════════════════════════════════════════════
-        try {
-          const crypto = await import("crypto");
-          const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
-
-          // Token valid for 2 hours (enough for a long gaming session)
-          const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
-          const tokenData = `${userId}:${tokenExpiry}:mobile`;
-
-          const signature = crypto
-            .createHmac("sha256", SECRET_KEY)
-            .update(tokenData)
-            .digest("hex")
-            .substring(0, 32); // Use partial signature for efficiency
-
-          const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-
-          const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"\n`;
-          uiScript = tokenInjection + uiScript;
-          console.log(`[${timestamp}] 🎟️ Injected Cloud Token for VIP user (UserId: ${userId})`);
-        } catch (tokenErr) {
-          console.error(`[${timestamp}] ❌ Failed to generate cloud token:`, tokenErr.message);
-          // Fallback to empty token if crypto fails
-          uiScript = `_G.StarshipCloudToken = ""\n` + uiScript;
+        // Inject R2 Event Code for cloud access (VIP users get access)
+        if (R2_EVENT_CODE) {
+          const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
+          uiScript = eventCodeInjection + uiScript;
+          console.log(`[${timestamp}] 🔑 Injected R2 event code for VIP user`);
         }
 
         res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -455,23 +422,11 @@ export default async function handler(req, res) {
 
           let uiScript = fs.readFileSync(uiPath, "utf8");
 
-          // ═══════════════════════════════════════════════════════════════
-          // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
-          // ═══════════════════════════════════════════════════════════════
-          try {
-            const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
-            const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
-            const tokenData = `${userId}:${tokenExpiry}:file_vip`;
-            const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
-            const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-
-            // Multiple global assignments for maximum executor compatibility
-            const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"; getgenv().StarshipCloudToken = "${cloudToken}"; print("[STARSHIP_DEBUG] VERSION_3_TOKEN_ACTIVE");\n`;
-            uiScript = tokenInjection + uiScript;
-            console.log(`[R2 Auth] 🎫 Token injected for ${userId}: ${cloudToken.substring(0, 10)}...`);
-          } catch (e) {
-            console.error("Token generation failed:", e.message);
-            uiScript = `_G.StarshipCloudToken = "ERROR_AUTH";\n` + uiScript;
+          // Inject R2 Event Code for cloud access (file-based VIP users)
+          if (R2_EVENT_CODE) {
+            const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
+            uiScript = eventCodeInjection + uiScript;
+            console.log(`[${timestamp}] 🔑 Injected R2 event code for file-based VIP user`);
           }
 
           res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -507,23 +462,11 @@ export default async function handler(req, res) {
 
         let uiScript = fs.readFileSync(uiPath, "utf8");
 
-        // ═══════════════════════════════════════════════════════════════
-        // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
-        // ═══════════════════════════════════════════════════════════════
-        try {
-          const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
-          const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
-          const tokenData = `${userId}:${tokenExpiry}:event_code`;
-          const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
-          const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-
-          // Multiple global assignments for maximum executor compatibility
-          const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"; getgenv().StarshipCloudToken = "${cloudToken}"; print("[STARSHIP_DEBUG] VERSION_3_EVENT_TOKEN_ACTIVE");\n`;
-          uiScript = tokenInjection + uiScript;
-          console.log(`[R2 Auth] 🎟️ Token injected (Event) for ${userId}: ${cloudToken.substring(0, 10)}...`);
-        } catch (e) {
-          console.error("Token generation failed (Event):", e.message);
-          uiScript = `_G.StarshipCloudToken = "ERROR_EVENT_AUTH";\n` + uiScript;
+        // Inject R2 Event Code for cloud access
+        if (R2_EVENT_CODE) {
+          const eventCodeInjection = `_G.StarshipEventCode = "${R2_EVENT_CODE}"\n`;
+          uiScript = eventCodeInjection + uiScript;
+          console.log(`[${timestamp}] 🔑 Injected R2 event code for event user`);
         }
 
         // Note: Discord webhook sent from load.js instead (to avoid duplicate)
