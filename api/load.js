@@ -1419,10 +1419,25 @@ async function handleMobileSuccess(
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
+  // ═══════════════════════════════════════════════════════════════════
+  let cloudToken = "";
+  try {
+    const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
+    const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
+    const tokenData = `${userId}:${tokenExpiry}:mobile_vip_script`;
+    const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
+    cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
+  } catch (err) {
+    console.error("Cloud token generation error (Mobile VIP):", err.message);
+  }
+
   // Create the response data
   const responseData = {
     status: "success",
     platform: "mobile",
+    cloudToken: cloudToken, // Added for mobile UI access
     role: mobileUser.type || config.defaultType,
     duration: mobileUser.expiresAt ? `${remainingDays} days` : "LIFETIME",
     expiry: mobileUser.expiresAt
