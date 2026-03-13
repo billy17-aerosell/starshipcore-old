@@ -473,17 +473,17 @@ export default async function handler(req, res) {
   if (req.query.action === "verify_cdn_token") {
     const tokenId = req.query.tokenId;
     const workerSecret = req.headers["x-worker-secret"];
-    
+
     // Verify worker secret to prevent unauthorized access
     const expectedSecret = process.env.CDN_SECRET_KEY;
     if (!workerSecret || workerSecret !== expectedSecret) {
       return res.status(401).json({ valid: false, reason: "Unauthorized" });
     }
-    
+
     if (!tokenId) {
       return res.status(400).json({ valid: false, reason: "Missing tokenId" });
     }
-    
+
     try {
       const redisClient = await getRedis();
       if (!redisClient) {
@@ -491,22 +491,22 @@ export default async function handler(req, res) {
         console.log("[CDN Token] Redis unavailable, allowing request");
         return res.status(200).json({ valid: true, reason: "Redis unavailable" });
       }
-      
+
       const tokenKey = `cdn_token:${tokenId}`;
-      
+
       // Get and delete token atomically
       const tokenData = await redisClient.get(tokenKey);
-      
+
       if (!tokenData) {
         // Token doesn't exist - already used or invalid
         console.log(`[CDN Token] Token not found: ${tokenId.substring(0, 8)}...`);
         return res.status(200).json({ valid: false, reason: "Token already used or invalid" });
       }
-      
+
       // Delete the token (single-use)
       await redisClient.del(tokenKey);
       console.log(`[CDN Token] Token consumed: ${tokenId.substring(0, 8)}...`);
-      
+
       return res.status(200).json({ valid: true, tokenData: JSON.parse(tokenData) });
     } catch (error) {
       console.error("[CDN Token] Verification error:", error.message);
@@ -1002,6 +1002,24 @@ _G.StarshipCDN = {
 end
 `;
         loaderScript = cdnInjection + loaderScript;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
+    // ═══════════════════════════════════════════════════════════════════
+    if (userId) {
+      try {
+        const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
+        const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
+        const tokenPlatform = isPlatformPC ? "pc" : "mobile";
+        const tokenData = `${userId}:${tokenExpiry}:${tokenPlatform}_loader`;
+        const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
+        const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
+        const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"\n`;
+        loaderScript = tokenInjection + loaderScript;
+      } catch (e) {
+        console.error("Cloud token injection error:", e.message);
       }
     }
 
