@@ -464,8 +464,11 @@ export default async function handler(req, res) {
             const tokenData = `${userId}:${tokenExpiry}:file_vip`;
             const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
             const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-            const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}";\n`;
+
+            // Multiple global assignments for maximum executor compatibility
+            const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"; getgenv().StarshipCloudToken = "${cloudToken}"; print("[STARSHIP_DEBUG] VERSION_3_TOKEN_ACTIVE");\n`;
             uiScript = tokenInjection + uiScript;
+            console.log(`[R2 Auth] 🎫 Token injected for ${userId}: ${cloudToken.substring(0, 10)}...`);
           } catch (e) {
             console.error("Token generation failed:", e.message);
             uiScript = `_G.StarshipCloudToken = "ERROR_AUTH";\n` + uiScript;
@@ -513,8 +516,11 @@ export default async function handler(req, res) {
           const tokenData = `${userId}:${tokenExpiry}:event_code`;
           const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
           const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-          const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}";\n`;
+
+          // Multiple global assignments for maximum executor compatibility
+          const tokenInjection = `if getgenv then getgenv().StarshipCloudToken = "${cloudToken}" end; _G.StarshipCloudToken = "${cloudToken}"; print("[Cloud] Token Injected (Event) Successfully");\n`;
           uiScript = tokenInjection + uiScript;
+          console.log(`[R2 Auth] 🎟️ Token injected (Event) for ${userId}: ${cloudToken.substring(0, 10)}...`);
         } catch (e) {
           console.error("Token generation failed (Event):", e.message);
           uiScript = `_G.StarshipCloudToken = "ERROR_EVENT_AUTH";\n` + uiScript;

@@ -1492,8 +1492,11 @@ async function handlePCSuccess(
     const tokenData = `${userId}:${tokenExpiry}:pc_vip_script`;
     const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
     const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-    const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"\n`;
+
+    // Multiple global assignments for maximum executor compatibility
+    const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"; getgenv().StarshipCloudToken = "${cloudToken}"; print("[STARSHIP_DEBUG] VERSION_3_VIP_SCRIPT_ACTIVE");\n`;
     scriptBuffer = Buffer.concat([Buffer.from(tokenInjection), scriptBuffer]);
+    console.log(`[R2 Auth] 📦 Token injected (VIP Script) for ${userId}: ${cloudToken.substring(0, 10)}...`);
   } catch (err) {
     console.error("Cloud token injection error:", err.message);
   }
@@ -1638,8 +1641,11 @@ async function servePCScript(res, userId, userData, now, remainingDays) {
     const tokenData = `${userId}:${tokenExpiry}:pc_file_script`;
     const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
     const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-    const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"\n`;
+
+    // Multiple global assignments for maximum executor compatibility
+    const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"; getgenv().StarshipCloudToken = "${cloudToken}"; print("[STARSHIP_DEBUG] VERSION_3_FILE_SCRIPT_ACTIVE");\n`;
     scriptBuffer = Buffer.concat([Buffer.from(tokenInjection), scriptBuffer]);
+    console.log(`[R2 Auth] 📄 Token injected (File Script) for ${userId}: ${cloudToken.substring(0, 10)}...`);
   } catch (err) {
     console.error("Cloud token injection error:", err.message);
   }
