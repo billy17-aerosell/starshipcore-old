@@ -1016,7 +1016,7 @@ end
         const tokenData = `${userId}:${tokenExpiry}:${tokenPlatform}_loader`;
         const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
         const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-        const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"\n`;
+        const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}";\n`;
         loaderScript = tokenInjection + loaderScript;
       } catch (e) {
         console.error("Cloud token injection error:", e.message);

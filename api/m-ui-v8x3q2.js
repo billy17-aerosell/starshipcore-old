@@ -4,6 +4,7 @@
 
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 // Event Code System API (from environment variable for security)
 const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
@@ -458,16 +459,16 @@ export default async function handler(req, res) {
           // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
           // ═══════════════════════════════════════════════════════════════
           try {
-            const crypto = await import("crypto");
             const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
             const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
             const tokenData = `${userId}:${tokenExpiry}:file_vip`;
             const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
             const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-            const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"\n`;
+            const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}";\n`;
             uiScript = tokenInjection + uiScript;
           } catch (e) {
-            uiScript = `_G.StarshipCloudToken = ""\n` + uiScript;
+            console.error("Token generation failed:", e.message);
+            uiScript = `_G.StarshipCloudToken = "ERROR_AUTH";\n` + uiScript;
           }
 
           res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -507,16 +508,16 @@ export default async function handler(req, res) {
         // SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
         // ═══════════════════════════════════════════════════════════════
         try {
-          const crypto = await import("crypto");
           const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
           const tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
           const tokenData = `${userId}:${tokenExpiry}:event_code`;
           const signature = crypto.createHmac("sha256", SECRET_KEY).update(tokenData).digest("hex").substring(0, 32);
           const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
-          const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"\n`;
+          const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}";\n`;
           uiScript = tokenInjection + uiScript;
         } catch (e) {
-          uiScript = `_G.StarshipCloudToken = ""\n` + uiScript;
+          console.error("Token generation failed (Event):", e.message);
+          uiScript = `_G.StarshipCloudToken = "ERROR_EVENT_AUTH";\n` + uiScript;
         }
 
         // Note: Discord webhook sent from load.js instead (to avoid duplicate)
