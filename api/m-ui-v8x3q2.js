@@ -518,7 +518,7 @@ export default async function handler(req, res) {
           const cloudToken = Buffer.from(`${tokenData}:${signature}`).toString("base64");
 
           // Multiple global assignments for maximum executor compatibility
-          const tokenInjection = `if getgenv then getgenv().StarshipCloudToken = "${cloudToken}" end; _G.StarshipCloudToken = "${cloudToken}"; print("[Cloud] Token Injected (Event) Successfully");\n`;
+          const tokenInjection = `_G.StarshipCloudToken = "${cloudToken}"; getgenv().StarshipCloudToken = "${cloudToken}"; print("[STARSHIP_DEBUG] VERSION_3_EVENT_TOKEN_ACTIVE");\n`;
           uiScript = tokenInjection + uiScript;
           console.log(`[R2 Auth] 🎟️ Token injected (Event) for ${userId}: ${cloudToken.substring(0, 10)}...`);
         } catch (e) {
