@@ -315,6 +315,55 @@ async function sendDiscordLog(logData) {
   }
 }
 
+// ============================================
+// TOKEN-BASED ACCESS VALIDATION (Fixes [Risiko: TINGGI])
+// ============================================
+async function validateCloudToken(token, userId) {
+  if (!token || !userId) return false;
+
+  try {
+    const crypto = await import("crypto");
+    const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
+
+    // Decode from base64
+    const decoded = Buffer.from(token, "base64").toString("utf-8");
+    const parts = decoded.split(":");
+    if (parts.length < 4) return false;
+
+    const [tokenUserId, expiry, platform, signature] = parts;
+
+    // 1. Check if token belongs to the requesting user
+    if (tokenUserId !== String(userId)) {
+      console.log(`[R2 Auth] ❌ Token user mismatch: ${tokenUserId} vs ${userId}`);
+      return false;
+    }
+
+    // 2. Check if token has expired
+    if (Date.now() > parseInt(expiry)) {
+      console.log(`[R2 Auth] ❌ Token expired: ${new Date(parseInt(expiry)).toISOString()}`);
+      return false;
+    }
+
+    // 3. Verify signature
+    const tokenData = `${tokenUserId}:${expiry}:${platform}`;
+    const expectedSignature = crypto
+      .createHmac("sha256", SECRET_KEY)
+      .update(tokenData)
+      .digest("hex")
+      .substring(0, 32);
+
+    if (signature !== expectedSignature) {
+      console.log(`[R2 Auth] ❌ Invalid token signature`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[R2 Auth] Token validation error:", error.message);
+    return false;
+  }
+}
+
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -322,83 +371,54 @@ export default async function handler(req, res) {
     "Access-Control-Allow-Methods",
     "GET, POST, DELETE, PATCH, OPTIONS",
   );
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-User-Id");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-User-Id, X-Event-Code, X-Cloud-Token");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
   // ============================================
-  // EVENT PROTECTION - Check if event is enabled and code is valid
-  // + User-specific validation and blacklist system
+  // SECURITY UPDATE: Token-based Access
   // ============================================
   const EVENT_ENABLED = process.env.R2_EVENT_ENABLED === "true";
-  const EVENT_CODE = process.env.R2_EVENT_CODE || "";
-  const requestCode = req.query.eventCode || req.body?.eventCode || req.headers["x-event-code"];
   const requestUserId = req.query.userId || req.body?.userId || req.headers["x-user-id"];
+  const cloudToken = req.query.cloudToken || req.body?.cloudToken || req.headers["x-cloud-token"];
 
-  // BLACKLIST - Add userIds here that should be blocked (comma-separated in env)
-  // Example: R2_BLACKLIST="123456789,987654321,111222333"
+  // BLACKLIST - Add userIds here that should be blocked
   const BLACKLIST_RAW = process.env.R2_BLACKLIST || "";
   const BLACKLIST = BLACKLIST_RAW.split(",").map(id => id.trim()).filter(id => id);
 
-  // ============================================
-  // CRITICAL: Validate userId has ACTUAL access (VIP or Event)
-  // This prevents hackers with stolen event codes from accessing R2
-  // ============================================
-
-  // DEV MODE BYPASS - Allow localhost/dev access
-  const IS_DEV = process.env.NODE_ENV === 'development';
+  // OWNER & DEV BYPASS
+  const OWNER_USER_ID = "9268011358";
+  const IS_DEV = process.env.NODE_ENV === "development";
 
   if (IS_DEV) {
-    console.log(`[R2] 🔧 DEV MODE DETECTED - Bypassing strict auth for ${requestUserId}`);
+    console.log(`[R2] 🔧 DEV MODE BYPASS GRANTED - UserId: ${requestUserId}`);
+  } else if (requestUserId === OWNER_USER_ID) {
+    console.log(`[R2] 👑 OWNER BYPASS GRANTED - UserId: ${requestUserId}`);
   } else {
-    // Check if event mode is enabled
+    // 1. Check if event mode is enabled
     if (!EVENT_ENABLED) {
-      console.log(`[R2] ❌ Event mode disabled - access denied`);
-      return res.status(403).json({
-        error: "Event tidak aktif",
-        message: "Cloud storage sedang tidak tersedia"
-      });
+      return res.status(403).json({ error: "Event tidak aktif", message: "Cloud storage sedang tidak tersedia" });
     }
 
-    // Check event code
-    if (!requestCode || requestCode !== EVENT_CODE) {
-      console.log(`[R2] ❌ Invalid event code: ${requestCode ? "wrong code" : "no code"} | UserId: ${requestUserId || "none"}`);
-      return res.status(403).json({
-        error: "Kode event tidak valid",
-        message: "Masukkan kode event yang benar untuk mengakses cloud storage"
-      });
+    // 2. Check if user provided a token
+    if (!cloudToken) {
+      return res.status(403).json({ error: "Token tidak ditemukan", message: "Silakan Re-Execute script untuk mendapatkan akses Cloud" });
     }
 
-    // Check userId is provided
-    if (!requestUserId) {
-      console.log(`[R2] ❌ No userId provided with event code`);
-      return res.status(403).json({
-        error: "UserId tidak ditemukan",
-        message: "Autentikasi tidak valid"
-      });
+    // 3. Validate Token
+    const isTokenValid = await validateCloudToken(cloudToken, requestUserId);
+    if (!isTokenValid) {
+      return res.status(403).json({ error: "Token tidak valid", message: "Akses ditolak. Token kadaluarsa atau tidak sah." });
     }
 
-    // Check if user is blacklisted
-    if (BLACKLIST.includes(requestUserId.toString())) {
-      console.log(`[R2] 🚫 BLACKLISTED USER BLOCKED - UserId: ${requestUserId}`);
-      return res.status(403).json({
-        error: "Akses ditolak",
-        message: "Akun Anda telah diblokir dari layanan ini"
-      });
+    // 4. Blacklist check
+    if (BLACKLIST.includes(String(requestUserId))) {
+      return res.status(403).json({ error: "Akses ditolak", message: "Akun Anda telah diblokir" });
     }
 
-    // Validate User Access (VIP/Event)
-    const accessResult = await validateUserAccess(requestUserId);
-    if (!accessResult.hasAccess) {
-      console.log(`[R2] ❌ NO VALID ACCESS - UserId: ${requestUserId} (not VIP, not Event)`);
-      return res.status(403).json({
-        error: "Akses tidak valid",
-        message: "UserId tidak memiliki akses VIP atau Event"
-      });
-    }
-    console.log(`[R2] ✅ Access granted - UserId: ${requestUserId} (${accessResult.source})`);
+    console.log(`[R2] ✅ Token-Access granted - User: ${requestUserId}`);
   }
 
   const { method } = req;

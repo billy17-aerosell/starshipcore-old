@@ -40,8 +40,9 @@ end
 
 -- Configuration - use dynamic URL from global (supports localhost dev mode)
 -- Uses Cloudflare R2 storage for large files support (up to 5GB)
-local function GetEventCode()
-	return _G.StarshipEventCode or ""
+-- SECURITY UPDATE: Token-based Cloud Access (Fixes [Risiko: TINGGI])
+local function GetCloudToken()
+	return _G.StarshipCloudToken or ""
 end
 
 -- Get base API URL (without auth params)
@@ -50,11 +51,11 @@ local function GetAPIBaseUrl()
 	return baseUrl .. "/api/cloud-store-x7k9"
 end
 
--- Get auth params string (eventCode + userId)
+-- Get auth params string (cloudToken + userId)
 local function GetAuthParams()
-	local eventCode = GetEventCode()
+	local cloudToken = GetCloudToken()
 	local userId = tostring(LocalPlayer.UserId)
-	return "eventCode=" .. eventCode .. "&userId=" .. userId
+	return "cloudToken=" .. cloudToken .. "&userId=" .. userId
 end
 
 -- Full API URL with auth params (for simple requests)
@@ -236,6 +237,8 @@ local function SafeRequest(url, method, body, callback)
 						Method = method,
 						Headers = {
 							["Content-Type"] = "application/json",
+							["X-User-Id"] = tostring(LocalPlayer.UserId),
+							["X-Cloud-Token"] = GetCloudToken(),
 						},
 						Body = body,
 					})

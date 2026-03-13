@@ -50,7 +50,7 @@ async function checkVIPAccess(userId) {
   try {
     const redisClient = await getRedis();
     if (!redisClient) return { hasAccess: false };
-    
+
     // Check PC whitelist
     const pcWhitelist = await redisClient.get("starship:whitelist");
     if (pcWhitelist) {
@@ -59,7 +59,7 @@ async function checkVIPAccess(userId) {
         return { hasAccess: true, source: "PC VIP" };
       }
     }
-    
+
     // Check Mobile whitelist
     const mobileWhitelist = await redisClient.get("starship:mobile_whitelist");
     if (mobileWhitelist) {
@@ -68,7 +68,7 @@ async function checkVIPAccess(userId) {
         return { hasAccess: true, source: "Mobile VIP" };
       }
     }
-    
+
     return { hasAccess: false };
   } catch (error) {
     console.error("[R2-Chunked] VIP check error:", error.message);
@@ -81,12 +81,12 @@ async function checkEventAccessForUser(userId) {
   if (!EVENT_CODE_API_URL) {
     return { hasAccess: false };
   }
-  
+
   try {
     const apiUrl = `${EVENT_CODE_API_URL}?action=check&userId=${userId}`;
     const response = await fetch(apiUrl);
     const data = await response.json();
-    
+
     if (data.success && data.hasAccess) {
       return { hasAccess: true, source: "Event" };
     }
@@ -154,16 +154,16 @@ async function sendGzipJson(res, data, statusCode = 200) {
   try {
     const jsonString = JSON.stringify(data);
     const compressed = await gzip(Buffer.from(jsonString, "utf-8"));
-    
+
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Encoding", "gzip");
     res.setHeader("Vary", "Accept-Encoding");
     res.setHeader("X-Original-Size", jsonString.length);
     res.setHeader("X-Compressed-Size", compressed.length);
-    
+
     const compressionRatio = ((1 - compressed.length / jsonString.length) * 100).toFixed(1);
     console.log(`[R2-Chunked] GZIP: ${jsonString.length} -> ${compressed.length} bytes (${compressionRatio}% reduction)`);
-    
+
     return res.status(statusCode).send(compressed);
   } catch (error) {
     // Fallback to uncompressed if gzip fails
@@ -177,7 +177,7 @@ async function getChunkInfo(recordingId) {
   try {
     // First, check if chunked metadata exists
     const metaKey = `recordings/${recordingId}_meta.json`;
-    
+
     try {
       const metaResult = await r2Client.send(
         new GetObjectCommand({
@@ -194,7 +194,7 @@ async function getChunkInfo(recordingId) {
     } catch (e) {
       // No chunked metadata, check if original file exists
       const originalKey = `recordings/${recordingId}.json`;
-      
+
       try {
         const headResult = await r2Client.send(
           new HeadObjectCommand({
@@ -202,7 +202,7 @@ async function getChunkInfo(recordingId) {
             Key: originalKey,
           })
         );
-        
+
         return {
           isChunked: false,
           recordingId: recordingId,
@@ -228,90 +228,110 @@ function createChunks(frames, framesPerChunk = FRAMES_PER_CHUNK) {
   return chunks;
 }
 
+// ============================================
+// TOKEN-BASED ACCESS VALIDATION (Fixes [Risiko: TINGGI])
+// ============================================
+async function validateCloudToken(token, userId) {
+  if (!token || !userId) return false;
+
+  try {
+    const crypto = await import("crypto");
+    const SECRET_KEY = process.env.STARSHIP_SECRET_KEY || process.env.ADMIN_SECRET || "starship-fallback-secret-2025";
+
+    // Decode from base64
+    const decoded = Buffer.from(token, "base64").toString("utf-8");
+    const parts = decoded.split(":");
+    if (parts.length < 4) return false;
+
+    const [tokenUserId, expiry, platform, signature] = parts;
+
+    // 1. Check if token belongs to the requesting user
+    if (tokenUserId !== String(userId)) {
+      console.log(`[R2 Auth] ❌ Token user mismatch: ${tokenUserId} vs ${userId}`);
+      return false;
+    }
+
+    // 2. Check if token has expired
+    if (Date.now() > parseInt(expiry)) {
+      console.log(`[R2 Auth] ❌ Token expired: ${new Date(parseInt(expiry)).toISOString()}`);
+      return false;
+    }
+
+    // 3. Verify signature
+    const tokenData = `${tokenUserId}:${expiry}:${platform}`;
+    const expectedSignature = crypto
+      .createHmac("sha256", SECRET_KEY)
+      .update(tokenData)
+      .digest("hex")
+      .substring(0, 32);
+
+    if (signature !== expectedSignature) {
+      console.log(`[R2 Auth] ❌ Invalid token signature`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[R2 Auth] Token validation error:", error.message);
+    return false;
+  }
+}
+
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader(
     "Access-Control-Allow-Methods",
-    "GET, POST, OPTIONS"
+    "GET, POST, OPTIONS",
   );
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-User-Id");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-User-Id, X-Event-Code, X-Cloud-Token");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
   // ============================================
-  // EVENT PROTECTION - Check if event is enabled and code is valid
-  // + User-specific validation and blacklist system
+  // SECURITY UPDATE: Token-based Access
   // ============================================
   const EVENT_ENABLED = process.env.R2_EVENT_ENABLED === "true";
-  const EVENT_CODE = process.env.R2_EVENT_CODE || "";
-  const requestCode = req.query.eventCode || req.body?.eventCode || req.headers["x-event-code"];
   const requestUserId = req.query.userId || req.body?.userId || req.headers["x-user-id"];
-  
-  // BLACKLIST - Add userIds here that should be blocked (comma-separated in env)
-  // Example: R2_BLACKLIST="123456789,987654321,111222333"
+  const cloudToken = req.query.cloudToken || req.body?.cloudToken || req.headers["x-cloud-token"];
+
+  // BLACKLIST - Add userIds here that should be blocked
   const BLACKLIST_RAW = process.env.R2_BLACKLIST || "";
   const BLACKLIST = BLACKLIST_RAW.split(",").map(id => id.trim()).filter(id => id);
-  
-  // ============================================
-  // CRITICAL: Validate userId has ACTUAL access (VIP or Event)
-  // This prevents hackers with stolen event codes from accessing R2
-  // ============================================
-  
-  // DEV MODE BYPASS - Allow localhost/dev access
-  const IS_DEV = process.env.NODE_ENV === 'development';
-  
+
+  // OWNER & DEV BYPASS
+  const OWNER_USER_ID = "9268011358";
+  const IS_DEV = process.env.NODE_ENV === "development";
+
   if (IS_DEV) {
-    console.log(`[R2-Chunked] 🔧 DEV MODE DETECTED - Bypassing strict auth for ${requestUserId}`);
+    console.log(`[R2-Chunked] 🔧 DEV MODE BYPASS GRANTED - UserId: ${requestUserId}`);
+  } else if (requestUserId === OWNER_USER_ID) {
+    console.log(`[R2-Chunked] 👑 OWNER BYPASS GRANTED - UserId: ${requestUserId}`);
   } else {
-    // Check if event mode is enabled
+    // 1. Check if event mode is enabled
     if (!EVENT_ENABLED) {
-      console.log(`[R2-Chunked] ❌ Event mode disabled - access denied`);
-      return res.status(403).json({ 
-        error: "Event tidak aktif",
-        message: "Cloud storage sedang tidak tersedia"
-      });
+      return res.status(403).json({ error: "Event tidak aktif", message: "Cloud storage sedang tidak tersedia" });
     }
-    
-    // Check event code
-    if (!requestCode || requestCode !== EVENT_CODE) {
-      console.log(`[R2-Chunked] ❌ Invalid event code: ${requestCode ? "wrong code" : "no code"} | UserId: ${requestUserId || "none"}`);
-      return res.status(403).json({ 
-        error: "Kode event tidak valid",
-        message: "Masukkan kode event yang benar untuk mengakses cloud storage"
-      });
+
+    // 2. Check if user provided a token
+    if (!cloudToken) {
+      return res.status(403).json({ error: "Token tidak ditemukan", message: "Silakan Re-Execute script untuk mendapatkan akses Cloud" });
     }
-    
-    // Check userId is provided
-    if (!requestUserId) {
-      console.log(`[R2-Chunked] ❌ No userId provided with event code`);
-      return res.status(403).json({ 
-        error: "UserId tidak ditemukan",
-        message: "Autentikasi tidak valid"
-      });
+
+    // 3. Validate Token
+    const isTokenValid = await validateCloudToken(cloudToken, requestUserId);
+    if (!isTokenValid) {
+      return res.status(403).json({ error: "Token tidak valid", message: "Akses ditolak. Token kadaluarsa atau tidak sah." });
     }
-    
-    // Check if user is blacklisted
-    if (BLACKLIST.includes(requestUserId.toString())) {
-      console.log(`[R2-Chunked] 🚫 BLACKLISTED USER BLOCKED - UserId: ${requestUserId}`);
-      return res.status(403).json({ 
-        error: "Akses ditolak",
-        message: "Akun Anda telah diblokir dari layanan ini"
-      });
+
+    // 4. Blacklist check
+    if (BLACKLIST.includes(String(requestUserId))) {
+      return res.status(403).json({ error: "Akses ditolak", message: "Akun Anda telah diblokir" });
     }
-    
-    // Validate User Access (VIP/Event)
-    const accessResult = await validateUserAccess(requestUserId);
-    if (!accessResult.hasAccess) {
-      console.log(`[R2-Chunked] ❌ NO VALID ACCESS - UserId: ${requestUserId} (not VIP, not Event)`);
-      return res.status(403).json({ 
-        error: "Akses tidak valid",
-        message: "UserId tidak memiliki akses VIP atau Event"
-      });
-    }
-    console.log(`[R2-Chunked] ✅ Access granted - UserId: ${requestUserId} (${accessResult.source})`);
+
+    console.log(`[R2-Chunked] ✅ Token-Access granted - User: ${requestUserId}`);
   }
 
   const { method } = req;
@@ -321,15 +341,15 @@ export default async function handler(req, res) {
   // GET - Retrieve chunk info or specific chunk
   // ============================================
   if (method === "GET") {
-    
+
     // GET /api/r2-chunked?recordingId=xxx&action=info
     // Returns metadata about the recording (chunk info, total frames, etc.)
     if (action === "info" && recordingId) {
       try {
         console.log(`[R2-Chunked] Getting info for: ${recordingId}`);
-        
+
         const info = await getChunkInfo(recordingId);
-        
+
         if (!info) {
           return res.status(404).json({
             error: "Recording not found",
@@ -355,10 +375,10 @@ export default async function handler(req, res) {
         } else {
           // Not chunked - need to load and check if it's large enough to chunk
           const originalKey = `recordings/${recordingId}.json`;
-          
+
           // For large files (>10MB), recommend chunking
           const sizeMB = info.size / (1024 * 1024);
-          
+
           if (sizeMB > 10) {
             // Load the recording to get accurate info
             const getResult = await r2Client.send(
@@ -367,12 +387,12 @@ export default async function handler(req, res) {
                 Key: originalKey,
               })
             );
-            
+
             const content = await streamToString(getResult.Body);
             const recordingData = JSON.parse(content);
             const frames = recordingData.data?.Frames || [];
             const totalChunks = Math.ceil(frames.length / FRAMES_PER_CHUNK);
-            
+
             return res.status(200).json({
               success: true,
               isChunked: false,
@@ -411,12 +431,12 @@ export default async function handler(req, res) {
     // Returns the specified chunk of frames
     if (chunk !== undefined && recordingId) {
       const chunkIndex = parseInt(chunk);
-      
+
       try {
         console.log(`[R2-Chunked] Getting chunk ${chunkIndex} for: ${recordingId}`);
-        
+
         const info = await getChunkInfo(recordingId);
-        
+
         if (!info) {
           return res.status(404).json({
             error: "Recording not found",
@@ -427,7 +447,7 @@ export default async function handler(req, res) {
         if (info.isChunked) {
           // Load chunk file directly
           const chunkKey = `recordings/${recordingId}_chunk_${chunkIndex}.json`;
-          
+
           try {
             const chunkResult = await r2Client.send(
               new GetObjectCommand({
@@ -435,10 +455,10 @@ export default async function handler(req, res) {
                 Key: chunkKey,
               })
             );
-            
+
             const chunkContent = await streamToString(chunkResult.Body);
             const chunkData = JSON.parse(chunkContent);
-            
+
             // Use GZIP compression for faster transfer
             return sendGzipJson(res, {
               success: true,
@@ -459,21 +479,21 @@ export default async function handler(req, res) {
         } else {
           // Not chunked - extract chunk from original file
           const originalKey = `recordings/${recordingId}.json`;
-          
+
           const getResult = await r2Client.send(
             new GetObjectCommand({
               Bucket: R2_BUCKET_NAME,
               Key: originalKey,
             })
           );
-          
+
           const content = await streamToString(getResult.Body);
           const recordingData = JSON.parse(content);
           const frames = recordingData.data?.Frames || [];
-          
+
           const startIdx = chunkIndex * FRAMES_PER_CHUNK;
           const endIdx = Math.min(startIdx + FRAMES_PER_CHUNK, frames.length);
-          
+
           if (startIdx >= frames.length) {
             return res.status(404).json({
               error: "Chunk index out of range",
@@ -482,10 +502,10 @@ export default async function handler(req, res) {
               totalFrames: frames.length,
             });
           }
-          
+
           const chunkFrames = frames.slice(startIdx, endIdx);
           const totalChunks = Math.ceil(frames.length / FRAMES_PER_CHUNK);
-          
+
           // Use GZIP compression for faster transfer
           return sendGzipJson(res, {
             success: true,
@@ -519,10 +539,10 @@ export default async function handler(req, res) {
     if (action === "metadata" && recordingId) {
       try {
         console.log(`[R2-Chunked] Getting metadata for: ${recordingId}`);
-        
+
         // Check for chunked metadata first
         const metaKey = `recordings/${recordingId}_meta.json`;
-        
+
         try {
           const metaResult = await r2Client.send(
             new GetObjectCommand({
@@ -532,7 +552,7 @@ export default async function handler(req, res) {
           );
           const metaContent = await streamToString(metaResult.Body);
           const metadata = JSON.parse(metaContent);
-          
+
           return res.status(200).json({
             success: true,
             isChunked: true,
@@ -541,18 +561,18 @@ export default async function handler(req, res) {
         } catch (e) {
           // Fallback to original file
           const originalKey = `recordings/${recordingId}.json`;
-          
+
           const getResult = await r2Client.send(
             new GetObjectCommand({
               Bucket: R2_BUCKET_NAME,
               Key: originalKey,
             })
           );
-          
+
           const content = await streamToString(getResult.Body);
           const recordingData = JSON.parse(content);
           const frames = recordingData.data?.Frames || [];
-          
+
           return res.status(200).json({
             success: true,
             isChunked: false,
@@ -596,17 +616,17 @@ export default async function handler(req, res) {
     // Upload a single chunk of a recording
     if (postAction === "upload_chunk") {
       const { recordingId, chunkIndex, chunkData } = req.body;
-      
+
       if (!recordingId || chunkIndex === undefined || !chunkData) {
-         return res.status(400).json({ error: "Missing parameters: recordingId, chunkIndex, chunkData" });
+        return res.status(400).json({ error: "Missing parameters: recordingId, chunkIndex, chunkData" });
       }
 
       try {
         const chunkKey = `recordings/${recordingId}_chunk_${chunkIndex}.json`;
-        
+
         // Ensure chunkData is stringified if it's an object
         const bodyContent = typeof chunkData === 'string' ? chunkData : JSON.stringify(chunkData);
-        
+
         await r2Client.send(
           new PutObjectCommand({
             Bucket: R2_BUCKET_NAME,
@@ -615,7 +635,7 @@ export default async function handler(req, res) {
             ContentType: "application/json",
           })
         );
-        
+
         console.log(`[R2-Chunked] Uploaded chunk ${chunkIndex} for ${recordingId}`);
         return res.status(200).json({ success: true, chunkIndex });
       } catch (error) {
@@ -628,133 +648,133 @@ export default async function handler(req, res) {
     // Save metadata file ONLY (no merge - chunks stay separate)
     // This is fast and won't timeout even for huge files
     if (postAction === "save_meta") {
-        const { recordingId, metadata } = req.body;
-        
-        if (!recordingId || !metadata) {
-            return res.status(400).json({ error: "Missing parameters: recordingId, metadata" });
-        }
+      const { recordingId, metadata } = req.body;
 
-        try {
-            console.log(`[R2-Chunked] Saving metadata for ${recordingId} (${metadata.totalChunks} chunks)...`);
-            
-            // Just save the metadata file - NO MERGE
-            const metaKey = `recordings/${recordingId}_meta.json`;
-            
-            await r2Client.send(new PutObjectCommand({
-                Bucket: R2_BUCKET_NAME,
-                Key: metaKey,
-                Body: JSON.stringify(metadata),
-                ContentType: "application/json",
-            }));
-            
-            console.log(`[R2-Chunked] Metadata saved: ${metaKey}`);
-            
-            return res.status(200).json({ 
-                success: true, 
-                recordingId, 
-                isChunked: true,
-                totalChunks: metadata.totalChunks,
-                message: "Chunked recording saved successfully!" 
-            });
+      if (!recordingId || !metadata) {
+        return res.status(400).json({ error: "Missing parameters: recordingId, metadata" });
+      }
 
-        } catch (error) {
-            console.error("[R2-Chunked] Save metadata error:", error);
-            return res.status(500).json({ error: "Failed to save metadata", details: error.message });
-        }
+      try {
+        console.log(`[R2-Chunked] Saving metadata for ${recordingId} (${metadata.totalChunks} chunks)...`);
+
+        // Just save the metadata file - NO MERGE
+        const metaKey = `recordings/${recordingId}_meta.json`;
+
+        await r2Client.send(new PutObjectCommand({
+          Bucket: R2_BUCKET_NAME,
+          Key: metaKey,
+          Body: JSON.stringify(metadata),
+          ContentType: "application/json",
+        }));
+
+        console.log(`[R2-Chunked] Metadata saved: ${metaKey}`);
+
+        return res.status(200).json({
+          success: true,
+          recordingId,
+          isChunked: true,
+          totalChunks: metadata.totalChunks,
+          message: "Chunked recording saved successfully!"
+        });
+
+      } catch (error) {
+        console.error("[R2-Chunked] Save metadata error:", error);
+        return res.status(500).json({ error: "Failed to save metadata", details: error.message });
+      }
     }
 
     // POST /api/r2-chunked?action=upload_meta
     // Finalize upload by merging chunks into a single file (LEGACY - may timeout on large files)
     if (postAction === "upload_meta") {
-        const { recordingId, metadata } = req.body;
-        
-        if (!recordingId || !metadata) {
-            return res.status(400).json({ error: "Missing parameters: recordingId, metadata" });
+      const { recordingId, metadata } = req.body;
+
+      if (!recordingId || !metadata) {
+        return res.status(400).json({ error: "Missing parameters: recordingId, metadata" });
+      }
+
+      try {
+        console.log(`[R2-Chunked] Merging ${metadata.totalChunks} chunks for ${recordingId}...`);
+
+        // 1. Download all chunks
+        const chunkPromises = [];
+        for (let i = 0; i < metadata.totalChunks; i++) {
+          chunkPromises.push(
+            r2Client.send(new GetObjectCommand({
+              Bucket: R2_BUCKET_NAME,
+              Key: `recordings/${recordingId}_chunk_${i}.json`
+            })).then(res => streamToString(res.Body))
+              .then(str => JSON.parse(str))
+          );
         }
 
-        try {
-            console.log(`[R2-Chunked] Merging ${metadata.totalChunks} chunks for ${recordingId}...`);
-            
-            // 1. Download all chunks
-            const chunkPromises = [];
-            for (let i = 0; i < metadata.totalChunks; i++) {
-                chunkPromises.push(
-                    r2Client.send(new GetObjectCommand({ 
-                        Bucket: R2_BUCKET_NAME, 
-                        Key: `recordings/${recordingId}_chunk_${i}.json` 
-                    })).then(res => streamToString(res.Body))
-                       .then(str => JSON.parse(str))
-                );
-            }
-            
-            const chunks = await Promise.all(chunkPromises);
-            
-            // 2. Merge frames
-            let allFrames = [];
-            chunks.sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0));
-            
-            chunks.forEach(chunk => {
-                if (chunk && chunk.frames) {
-                    allFrames = allFrames.concat(chunk.frames);
-                }
-            });
-            
-            console.log(`[R2-Chunked] Merged ${allFrames.length} frames.`);
-            
-            // 3. Create final object (same structure as normal upload)
-            const finalRecording = {
-                id: recordingId,
-                name: metadata.name,
-                userId: metadata.userId,
-                gameId: metadata.gameId,
-                gameName: metadata.gameName,
-                frameCount: allFrames.length,
-                duration: metadata.duration,
-                mode: metadata.mode,
-                createdAt: metadata.createdAt,
-                updatedAt: new Date().toISOString(),
-                data: {
-                    Frames: allFrames,
-                    Mode: metadata.mode,
-                    FPS: 60
-                }
-            };
-            
-            // 4. Upload final file with correct name (recordingId is already sanitized)
-            await r2Client.send(new PutObjectCommand({
-                Bucket: R2_BUCKET_NAME,
-                Key: `recordings/${recordingId}.json`,
-                Body: JSON.stringify(finalRecording),
-                ContentType: "application/json",
-                Metadata: {
-                    name: metadata.name,
-                    userId: metadata.userId,
-                    framecount: allFrames.length.toString(),
-                    mode: metadata.mode
-                }
-            }));
-            
-            console.log(`[R2-Chunked] Final file saved: recordings/${recordingId}.json`);
-            
-            // 5. Delete temporary chunks
-            const deletePromises = [];
-            for (let i = 0; i < metadata.totalChunks; i++) {
-                deletePromises.push(
-                    r2Client.send(new DeleteObjectCommand({ 
-                        Bucket: R2_BUCKET_NAME, 
-                        Key: `recordings/${recordingId}_chunk_${i}.json` 
-                    }))
-                );
-            }
-            await Promise.all(deletePromises);
-            console.log(`[R2-Chunked] Cleaned up ${metadata.totalChunks} temporary chunks.`);
-            
-            return res.status(200).json({ success: true, recordingId, message: "Large recording uploaded and merged successfully!" });
+        const chunks = await Promise.all(chunkPromises);
 
-        } catch (error) {
-            console.error("[R2-Chunked] Merge error:", error);
-            return res.status(500).json({ error: "Failed to merge chunks", details: error.message });
+        // 2. Merge frames
+        let allFrames = [];
+        chunks.sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0));
+
+        chunks.forEach(chunk => {
+          if (chunk && chunk.frames) {
+            allFrames = allFrames.concat(chunk.frames);
+          }
+        });
+
+        console.log(`[R2-Chunked] Merged ${allFrames.length} frames.`);
+
+        // 3. Create final object (same structure as normal upload)
+        const finalRecording = {
+          id: recordingId,
+          name: metadata.name,
+          userId: metadata.userId,
+          gameId: metadata.gameId,
+          gameName: metadata.gameName,
+          frameCount: allFrames.length,
+          duration: metadata.duration,
+          mode: metadata.mode,
+          createdAt: metadata.createdAt,
+          updatedAt: new Date().toISOString(),
+          data: {
+            Frames: allFrames,
+            Mode: metadata.mode,
+            FPS: 60
+          }
+        };
+
+        // 4. Upload final file with correct name (recordingId is already sanitized)
+        await r2Client.send(new PutObjectCommand({
+          Bucket: R2_BUCKET_NAME,
+          Key: `recordings/${recordingId}.json`,
+          Body: JSON.stringify(finalRecording),
+          ContentType: "application/json",
+          Metadata: {
+            name: metadata.name,
+            userId: metadata.userId,
+            framecount: allFrames.length.toString(),
+            mode: metadata.mode
+          }
+        }));
+
+        console.log(`[R2-Chunked] Final file saved: recordings/${recordingId}.json`);
+
+        // 5. Delete temporary chunks
+        const deletePromises = [];
+        for (let i = 0; i < metadata.totalChunks; i++) {
+          deletePromises.push(
+            r2Client.send(new DeleteObjectCommand({
+              Bucket: R2_BUCKET_NAME,
+              Key: `recordings/${recordingId}_chunk_${i}.json`
+            }))
+          );
         }
+        await Promise.all(deletePromises);
+        console.log(`[R2-Chunked] Cleaned up ${metadata.totalChunks} temporary chunks.`);
+
+        return res.status(200).json({ success: true, recordingId, message: "Large recording uploaded and merged successfully!" });
+
+      } catch (error) {
+        console.error("[R2-Chunked] Merge error:", error);
+        return res.status(500).json({ error: "Failed to merge chunks", details: error.message });
+      }
     }
 
     // POST /api/r2-chunked?action=convert
@@ -762,9 +782,9 @@ export default async function handler(req, res) {
     if (postAction === "convert" && bodyRecordingId) {
       try {
         console.log(`[R2-Chunked] Converting: ${bodyRecordingId}`);
-        
+
         const originalKey = `recordings/${bodyRecordingId}.json`;
-        
+
         // Load original recording
         const getResult = await r2Client.send(
           new GetObjectCommand({
@@ -772,21 +792,21 @@ export default async function handler(req, res) {
             Key: originalKey,
           })
         );
-        
+
         const content = await streamToString(getResult.Body);
         const recordingData = JSON.parse(content);
         const frames = recordingData.data?.Frames || [];
-        
+
         if (frames.length === 0) {
           return res.status(400).json({
             error: "Recording has no frames",
           });
         }
-        
+
         // Create chunks
         const chunks = createChunks(frames, FRAMES_PER_CHUNK);
         const chunkSizes = [];
-        
+
         // Upload each chunk
         for (let i = 0; i < chunks.length; i++) {
           const chunkData = {
@@ -795,13 +815,13 @@ export default async function handler(req, res) {
             endFrame: Math.min((i + 1) * FRAMES_PER_CHUNK - 1, frames.length - 1),
             frames: chunks[i],
           };
-          
+
           const chunkContent = JSON.stringify(chunkData);
           const chunkSize = Buffer.byteLength(chunkContent, "utf-8");
           chunkSizes.push(Math.round(chunkSize / 1024)); // Size in KB
-          
+
           const chunkKey = `recordings/${bodyRecordingId}_chunk_${i}.json`;
-          
+
           await r2Client.send(
             new PutObjectCommand({
               Bucket: R2_BUCKET_NAME,
@@ -810,10 +830,10 @@ export default async function handler(req, res) {
               ContentType: "application/json",
             })
           );
-          
+
           console.log(`[R2-Chunked] Uploaded chunk ${i + 1}/${chunks.length}`);
         }
-        
+
         // Create and upload metadata
         const metadata = {
           recordingId: bodyRecordingId,
@@ -827,9 +847,9 @@ export default async function handler(req, res) {
           createdAt: recordingData.createdAt || new Date().toISOString(),
           convertedAt: new Date().toISOString(),
         };
-        
+
         const metaKey = `recordings/${bodyRecordingId}_meta.json`;
-        
+
         await r2Client.send(
           new PutObjectCommand({
             Bucket: R2_BUCKET_NAME,
@@ -838,9 +858,9 @@ export default async function handler(req, res) {
             ContentType: "application/json",
           })
         );
-        
+
         console.log(`[R2-Chunked] Conversion complete: ${bodyRecordingId}`);
-        
+
         return res.status(200).json({
           success: true,
           message: "Recording converted to chunked format",
@@ -851,14 +871,14 @@ export default async function handler(req, res) {
         });
       } catch (error) {
         console.error("[R2-Chunked] Convert error:", error);
-        
+
         if (error.name === "NoSuchKey") {
           return res.status(404).json({
             error: "Recording not found",
             recordingId: bodyRecordingId,
           });
         }
-        
+
         return res.status(500).json({
           error: "Failed to convert recording",
           message: error.message,
