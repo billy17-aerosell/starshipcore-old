@@ -12,68 +12,38 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
         rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --bg-body: #050507;
+            --bg-surface: #0a0a0f;
+            --bg-card: rgba(15, 15, 22, 0.7);
+            --accent: #ff2d2d;
+            --accent-glow: rgba(255, 45, 45, 0.4);
+            --gold: #ffb800;
+            --cyan: #00f2ff;
+            --success: #00e676;
+            --text: #ffffff;
+            --text-muted: #888899;
+            --border: 1px solid rgba(255, 255, 255, 0.04);
+            --border-bright: 1px solid rgba(255, 255, 255, 0.1);
+            --radius-lg: 24px;
+            --radius-md: 16px;
+            --radius-sm: 8px;
+            --font-main: 'Inter', sans-serif;
+            --font-tech: 'Space Grotesk', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
+            --transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-        }
-
-        :root {
-            --bg: #fffef5;
-            --bg-alt: #f5f3e7;
-            --black: #1a1a1a;
-            --white: #ffffff;
-            --accent-1: #ff5722;
-            --accent-2: #7c4dff;
-            --accent-3: #00e676;
-            --accent-4: #ffea00;
-            --accent-5: #00bcd4;
-            --border: 3px solid var(--black);
-            --border-thick: 4px solid var(--black);
-            --shadow: 6px 6px 0 var(--black);
-            --shadow-sm: 4px 4px 0 var(--black);
-            --shadow-hover: 8px 8px 0 var(--black);
-            --radius: 0;
-        }
-
-        /* ============ DARK MODE ============ */
-        body.dark-mode {
-            --bg: #0a0a0f;
-            --bg-alt: #12121a;
-            --black: #e0e0e0;
-            --white: #1a1a24;
-            --accent-1: #ff7043;
-            --accent-2: #b388ff;
-            --accent-3: #69f0ae;
-            --accent-4: #fff176;
-            --accent-5: #4dd0e1;
-            --border: 3px solid var(--black);
-            --border-thick: 4px solid var(--black);
-            --shadow: 6px 6px 0 rgba(100, 100, 120, 0.4);
-            --shadow-sm: 4px 4px 0 rgba(100, 100, 120, 0.3);
-            --shadow-hover: 8px 8px 0 rgba(100, 100, 120, 0.5);
-        }
-
-        body.dark-mode .marquee-wrapper {
-            background: linear-gradient(90deg, #1a1a2e, #16213e);
-        }
-
-        body.dark-mode .status-badge {
-            background: #1a1a24;
-        }
-
-        body.dark-mode .platform-card,
-        body.dark-mode .duration-card,
-        body.dark-mode .summary-card,
-        body.dark-mode .input-container {
-            background: #16162a;
-            border-color: #3a3a5a;
-        }
-
-        body.dark-mode .platform-card:hover,
-        body.dark-mode .duration-card:hover {
-            box-shadow: 6px 6px 0 rgba(124, 77, 255, 0.4);
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         html {
@@ -81,51 +51,51 @@
         }
 
         body {
-            font-family: 'Space Grotesk', -apple-system, sans-serif;
-            background: var(--bg);
-            color: var(--black);
+            background-color: var(--bg-body);
+            color: var(--text);
+            font-family: var(--font-main);
             min-height: 100vh;
             overflow-x: hidden;
-            line-height: 1.5;
-            -webkit-font-smoothing: antialiased;
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(255, 45, 45, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(0, 242, 255, 0.03) 0%, transparent 40%),
+                url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
         }
 
-        /* ============ NOISE TEXTURE ============ */
         body::before {
-            content: '';
+            content: "";
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-            opacity: 0.03;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.04;
             pointer-events: none;
-            z-index: 0;
+            z-index: 9999;
         }
 
-        /* ============ MARQUEE ============ */
         .marquee-wrapper {
-            background: var(--black);
-            color: var(--accent-4);
-            padding: 12px 0;
+            background: rgba(0, 0, 0, 0.4);
+            border-bottom: var(--border);
+            padding: 10px 0;
             overflow: hidden;
-            border-bottom: var(--border-thick);
+            position: relative;
+            z-index: 10;
         }
 
         .marquee {
             display: flex;
-            animation: marquee 20s linear infinite;
+            animation: marquee 30s linear infinite;
             white-space: nowrap;
         }
 
         .marquee span {
-            font-family: 'Space Mono', monospace;
-            font-size: 0.85rem;
+            font-family: var(--font-code);
+            font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.1em;
-            padding: 0 40px;
+            letter-spacing: 0.3em;
+            color: var(--cyan);
+            padding: 0 60px;
+            opacity: 0.6;
         }
 
         @keyframes marquee {
@@ -138,866 +108,951 @@
             }
         }
 
-        /* ============ STATUS BADGE ============ */
+        .nav-tools {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 2000;
+        }
+
+        .tool-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: var(--border-bright);
+            backdrop-filter: blur(10px);
+            color: #fff;
+            width: 45px;
+            height: 45px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        @media (hover: hover) {
+            .tool-btn:hover {
+                background: rgba(255, 255, 255, 0.08);
+                transform: translateY(-3px);
+            }
+        }
+
+        .tool-btn:active {
+            transform: scale(0.92);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .lang-switcher-tool {
+            background: rgba(255, 255, 255, 0.03);
+            border: var(--border-bright);
+            backdrop-filter: blur(10px);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            display: flex;
+        }
+
+        .lang-btn {
+            padding: 0 15px;
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-family: var(--font-code);
+            font-size: 11px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .lang-btn.active {
+            background: var(--accent);
+        }
+
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 80px 0 40px;
+            position: relative;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .logo-system {
+            position: relative;
+            width: 220px;
+            height: 220px;
+            margin: 0 auto 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-main {
+            width: 120px;
+            height: 120px;
+            z-index: 10;
+            border-radius: 50%;
+            object-fit: cover;
+            filter: drop-shadow(0 0 30px var(--accent-glow));
+            animation: logoFloat 4s ease-in-out infinite;
+        }
+
+        .logo-ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 1.5px solid rgba(255, 45, 45, 0.1);
+        }
+
+        .ring-inner {
+            width: 160px;
+            height: 160px;
+            border-style: dashed;
+            border-color: rgba(255, 255, 255, 0.1);
+            animation: rotateClockwise 15s linear infinite;
+        }
+
+        .ring-outer {
+            width: 200px;
+            height: 200px;
+            border-color: rgba(255, 45, 45, 0.15);
+            animation: rotateCounter 20s linear infinite;
+        }
+
+        .logo-glow {
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            background: var(--accent);
+            filter: blur(60px);
+            opacity: 0.15;
+            animation: glowPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes logoFloat {
+
+            0%,
+            100% {
+                transform: translateY(0) scale(1);
+            }
+
+            50% {
+                transform: translateY(-10px) scale(1.05);
+            }
+        }
+
+        @keyframes rotateClockwise {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes rotateCounter {
+            to {
+                transform: rotate(-360deg);
+            }
+        }
+
+        @keyframes glowPulse {
+
+            0%,
+            100% {
+                opacity: 0.1;
+            }
+
+            50% {
+                opacity: 0.25;
+            }
+        }
+
+        .hero h1 {
+            font-family: var(--font-tech);
+            font-size: clamp(3rem, 8vw, 6rem);
+            font-weight: 700;
+            line-height: 0.9;
+            text-transform: uppercase;
+            letter-spacing: -4px;
+            margin-bottom: 20px;
+            background: linear-gradient(180deg, #fff 0%, #777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero h1 span {
+            color: var(--accent);
+            -webkit-text-fill-color: var(--accent);
+            text-shadow: 0 0 40px var(--accent-glow);
+        }
+
+        .hero p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            max-width: 550px;
+            margin: 0 auto 50px;
+            line-height: 1.6;
+        }
+
         .status-badge-container {
             display: flex;
             justify-content: center;
             gap: 15px;
             flex-wrap: wrap;
-            margin-bottom: 20px;
+            margin-bottom: 40px;
         }
 
         .status-badge {
-            display: inline-flex;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 10px 18px;
+            display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 12px 20px;
-            background: var(--white);
-            border: var(--border);
-            box-shadow: var(--shadow-sm);
-            font-family: 'Space Mono', monospace;
-            font-size: 0.85rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            transition: all 0.3s ease;
+            gap: 12px;
+            font-family: var(--font-code);
+            transition: var(--transition);
             cursor: default;
+            backdrop-filter: blur(5px);
+            min-width: 140px;
         }
 
-        .status-badge:hover {
-            transform: translate(-2px, -2px);
-            box-shadow: var(--shadow);
+        @media (hover: hover) {
+            .status-badge:hover {
+                background: rgba(255, 255, 255, 0.05);
+                transform: translateY(-2px);
+                border-color: rgba(255, 255, 255, 0.1);
+            }
         }
 
-        .status-badge.online {
-            background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
-            border-color: #2e7d32;
-        }
-
-        .status-badge.maintenance {
-            background: linear-gradient(135deg, #fff3e0, #ffe0b2);
-            border-color: #e65100;
-            animation: pulse-maintenance 2s ease-in-out infinite;
-        }
-
-        .status-badge.offline {
-            background: linear-gradient(135deg, #ffebee, #ffcdd2);
-            border-color: #c62828;
-        }
-
-        .status-badge.degraded {
-            background: linear-gradient(135deg, #fffde7, #fff9c4);
-            border-color: #f9a825;
-        }
-
-        .status-badge.updating {
-            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-            border-color: #1565c0;
-            animation: pulse-updating 1.5s ease-in-out infinite;
-        }
-
-        .status-badge.loading {
-            background: var(--bg-alt);
+        .status-icon {
+            font-size: 14px;
+            color: var(--text-muted);
+            opacity: 0.8;
         }
 
         .status-indicator {
-            width: 12px;
-            height: 12px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
-            animation: status-pulse 2s ease-in-out infinite;
+            background: #444;
+            position: relative;
+            margin-right: 2px;
+        }
+
+        .status-indicator::after {
+            content: "";
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            background: inherit;
+            filter: blur(4px);
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
 
         .status-badge.online .status-indicator {
-            background: #00e676;
-            box-shadow: 0 0 8px #00e676;
+            background: #00ffaa;
+            box-shadow: 0 0 10px rgba(0, 255, 170, 0.5);
         }
 
-        .status-badge.maintenance .status-indicator {
-            background: #ff9800;
-            box-shadow: 0 0 8px #ff9800;
+        .status-badge.online .status-indicator::after {
+            opacity: 0.4;
+            animation: statusPulse 2s infinite ease-in-out;
         }
 
-        .status-badge.offline .status-indicator {
-            background: #f44336;
-            box-shadow: 0 0 8px #f44336;
-            animation: none;
-        }
+        @keyframes statusPulse {
+            0% {
+                transform: scale(1);
+                opacity: 0.4;
+            }
 
-        .status-badge.degraded .status-indicator {
-            background: #ffeb3b;
-            box-shadow: 0 0 8px #ffeb3b;
-        }
+            50% {
+                transform: scale(2.5);
+                opacity: 0;
+            }
 
-        .status-badge.updating .status-indicator {
-            background: #2196f3;
-            box-shadow: 0 0 8px #2196f3;
+            100% {
+                transform: scale(1);
+                opacity: 0.4;
+            }
         }
 
         .status-text {
             display: flex;
             flex-direction: column;
-            align-items: flex-start;
+            text-align: left;
+            line-height: 1.2;
         }
 
         .status-label {
-            font-size: 0.65rem;
-            color: #666;
-            font-weight: 500;
+            font-size: 8px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 1.5px;
+            font-weight: 700;
+            margin-bottom: 2px;
         }
 
         .status-value {
-            font-size: 0.9rem;
-        }
-
-        .status-message {
-            font-size: 0.75rem;
-            color: #666;
-            max-width: 200px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        @keyframes status-pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-                transform: scale(1);
-            }
-
-            50% {
-                opacity: 0.7;
-                transform: scale(0.9);
-            }
-        }
-
-        @keyframes pulse-maintenance {
-
-            0%,
-            100% {
-                box-shadow: var(--shadow-sm);
-            }
-
-            50% {
-                box-shadow: 0 0 15px rgba(255, 152, 0, 0.4), var(--shadow-sm);
-            }
-        }
-
-        @keyframes pulse-updating {
-
-            0%,
-            100% {
-                box-shadow: var(--shadow-sm);
-            }
-
-            50% {
-                box-shadow: 0 0 15px rgba(33, 150, 243, 0.4), var(--shadow-sm);
-            }
-        }
-
-        /* ============ MAIN CONTAINER ============ */
-        .main-container {
-            position: relative;
-            z-index: 1;
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-
-        /* ============ HERO SECTION ============ */
-        .hero {
-            text-align: center;
-            padding: 50px 0 60px;
-            position: relative;
-        }
-
-        .hero-logo {
-            width: 140px;
-            height: 140px;
-            margin-bottom: 25px;
-            border: var(--border-thick);
-            box-shadow: var(--shadow);
-            background: var(--white);
-            padding: 10px;
-            transition: all 0.2s ease;
-        }
-
-        .hero-logo:hover {
-            transform: translate(-3px, -3px);
-            box-shadow: var(--shadow-hover);
-        }
-
-        .hero h1 {
-            font-size: clamp(3rem, 10vw, 5rem);
-            font-weight: 700;
-            letter-spacing: -0.03em;
-            margin-bottom: 15px;
-            text-transform: uppercase;
-            line-height: 0.95;
-        }
-
-        .hero h1 span {
-            display: inline-block;
-            background: var(--accent-4);
-            padding: 5px 15px;
-            border: var(--border);
-            box-shadow: var(--shadow-sm);
-            transform: rotate(-1deg);
-        }
-
-        .hero p {
-            font-size: clamp(1rem, 3vw, 1.2rem);
-            max-width: 500px;
-            margin: 20px auto 35px;
-            color: var(--black);
-            font-weight: 500;
+            font-size: 11px;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: 0.5px;
         }
 
         .hero-socials {
             display: flex;
             justify-content: center;
+            align-items: center;
             gap: 15px;
             flex-wrap: wrap;
+            width: 100%;
+            margin-bottom: 60px;
         }
 
         .social-link {
+            padding: 14px 25px;
+            border-radius: var(--radius-md);
+            border: var(--border);
+            background: rgba(255, 255, 255, 0.02);
+            color: #fff;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: var(--font-tech);
+            text-transform: uppercase;
+            letter-spacing: 1px;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 10px;
-            padding: 14px 24px;
-            background: var(--white);
-            border: var(--border);
-            box-shadow: var(--shadow-sm);
-            color: var(--black);
-            text-decoration: none;
-            font-weight: 700;
-            font-size: 0.95rem;
-            text-transform: uppercase;
-            letter-spacing: 0.02em;
-            transition: all 0.15s ease;
+            transition: var(--transition);
+            min-width: 160px;
         }
 
-        .social-link:hover {
-            transform: translate(-3px, -3px);
-            box-shadow: var(--shadow-hover);
+        @media (hover: hover) {
+            .social-link:hover {
+                background: rgba(255, 255, 255, 0.05);
+                transform: translateY(-5px);
+                border-color: rgba(255, 255, 255, 0.1);
+            }
         }
 
         .social-link:active {
-            transform: translate(2px, 2px);
-            box-shadow: 2px 2px 0 var(--black);
-        }
-
-        .social-link.tiktok {
-            background: var(--accent-1);
-            color: var(--white);
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.1);
+            opacity: 0.8;
         }
 
         .social-link.discord {
-            background: var(--accent-2);
-            color: var(--white);
-        }
-
-        .social-link.hwid-reset {
-            background: var(--accent-5);
-            color: var(--black);
-        }
-
-        .social-link span {
-            font-size: 1.3rem;
-        }
-
-        /* ============ FEATURES BAR ============ */
-        .features-bar {
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 0;
-            margin: 50px 0;
-            border: var(--border);
-            background: var(--white);
-            box-shadow: var(--shadow);
-        }
-
-        .feature-box {
-            flex: 1;
-            min-width: 140px;
-            padding: 20px 15px;
-            text-align: center;
-            border-right: var(--border);
-            transition: background 0.15s ease;
-        }
-
-        .feature-box:last-child {
-            border-right: none;
-        }
-
-        .feature-box:hover {
-            background: var(--accent-4);
+            background: #5865f2;
+            border: none;
+            box-shadow: 0 10px 20px rgba(88, 101, 242, 0.2);
         }
 
         .feature-box .icon {
             font-size: 2rem;
-            margin-bottom: 8px;
+            margin-bottom: 15px;
+            display: block;
+            filter: drop-shadow(0 0 10px var(--accent-glow));
         }
 
-        .feature-box span {
-            font-family: 'Space Mono', monospace;
-            font-size: 0.75rem;
+        /* Detailed VIP Features Section */
+        .vip-features-detailed {
+            margin: 80px 0;
+            padding: 60px 40px;
+            background: rgba(255, 255, 255, 0.01);
+            border: var(--border);
+            border-radius: 40px;
+            position: relative;
+        }
+
+        .vip-features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-top: 50px;
+        }
+
+        .vip-feature-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 24px;
+            padding: 35px;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        @media (hover: hover) {
+            .vip-feature-card:hover {
+                background: rgba(255, 255, 255, 0.04);
+                transform: translateY(-8px);
+                border-color: rgba(255, 45, 45, 0.2);
+                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            }
+        }
+
+        .vip-feature-card:active {
+            transform: scale(0.97);
+        }
+
+        .vip-f-icon {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            display: block;
+            filter: drop-shadow(0 0 10px var(--accent-glow));
+        }
+
+        .vip-f-title {
+            font-family: var(--font-tech);
+            font-size: 1.25rem;
             font-weight: 700;
+            color: #fff;
+            margin-bottom: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 1px;
         }
 
-        /* ============ STEPS TRACKER ============ */
+        .vip-f-desc {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        /* Hero Stats & CTA */
+        .hero-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin: 0 0 30px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 120px;
+            position: relative;
+        }
+
+        .stat-item:not(:last-child)::after {
+            content: "";
+            position: absolute;
+            right: -20px;
+            top: 20%;
+            height: 60%;
+            width: 1px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-value {
+            font-family: var(--font-tech);
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--accent);
+            letter-spacing: 1px;
+            text-shadow: 0 0 20px rgba(255, 45, 45, 0.3);
+        }
+
+        .stat-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 1.5px;
+        }
+
+        .hero-cta-btn {
+            background: linear-gradient(135deg, var(--accent) 0%, #ff5e5e 100%);
+            color: #fff;
+            padding: 20px 60px;
+            border-radius: 100px;
+            font-family: var(--font-tech);
+            font-weight: 800;
+            font-size: 18px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 15px 35px rgba(255, 45, 45, 0.4);
+            transition: var(--transition);
+            margin-bottom: 30px;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .hero-cta-btn:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 20px 45px rgba(255, 45, 45, 0.6);
+            filter: brightness(1.1);
+        }
+
+        .hero-cta-btn:active {
+            transform: scale(0.98);
+        }
+
+
+        .scroll-indicator {
+            margin-top: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-muted);
+            font-family: var(--font-code);
+            font-size: 9px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            20%,
+            50%,
+            80%,
+            100% {
+                transform: translateY(0);
+            }
+
+            40% {
+                transform: translateY(-10px);
+            }
+
+            60% {
+                transform: translateY(-5px);
+            }
+        }
+
+        /* Full Feature List Section */
+
+        /* UI Showcase Styles */
+        .ui-showcase {
+            margin: 80px 0;
+            position: relative;
+        }
+
+        .showcase-container {
+            position: relative;
+            padding: 20px 0;
+        }
+
+        .showcase-slider {
+            overflow: hidden;
+            cursor: grab;
+            border-radius: var(--radius-lg);
+            background: rgba(255, 255, 255, 0.01);
+            padding: 30px 0;
+        }
+
+        .showcase-slider:active {
+            cursor: grabbing;
+        }
+
+        .showcase-track {
+            display: flex;
+            gap: 20px;
+            padding: 0 20px;
+            transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .showcase-item {
+            flex: 0 0 calc(50% - 10px);
+            position: relative;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(0, 0, 0, 0.3);
+            transition: var(--transition);
+        }
+
+        @media (max-width: 768px) {
+            .showcase-item {
+                flex: 0 0 100%;
+            }
+        }
+
+        .showcase-item img {
+            width: 100%;
+            height: auto;
+            display: block;
+            transition: transform 0.5s ease;
+        }
+
+        .showcase-item:hover img {
+            transform: scale(1.03);
+        }
+
+        .showcase-label {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            padding: 6px 12px;
+            border-radius: 100px;
+            font-size: 10px;
+            font-family: var(--font-tech);
+            color: #fff;
+            border: var(--border);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+        }
+
+        .showcase-nav {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 25px;
+        }
+
+        .showcase-nav button {
+            background: rgba(255, 255, 255, 0.03);
+            border: var(--border-bright);
+            color: #fff;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .showcase-nav button:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+
         .steps-tracker {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 0;
-            margin-bottom: 50px;
-            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 60px;
         }
 
         .step-box {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
         .step-number {
-            width: 55px;
-            height: 55px;
-            background: var(--white);
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #15151f;
             border: var(--border);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: 'Space Mono', monospace;
+            font-family: var(--font-code);
             font-weight: 700;
-            font-size: 1.3rem;
-            transition: all 0.15s ease;
+            color: var(--text-muted);
+            transition: var(--transition);
         }
 
         .step-number.active {
-            background: var(--accent-4);
-            transform: rotate(-2deg);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .step-number.completed {
-            background: var(--accent-3);
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+            box-shadow: 0 0 20px var(--accent-glow);
         }
 
         .step-text {
-            font-family: 'Space Mono', monospace;
-            font-size: 0.7rem;
-            font-weight: 700;
+            font-family: var(--font-tech);
+            font-size: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 1px;
+            color: var(--text-muted);
         }
 
         .step-connector {
-            width: 50px;
-            height: 4px;
-            background: var(--black);
-            margin-bottom: 25px;
+            height: 1px;
+            width: 40px;
+            background: rgba(255, 255, 255, 0.05);
+            margin-bottom: 24px;
         }
 
-        .step-connector.completed {
-            background: var(--accent-3);
+        .star-panel {
+            background: var(--bg-card);
+            backdrop-filter: blur(40px);
+            border: var(--border);
+            border-radius: 32px;
+            padding: 50px;
+            box-shadow: 0 30px 100px rgba(0, 0, 0, 0.8);
+            position: relative;
+            overflow: hidden;
         }
 
-        /* ============ SECTION STYLING ============ */
         .section {
-            margin-bottom: 50px;
+            margin-bottom: 60px;
         }
 
         .section-header {
             text-align: center;
-            margin-bottom: 35px;
+            margin-bottom: 40px;
         }
 
         .section-badge {
             display: inline-block;
-            background: var(--accent-2);
-            color: var(--white);
-            font-family: 'Space Mono', monospace;
-            font-size: 0.8rem;
-            font-weight: 700;
-            padding: 8px 16px;
-            border: var(--border);
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 15px;
+            padding: 6px 16px;
+            background: rgba(255, 45, 45, 0.1);
+            color: var(--accent);
+            border: 1px solid rgba(255, 45, 45, 0.2);
+            font-family: var(--font-code);
+            font-size: 11px;
+            border-radius: 100px;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 2px;
+            margin-bottom: 15px;
         }
 
         .section-title {
-            font-size: clamp(1.6rem, 5vw, 2.2rem);
+            font-family: var(--font-tech);
+            font-size: 2.2rem;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: -0.02em;
+            letter-spacing: -1px;
         }
 
         .section-desc {
-            font-size: 1rem;
+            color: var(--text-muted);
             margin-top: 10px;
-            font-weight: 500;
         }
 
-        /* ============ PLATFORM CARDS ============ */
         .platform-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
         }
 
         .platform-card {
-            position: relative;
-            background: var(--white);
-            border: var(--border-thick);
-            padding: 35px 25px;
+            background: rgba(255, 255, 255, 0.01);
+            border: var(--border);
+            border-radius: var(--radius-md);
+            padding: 40px 30px;
             cursor: pointer;
-            transition: all 0.15s ease;
-            box-shadow: var(--shadow);
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
         }
 
-        .platform-card:hover {
-            transform: translate(-4px, -4px);
-            box-shadow: 10px 10px 0 var(--black);
+        @media (hover: hover) {
+            .platform-card:hover {
+                transform: translateY(-10px);
+                background: rgba(255, 255, 255, 0.02);
+                border-color: rgba(255, 255, 255, 0.1);
+            }
+
+            .platform-card:hover .platform-icon {
+                filter: grayscale(0);
+                opacity: 1;
+            }
         }
 
         .platform-card:active {
-            transform: translate(2px, 2px);
-            box-shadow: 2px 2px 0 var(--black);
+            transform: scale(0.96);
+            background: rgba(255, 255, 255, 0.04);
         }
 
         .platform-card.selected {
-            background: var(--accent-4);
+            border-color: var(--accent);
+            background: rgba(255, 45, 45, 0.08);
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(255, 45, 45, 0.15), inset 0 0 20px rgba(255, 45, 45, 0.05);
         }
 
-        .platform-card.mobile .platform-accent {
-            background: var(--accent-5);
-        }
-
-        .platform-card.pc .platform-accent {
-            background: var(--accent-2);
-        }
-
-        .platform-card.bundle .platform-accent {
-            background: var(--accent-1);
-        }
-
-        .platform-accent {
+        .platform-card.selected::before {
+            content: "";
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 8px;
-            background: var(--accent-3);
+            inset: 0;
+            border-radius: inherit;
+            box-shadow: 0 0 40px var(--accent-glow);
+            opacity: 0.2;
+            pointer-events: none;
         }
 
-        .platform-badge {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: var(--accent-1);
-            color: var(--white);
-            padding: 6px 12px;
-            border: 2px solid var(--black);
-            font-family: 'Space Mono', monospace;
-            font-size: 0.65rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            transform: rotate(3deg);
-        }
-
-        .platform-icon {
-            width: 70px;
-            height: 70px;
-            background: var(--bg-alt);
-            border: var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2.2rem;
-            margin-bottom: 20px;
+        .platform-card.selected .platform-icon {
+            filter: grayscale(0);
+            opacity: 1;
         }
 
         .platform-name {
-            font-size: 1.5rem;
+            font-family: var(--font-tech);
+            font-size: 1.6rem;
             font-weight: 700;
+            margin-bottom: 10px;
             text-transform: uppercase;
-            margin-bottom: 8px;
-            letter-spacing: -0.02em;
         }
 
         .platform-desc {
-            font-size: 0.9rem;
-            margin-bottom: 20px;
-            line-height: 1.5;
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 30px;
         }
 
         .platform-price {
-            font-family: 'Space Mono', monospace;
-            font-size: 0.9rem;
-            font-weight: 700;
+            font-family: var(--font-code);
+            font-size: 1rem;
+            color: #fff;
         }
 
         .platform-price strong {
-            font-size: 1.2rem;
-            background: var(--accent-3);
-            padding: 2px 8px;
-            border: 2px solid var(--black);
+            color: var(--accent);
+            font-size: 1.3rem;
+            margin-left: 8px;
         }
 
-        /* ============ DURATION CARDS ============ */
         .duration-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
             gap: 15px;
-            max-width: 650px;
-            margin: 0 auto;
         }
 
         .duration-card {
-            position: relative;
-            background: var(--white);
+            background: rgba(255, 255, 255, 0.02);
             border: var(--border);
-            padding: 25px 18px;
+            border-radius: var(--radius-md);
+            padding: 25px 20px;
             text-align: center;
             cursor: pointer;
-            transition: all 0.15s ease;
-            box-shadow: var(--shadow-sm);
+            transition: var(--transition);
+            position: relative;
         }
 
-        .duration-card:hover {
-            transform: translate(-3px, -3px);
-            box-shadow: var(--shadow-hover);
+        @media (hover: hover) {
+            .duration-card:hover {
+                background: rgba(255, 255, 255, 0.05);
+                transform: translateY(-5px);
+            }
         }
 
         .duration-card:active {
-            transform: translate(2px, 2px);
-            box-shadow: 2px 2px 0 var(--black);
+            transform: scale(0.9);
+            background: rgba(255, 255, 255, 0.1);
         }
 
         .duration-card.selected {
-            background: var(--accent-4);
+            border-color: var(--accent);
+            background: rgba(255, 45, 45, 0.08);
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(255, 45, 45, 0.15), inset 0 0 20px rgba(255, 45, 45, 0.05);
+            color: #fff;
         }
 
-        .duration-card.best-value::before {
-            content: '★ BEST';
+        .duration-card.selected::before {
+            content: "";
             position: absolute;
-            top: -12px;
-            left: 50%;
-            transform: translateX(-50%) rotate(-2deg);
-            background: var(--accent-1);
-            color: var(--white);
-            padding: 4px 12px;
-            border: 2px solid var(--black);
-            font-family: 'Space Mono', monospace;
-            font-size: 0.6rem;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            white-space: nowrap;
+            inset: 0;
+            border-radius: inherit;
+            box-shadow: 0 0 30px var(--accent-glow);
+            opacity: 0.2;
+            pointer-events: none;
+        }
+
+        .duration-card.selected .duration-price {
+            color: rgba(255, 255, 255, 0.8);
         }
 
         .duration-time {
-            font-size: 1.4rem;
+            font-family: var(--font-tech);
+            font-size: 1.3rem;
             font-weight: 700;
-            text-transform: uppercase;
-            margin-bottom: 8px;
+            margin-bottom: 5px;
         }
 
         .duration-price {
-            font-family: 'Space Mono', monospace;
-            font-size: 1.1rem;
-            font-weight: 700;
-            background: var(--accent-3);
-            display: inline-block;
-            padding: 4px 10px;
-            border: 2px solid var(--black);
+            font-family: var(--font-code);
+            font-size: 0.9rem;
+            color: var(--text-muted);
         }
 
-        /* ============ USER ID INPUT ============ */
         .input-wrapper {
-            max-width: 500px;
+            max-width: 600px;
             margin: 0 auto;
-        }
-
-        .input-container {
             position: relative;
-            margin-bottom: 20px;
         }
 
-        .input-field {
+        .input-elite {
             width: 100%;
-            padding: 20px;
-            padding-right: 110px;
-            background: var(--white);
-            border: var(--border-thick);
-            box-shadow: var(--shadow);
-            color: var(--black);
-            font-size: 1.1rem;
-            font-family: 'Space Mono', monospace;
-            font-weight: 500;
-            outline: none;
-            transition: all 0.15s ease;
+            padding: 25px 30px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-md);
+            color: #fff;
+            font-family: var(--font-code);
+            font-size: 1.2rem;
+            transition: var(--transition);
         }
 
-        .input-field:focus {
-            transform: translate(-2px, -2px);
-            box-shadow: var(--shadow-hover);
-        }
-
-        .input-field::placeholder {
-            color: #999;
-            font-weight: 400;
+        .input-elite:focus {
+            background: rgba(0, 0, 0, 0.5);
+            border-color: var(--accent);
+            box-shadow: 0 0 30px rgba(255, 45, 45, 0.1);
         }
 
         .input-status {
             position: absolute;
-            right: 18px;
-            top: 50%;
-            transform: translateY(-50%);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-family: 'Space Mono', monospace;
-            font-size: 0.8rem;
+            right: 25px;
+            top: 25px;
+            font-family: var(--font-code);
+            font-size: 12px;
             font-weight: 700;
         }
 
         .input-status.valid {
-            color: #16a34a;
+            color: var(--success);
         }
 
         .input-status.invalid {
-            color: #dc2626;
+            color: var(--accent);
         }
 
-        .input-status.checking {
-            color: #666;
+        .input-elite.checking {
+            border-color: var(--accent);
+            animation: inputPulse 1.5s infinite ease-in-out;
         }
 
-        .user-preview {
-            display: flex;
-            align-items: center;
-            gap: 18px;
-            padding: 18px;
-            background: var(--white);
-            border: var(--border);
-            box-shadow: var(--shadow-sm);
-            opacity: 0;
-            transform: translateY(10px);
-            transition: all 0.2s ease;
+        @keyframes inputPulse {
+            0% {
+                box-shadow: 0 0 10px rgba(255, 45, 45, 0.1);
+            }
+
+            50% {
+                box-shadow: 0 0 30px rgba(255, 45, 45, 0.3);
+                border-color: rgba(255, 45, 45, 0.5);
+            }
+
+            100% {
+                box-shadow: 0 0 10px rgba(255, 45, 45, 0.1);
+            }
         }
 
-        .user-preview.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .user-preview img {
-            width: 60px;
-            height: 60px;
-            border: var(--border);
-        }
-
-        .user-details h4 {
-            font-size: 1.15rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-
-        .user-details p {
-            font-family: 'Space Mono', monospace;
-            font-size: 0.8rem;
-            color: #666;
-        }
-
-        /* ============ SUMMARY CARD ============ */
-        .summary-section {
-            max-width: 550px;
-            margin: 0 auto;
-        }
-
-        .how-it-works {
-            background: var(--accent-5);
-            border: var(--border);
-            box-shadow: var(--shadow);
-            padding: 25px;
-            margin-bottom: 25px;
-        }
-
-        .how-it-works h4 {
-            font-size: 1.1rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .how-it-works ol {
-            padding-left: 22px;
-            font-size: 0.95rem;
-            line-height: 2;
-        }
-
-        .summary-card {
-            background: var(--white);
-            border: var(--border-thick);
-            box-shadow: var(--shadow);
-            padding: 30px;
-            margin-bottom: 25px;
-        }
-
-        .summary-header {
-            text-align: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: var(--border);
-        }
-
-        .summary-header h4 {
-            font-size: 1.2rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.02em;
-        }
-
-        .summary-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 14px 0;
-            border-bottom: 2px dashed var(--black);
-        }
-
-        .summary-row:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
-        }
-
-        .summary-label {
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
-
-        .summary-value {
-            font-weight: 700;
-            font-size: 0.95rem;
-        }
-
-        .summary-total {
-            font-family: 'Space Mono', monospace;
-            font-size: 1.6rem;
-            font-weight: 700;
-            background: var(--accent-3);
-            padding: 5px 12px;
-            border: 2px solid var(--black);
-        }
-
-        /* ============ PAY BUTTON ============ */
-        .pay-button {
-            width: 100%;
-            padding: 22px;
-            background: var(--accent-1);
-            border: var(--border-thick);
-            box-shadow: var(--shadow);
-            color: var(--white);
-            font-size: 1.2rem;
-            font-weight: 700;
-            font-family: 'Space Grotesk', sans-serif;
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        .pay-button:hover:not(:disabled) {
-            transform: translate(-4px, -4px);
-            box-shadow: 10px 10px 0 var(--black);
-        }
-
-        .pay-button:active:not(:disabled) {
-            transform: translate(3px, 3px);
-            box-shadow: 2px 2px 0 var(--black);
-        }
-
-        .pay-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            background: #999;
-        }
-
-        .pay-button .icon {
-            font-size: 1.4rem;
-        }
-
-        /* ============ FOOTER ============ */
-        .footer {
-            text-align: center;
-            padding: 50px 20px 30px;
-            margin-top: 60px;
-            border-top: var(--border-thick);
-            background: var(--black);
-            color: var(--white);
-        }
-
-        .footer-logo {
-            width: 60px;
-            height: 60px;
-            border: 3px solid var(--white);
-            margin-bottom: 20px;
-        }
-
-        .footer p {
-            font-family: 'Space Mono', monospace;
-            font-size: 0.8rem;
-            margin-bottom: 20px;
-            letter-spacing: 0.05em;
-        }
-
-        .footer-links {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-        }
-
-        .footer-links a {
-            color: var(--accent-4);
-            text-decoration: none;
-            font-weight: 700;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            transition: color 0.15s ease;
-        }
-
-        .footer-links a:hover {
-            color: var(--accent-3);
-        }
-
-        /* ============ LOADING SPINNER ============ */
         .spinner {
-            width: 20px;
-            height: 20px;
-            border: 3px solid #ccc;
-            border-top-color: var(--black);
-            border-radius: 0;
-            animation: spin 0.6s linear infinite;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
         }
 
         @keyframes spin {
@@ -1006,24 +1061,685 @@
             }
         }
 
-        /* ============ TOAST ============ */
+        .user-preview,
+        .user-preview-skeleton {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid transparent;
+            border-radius: var(--radius-md);
+            margin-top: 0;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: var(--transition);
+            visibility: hidden;
+            height: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .user-preview.visible,
+        .user-preview-skeleton.visible {
+            opacity: 1;
+            transform: translateY(0);
+            visibility: visible;
+            height: auto;
+            padding: 25px;
+            margin-top: 25px;
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .user-preview img {
+            width: 80px;
+            height: 80px;
+            border-radius: var(--radius-sm);
+            border: var(--border-bright);
+        }
+
+        .user-details h4 {
+            font-family: var(--font-tech);
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .user-details p {
+            font-family: var(--font-code);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .summary-card {
+            background: rgba(0, 0, 0, 0.3);
+            border: var(--border);
+            border-radius: var(--radius-md);
+            padding: 35px;
+            margin-bottom: 30px;
+        }
+
+        .summary-header {
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .summary-header h4 {
+            font-family: var(--font-tech);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .total-row {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin-top: 10px;
+            padding-top: 25px;
+            border-bottom: none;
+        }
+
+        .summary-label {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .summary-value {
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .summary-total {
+            font-family: var(--font-tech);
+            font-size: 2rem;
+            color: var(--accent);
+            text-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .pay-button {
+            width: 100%;
+            padding: 25px;
+            border-radius: var(--radius-md);
+            border: none;
+            background: linear-gradient(135deg, var(--accent) 0%, #a81c1c 100%);
+            color: #fff;
+            font-family: var(--font-tech);
+            font-size: 1.2rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: 0 15px 40px rgba(255, 45, 45, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        @media (hover: hover) {
+            .pay-button:hover:not(:disabled) {
+                transform: translateY(-5px) scale(1.02);
+                box-shadow: 0 20px 50px rgba(255, 45, 45, 0.5);
+            }
+        }
+
+        .pay-button:active:not(:disabled) {
+            transform: scale(0.96);
+            filter: brightness(0.9);
+        }
+
+        .pay-button:disabled {
+            filter: grayscale(1);
+            opacity: 0.3;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .waiting-card,
+        .success-card {
+            text-align: center;
+            max-width: 600px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        /* Animated Scanner Component */
+        .waiting-visual {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .scanner-ring {
+            position: absolute;
+            inset: 0;
+            border: 2px solid rgba(255, 45, 45, 0.05);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: rotateClockwise 2s linear infinite;
+        }
+
+        .scanner-inner {
+            width: 80px;
+            height: 80px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            animation: pulseSoft 2s infinite ease-in-out;
+        }
+
+        @keyframes pulseSoft {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 0.3;
+            }
+
+            50% {
+                transform: scale(1.1);
+                opacity: 0.6;
+            }
+        }
+
+        .waiting-card h2,
+        .success-card h2 {
+            font-family: var(--font-tech);
+            font-size: 2rem;
+            text-transform: uppercase;
+            letter-spacing: -1px;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+
+        .waiting-card p,
+        .success-card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-bottom: 30px;
+        }
+
+        /* Dashboard Summary style for Polling/Success */
+        .status-board {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 24px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: left;
+        }
+
+        .board-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .board-row:last-child {
+            border: none;
+        }
+
+        .board-label {
+            font-family: var(--font-code);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+        }
+
+        .board-value {
+            font-family: var(--font-tech);
+            color: #fff;
+            font-size: 1rem;
+        }
+
+        .progress-container {
+            margin: 40px 0 20px;
+        }
+
+        .progress-bar {
+            height: 6px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 100px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            border-radius: 100px;
+            box-shadow: 0 0 20px rgba(255, 45, 45, 0.5);
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .progress-fill::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            animation: scanLine 2s linear infinite;
+        }
+
+        @keyframes scanLine {
+            from {
+                transform: translateX(-100%);
+            }
+
+            to {
+                transform: translateX(100%);
+            }
+        }
+
+        .waiting-status {
+            font-family: var(--font-code);
+            font-size: 10px;
+            letter-spacing: 2px;
+            color: var(--accent);
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(20px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            padding: 20px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #0a0a0f 0%, #11111a 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 36px;
+            width: 100%;
+            max-width: 500px;
+            padding: 45px;
+            box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(255, 255, 255, 0.02);
+            position: relative;
+            animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(30px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-family: var(--font-tech);
+            font-size: 1.6rem;
+            text-transform: uppercase;
+            color: #fff;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .modal-header h3::before {
+            content: "💳";
+            font-size: 1.4rem;
+        }
+
+        .modal-close {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            color: var(--text-muted);
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        @media (hover: hover) {
+            .modal-close:hover {
+                background: var(--accent);
+                color: #fff;
+                transform: rotate(90deg);
+                border-color: transparent;
+            }
+        }
+
+        .modal-close:active {
+            transform: scale(0.9);
+        }
+
+        .modal-subtitle {
+            display: block;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 25px;
+            font-weight: 500;
+        }
+
+        .copy-section {
+            margin-bottom: 20px;
+        }
+
+        .copy-section label {
+            display: block;
+            font-family: var(--font-code);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent);
+            margin-bottom: 10px;
+        }
+
+        .copy-box {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: var(--transition);
+        }
+
+        @media (hover: hover) {
+            .copy-box:hover {
+                border-color: rgba(255, 45, 45, 0.3);
+                background: rgba(255, 45, 45, 0.03);
+            }
+        }
+
+        .copy-box span,
+        .copy-box code {
+            font-family: var(--font-tech);
+            font-size: 1.1rem;
+            color: #fff;
+            letter-spacing: 0.5px;
+        }
+
+        .copy-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        @media (hover: hover) {
+            .copy-btn:hover {
+                background: #fff;
+                color: #000;
+            }
+        }
+
+        .copy-btn:active {
+            transform: scale(0.95);
+        }
+
+        .modal-steps {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 20px;
+            padding: 25px;
+            margin: 30px 0;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .modal-steps ol {
+            padding-left: 0;
+            list-style: none;
+            display: grid;
+            gap: 12px;
+        }
+
+        .modal-steps li {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.7);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .modal-steps li::before {
+            content: "✓";
+            width: 20px;
+            height: 20px;
+            background: rgba(255, 45, 45, 0.1);
+            color: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 900;
+        }
+
+        .modal-btn.primary,
+        .modal-btn.secondary {
+            width: 100%;
+            padding: 18px;
+            border-radius: 16px;
+            font-family: var(--font-tech);
+            font-size: 0.95rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            transition: var(--transition);
+        }
+
+        .modal-btn.primary {
+            border: none;
+            background: linear-gradient(135deg, var(--accent) 0%, #a81c1c 100%);
+            color: #fff;
+            box-shadow: 0 10px 30px rgba(255, 45, 45, 0.2);
+        }
+
+        .modal-btn.secondary {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-muted);
+            margin-top: 30px;
+        }
+
+        @media (hover: hover) {
+            .modal-btn.primary:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 15px 40px rgba(255, 45, 45, 0.4);
+                filter: brightness(1.1);
+            }
+
+            .modal-btn.secondary:hover {
+                background: rgba(255, 255, 255, 0.08);
+                color: #fff;
+                border-color: rgba(255, 255, 255, 0.3);
+                transform: translateY(-2px);
+            }
+        }
+
+        .modal-btn.primary:active,
+        .modal-btn.secondary:active {
+            transform: scale(0.98);
+        }
+
+        .copy-btn.copied {
+            background: var(--success) !important;
+            color: #fff !important;
+            border-color: transparent !important;
+        }
+
+        /* DM Modal Specifics */
+        .dm-modal-body {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .dm-icon {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--accent) 0%, #a81c1c 100%);
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 100px;
+            font-family: var(--font-tech);
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(255, 45, 45, 0.3);
+        }
+
+        .dm-modal-body h4 {
+            font-family: var(--font-tech);
+            font-size: 2.2rem;
+            color: #fff;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: -1px;
+        }
+
+        .dm-price {
+            display: block;
+            font-family: var(--font-tech);
+            font-size: 1.2rem;
+            color: var(--accent);
+            margin-bottom: 30px;
+            text-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .dm-notice {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            color: var(--text-muted);
+            margin-bottom: 30px;
+        }
+
+        .discord-contact {
+            margin-bottom: 30px;
+        }
+
+        .dm-dc-username {
+            font-family: var(--font-code);
+            font-size: 1.2rem;
+            color: #fff;
+            padding: 12px 30px;
+            background: rgba(88, 101, 242, 0.1);
+            border: 1px solid rgba(88, 101, 242, 0.2);
+            border-radius: 16px;
+            display: inline-block;
+        }
+
+        .discord-contact::before {
+            content: "💬 Discord: ";
+            font-size: 0.7rem;
+            display: block;
+            color: rgba(88, 101, 242, 0.8);
+            margin-bottom: 8px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .footer {
+            padding: 80px 5% 40px;
+            text-align: center;
+            border-top: var(--border);
+        }
+
+        .footer-logo {
+            width: 50px;
+            height: 50px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .footer-text {
+            font-family: var(--font-code);
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
         .toast {
             position: fixed;
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%) translateY(100px);
-            background: var(--black);
-            color: var(--white);
-            border: 3px solid var(--white);
-            padding: 16px 28px;
-            box-shadow: var(--shadow);
-            z-index: 1000;
-            opacity: 0;
-            transition: all 0.2s ease;
+            background: #fff;
+            color: #000;
+            padding: 15px 30px;
+            border-radius: 100px;
+            font-family: var(--font-tech);
             font-weight: 700;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
+            font-size: 13px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 5000;
+            transition: var(--transition);
+            opacity: 0;
         }
 
         .toast.show {
@@ -1031,253 +1747,243 @@
             opacity: 1;
         }
 
-        .toast.error {
-            background: #dc2626;
-        }
-
-        .toast.success {
-            background: var(--accent-3);
-            color: var(--black);
-            border-color: var(--black);
-        }
-
-        /* ============ MOBILE RESPONSIVE ============ */
         @media (max-width: 768px) {
-            .main-container {
-                padding: 25px 15px;
-            }
-
-            .marquee span {
-                font-size: 0.75rem;
-            }
-
-            .hero {
-                padding: 35px 0 50px;
-            }
-
-            .hero-logo {
-                width: 110px;
-                height: 110px;
-            }
-
             .hero h1 {
-                font-size: 2.5rem;
+                font-size: 3.5rem;
+                letter-spacing: -2px;
             }
 
-            .hero-socials {
-                gap: 10px;
-            }
-
-            .social-link {
-                padding: 12px 18px;
-                font-size: 0.85rem;
-            }
-
-            .features-bar {
-                flex-wrap: wrap;
-                box-shadow: var(--shadow-sm);
-            }
-
-            .feature-box {
-                flex: 1 0 50%;
-                min-width: 0;
-                border-right: none;
-                border-bottom: var(--border);
-                padding: 15px 10px;
-            }
-
-            .feature-box:nth-child(odd) {
-                border-right: var(--border);
-            }
-
-            .feature-box:nth-last-child(-n+2) {
-                border-bottom: none;
-            }
-
-            .feature-box .icon {
-                font-size: 1.6rem;
-            }
-
-            .feature-box span {
-                font-size: 0.65rem;
-            }
-
-            .steps-tracker {
-                margin-bottom: 40px;
-            }
-
-            .step-number {
-                width: 45px;
-                height: 45px;
-                font-size: 1.1rem;
-            }
-
-            .step-text {
-                display: none;
-            }
-
-            .step-connector {
-                width: 35px;
-                margin-bottom: 0;
-            }
-
-            .section {
-                margin-bottom: 40px;
-            }
-
-            .section-header {
-                margin-bottom: 25px;
-            }
-
-            .section-badge {
-                font-size: 0.7rem;
-                padding: 6px 12px;
+            .section-title {
+                font-size: 1.8rem;
             }
 
             .platform-grid {
                 grid-template-columns: 1fr;
-                gap: 15px;
             }
 
-            .platform-card {
-                padding: 28px 20px;
-                box-shadow: var(--shadow-sm);
-            }
-
-            .platform-icon {
-                width: 60px;
-                height: 60px;
-                font-size: 1.8rem;
-            }
-
-            .platform-name {
-                font-size: 1.3rem;
-            }
-
-            .platform-desc {
-                font-size: 0.85rem;
-            }
-
-            .duration-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 12px;
-            }
-
-            .duration-card {
-                padding: 20px 12px;
-            }
-
-            .duration-time {
-                font-size: 1.2rem;
-            }
-
-            .duration-price {
-                font-size: 1rem;
-            }
-
-            .input-field {
-                padding: 18px;
-                padding-right: 100px;
-                font-size: 1rem;
-            }
-
-            .user-preview {
-                gap: 14px;
-                padding: 14px;
-            }
-
-            .user-preview img {
-                width: 50px;
-                height: 50px;
-            }
-
-            .how-it-works {
-                padding: 20px;
-            }
-
-            .how-it-works ol {
-                font-size: 0.9rem;
-            }
-
-            .summary-card {
-                padding: 25px;
-            }
-
-            .summary-header h4 {
-                font-size: 1.1rem;
-            }
-
-            .summary-total {
-                font-size: 1.4rem;
-            }
-
-            .pay-button {
-                padding: 18px;
-                font-size: 1.05rem;
-            }
-
-            .footer {
-                padding: 40px 15px 25px;
-            }
-
-            .footer-logo {
-                width: 50px;
-                height: 50px;
+            .star-panel {
+                padding: 30px 20px;
             }
         }
 
-        @media (max-width: 400px) {
-            .hero h1 {
-                font-size: 2rem;
-            }
-
-            .hero h1 span {
-                padding: 3px 10px;
-            }
-
-            .hero-socials {
-                flex-direction: column;
-                align-items: center;
-            }
-
-            .social-link {
-                width: 100%;
-                max-width: 220px;
-                justify-content: center;
-            }
-
-            .feature-box span {
-                font-size: 0.6rem;
-            }
+        /* White Mode / Light Mode Customization */
+        body.light-mode {
+            --bg-body: #f8f9fc;
+            --bg-surface: #ffffff;
+            --bg-card: rgba(255, 255, 255, 0.95);
+            --text: #1a1a1f;
+            --text-muted: #666677;
+            --border: 1px solid rgba(0, 0, 0, 0.06);
+            --border-bright: 1px solid rgba(0, 0, 0, 0.1);
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(255, 45, 45, 0.03) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(0, 242, 255, 0.02) 0%, transparent 40%),
+                none;
         }
 
-        /* Hide sections initially */
-        #section-duration,
-        #section-userid,
-        #section-summary {
-            display: none;
+        body.light-mode::before {
+            opacity: 0.02;
         }
 
-        /* ============ WAITING CARD ============ */
-        .waiting-card,
-        .success-card {
-            max-width: 500px;
-            margin: 0 auto;
-            background: var(--white);
-            border: var(--border-thick);
-            box-shadow: var(--shadow);
-            padding: 40px 30px;
+        body.light-mode .hero h1 {
+            background: linear-gradient(180deg, #1a1a1f 0%, #555 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+
+        body.light-mode .status-badge,
+        body.light-mode .platform-card,
+        body.light-mode .duration-card,
+        body.light-mode .summary-card,
+        body.light-mode .vip-feature-card,
+        body.light-mode .input-elite,
+        body.light-mode .copy-box,
+        body.light-mode .modal-content,
+        body.light-mode .waiting-card,
+        body.light-mode .success-screen,
+        body.light-mode .dm-notice {
+            background: #fff;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        body.light-mode .status-value,
+        body.light-mode .hero-stats .stat-value,
+        body.light-mode .copy-box span,
+        body.light-mode .copy-box code,
+        body.light-mode .dm-modal-body h4,
+        body.light-mode .dm-dc-username,
+        body.light-mode .modal-steps li,
+        body.light-mode .sum-val,
+        body.light-mode .platform-price,
+        body.light-mode .input-elite,
+        body.light-mode .social-link,
+        body.light-mode .summary-value,
+        body.light-mode .summary-header h4,
+        body.light-mode .modal-header h3,
+        body.light-mode .copy-section label,
+        body.light-mode .waiting-card h2,
+        body.light-mode .waiting-card p,
+        body.light-mode .success-card h2,
+        body.light-mode .success-card p,
+        body.light-mode .board-value,
+        body.light-mode .waiting-status,
+        body.light-mode .total-label {
+            color: #1a1a1f;
+        }
+
+        body.light-mode .board-label {
+            color: #666677;
+        }
+
+        body.light-mode .summary-label,
+        body.light-mode .modal-subtitle,
+        body.light-mode .modal-steps li {
+            color: #555566;
+        }
+
+        body.light-mode .scanner-ring {
+            border-color: rgba(0, 0, 0, 0.05);
+            border-top-color: var(--accent);
+        }
+
+        body.light-mode .progress-bar {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        body.light-mode .summary-header,
+        body.light-mode .summary-row,
+        body.light-mode .total-row,
+        body.light-mode .modal-steps,
+        body.light-mode .status-board {
+            border-color: rgba(0, 0, 0, 0.08);
+        }
+
+        body.light-mode .spinner {
+            border-color: rgba(0, 0, 0, 0.05);
+            border-top-color: var(--accent);
+        }
+
+        body.light-mode .status-board,
+        body.light-mode .modal-btn.secondary {
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        body.light-mode .modal-btn.secondary {
+            border-color: rgba(0, 0, 0, 0.1);
+            color: #555566;
+        }
+
+        body.light-mode .modal-btn.secondary:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: #000;
+        }
+
+        body.light-mode .marquee-wrapper {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+        }
+
+        body.light-mode .step-box .step-number {
+            background: rgba(0, 0, 0, 0.05);
+            color: #666;
+        }
+
+        body.light-mode .step-box .step-number.active {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        body.light-mode .platform-card.mobile .platform-icon {
+            filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.1));
+        }
+
+        body.light-mode .showcase-item {
+            background: #fff;
+        }
+
+        body.light-mode .platform-card.selected,
+        body.light-mode .duration-card.selected {
+            background: rgba(255, 45, 45, 0.06);
+            border-color: var(--accent);
+            box-shadow: 0 15px 35px rgba(255, 45, 45, 0.1);
+        }
+
+        body.light-mode .duration-card.selected {
+            color: var(--accent);
+        }
+
+        body.light-mode .platform-card.selected .platform-price,
+        body.light-mode .duration-card.selected .duration-price {
+            color: rgba(0, 0, 0, 0.6);
+        }
+
+        body.light-mode .duration-card.selected .duration-time {
+            color: var(--accent);
+        }
+
+        /* Maintenance Overlay */
+        #maintenance-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(5, 5, 7, 0.98);
+            backdrop-filter: blur(25px);
+            z-index: 999999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
             text-align: center;
         }
 
-        .waiting-icon,
-        .success-icon {
-            font-size: 4rem;
-            margin-bottom: 20px;
-            animation: bounce 1s ease infinite;
+        .maintenance-content {
+            background: var(--bg-surface);
+            border: 1px solid rgba(255, 45, 45, 0.3);
+            border-radius: 40px;
+            padding: 60px 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 0 100px rgba(255, 45, 45, 0.15), inset 0 0 30px rgba(255, 45, 45, 0.05);
+            position: relative;
+            overflow: hidden;
+            animation: maintenanceSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        @keyframes bounce {
+        @keyframes maintenanceSlideUp {
+            from {
+                transform: translateY(50px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .maintenance-content::before {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at center, rgba(255, 45, 45, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        .m-icon {
+            width: 140px;
+            height: 140px;
+            margin: 0 auto 30px;
+            display: block;
+            object-fit: cover;
+            border-radius: 50%;
+            filter: drop-shadow(0 0 20px var(--accent-glow));
+            animation: mIconFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes mIconFloat {
 
             0%,
             100% {
@@ -1285,349 +1991,93 @@
             }
 
             50% {
-                transform: translateY(-10px);
+                transform: translateY(-15px);
             }
         }
 
-        .waiting-card h2,
-        .success-card h2 {
-            font-size: 1.5rem;
+        .m-title {
+            font-family: var(--font-tech);
+            font-size: clamp(1.8rem, 5vw, 2.5rem);
+            color: #fff;
+            margin-bottom: 20px;
             text-transform: uppercase;
-            margin-bottom: 10px;
+            letter-spacing: -1px;
+            line-height: 1.1;
         }
 
-        .waiting-card>p,
-        .success-card>p {
-            color: #666;
-            margin-bottom: 25px;
+        .m-title span {
+            color: var(--accent);
+            text-shadow: 0 0 30px var(--accent-glow);
         }
 
-        .waiting-details,
-        .success-details {
-            background: var(--bg-alt);
-            border: var(--border);
-            padding: 20px;
-            margin-bottom: 25px;
-            text-align: left;
+        .m-desc {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin-bottom: 40px;
         }
 
-        .waiting-row,
-        .success-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 2px dashed var(--black);
-        }
-
-        .waiting-row:last-child,
-        .success-row:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
-        }
-
-        .waiting-row span,
-        .success-row span {
-            color: #666;
-        }
-
-        .waiting-progress {
-            margin-bottom: 25px;
-        }
-
-        .progress-bar {
-            height: 12px;
-            background: var(--bg-alt);
-            border: var(--border);
-            overflow: hidden;
-            margin-bottom: 10px;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: var(--accent-3);
-            width: 0%;
-            transition: width 0.3s ease;
-        }
-
-        .waiting-status {
-            font-family: 'Space Mono', monospace;
-            font-size: 0.85rem;
-            color: #666;
-        }
-
-        .cancel-btn {
-            background: var(--white);
-            border: var(--border);
-            padding: 12px 25px;
-            font-family: 'Space Grotesk', sans-serif;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-
-        .cancel-btn:hover {
-            background: var(--accent-1);
-            color: var(--white);
-        }
-
-        /* ============ SUCCESS CARD ============ */
-        .success-card {
-            background: linear-gradient(135deg, #e8f5e9 0%, var(--white) 100%);
-        }
-
-        .success-icon {
-            animation: celebrate 0.5s ease;
-        }
-
-        @keyframes celebrate {
-            0% {
-                transform: scale(0);
-            }
-
-            50% {
-                transform: scale(1.2);
-            }
-
-            100% {
-                transform: scale(1);
-            }
-        }
-
-        .success-status-badge {
-            background: var(--accent-3);
-            padding: 5px 12px;
-            border: 2px solid var(--black);
-        }
-
-        .success-instructions {
-            background: var(--accent-5);
-            border: var(--border);
-            padding: 20px;
-            margin-bottom: 25px;
-            text-align: left;
-        }
-
-        .success-instructions h4 {
-            margin-bottom: 15px;
-        }
-
-        .success-instructions ol {
-            padding-left: 20px;
-            line-height: 1.8;
-        }
-
-        .success-buttons {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-
-        .success-btn {
-            flex: 1;
-            min-width: 150px;
-            padding: 15px 20px;
-            border: var(--border);
-            font-family: 'Space Grotesk', sans-serif;
-            font-weight: 700;
-            font-size: 0.95rem;
+        .m-button {
+            background: linear-gradient(135deg, var(--accent) 0%, #a81c1c 100%);
+            color: #fff;
+            padding: 18px 40px;
+            border-radius: 100px;
+            font-family: var(--font-tech);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 2px;
             text-decoration: none;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .success-btn.discord {
-            background: var(--accent-2);
-            color: var(--white);
-        }
-
-        .success-btn.verify {
-            background: #9b59b6;
-            color: var(--white);
-        }
-
-        .success-btn.primary {
-            background: var(--accent-3);
-            color: var(--black);
-        }
-
-        .success-btn:hover {
-            transform: translate(-2px, -2px);
-            box-shadow: var(--shadow);
-        }
-
-        @media (max-width: 500px) {
-
-            .waiting-card,
-            .success-card {
-                padding: 30px 20px;
-            }
-
-            .waiting-icon,
-            .success-icon {
-                font-size: 3rem;
-            }
-
-            .success-buttons {
-                flex-direction: column;
-            }
-        }
-
-        /* ============ LANGUAGE SWITCHER ============ */
-        .lang-switcher {
-            position: fixed;
-            top: 15px;
-            right: 15px;
-            display: flex;
-            gap: 0;
-            background: var(--white);
-            border: var(--border);
-            box-shadow: var(--shadow-sm);
-            z-index: 1000;
-        }
-
-        .lang-btn {
-            padding: 10px 15px;
-            border: none;
-            background: transparent;
-            font-family: 'Space Mono', monospace;
-            font-weight: 700;
-            font-size: 0.75rem;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            text-transform: uppercase;
-        }
-
-        .lang-btn:first-child {
-            border-right: var(--border);
-        }
-
-        .lang-btn:hover {
-            background: var(--bg-alt);
-        }
-
-        .lang-btn.active {
-            background: var(--accent-2);
-            color: var(--white);
-        }
-
-        /* ============ DARK MODE TOGGLE ============ */
-        .theme-toggle {
-            position: fixed;
-            top: 15px;
-            right: 120px;
-            background: var(--white);
-            border: var(--border);
-            box-shadow: var(--shadow-sm);
-            z-index: 1000;
-            width: 45px;
-            height: 45px;
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 1.2rem;
+            gap: 12px;
+            transition: var(--transition);
+            box-shadow: 0 15px 35px rgba(255, 45, 45, 0.4);
         }
 
-        .theme-toggle:hover {
-            transform: translate(-2px, -2px);
-            box-shadow: var(--shadow);
+        .m-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 45px rgba(255, 45, 45, 0.6);
+            filter: brightness(1.1);
         }
 
-        body.dark-mode .theme-toggle {
-            background: #1a1a24;
+        .m-button:active {
+            transform: scale(0.95);
         }
 
-        /* ============ SKELETON LOADER ============ */
-        .skeleton {
-            background: linear-gradient(90deg, var(--bg-alt) 25%, var(--bg) 50%, var(--bg-alt) 75%);
-            background-size: 200% 100%;
-            animation: skeleton-shimmer 1.5s infinite;
-            border-radius: 4px;
-        }
-
-        @keyframes skeleton-shimmer {
-            0% {
-                background-position: 200% 0;
-            }
-
-            100% {
-                background-position: -200% 0;
-            }
-        }
-
-        .user-preview-skeleton {
-            display: none;
-            gap: 15px;
-            padding: 15px;
-            background: var(--bg-alt);
-            border: var(--border);
-            margin-top: 15px;
-        }
-
-        .user-preview-skeleton.visible {
-            display: flex;
-            align-items: center;
-        }
-
-        .skeleton-avatar {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-        }
-
-        .skeleton-info {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .skeleton-name {
-            width: 150px;
-            height: 20px;
-        }
-
-        .skeleton-id {
-            width: 200px;
-            height: 14px;
-        }
-
-        @media (max-width: 768px) {
-            .lang-switcher {
-                top: 10px;
-                right: 10px;
-            }
-
-            .lang-btn {
-                padding: 8px 12px;
-                font-size: 0.7rem;
-            }
-
-            .theme-toggle {
-                top: 10px;
-                right: 85px;
-                width: 40px;
-                height: 40px;
-                font-size: 1rem;
-            }
+        body.maintenance-active {
+            overflow: hidden;
         }
     </style>
+
 </head>
 
-<body>
-    <!-- Language Switcher -->
-    <div class="lang-switcher">
-        <button class="lang-btn active" onclick="setLanguage('id')" id="lang-id">🇮🇩 ID</button>
-        <button class="lang-btn" onclick="setLanguage('en')" id="lang-en">🇬🇧 EN</button>
+<body ontouchstart="" class="maintenance-active">
+    <!-- Maintenance Overlay -->
+    <div id="maintenance-overlay">
+        <div class="maintenance-content">
+            <img src="/starship-logo.png" alt="Starship Logo" class="m-icon">
+            <h1 class="m-title">TOKO <span>TUTUP</span> SEMENTARA</h1>
+            <p class="m-desc">
+                Maaf, Starship VIP Store sedang ditutup untuk pemeliharaan dan pembaruan sistem selama beberapa minggu
+                ke depan.
+                Seluruh aktivitas pembelian dinonaktifkan untuk sementara waktu.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 15px; align-items: center;">
+                <a href="https://discord.gg/ftmA7BheTc" class="m-button">
+                    <i class="fab fa-discord"></i> GABUNG DISCORD UNTUK UPDATE
+                </a>
+            </div>
+        </div>
     </div>
 
-    <!-- Dark Mode Toggle -->
-    <button class="theme-toggle" onclick="toggleDarkMode()" id="theme-toggle" title="Toggle Dark Mode">
-        🌙
-    </button>
+    <!-- Tools & Navigation -->
+    <div class="nav-tools">
+        <div class="lang-switcher-tool">
+            <button class="lang-btn active" onclick="setLanguage('id')" id="lang-id">ID</button>
+            <button class="lang-btn" onclick="setLanguage('en')" id="lang-en">EN</button>
+        </div>
+        <button class="tool-btn" onclick="toggleTheme()" id="theme-toggle" title="Toggle Theme">☀️</button>
+    </div>
 
     <!-- Marquee -->
     <div class="marquee-wrapper">
@@ -1646,24 +2096,28 @@
     <div class="main-container">
         <!-- Hero Section -->
         <section class="hero">
-            <img src="/starship-logo.png" alt="Starship Logo" class="hero-logo">
+            <div class="logo-system">
+                <div class="logo-glow"></div>
+                <div class="logo-ring ring-inner"></div>
+                <div class="logo-ring ring-outer"></div>
+                <img src="/starship-logo.png" alt="Starship Logo" class="logo-main">
+            </div>
 
-            <!-- Status Badges (PC & Mobile) -->
             <div class="status-badge-container">
-                <!-- PC Status -->
-                <div class="status-badge loading" id="status-badge-pc" title="Loading PC status...">
+                <div class="status-badge loading" id="status-badge-pc">
+                    <i class="fas fa-desktop status-icon"></i>
                     <div class="status-indicator"></div>
                     <div class="status-text">
-                        <span class="status-label">💻 PC</span>
-                        <span class="status-value" id="status-value-pc" data-i18n="loading">Memuat...</span>
+                        <span class="status-label">PC SYSTEM</span>
+                        <span class="status-value" id="status-value-pc" data-i18n="loading">MEMUAT...</span>
                     </div>
                 </div>
-                <!-- Mobile Status -->
-                <div class="status-badge loading" id="status-badge-mobile" title="Loading Mobile status...">
+                <div class="status-badge loading" id="status-badge-mobile">
+                    <i class="fas fa-mobile-alt status-icon"></i>
                     <div class="status-indicator"></div>
                     <div class="status-text">
-                        <span class="status-label">📱 Mobile</span>
-                        <span class="status-value" id="status-value-mobile" data-i18n="loading">Memuat...</span>
+                        <span class="status-label">MOBILE SYSTEM</span>
+                        <span class="status-value" id="status-value-mobile" data-i18n="loading">MEMUAT...</span>
                     </div>
                 </div>
             </div>
@@ -1671,38 +2125,152 @@
             <h1>STARSHIP <span>VIP</span></h1>
             <p data-i18n="hero_desc">Buka fitur premium untuk pengalaman Roblox Anda. Tanpa batas. Kekuatan penuh.</p>
 
+            <div class="hero-stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="stat-active-users">15,000+</span>
+                    <span class="stat-label" data-i18n="stat_users">Active Users</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value">99.9%</span>
+                    <span class="stat-label" data-i18n="stat_uptime">System Uptime</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value">24/7</span>
+                    <span class="stat-label" data-i18n="stat_support">Fast Support</span>
+                </div>
+            </div>
+
+            <a href="#order-intro" class="hero-cta-btn" data-i18n="cta_buy">GET VIP ACCESS NOW</a>
+
             <div class="hero-socials">
-                <a href="https://www.tiktok.com/@starshipcore" class="social-link tiktok" target="_blank">
-                    <span>🎵</span> TikTok
-                </a>
-                <a href="https://discord.gg/ftmA7BheTc" class="social-link discord" target="_blank">
-                    <span>💬</span> Discord
-                </a>
-                <a href="/vip-reset" class="social-link hwid-reset">
-                    <span>🔄</span> Reset HWID
-                </a>
+                <a href="https://www.tiktok.com/@starshipcore" class="social-link" target="_blank"><i
+                        class="fab fa-tiktok"></i> TikTok</a>
+                <a href="https://discord.gg/ftmA7BheTc" class="social-link discord" target="_blank"><i
+                        class="fab fa-discord"></i> Discord</a>
+                <a href="/vip-reset" class="social-link"><i class="fas fa-arrows-rotate"></i> Reset HWID</a>
+            </div>
+
+            <div class="scroll-indicator">
+                <span data-i18n="scroll_explore">Explore Starship</span>
+                <span class="scroll-arrow">▼</span>
             </div>
         </section>
 
-        <!-- Features Bar -->
-        <div class="features-bar">
-            <div class="feature-box">
-                <div class="icon">☁️</div>
-                <span data-i18n="feature_cloud">Rekam Cloud</span>
+        <!-- Detailed VIP Features -->
+        <section class="vip-features-detailed">
+            <div class="section-header">
+                <div class="section-badge" data-i18n="vip_benefits">KEUNTUNGAN VIP</div>
+                <h2 class="section-title" data-i18n="why_choose_vip">Kenapa Memilih VIP?</h2>
+                <p class="section-desc" data-i18n="vip_benefits_desc">Dapatkan fitur eksklusif yang tidak tersedia untuk
+                    pengguna gratis.</p>
             </div>
-            <div class="feature-box">
-                <div class="icon">🔄</div>
-                <span data-i18n="feature_updates">Update Otomatis</span>
+
+            <div class="vip-features-grid">
+                <div class="vip-feature-card">
+                    <span class="vip-f-icon">☁️</span>
+                    <h3 class="vip-f-title" data-i18n="f_cloud_title">Cloud Storage</h3>
+                    <p class="vip-f-desc" data-i18n="f_cloud_desc">Simpan konfigurasi dan skrip Anda dikelola secara
+                        otomatis di server cloud kami.</p>
+                </div>
+                <div class="vip-feature-card">
+                    <span class="vip-f-icon">🛡️</span>
+                    <h3 class="vip-f-title" data-i18n="f_anti_title">Anti-Deteksi</h3>
+                    <p class="vip-f-desc" data-i18n="f_anti_desc">Sistem bypass canggih yang diperbarui setiap hari
+                        untuk menjaga akun Anda tetap aman.</p>
+                </div>
+                <div class="vip-feature-card">
+                    <span class="vip-f-icon">⚡</span>
+                    <h3 class="vip-f-title" data-i18n="f_update_title">Auto-Update</h3>
+                    <p class="vip-f-desc" data-i18n="f_update_desc">Tidak perlu download manual, skrip akan selalu
+                        otomatis menggunakan versi terbaru.</p>
+                </div>
+                <div class="vip-feature-card">
+                    <span class="vip-f-icon">🎧</span>
+                    <h3 class="vip-f-title" data-i18n="f_support_title">Premium Support</h3>
+                    <p class="vip-f-desc" data-i18n="f_support_desc">Akses prioritas ke tim teknis kami via Discord
+                        untuk bantuan instan.</p>
+                </div>
+                <div class="vip-feature-card">
+                    <span class="vip-f-icon">🔄</span>
+                    <h3 class="vip-f-title" data-i18n="f_hwid_title">HWID Reset</h3>
+                    <p class="vip-f-desc" data-i18n="f_hwid_desc">Ganti perangkat? Tidak masalah. Reset HWID Anda secara
+                        mandiri di website kami.</p>
+                </div>
+                <div class="vip-feature-card">
+                    <span class="vip-f-icon">💎</span>
+                    <h3 class="vip-f-title" data-i18n="f_priority_title">Priority Access</h3>
+                    <p class="vip-f-desc" data-i18n="f_priority_desc">Jadilah yang pertama mencoba fitur eksperimental
+                        sebelum dirilis ke publik.</p>
+                </div>
             </div>
-            <div class="feature-box">
-                <div class="icon">🛡️</div>
-                <span data-i18n="feature_antidetect">Anti-Deteksi</span>
+        </section>
+
+        <!-- UI Showcase Gallery -->
+        <section class="ui-showcase section">
+            <div class="section-header">
+                <div class="section-badge" data-i18n="ui_showcase_badge">UI SHOWCASE</div>
+                <h2 class="section-title" data-i18n="ui_showcase_title">Antarmuka Premium Starship</h2>
+                <p class="section-desc" data-i18n="ui_showcase_desc">Eksplorasi setiap tab fungsional dengan desain
+                    berkelas dunia.</p>
             </div>
-            <div class="feature-box">
-                <div class="icon">🌍</div>
-                <span data-i18n="feature_multilang">Multi-Bahasa</span>
+
+            <div class="showcase-container">
+                <div class="showcase-slider" id="ui-slider">
+                    <div class="showcase-track" id="ui-track">
+                        <div class="showcase-item">
+                            <img src="imageMobileTab/dashboard-tab.png" alt="Dashboard Tab">
+                            <span class="showcase-label" data-i18n="tab_dashboard">Dashboard & Performance</span>
+                        </div>
+                        <div class="showcase-item">
+                            <img src="imageMobileTab/player-tab.png" alt="Player Tab">
+                            <span class="showcase-label" data-i18n="tab_player">Player Enhancement</span>
+                        </div>
+                        <div class="showcase-item">
+                            <img src="imageMobileTab/autowalk-tab.png" alt="Auto Walk Tab">
+                            <span class="showcase-label" data-i18n="tab_autowalk">Autonomous Navigation</span>
+                        </div>
+                        <div class="showcase-item">
+                            <img src="imageMobileTab/avatar-tab.png" alt="Avatar Tab">
+                            <span class="showcase-label" data-i18n="tab_avatar">Avatar Identity</span>
+                        </div>
+                        <div class="showcase-item">
+                            <img src="imageMobileTab/animations-tab.png" alt="Animations Tab">
+                            <span class="showcase-label" data-i18n="tab_animations">Animation Library</span>
+                        </div>
+                        <div class="showcase-item">
+                            <img src="imageMobileTab/skybox-tab.png" alt="Skybox Tab">
+                            <span class="showcase-label" data-i18n="tab_skybox">World & Atmosphere</span>
+                        </div>
+                        <div class="showcase-item">
+                            <img src="imageMobileTab/spoofsystem-tab.png" alt="Spoof System Tab">
+                            <span class="showcase-label" data-i18n="tab_spoof">Identity Spoofing</span>
+                        </div>
+                        <div class="showcase-item">
+                            <img src="imageMobileTab/account-tab.png" alt="Account Tab">
+                            <span class="showcase-label" data-i18n="tab_account">Account & Billing</span>
+                        </div>
+                        <div class="showcase-item">
+                            <img src="imageMobileTab/settings-tab.png" alt="Settings Tab">
+                            <span class="showcase-label" data-i18n="tab_settings">Core Config</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="showcase-nav">
+                    <button class="nav-prev" onclick="moveShowcase(-1)">❮</button>
+                    <button class="nav-next" onclick="moveShowcase(1)">❯</button>
+                </div>
             </div>
-        </div>
+        </section>
+
+        <!-- Order Introduction -->
+        <section class="order-intro section" id="order-intro">
+            <div class="section-header">
+                <div class="section-badge" data-i18n="order_badge">ORDER PROCESS</div>
+                <h2 class="section-title" data-i18n="order_title">Dapatkan Akses Starship VIP</h2>
+                <p class="section-desc" data-i18n="order_desc">Ikuti langkah-langkah di bawah ini untuk mendapatkan
+                    lisensi elite Anda sekarang.</p>
+            </div>
+        </section>
 
         <!-- Steps Tracker -->
         <div class="steps-tracker">
@@ -1727,107 +2295,91 @@
             </div>
         </div>
 
-        <!-- Step 1: Platform Selection -->
-        <section class="section" id="section-platform">
-            <div class="section-header">
-                <div class="section-badge" data-i18n="step_01">Langkah 01</div>
-                <h2 class="section-title" data-i18n="choose_platform">Pilih Platform Anda</h2>
-                <p class="section-desc" data-i18n="choose_platform_desc">Pilih di mana Anda ingin menggunakan Starship
-                    VIP</p>
-            </div>
-
-            <div class="platform-grid">
-                <div class="platform-card mobile" data-platform="mobile" onclick="selectPlatform('mobile')">
-                    <div class="platform-accent"></div>
-                    <div class="platform-icon">📱</div>
-                    <h3 class="platform-name">Mobile VIP</h3>
-                    <p class="platform-desc" data-i18n="mobile_desc">Untuk perangkat Android & iOS dengan executor
-                        mobile</p>
-                    <p class="platform-price" data-i18n="mobile_price">Mulai dari <strong>Rp 10K</strong></p>
+        <div class="star-panel">
+            <!-- Step 1: Platform Selection -->
+            <section class="section" id="section-platform">
+                <div class="section-header">
+                    <div class="section-badge" data-i18n="step_01">Langkah 01</div>
+                    <h2 class="section-title" data-i18n="choose_platform">Pilih Platform Anda</h2>
+                    <p class="section-desc" data-i18n="choose_platform_desc">Pilih di mana Anda ingin menggunakan
+                        Starship VIP</p>
                 </div>
 
-                <div class="platform-card pc" data-platform="pc" onclick="selectPlatform('pc')">
-                    <div class="platform-accent"></div>
-                    <div class="platform-icon">💻</div>
-                    <h3 class="platform-name">PC VIP</h3>
-                    <p class="platform-desc" data-i18n="pc_desc">Untuk Windows dengan executor desktop</p>
-                    <p class="platform-price" data-i18n="pc_price">Selamanya <strong>Rp 250K</strong></p>
+                <div class="platform-grid">
+                    <div class="platform-card mobile" data-platform="mobile" onclick="selectPlatform('mobile')">
+                        <div class="platform-accent"></div>
+                        <span class="platform-icon">📱</span>
+                        <h3 class="platform-name">Mobile VIP</h3>
+                        <p class="platform-desc" data-i18n="mobile_desc">Untuk perangkat Android & iOS dengan executor
+                            mobile</p>
+                        <p class="platform-price" data-i18n="mobile_price">Mulai dari <strong>Rp 10K</strong></p>
+                    </div>
+
+                    <div class="platform-card pc" data-platform="pc" onclick="selectPlatform('pc')">
+                        <div class="platform-accent"></div>
+                        <span class="platform-icon">💻</span>
+                        <h3 class="platform-name">PC VIP</h3>
+                        <p class="platform-desc" data-i18n="pc_desc">Untuk Windows dengan executor desktop</p>
+                        <p class="platform-price" data-i18n="pc_price">Selamanya <strong>Rp 250K</strong></p>
+                    </div>
+
+                    <div class="platform-card bundle" data-platform="bundle" onclick="selectPlatform('bundle')">
+                        <div class="platform-accent"></div>
+                        <span class="platform-icon">🎁</span>
+                        <h3 class="platform-name" data-i18n="bundle_name">Paket Bundle</h3>
+                        <p class="platform-desc" data-i18n="bundle_desc">Dapatkan akses Mobile + PC sekaligus</p>
+                        <p class="platform-price" data-i18n="bundle_price">Selamanya <strong>Rp 300K</strong></p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 2: Duration Selection -->
+            <section class="section" id="section-duration" style="display: none;">
+                <div class="section-header">
+                    <div class="section-badge" data-i18n="step_02">Langkah 02</div>
+                    <h2 class="section-title" data-i18n="select_duration">Pilih Durasi</h2>
+                    <p class="section-desc" data-i18n="select_duration_desc">Berapa lama Anda butuh akses VIP?</p>
+                </div>
+                <div class="duration-grid" id="duration-grid"></div>
+            </section>
+
+            <!-- Step 3: Account -->
+            <section class="section" id="section-userid" style="display: none;">
+                <div class="section-header">
+                    <div class="section-badge" data-i18n="step_03">Langkah 03</div>
+                    <h2 class="section-title" data-i18n="enter_roblox">Masukkan Akun Roblox</h2>
+                    <p class="section-desc" data-i18n="enter_roblox_desc">Masukkan Username atau User ID Anda</p>
                 </div>
 
-                <div class="platform-card bundle" data-platform="bundle" onclick="selectPlatform('bundle')">
-                    <div class="platform-accent"></div>
-                    <span class="platform-badge" data-i18n="save_20">Hemat 20%</span>
-                    <div class="platform-icon">🎁</div>
-                    <h3 class="platform-name" data-i18n="bundle_name">Paket Bundle</h3>
-                    <p class="platform-desc" data-i18n="bundle_desc">Dapatkan akses Mobile + PC sekaligus</p>
-                    <p class="platform-price" data-i18n="bundle_price">Selamanya <strong>Rp 300K</strong></p>
-                </div>
-            </div>
-        </section>
-
-        <!-- Step 2: Duration Selection -->
-        <section class="section" id="section-duration">
-            <div class="section-header">
-                <div class="section-badge" data-i18n="step_02">Langkah 02</div>
-                <h2 class="section-title" data-i18n="select_duration">Pilih Durasi</h2>
-                <p class="section-desc" data-i18n="select_duration_desc">Berapa lama Anda butuh akses VIP?</p>
-            </div>
-
-            <div class="duration-grid" id="duration-grid">
-                <!-- Dynamically populated -->
-            </div>
-        </section>
-
-        <!-- Step 3: User ID -->
-        <section class="section" id="section-userid">
-            <div class="section-header">
-                <div class="section-badge" data-i18n="step_03">Langkah 03</div>
-                <h2 class="section-title" data-i18n="enter_roblox">Masukkan Akun Roblox</h2>
-                <p class="section-desc" data-i18n="enter_roblox_desc">Masukkan Username atau User ID Anda</p>
-            </div>
-
-            <div class="input-wrapper">
-                <div class="input-container">
-                    <input type="text" class="input-field" id="userid-input" placeholder="Username atau User ID"
+                <div class="input-wrapper">
+                    <input type="text" class="input-elite" id="userid-input" placeholder="Username atau User ID"
                         data-i18n-placeholder="input_placeholder" autocomplete="off" oninput="validateUser()">
                     <div class="input-status" id="input-status"></div>
-                </div>
 
-                <div class="user-preview" id="user-preview">
-                    <img id="user-avatar" src="" alt="Avatar">
-                    <div class="user-details">
-                        <h4 id="user-name" data-i18n="loading">Memuat...</h4>
-                        <p id="user-id-display">ID: </p>
+                    <div class="user-preview" id="user-preview">
+                        <img id="user-avatar" src="" alt="Avatar">
+                        <div class="user-details">
+                            <h4 id="user-name">...</h4>
+                            <p id="user-id-display">ID: </p>
+                        </div>
+                    </div>
+
+                    <div class="user-preview-skeleton" id="user-preview-skeleton">
+                        <div class="skeleton skeleton-avatar"></div>
+                        <div class="skeleton-info">
+                            <div class="skeleton skeleton-name"></div>
+                            <div class="skeleton skeleton-id"></div>
+                        </div>
                     </div>
                 </div>
+            </section>
 
-                <!-- Skeleton Loader -->
-                <div class="user-preview-skeleton" id="user-preview-skeleton">
-                    <div class="skeleton skeleton-avatar"></div>
-                    <div class="skeleton-info">
-                        <div class="skeleton skeleton-name"></div>
-                        <div class="skeleton skeleton-id"></div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Step 4: Summary & Pay -->
-        <section class="section" id="section-summary">
-            <div class="section-header">
-                <div class="section-badge" data-i18n="step_04">Langkah 04</div>
-                <h2 class="section-title" data-i18n="complete_order">Selesaikan Pesanan</h2>
-                <p class="section-desc" data-i18n="complete_order_desc">Periksa dan lanjutkan ke pembayaran</p>
-            </div>
-
-            <div class="summary-section">
-                <div class="how-it-works">
-                    <h4 data-i18n="how_payment_works">📋 Cara Pembayaran</h4>
-                    <ol>
-                        <li data-i18n="payment_step1">Klik tombol Bayar di bawah</li>
-                        <li data-i18n="payment_step2">Selesaikan pembayaran via QRIS, Bank, atau E-Wallet</li>
-                        <li data-i18n="payment_step3">VIP aktif otomatis dalam 5 menit!</li>
-                    </ol>
+            <!-- Step 4: Summary -->
+            <section class="section" id="section-summary" style="display: none;">
+                <div class="section-header">
+                    <div class="section-badge" data-i18n="step_04">Langkah 04</div>
+                    <h2 class="section-title" data-i18n="complete_order">Selesaikan Pesanan</h2>
+                    <p class="section-desc" data-i18n="complete_order_desc">Periksa dan lanjutkan ke pembayaran</p>
                 </div>
 
                 <div class="summary-card">
@@ -1846,538 +2398,186 @@
                         <span class="summary-label" data-i18n="summary_account">Akun Roblox</span>
                         <span class="summary-value" id="summary-user">-</span>
                     </div>
-                    <div class="summary-row">
-                        <span class="summary-label" data-i18n="summary_total">Total</span>
-                        <span class="summary-value summary-total" id="summary-total">Rp 0</span>
+                    <div class="summary-row total-row">
+                        <span class="summary-label total-label" data-i18n="summary_total"
+                            style="font-weight: 800;">TOTAL</span>
+                        <span class="summary-total" id="summary-total">Rp 0</span>
                     </div>
                 </div>
 
                 <button class="pay-button" id="pay-button" onclick="proceedToPayment()" disabled>
-                    <span class="icon">💳</span>
                     <span id="pay-button-text" data-i18n="complete_payment">Selesaikan Pembayaran</span>
                 </button>
-            </div>
-        </section>
+            </section>
 
-        <!-- Waiting for Payment Section -->
-        <section class="section" id="section-waiting" style="display: none;">
-            <div class="waiting-card">
-                <div class="waiting-icon">⏳</div>
-                <h2>Menunggu Konfirmasi Pembayaran</h2>
-                <p>Kami sedang mengecek status pembayaran Anda...</p>
+            <!-- Waiting Section -->
+            <section id="section-waiting" style="display: none;">
+                <div class="waiting-card">
+                    <div class="waiting-visual">
+                        <div class="scanner-ring"></div>
+                        <div class="scanner-inner">📡</div>
+                    </div>
 
-                <div class="waiting-details">
-                    <div class="waiting-row">
-                        <span>Platform:</span>
-                        <strong id="waiting-platform">-</strong>
+                    <h2 data-i18n="waiting_title">Verifikasi Sistem</h2>
+                    <p data-i18n="waiting_desc">Mencocokkan data pembayaran Anda dengan database Starship...</p>
+
+                    <div class="status-board">
+                        <div class="board-row">
+                            <span class="board-label">TARGET ID</span>
+                            <span class="board-value" id="waiting-userid">-</span>
+                        </div>
+                        <div class="board-row">
+                            <span class="board-label">ACCESS TYPE</span>
+                            <span class="board-value" id="waiting-platform">-</span>
+                        </div>
+                        <div class="board-row">
+                            <span class="board-label">DURATION</span>
+                            <span class="board-value" id="waiting-duration">-</span>
+                        </div>
                     </div>
-                    <div class="waiting-row">
-                        <span>Duration:</span>
-                        <strong id="waiting-duration">-</strong>
+
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
                     </div>
-                    <div class="waiting-row">
-                        <span>Roblox ID:</span>
-                        <strong id="waiting-userid">-</strong>
+
+                    <p class="waiting-status" id="waiting-status">
+                        SYNCING DATA... [<span id="check-count">0</span>/<span id="max-count">180</span>]
+                    </p>
+
+                    <button class="modal-btn secondary" onclick="cancelWaiting()"
+                        data-i18n="cancel_restart">Batalkan</button>
+                </div>
+            </section>
+
+            <!-- Success Section -->
+            <section id="section-success" style="display: none;">
+                <div class="success-card">
+                    <div class="waiting-visual">
+                        <div class="scanner-ring" style="border-top-color: var(--success);"></div>
+                        <div class="scanner-inner"
+                            style="background: radial-gradient(circle, var(--success) 0%, transparent 70%);">⚡</div>
+                    </div>
+
+                    <h2 data-i18n="vip_activated">Elite Activated</h2>
+                    <p data-i18n="success_ready">Akses VIP Anda telah aktif dan siap digunakan!</p>
+
+                    <div class="status-board">
+                        <div class="board-row">
+                            <span class="board-label">USER</span>
+                            <span class="board-value" id="success-username">-</span>
+                        </div>
+                        <div class="board-row">
+                            <span class="board-label">PLATFORM</span>
+                            <span class="board-value" id="success-platform">-</span>
+                        </div>
+                        <div class="board-row">
+                            <span class="board-label">SYSTEM STATUS</span>
+                            <span class="board-value" style="color: var(--success); font-weight: 800;">FULLY
+                                RECOGNIZED</span>
+                        </div>
+                    </div>
+
+                    <div class="success-instructions">
+                        <h4 data-i18n="instructions_title">📖 Prosedur In-Game</h4>
+                        <ol class="styled-list">
+                            <li>Buka Roblox dan jalankan game</li>
+                            <li>Execute script Starship Core</li>
+                            <li>Sistem akan mendeteksi HWID Anda</li>
+                        </ol>
+                    </div>
+
+                    <div class="success-buttons" style="margin-top: 40px; display: grid; gap: 15px;">
+                        <a href="/verify.html" class="modal-btn primary" data-i18n="verify_discord"
+                            style="background: #5865F2; box-shadow: 0 10px 30px rgba(88, 101, 242, 0.3);">Link Discord
+                            Role</a>
+                        <button class="modal-btn secondary" onclick="resetToHome()" data-i18n="back_home">Kembali ke
+                            Home</button>
                     </div>
                 </div>
-
-                <div class="waiting-progress">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progress-fill"></div>
-                    </div>
-                    <p class="waiting-status" id="waiting-status">Mengecek status... <span
-                            id="check-count">0</span>/<span id="max-count">180</span></p>
-                </div>
-
-                <button class="cancel-btn" onclick="cancelWaiting()" data-i18n="cancel_restart">Batalkan & Mulai
-                    Ulang</button>
-            </div>
-        </section>
-
-        <!-- Success Section -->
-        <section class="section" id="section-success" style="display: none;">
-            <div class="success-card">
-                <div class="success-icon">🎉</div>
-                <h2>VIP Berhasil Diaktifkan!</h2>
-                <p>Selamat! Akun Anda sekarang sudah VIP.</p>
-
-                <div class="success-details">
-                    <div class="success-row">
-                        <span>Username:</span>
-                        <strong id="success-username">-</strong>
-                    </div>
-                    <div class="success-row">
-                        <span>Platform:</span>
-                        <strong id="success-platform">-</strong>
-                    </div>
-                    <div class="success-row">
-                        <span>Duration:</span>
-                        <strong id="success-duration">-</strong>
-                    </div>
-                    <div class="success-row">
-                        <span>Status:</span>
-                        <strong class="success-status-badge">✅ ACTIVE</strong>
-                    </div>
-                    <div class="success-row" id="success-expires-row">
-                        <span>Expires:</span>
-                        <strong id="success-expires">-</strong>
-                    </div>
-                </div>
-
-                <div class="success-instructions">
-                    <h4>📖 Cara Menggunakan:</h4>
-                    <ol>
-                        <li>Buka Roblox dan jalankan game</li>
-                        <li>Execute script Starship</li>
-                        <li>VIP features sudah aktif otomatis!</li>
-                    </ol>
-                </div>
-
-                <div class="success-buttons">
-                    <a href="/verify.html" class="success-btn verify" data-i18n="verify_discord">🔗 Verifikasi &
-                        Dapatkan Role Discord</a>
-                    <a href="https://discord.gg/ftmA7BheTc" target="_blank" class="success-btn discord"
-                        data-i18n="join_discord">💬 Gabung Discord</a>
-                    <button class="success-btn primary" onclick="resetToHome()" data-i18n="back_home">🏠 Kembali ke
-                        Home</button>
-                </div>
-            </div>
-        </section>
+            </section>
+        </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <img src="/starship-logo.png" alt="Starship Logo" class="footer-logo">
-        <p>© 2026 Starship. Premium Roblox Experience.</p>
-        <div class="footer-links">
-            <a href="https://discord.gg/ftmA7BheTc" target="_blank">Discord</a>
-            <a href="https://www.tiktok.com/@starshipcore" target="_blank">TikTok</a>
-        </div>
-    </footer>
-
-    <!-- Toast Notification -->
-    <div class="toast" id="toast"></div>
-
-    <!-- Payment Instruction Modal -->
+    <!-- Modals -->
     <div class="modal-overlay" id="payment-modal" style="display: none;">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>📋 Instruksi Pembayaran</h3>
+                <h3 data-i18n="how_payment_works">Pembayaran</h3>
                 <button class="modal-close" onclick="closePaymentModal()">&times;</button>
             </div>
-            <div class="modal-body">
-                <p class="modal-subtitle">Silakan copy informasi berikut ke Saweria:</p>
+            <span class="modal-subtitle">Silakan copy informasi ke Saweria:</span>
 
-                <div class="copy-section">
-                    <label>1️⃣ Nominal Pembayaran:</label>
-                    <div class="copy-box">
-                        <span id="modal-amount">Rp 0</span>
-                        <button class="copy-btn" onclick="copyToClipboard('amount')">📋 Copy</button>
-                    </div>
-                </div>
-
-                <div class="copy-section">
-                    <label>2️⃣ Pesan (Opsional tapi direkomendasikan):</label>
-                    <div class="copy-box message-box">
-                        <code id="modal-message">-</code>
-                        <button class="copy-btn" onclick="copyToClipboard('message')">📋 Copy</button>
-                    </div>
-                </div>
-
-                <div class="modal-steps">
-                    <p><strong>Langkah:</strong></p>
-                    <ol>
-                        <li>Copy nominal di atas</li>
-                        <li>Klik "Buka Saweria" di bawah</li>
-                        <li>Paste nominal, bayar</li>
-                        <li>VIP aktif dalam 5 menit! 🎉</li>
-                    </ol>
+            <div class="copy-section">
+                <label>NOMINAL</label>
+                <div class="copy-box">
+                    <span id="modal-amount">Rp 0</span>
+                    <button class="copy-btn" onclick="copyToClipboard('amount')">COPY</button>
                 </div>
             </div>
+
+            <div class="copy-section">
+                <label>PESAN / CODE</label>
+                <div class="copy-box">
+                    <code id="modal-message">-</code>
+                    <button class="copy-btn" onclick="copyToClipboard('message')">COPY</button>
+                </div>
+            </div>
+
+            <div class="modal-steps">
+                <ol>
+                    <li>Copy nominal di atas</li>
+                    <li>Buka platform Saweria</li>
+                    <li>Tulis pesan/code yang diberikan</li>
+                    <li>VIP aktif dalam 5 menit</li>
+                </ol>
+            </div>
+
             <div class="modal-footer">
-                <button class="modal-btn secondary" onclick="closePaymentModal()">Batal</button>
                 <a href="#" id="saweria-link" class="modal-btn primary" onclick="return openSaweria(event)"
-                    target="_blank" rel="noopener noreferrer">🚀 Buka Saweria</a>
+                    target="_blank">BUKA SAWERIA</a>
             </div>
         </div>
     </div>
 
-    <!-- DM Modal for PC VIP & Bundle -->
-    <div class="modal-overlay dm-modal-overlay" id="dm-modal" style="display: none;">
-        <div class="modal-content dm-modal-content">
-            <div class="modal-header dm-modal-header">
-                <h3 data-i18n="dm_modal_title">📩 Pembelian via DM</h3>
+    <!-- DM Modal -->
+    <div class="modal-overlay" id="dm-modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-i18n="dm_modal_title" id="dm-modal-platform-header">Beli via DM</h3>
                 <button class="modal-close" onclick="closeDmModal()">&times;</button>
             </div>
-            <div class="modal-body dm-modal-body">
-                <div class="dm-icon">💻</div>
-                <h4 class="dm-platform" id="dm-modal-platform">PC VIP</h4>
-                <p class="dm-price" id="dm-modal-price">Rp 250.000</p>
+            <div class="dm-modal-body">
+                <span class="dm-icon">Elite</span>
+                <h4 class="platform-name" id="dm-modal-platform">-</h4>
+                <span class="dm-price" id="dm-modal-price">-</span>
 
-                <div class="dm-notice">
-                    <p data-i18n="dm_modal_desc">⚠️ Paket ini tidak bisa dibeli langsung dari website.</p>
-                </div>
+                <div class="dm-notice" data-i18n="dm_modal_desc">Paket ini memerlukan aktivasi manual oleh admin.</div>
 
-                <p class="dm-instruction" data-i18n="dm_modal_instruction">
-                    Untuk membeli paket ini, silakan hubungi admin via DM Discord:
-                </p>
-
-                <div class="dm-contact discord-contact">
-                    <span class="dm-dc-icon">💬</span>
+                <div class="discord-contact">
                     <span class="dm-dc-username">@bee._95</span>
                 </div>
-            </div>
-            <div class="modal-footer dm-modal-footer">
-                <button class="modal-btn secondary" onclick="closeDmModal()" data-i18n="dm_modal_close">Tutup</button>
-                <button class="modal-btn primary dm-btn" onclick="openDiscordDm()" data-i18n="dm_modal_btn">💬 DM
-                    @bee._95</button>
+
+                <button class="modal-btn primary" onclick="openDiscordDm()" data-i18n="dm_modal_btn">HUBUNGI
+                    ADMIN</button>
             </div>
         </div>
     </div>
 
-    <style>
-        /* DM Modal Styles */
-        .dm-modal-content {
-            max-width: 450px;
-        }
+    <footer class="footer">
+        <img src="/starship-logo.png" alt="Starship" class="footer-logo">
+        <p class="footer-text">© 2026 STARSHIP CORE // ELITE ACCESS</p>
+    </footer>
 
-        .dm-modal-header {
-            background: linear-gradient(135deg, var(--accent-2), #9c27b0);
-        }
-
-        .dm-modal-body {
-            text-align: center;
-            padding: 30px 25px;
-        }
-
-        .dm-icon {
-            font-size: 4rem;
-            margin-bottom: 15px;
-            animation: bounce 2s infinite;
-        }
-
-        @keyframes bounce {
-
-            0%,
-            100% {
-                transform: translateY(0);
-            }
-
-            50% {
-                transform: translateY(-10px);
-            }
-        }
-
-        .dm-platform {
-            font-size: 1.8rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            margin-bottom: 5px;
-            letter-spacing: -0.02em;
-        }
-
-        .dm-price {
-            font-family: 'Space Mono', monospace;
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: var(--accent-2);
-            background: var(--bg-alt);
-            display: inline-block;
-            padding: 8px 20px;
-            border: var(--border);
-            margin-bottom: 20px;
-        }
-
-        .dm-notice {
-            background: #fff3e0;
-            border: 3px solid #e65100;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-
-        body.dark-mode .dm-notice {
-            background: rgba(230, 81, 0, 0.2);
-        }
-
-        .dm-notice p {
-            margin: 0;
-            font-weight: 600;
-            color: #e65100;
-        }
-
-        .dm-instruction {
-            font-size: 0.95rem;
-            margin-bottom: 20px;
-            line-height: 1.5;
-        }
-
-        .dm-contact {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            padding: 18px 30px;
-            border: var(--border);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .dm-contact.discord-contact {
-            background: linear-gradient(135deg, #5865F2, #7289DA);
-        }
-
-        .dm-dc-icon {
-            font-size: 1.8rem;
-        }
-
-        .dm-dc-username {
-            font-family: 'Space Mono', monospace;
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: var(--white);
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
-        }
-
-        .dm-btn {
-            background: linear-gradient(135deg, #5865F2, #7289DA) !important;
-            color: white !important;
-        }
-
-        .dm-btn:hover {
-            transform: translate(-2px, -2px) scale(1.02) !important;
-            box-shadow: var(--shadow-hover) !important;
-        }
-
-        .dm-modal-footer {
-            background: var(--bg-alt);
-        }
-    </style>
-
-    <style>
-        /* Modal Styles */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        .modal-content {
-            background: var(--white);
-            border: var(--border-thick);
-            box-shadow: 10px 10px 0 var(--black);
-            max-width: 500px;
-            width: 100%;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            border-bottom: var(--border);
-            background: var(--accent-4);
-        }
-
-        .modal-header h3 {
-            margin: 0;
-            font-size: 1.3rem;
-            text-transform: uppercase;
-        }
-
-        .modal-close {
-            background: var(--black);
-            color: var(--white);
-            border: none;
-            width: 35px;
-            height: 35px;
-            font-size: 1.5rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-close:hover {
-            background: var(--accent-1);
-        }
-
-        .modal-body {
-            padding: 25px;
-        }
-
-        .modal-subtitle {
-            margin-bottom: 20px;
-            font-size: 0.95rem;
-            color: #666;
-        }
-
-        .copy-section {
-            margin-bottom: 20px;
-        }
-
-        .copy-section label {
-            display: block;
-            font-weight: 700;
-            margin-bottom: 8px;
-            font-size: 0.9rem;
-        }
-
-        .copy-box {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: var(--bg-alt);
-            border: var(--border);
-            padding: 12px 15px;
-        }
-
-        .copy-box span,
-        .copy-box code {
-            flex: 1;
-            font-family: 'Space Mono', monospace;
-            font-size: 1.1rem;
-            font-weight: 700;
-        }
-
-        .copy-box code {
-            color: var(--accent-2);
-            word-break: break-all;
-        }
-
-        .copy-btn {
-            background: var(--accent-3);
-            border: 2px solid var(--black);
-            padding: 8px 12px;
-            font-family: 'Space Grotesk', sans-serif;
-            font-weight: 700;
-            font-size: 0.8rem;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            white-space: nowrap;
-        }
-
-        .copy-btn:hover {
-            background: var(--accent-4);
-            transform: translate(-2px, -2px);
-            box-shadow: 3px 3px 0 var(--black);
-        }
-
-        .copy-btn.copied {
-            background: var(--accent-3);
-        }
-
-        .modal-warning {
-            background: var(--accent-1);
-            color: var(--white);
-            padding: 15px;
-            border: var(--border);
-            margin: 20px 0;
-            font-size: 0.9rem;
-        }
-
-        .modal-steps {
-            background: var(--bg-alt);
-            border: var(--border);
-            padding: 15px 15px 15px 20px;
-        }
-
-        .modal-steps p {
-            margin: 0 0 10px 0;
-            font-size: 0.9rem;
-        }
-
-        .modal-steps ol {
-            margin: 0;
-            padding-left: 20px;
-            font-size: 0.85rem;
-            line-height: 1.8;
-        }
-
-        .modal-footer {
-            display: flex;
-            gap: 15px;
-            padding: 20px;
-            border-top: var(--border);
-            background: var(--bg-alt);
-        }
-
-        .modal-btn {
-            flex: 1;
-            padding: 15px;
-            border: var(--border);
-            font-family: 'Space Grotesk', sans-serif;
-            font-weight: 700;
-            font-size: 1rem;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-
-        .modal-btn.secondary {
-            background: var(--white);
-            color: var(--black);
-        }
-
-        .modal-btn.primary {
-            background: var(--accent-1);
-            color: var(--white);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .modal-btn:hover {
-            transform: translate(-2px, -2px);
-            box-shadow: var(--shadow);
-        }
-
-        /* Anchor button styling */
-        a.modal-btn {
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-        }
-
-        @media (max-width: 500px) {
-            .modal-content {
-                max-height: 85vh;
-            }
-
-            .modal-header h3 {
-                font-size: 1.1rem;
-            }
-
-            .modal-body {
-                padding: 20px;
-            }
-
-            .copy-box {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 8px;
-            }
-
-            .copy-btn {
-                text-align: center;
-            }
-
-            .modal-footer {
-                flex-direction: column;
-            }
-        }
-    </style>
-
+    <div class="toast" id="toast"></div>
     <script>
+        // ============ CONFIG & DEV MODE ============
+        const isDev = window.location.port === '5500' || window.location.hostname === '127.0.0.1';
+
+        // Enable :active states on mobile
+        document.addEventListener("touchstart", function () { }, true);
+
         // ============ TRANSLATIONS ============
         const translations = {
             id: {
@@ -2444,7 +2644,93 @@
                 duration_3d: '3 Hari',
                 duration_7d: '7 Hari',
                 duration_14d: '14 Hari',
-                duration_lifetime: 'Selamanya'
+                duration_lifetime: 'Selamanya',
+                vip_benefits: 'KEUNTUNGAN VIP',
+                why_choose_vip: 'Kenapa Memilih VIP?',
+                vip_benefits_desc: 'Dapatkan fitur eksklusif yang tidak tersedia untuk pengguna gratis.',
+                f_cloud_title: 'Cloud Storage',
+                f_cloud_desc: 'Simpan konfigurasi dan skrip Anda dikelola secara otomatis di server cloud kami.',
+                f_anti_title: 'Anti-Deteksi',
+                f_anti_desc: 'Sistem bypass canggih yang diperbarui setiap hari untuk menjaga akun Anda tetap aman.',
+                f_update_title: 'Auto-Update',
+                f_update_desc: 'Tidak perlu download manual, skrip akan selalu otomatis menggunakan versi terbaru.',
+                f_support_title: 'Premium Support',
+                f_support_desc: 'Akses prioritas ke tim teknis kami via Discord untuk bantuan instan.',
+                f_hwid_title: 'HWID Reset',
+                f_hwid_desc: 'Ganti perangkat? Tidak masalah. Reset HWID Anda secara mandiri di website kami.',
+                f_priority_title: 'Priority Access',
+                f_priority_desc: 'Jadilah yang pertama mencoba fitur eksperimental sebelum dirilis ke publik.',
+                system_manifest: 'MANIFEST SISTEM',
+                all_features: 'Seluruh Fitur Starship',
+                manifest_desc: 'Daftar lengkap modul teknis yang terintegrasi dalam Starship Elite.',
+                cat_dashboard: 'DASHBOARD & STATUS',
+                cat_security_bypass: 'KEAMANAN & BYPASS',
+                cat_visuals_esp: 'VISUAL & ESP',
+                cat_movement: 'MOVEMENT & PHYSICS',
+                cat_social: 'SOSIAL & AVATAR',
+                cat_tools_cloud: 'TOOLS & CLOUD',
+                feat_perf: 'Performa Real-time',
+                feat_server: 'Manajemen Server',
+                feat_session: 'Verifikasi Sesi',
+                feat_admin_bypass: 'Admin Bypass Pro',
+                feat_auto_leave: 'Sistem Keamanan Keluar',
+                feat_afk_guard: 'Proteksi Anti-AFK',
+                feat_admin_esp: 'Deteksi Ancaman Admin',
+                feat_box_health: 'Kotak Taktis & Darah',
+                feat_physx_chams: 'X-Ray Chams PhysX',
+                feat_flight: 'Penerbangan 3D Cepat',
+                feat_invis_core: 'Invisible Core v2',
+                feat_quantum_tp: 'Teleportasi Quantum',
+                feat_kinetic_jump: 'Lompatan Kinetik Tanpa Batas',
+                feat_animations: 'Library Animasi',
+                feat_morph: 'Morph Avatar Lengkap',
+                feat_spoofing: 'Sistem Spoofing',
+                feat_cloud_stream: 'Streaming Cloud',
+                feat_viz: 'Visualisasi Jalur',
+                feat_tool_sync: 'Sinkronisasi Tool',
+                cat_account: 'AKUN & BERLANGGANAN',
+                cat_animation: 'ENGINE ANIMASI',
+                cat_avatar: 'AVATAR & IDENTITAS',
+                feat_anim_lib: 'Library Animasi Global',
+                feat_anim_manage: 'Manager Animasi Dinamis',
+                feat_anim_sync: 'Sistem Sinkronisasi State',
+                feat_morph_ingame: 'Morph Avatar In-Game',
+                feat_clone_global: 'Kloning Avatar Global',
+                feat_identity_spoof: 'Spoofing Identitas',
+                feat_asset_clone: 'Auto-Cloner Asset',
+                feat_profile: 'Manajemen Profil',
+                feat_vip_monitor: 'Monitor Status VIP',
+                feat_friend_track: 'Konektivitas Sosial',
+                cat_world: 'DUNIA & ATMOSFER',
+                feat_skybox: 'Kustomisasi Skybox',
+                feat_render_bypass: 'Bypass Rendering Visual',
+                feat_env_reset: 'Reset Atmosferik',
+                cat_nav: 'NAVIGASI OTONOM',
+                feat_cloud_db: 'Sinkronisasi Database Cloud',
+                feat_neural_play: 'Engine Playback Neural',
+                feat_mini_player: 'Kontroler Mini-Player',
+                feat_sentinel: 'Proteksi Sentinel Pro',
+                feat_vip_req: 'Akses Request VIP',
+                ui_showcase_badge: 'UI SHOWCASE',
+                ui_showcase_title: 'Pratinjau Antarmuka Premium',
+                ui_showcase_desc: 'Lihat desain UI eksklusif Starship Elite yang modern dan fungsional.',
+                tab_dashboard: 'Dashboard & Performa',
+                tab_player: 'Player Enhancement',
+                tab_autowalk: 'Navigasi Otonom',
+                tab_avatar: 'Identitas Avatar',
+                tab_animations: 'Library Animasi',
+                tab_skybox: 'Dunia & Atmosfer',
+                tab_spoof: 'Spoofing Identitas',
+                tab_account: 'Akun & Billing',
+                tab_settings: 'Konfigurasi Core',
+                order_badge: 'ORDER PROCESS',
+                order_title: 'Dapatkan Akses Starship VIP',
+                order_desc: 'Ikuti langkah-langkah di bawah ini untuk mendapatkan lisensi elite Anda sekarang.',
+                stat_users: 'Pengguna Aktif',
+                stat_uptime: 'Waktu Aktif Sistem',
+                stat_support: 'Bantuan Cepat',
+                cta_buy: 'DAPATKAN AKSES VIP SEKARANG',
+                scroll_explore: 'Jelajahi Starship'
             },
             en: {
                 marquee: '★ VIP ACCESS ★ CLOUD RECORDING ★ ANTI-DETECTION ★ AUTO UPDATES ★ MULTI-LANGUAGE ★ 24/7 SUPPORT ★',
@@ -2510,7 +2796,93 @@
                 duration_3d: '3 Days',
                 duration_7d: '7 Days',
                 duration_14d: '14 Days',
-                duration_lifetime: 'Lifetime'
+                duration_lifetime: 'Lifetime',
+                vip_benefits: 'VIP BENEFITS',
+                why_choose_vip: 'Why Choose VIP?',
+                vip_benefits_desc: 'Unlock exclusive features not available to free users.',
+                f_cloud_title: 'Cloud Storage',
+                f_cloud_desc: 'Store your configs and scripts automatically managed on our cloud servers.',
+                f_anti_title: 'Anti-Detection',
+                f_anti_desc: 'Advanced bypass system updated daily to keep your account safe.',
+                f_update_title: 'Auto-Update',
+                f_update_desc: 'No manual downloads needed, scripts always auto-update to the latest version.',
+                f_support_title: 'Premium Support',
+                f_support_desc: 'Priority access to our technical team via Discord for instant help.',
+                f_hwid_title: 'HWID Reset',
+                f_hwid_desc: 'Changed device? No problem. Reset your HWID independently on our website.',
+                f_priority_title: 'Priority Access',
+                f_priority_desc: 'Be the first to try experimental features before public release.',
+                system_manifest: 'SYSTEM MANIFEST',
+                all_features: 'All Starship Features',
+                manifest_desc: 'Complete list of technical modules integrated within Starship Elite.',
+                cat_dashboard: 'DASHBOARD & STATUS',
+                cat_security_bypass: 'SECURITY & BYPASS',
+                cat_visuals_esp: 'VISUAL & ESP',
+                cat_movement: 'MOVEMENT & PHYSICS',
+                cat_social: 'SOCIAL & AVATAR',
+                cat_tools_cloud: 'TOOLS & CLOUD',
+                feat_perf: 'Real-time Performance',
+                feat_server: 'Server Management',
+                feat_session: 'Session Verification',
+                feat_admin_bypass: 'Admin Bypass Pro',
+                feat_auto_leave: 'Auto-Leave Safety',
+                feat_afk_guard: 'Anti-AFK Guard',
+                feat_admin_esp: 'Admin Threat Detection',
+                feat_box_health: 'Tactical Box & Health',
+                feat_physx_chams: 'PhysX X-Ray Chams',
+                feat_flight: 'High-Speed 3D Flight',
+                feat_invis_core: 'Invisible Core v2',
+                feat_quantum_tp: 'Quantum Teleportation',
+                feat_kinetic_jump: 'Infinite Kinetic Jump',
+                feat_animations: 'Animation Library',
+                feat_morph: 'Full Avatar Morph',
+                feat_spoofing: 'Spoofing System',
+                feat_cloud_stream: 'Cloud Stream',
+                feat_viz: 'Path Visualization',
+                feat_tool_sync: 'Auto Tool Sync',
+                cat_account: 'ACCOUNT & SUBSCRIPTION',
+                cat_animation: 'ANIMATION ENGINE',
+                cat_avatar: 'AVATAR & IDENTITY',
+                feat_anim_lib: 'Global Anim Library',
+                feat_anim_manage: 'Dynamic Anim Manager',
+                feat_anim_sync: 'State Sync System',
+                feat_morph_ingame: 'In-Game Avatar Morph',
+                feat_clone_global: 'Global Avatar Cloner',
+                feat_identity_spoof: 'Identity Spoofing',
+                feat_asset_clone: 'Asset Auto-Cloner',
+                feat_profile: 'Profile Management',
+                feat_vip_monitor: 'VIP Status Monitor',
+                feat_friend_track: 'Social Connectivity',
+                cat_world: 'WORLD & ATMOSPHERE',
+                feat_skybox: 'Skybox Customizer',
+                feat_render_bypass: 'Rendering Bypass',
+                feat_env_reset: 'Atmospheric Reset',
+                cat_nav: 'AUTONOMOUS NAVIGATION',
+                feat_cloud_db: 'Cloud Database Sync',
+                feat_neural_play: 'Neural Playback Engine',
+                feat_mini_player: 'Mini-Player Controller',
+                feat_sentinel: 'Sentinel Protection Pro',
+                feat_vip_req: 'Private Request Access',
+                ui_showcase_badge: 'UI SHOWCASE',
+                ui_showcase_title: 'Premium UI Showcase',
+                ui_showcase_desc: 'Explore the modern and functional elite interface of Starship.',
+                tab_dashboard: 'Dashboard & Performance',
+                tab_player: 'Player Enhancement',
+                tab_autowalk: 'Autonomous Navigation',
+                tab_avatar: 'Avatar Identity',
+                tab_animations: 'Animation Library',
+                tab_skybox: 'World & Atmosphere',
+                tab_spoof: 'Identity Spoofing',
+                tab_account: 'Account & Billing',
+                tab_settings: 'Core Configuration',
+                order_badge: 'ORDER PROCESS',
+                order_title: 'Get Your Starship VIP Access',
+                order_desc: 'Follow the steps below to secure your elite license today.',
+                stat_users: 'Active Users',
+                stat_uptime: 'System Uptime',
+                stat_support: 'Fast Support',
+                cta_buy: 'GET VIP ACCESS NOW',
+                scroll_explore: 'Explore Starship'
             }
         };
 
@@ -2553,28 +2925,30 @@
             return translations[currentLang][key] || translations['id'][key] || key;
         }
 
-        // ============ DARK MODE ============
-        function toggleDarkMode() {
+        // ============ THEME TOGGLE (DARK/WHITE) ============
+        function toggleTheme() {
             const body = document.body;
             const toggle = document.getElementById('theme-toggle');
-            const isDark = body.classList.toggle('dark-mode');
+            const isLight = body.classList.toggle('light-mode');
 
-            localStorage.setItem('starship_darkmode', isDark ? 'true' : 'false');
-            toggle.textContent = isDark ? '☀️' : '🌙';
+            localStorage.setItem('starship_white_mode', isLight ? 'true' : 'false');
+            toggle.textContent = isLight ? '🌙' : '☀️';
         }
 
-        function initDarkMode() {
-            const savedMode = localStorage.getItem('starship_darkmode');
+        function initTheme() {
+            const savedMode = localStorage.getItem('starship_white_mode');
             const toggle = document.getElementById('theme-toggle');
 
             if (savedMode === 'true') {
-                document.body.classList.add('dark-mode');
+                document.body.classList.add('light-mode');
+                toggle.textContent = '🌙';
+            } else {
                 toggle.textContent = '☀️';
             }
         }
 
-        // Initialize dark mode on load
-        initDarkMode();
+        // Initialize theme on load
+        initTheme();
 
         // ============ PRICING ============
         const PRICING = {
@@ -2706,15 +3080,21 @@
             });
             document.querySelector(`[data-duration="${duration}"]`).classList.add('selected');
 
-            updateSteps(3);
+            // If user is already validated, keep summary visible and just update it
+            if (validatedUserId) {
+                updateSteps(4);
+                document.getElementById('section-summary').style.display = 'block';
+                updateSummary();
+            } else {
+                updateSteps(3);
+                document.getElementById('section-userid').style.display = 'block';
+                document.getElementById('section-summary').style.display = 'none';
 
-            document.getElementById('section-userid').style.display = 'block';
-            document.getElementById('section-summary').style.display = 'none';
-
-            setTimeout(() => {
-                document.getElementById('section-userid').scrollIntoView({ behavior: 'smooth', block: 'center' });
-                document.getElementById('userid-input').focus();
-            }, 100);
+                setTimeout(() => {
+                    document.getElementById('section-userid').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    document.getElementById('userid-input').focus();
+                }, 100);
+            }
         }
 
         // ============ USER VALIDATION (supports username OR user ID) ============
@@ -2731,13 +3111,17 @@
                 status.innerHTML = '';
                 preview.classList.remove('visible');
                 skeleton.classList.remove('visible');
+                input.classList.remove('checking', 'invalid');
                 validatedUserId = null;
                 validatedUsername = null;
+                document.getElementById('section-summary').style.display = 'none';
+                updateSteps(3);
                 updateSummary();
                 return;
             }
 
             // Show skeleton loader while searching
+            input.classList.add('checking');
             status.innerHTML = '<div class="spinner"></div>';
             status.className = 'input-status checking';
             preview.classList.remove('visible');
@@ -2745,44 +3129,79 @@
 
             validateTimeout = setTimeout(async () => {
                 try {
-                    // Check if input is numeric (User ID) or text (Username)
-                    const isNumeric = /^\d+$/.test(userInput);
-                    const apiUrl = isNumeric
-                        ? `/api/roblox-user?userId=${userInput}`
-                        : `/api/roblox-user?username=${encodeURIComponent(userInput)}`;
+                    // Critical Check: Abort if input was cleared or changed before we even started
+                    if (input.value.trim() !== userInput) return;
 
-                    const response = await fetch(apiUrl);
+                    let data;
+                    if (isDev) {
+                        // Bypass network in Dev Mode to avoid browser 404 logs
+                        await new Promise(r => setTimeout(r, 600)); // Simulate delay
+                        // Re-check after delay
+                        if (input.value.trim() !== userInput) return;
 
-                    if (response.ok) {
-                        const data = await response.json();
-
-                        status.innerHTML = t('found');
-                        status.className = 'input-status valid';
-
-                        validatedUserId = data.id.toString();
-                        validatedUsername = data.name;
-
-                        document.getElementById('user-avatar').src = data.avatar;
-                        document.getElementById('user-name').textContent = data.displayName || data.name;
-                        document.getElementById('user-id-display').textContent = `@${data.name} • ID: ${data.id}`;
-
-                        // Hide skeleton, show actual preview
-                        skeleton.classList.remove('visible');
-                        preview.classList.add('visible');
-
-                        updateSteps(4);
-                        document.getElementById('section-summary').style.display = 'block';
-                        updateSummary();
-
-                        setTimeout(() => {
-                            document.getElementById('section-summary').scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }, 300);
+                        data = {
+                            id: "12345678",
+                            name: userInput,
+                            displayName: userInput + " [DEV]",
+                            avatar: "https://starship-core.my.id/starship-logo.png"
+                        };
                     } else {
-                        throw new Error('Not found');
+                        // Check if input is numeric (User ID) or text (Username)
+                        const isNumeric = /^\d+$/.test(userInput);
+                        const apiUrl = isNumeric
+                            ? `/api/roblox-user?userId=${userInput}`
+                            : `/api/roblox-user?username=${encodeURIComponent(userInput)}`;
+
+                        const response = await fetch(apiUrl);
+
+                        // Re-check after network call
+                        if (input.value.trim() !== userInput) return;
+
+                        if (!response.ok) {
+                            throw new Error(`API error or missing endpoint`);
+                        }
+                        data = await response.json();
                     }
+
+                    // FINAL CHECK: Ensure target input is still exactly what we searched for
+                    if (input.value.trim() !== userInput) return;
+
+                    status.innerHTML = t('found');
+                    status.className = 'input-status valid';
+                    input.classList.remove('checking');
+
+                    validatedUserId = data.id.toString();
+                    validatedUsername = data.name;
+
+                    document.getElementById('user-avatar').src = data.avatar;
+                    document.getElementById('user-name').textContent = data.displayName || data.name;
+                    document.getElementById('user-id-display').textContent = `@${data.name} • ID: ${data.id}`;
+
+                    // Hide skeleton, show actual preview
+                    skeleton.classList.remove('visible');
+                    preview.classList.add('visible');
+
+                    updateSteps(4);
+                    document.getElementById('section-summary').style.display = 'block';
+                    updateSummary();
+
+                    setTimeout(() => {
+                        if (input.value.trim() === userInput) {
+                            document.getElementById('section-summary').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 300);
                 } catch (error) {
+                    if (input.value.trim() !== userInput) return;
+
+                    // Log warning only if not on local dev server
+                    if (!isDev) {
+                        console.warn('Validation API failed:', error.message);
+                    }
                     status.innerHTML = t('not_found');
                     status.className = 'input-status invalid';
+                    input.classList.remove('checking');
+                    input.classList.add('invalid');
+                    setTimeout(() => input.classList.remove('invalid'), 2000);
                     preview.classList.remove('visible');
                     skeleton.classList.remove('visible');
                     validatedUserId = null;
@@ -2896,6 +3315,12 @@
 
         // Create pending order on server for time-based payment matching
         async function createPendingOrderOnServer(order) {
+            // Live Server (5500) doesn't support POST requests to /api
+            if (isDev) {
+                console.log('👷 [Dev Mode] Skipping pending order creation on server');
+                return;
+            }
+
             try {
                 const response = await fetch('/api/saweria-webhook?action=create-pending-order', {
                     method: 'POST',
@@ -2913,7 +3338,7 @@
                     const data = await response.json();
                     console.log('✅ Pending order created on server:', data.orderId);
                 } else {
-                    console.warn('⚠️ Failed to create pending order on server');
+                    console.warn('⚠️ Failed to create pending order on server (Status:', response.status, ')');
                 }
             } catch (error) {
                 console.error('Error creating pending order:', error);
@@ -2926,8 +3351,18 @@
                 const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
                 if (!pendingOrder) return;
 
-                const checkResponse = await fetch(`/api/roblox-user?userId=${pendingOrder.userId}&checkVip=true&platform=${pendingOrder.platform}`);
-                const checkData = await checkResponse.json();
+                let checkData = { isVip: false, updatedAt: null, purchaseHistory: [] };
+
+                if (isDev) {
+                    console.log('👷 [Dev Mode] Using mock VIP check data');
+                } else {
+                    const checkResponse = await fetch(`/api/roblox-user?userId=${pendingOrder.userId}&checkVip=true&platform=${pendingOrder.platform}`);
+                    if (checkResponse.ok) {
+                        checkData = await checkResponse.json();
+                    } else {
+                        console.warn('⚠️ Server VIP check skipped (Status:', checkResponse.status, ')');
+                    }
+                }
 
                 // Update the pending order with VIP status
                 pendingOrder.wasAlreadyVip = checkData.isVip;
@@ -3028,19 +3463,34 @@
             const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
             if (!pendingOrder) return;
 
-            // Hide all other sections
-            document.getElementById('section-platform').style.display = 'none';
-            document.getElementById('section-duration').style.display = 'none';
-            document.getElementById('section-userid').style.display = 'none';
-            document.getElementById('section-summary').style.display = 'none';
-            document.querySelector('.steps-tracker').style.display = 'none';
-            document.querySelector('.features-bar').style.display = 'none';
+            // Hide order sections
+            const sectionsToHide = [
+                'section-platform',
+                'section-duration',
+                'section-userid',
+                'section-summary',
+                'order-intro'
+            ];
+
+            sectionsToHide.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+
+            // Hide trackers if they exist
+            ['.steps-tracker', '.features-bar'].forEach(selector => {
+                const el = document.querySelector(selector);
+                if (el) el.style.display = 'none';
+            });
 
             // Show waiting section
             document.getElementById('section-waiting').style.display = 'block';
             document.getElementById('waiting-platform').textContent = pendingOrder.platformName;
             document.getElementById('waiting-duration').textContent = pendingOrder.durationLabel;
-            document.getElementById('waiting-userid').textContent = pendingOrder.userId;
+
+            // Show both Username and ID for clarity
+            const userDisplay = pendingOrder.username ? `${pendingOrder.username} (${pendingOrder.userId})` : pendingOrder.userId;
+            document.getElementById('waiting-userid').textContent = userDisplay;
 
             // Start polling
             startPolling(pendingOrder);
@@ -3056,8 +3506,12 @@
 
                 try {
                     const response = await fetch(`/api/roblox-user?userId=${pendingOrder.userId}&checkVip=true&platform=${pendingOrder.platform}`);
-                    const data = await response.json();
 
+                    if (!response.ok) {
+                        throw new Error(`Polling API unavailable (Local Dev?)`);
+                    }
+
+                    const data = await response.json();
                     if (data.isVip) {
                         let shouldShowSuccess = false;
                         const orderTimestamp = new Date(pendingOrder.timestamp);
@@ -3096,7 +3550,10 @@
                         }
                     }
                 } catch (error) {
-                    console.error('Polling error:', error);
+                    // Avoid noisy errors on local dev
+                    if (!isDev) {
+                        console.error('Polling error:', error.message);
+                    }
                 }
 
                 if (checkCount >= MAX_CHECKS) {
@@ -3163,8 +3620,12 @@
 
             try {
                 const response = await fetch(`/api/roblox-user?userId=${pendingOrder.userId}&checkVip=true&platform=${pendingOrder.platform}`);
-                const data = await response.json();
 
+                if (!response.ok) {
+                    throw new Error(`API unavailable (Local Dev?)`);
+                }
+
+                const data = await response.json();
                 if (data.isVip) {
                     const orderTimestamp = new Date(pendingOrder.timestamp);
                     let shouldShowSuccess = false;
@@ -3197,7 +3658,9 @@
                 showTimeoutUI();
                 showToast('⏳ Pembayaran belum terdeteksi. Coba lagi nanti atau hubungi admin.', 'error');
             } catch (error) {
-                console.error('Manual check error:', error);
+                if (!isDev) {
+                    console.error('Manual check error:', error.message);
+                }
                 showTimeoutUI();
                 showToast('❌ Gagal mengecek status. Coba lagi.', 'error');
             }
@@ -3227,27 +3690,43 @@
             localStorage.removeItem('starship_pending_order');
             resetToHome();
         }
-
         // ============ SUCCESS PAGE ============
         function showSuccessPage(vipData) {
             // Hide waiting
-            document.getElementById('section-waiting').style.display = 'none';
+            const waitingSec = document.getElementById('section-waiting');
+            if (waitingSec) waitingSec.style.display = 'none';
 
             // Update success content
-            document.getElementById('success-username').textContent = vipData.username;
-            document.getElementById('success-platform').textContent = vipData.platform.toUpperCase();
-            document.getElementById('success-duration').textContent = vipData.duration;
+            const userDisplay = vipData.id ? `${vipData.username} (${vipData.id})` : vipData.username;
+            const elements = {
+                'success-username': userDisplay,
+                'success-platform': vipData.platform.toUpperCase(),
+                'success-duration': vipData.duration
+            };
 
-            if (vipData.isLifetime) {
-                document.getElementById('success-expires-row').style.display = 'none';
-            } else {
-                document.getElementById('success-expires').textContent =
-                    vipData.expiresAt ? new Date(vipData.expiresAt).toLocaleDateString('id-ID') : '-';
+            for (const [id, value] of Object.entries(elements)) {
+                const el = document.getElementById(id);
+                if (el) el.textContent = value;
+            }
+
+            const expiresRow = document.getElementById('success-expires-row');
+            if (expiresRow) {
+                if (vipData.isLifetime) {
+                    expiresRow.style.display = 'none';
+                } else {
+                    const expiresEl = document.getElementById('success-expires');
+                    if (expiresEl) {
+                        expiresEl.textContent = vipData.expiresAt ? new Date(vipData.expiresAt).toLocaleDateString('id-ID') : '-';
+                    }
+                }
             }
 
             // Show success section
-            document.getElementById('section-success').style.display = 'block';
-            document.getElementById('section-success').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const successSec = document.getElementById('section-success');
+            if (successSec) {
+                successSec.style.display = 'block';
+                successSec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
 
             showToast(t('vip_activated'), 'success');
         }
@@ -3262,21 +3741,41 @@
             validatedUserId = null;
             validatedUsername = null;
 
-            // Show all sections again
-            document.querySelector('.steps-tracker').style.display = 'flex';
-            document.querySelector('.features-bar').style.display = 'flex';
-            document.getElementById('section-platform').style.display = 'block';
-            document.getElementById('section-duration').style.display = 'none';
-            document.getElementById('section-userid').style.display = 'none';
-            document.getElementById('section-summary').style.display = 'none';
-            document.getElementById('section-waiting').style.display = 'none';
-            document.getElementById('section-success').style.display = 'none';
+            // Show/Hide sections safely
+            const toShow = ['section-platform', 'order-intro'];
+            const toHide = ['section-duration', 'section-userid', 'section-summary', 'section-waiting', 'section-success'];
+
+            toShow.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'block';
+            });
+
+            toHide.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+
+            // Show trackers if they exist
+            ['.steps-tracker', '.features-bar'].forEach(selector => {
+                const el = document.querySelector(selector);
+                if (el) {
+                    el.style.display = selector === '.steps-tracker' ? 'flex' : 'flex';
+                }
+            });
 
             // Reset UI
             document.querySelectorAll('.platform-card').forEach(c => c.classList.remove('selected'));
-            document.getElementById('userid-input').value = '';
-            document.getElementById('user-preview').classList.remove('visible');
+            const inputEl = document.getElementById('userid-input');
+            if (inputEl) inputEl.value = '';
+
+            const previewEl = document.getElementById('user-preview');
+            if (previewEl) previewEl.classList.remove('visible');
+
             updateSteps(1);
+
+            // Reset Saweria link
+            const saweriaLink = document.getElementById('saweria-link');
+            if (saweriaLink) saweriaLink.href = '#';
 
             // Scroll to top
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3289,49 +3788,54 @@
             const badgeMobile = document.getElementById('status-badge-mobile');
             const statusValueMobile = document.getElementById('status-value-mobile');
 
-            try {
-                // Fetch both platforms at once
-                const response = await fetch('/api/tags?action=status');
-                const data = await response.json();
+            if (isDev) {
+                // Return mock status in Dev Mode to avoid 404 browser logs
+                badgePc.className = 'status-badge online';
+                statusValuePc.textContent = 'ONLINE';
+                badgeMobile.className = 'status-badge online';
+                statusValueMobile.textContent = 'ONLINE';
+                return;
+            }
 
+            try {
+                const response = await fetch('/api/tags?action=status');
+
+                // Gracefully handle 404 or non-JSON responses (common in local dev)
+                if (!response.ok) {
+                    throw new Error(`Status API unavailable`);
+                }
+
+                const data = await response.json();
                 if (data.success) {
-                    // Update PC badge
                     if (data.pc) {
                         badgePc.className = `status-badge ${data.pc.status}`;
                         badgePc.title = data.pc.message || 'PC Status';
-                        statusValuePc.textContent = `${data.pc.emoji} ${data.pc.label}`;
+                        statusValuePc.textContent = data.pc.label.toUpperCase();
                     }
-
-                    // Update Mobile badge
                     if (data.mobile) {
                         badgeMobile.className = `status-badge ${data.mobile.status}`;
                         badgeMobile.title = data.mobile.message || 'Mobile Status';
-                        statusValueMobile.textContent = `${data.mobile.emoji} ${data.mobile.label}`;
+                        statusValueMobile.textContent = data.mobile.label.toUpperCase();
                     }
-
-                    // If any platform is maintenance/offline, show banner
                     const pcDown = data.pc?.status === 'maintenance' || data.pc?.status === 'offline';
                     const mobileDown = data.mobile?.status === 'maintenance' || data.mobile?.status === 'offline';
-
                     if (pcDown || mobileDown) {
                         showMaintenanceBanner({
                             status: pcDown && mobileDown ? 'offline' : 'maintenance',
                             emoji: pcDown && mobileDown ? '🔴' : '🟠',
                             label: pcDown && mobileDown ? 'All Systems' : (pcDown ? 'PC' : 'Mobile'),
-                            message: pcDown && mobileDown
-                                ? 'All systems are under maintenance'
-                                : (pcDown ? 'PC is under maintenance' : 'Mobile is under maintenance')
+                            message: pcDown && mobileDown ? 'All systems are under maintenance' : (pcDown ? 'PC is under maintenance' : 'Mobile is under maintenance')
                         });
                     } else {
                         hideMaintenanceBanner();
                     }
                 }
             } catch (e) {
-                console.error('Failed to fetch status:', e);
+                console.warn('System status check failed:', e.message);
                 badgePc.className = 'status-badge online';
-                statusValuePc.textContent = '🟢 Online';
+                statusValuePc.textContent = 'ONLINE';
                 badgeMobile.className = 'status-badge online';
-                statusValueMobile.textContent = '🟢 Online';
+                statusValueMobile.textContent = 'ONLINE';
             }
         }
 
@@ -3398,6 +3902,32 @@
             // Refresh status every 60 seconds
             setInterval(fetchSystemStatus, 60000);
 
+            // Add smooth scroll for internal links
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    const targetId = this.getAttribute('href');
+
+                    // Only process links that are actual anchors and not just "#"
+                    if (targetId && targetId.startsWith('#') && targetId.length > 1) {
+                        const targetElement = document.querySelector(targetId);
+                        if (targetElement) {
+                            e.preventDefault();
+                            const offset = 80; // Offset for header/paddings
+                            const elementPosition = targetElement.getBoundingClientRect().top;
+                            const offsetPosition = elementPosition + window.pageYOffset - offset;
+
+                            window.scrollTo({
+                                top: offsetPosition,
+                                behavior: 'smooth'
+                            });
+                        }
+                    }
+                });
+            });
+
+            // Fetch Discord Member Count
+            fetchDiscordMembers();
+
             const pendingOrder = JSON.parse(localStorage.getItem('starship_pending_order') || 'null');
 
             if (pendingOrder) {
@@ -3429,6 +3959,72 @@
                 toast.classList.remove('show');
             }, 3000);
         }
+
+        // ============ UI SHOWCASE SLIDER ============
+        let currentShowcaseIdx = 0;
+        function moveShowcase(dir) {
+            const track = document.getElementById('ui-track');
+            const items = document.querySelectorAll('.showcase-item');
+            const total = items.length;
+            const perView = window.innerWidth > 768 ? 2 : 1;
+            const maxIdx = total - perView;
+
+            currentShowcaseIdx += dir;
+            if (currentShowcaseIdx < 0) currentShowcaseIdx = maxIdx;
+            if (currentShowcaseIdx > maxIdx) currentShowcaseIdx = 0;
+
+            const offset = (currentShowcaseIdx * (100 / perView));
+            track.style.transform = `translateX(-${offset}%)`;
+        }
+
+        // Handle Slider Touch Events
+        let touchStartX = 0;
+        let touchEndX = 0;
+        const slider = document.getElementById('ui-slider');
+
+        slider.addEventListener('touchstart', e => touchStartX = e.changedTouches[0].screenX, { passive: true });
+        slider.addEventListener('touchend', e => {
+            touchEndX = e.changedTouches[0].screenX;
+            if (touchStartX - touchEndX > 50) moveShowcase(1);
+            if (touchEndX - touchStartX > 50) moveShowcase(-1);
+        }, { passive: true });
+
+        // ============ DISCORD MEMBER COUNT (REALTIME) ============
+        async function fetchDiscordMembers() {
+            const INVITE_CODE = 'ftmA7BheTc';
+            const statElement = document.getElementById('stat-active-users');
+
+            try {
+                // Fetch invite data with member counts
+                const response = await fetch(`https://discord.com/api/v9/invites/${INVITE_CODE}?with_counts=true`);
+                if (!response.ok) throw new Error('Network response was not ok');
+
+                const data = await response.json();
+                const memberCount = data.approximate_member_count;
+
+                if (memberCount) {
+                    animateCount(statElement, 15000, memberCount, 2000);
+                }
+            } catch (error) {
+                console.warn('Discord fetch failed, using fallback:', error);
+                // Fallback is already handled by the default HTML value
+            }
+        }
+
+        function animateCount(element, start, end, duration) {
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                const currentCount = Math.floor(progress * (end - start) + start);
+                element.textContent = formatNumber(currentCount) + '+';
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+
     </script>
 </body>
 
