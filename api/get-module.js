@@ -233,7 +233,7 @@ export default async function handler(req, res) {
   // ══════════════════════════════════════════════════════════════════
   const userAgent = req.headers["user-agent"] || "";
   const browserPatterns = ["Mozilla", "Chrome", "Safari", "Firefox", "Edge", "Opera", "MSIE", "Trident", "WebKit", "Gecko"];
-  const robloxPatterns = ["Roblox", "RobloxApp", "synapse", "SYNAPSE_HTTP", "krnl", "fluxus", "arceus", "delta", "hydrogen", "evon", "vegax", "script-ware", "comet"];
+  const robloxPatterns = ["Wave","Roblox", "RobloxApp", "synapse", "SYNAPSE_HTTP", "krnl", "fluxus", "arceus", "delta", "hydrogen", "evon", "vegax", "script-ware", "comet", "codex", "electron", "fury"];
 
   const isRobloxExecutor = robloxPatterns.some((p) => userAgent.toLowerCase().includes(p.toLowerCase()));
   const isBrowser = userAgent !== "" && !isRobloxExecutor && browserPatterns.some((p) => userAgent.includes(p));
@@ -242,7 +242,7 @@ export default async function handler(req, res) {
   const isDevEnv = process.env.NODE_ENV === "development";
   const isLocalhost = isDevEnv;
 
-  if (isBrowser && !isLocalhost) {
+  if (isBrowser && !isLocalhost && !isOwner) {
     const clientIP = req.headers["x-forwarded-for"]?.split(",")[0] || req.headers["x-real-ip"] || "unknown";
     console.log(`[${timestamp}] 🚨 BROWSER BLOCKED on get-module | IP: ${clientIP} | UA: ${userAgent.substring(0, 60)}`);
 
