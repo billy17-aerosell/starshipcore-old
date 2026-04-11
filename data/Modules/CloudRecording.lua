@@ -236,8 +236,6 @@ local function SafeRequest(url, method, body, callback)
 						Method = method,
 						Headers = {
 							["Content-Type"] = "application/json",
-							["X-User-Id"] = tostring(LocalPlayer.UserId),
-							["X-Cloud-Token"] = GetEventToken(),
 						},
 						Body = body,
 					})

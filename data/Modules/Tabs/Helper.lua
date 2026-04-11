@@ -1111,12 +1111,12 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 		-- Mode: "hold" or "toggle"
 		local BtnHabegMode = Instance.new("TextButton", CardHabeg)
-		BtnHabegMode.Text = "MODE: HOLD"
+		BtnHabegMode.Text = "MODE: TOGGLE"
 		BtnHabegMode.Size = UDim2.new(0.45, 0, 0, 35)
 		BtnHabegMode.Position = UDim2.new(0.52, 0, 0, 35)
 		StyleBtn(BtnHabegMode, C_ACCENT)
 
-		local habegModeHold = true -- true = hold mode, false = toggle per-press
+		local habegModeHold = false -- true = hold mode, false = toggle per-press
 
 		BtnHabegMode.MouseButton1Click:Connect(function()
 			habegModeHold = not habegModeHold
@@ -1125,7 +1125,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 		-- Angle Offset Slider (how many degrees the body faces away from movement)
 		local LblHabegAngle = Instance.new("TextLabel", CardHabeg)
-		LblHabegAngle.Text = "ANGLE: 135°"
+		LblHabegAngle.Text = "ANGLE: 90°"
 		LblHabegAngle.Size = UDim2.new(0.35, 0, 0, 20)
 		LblHabegAngle.Position = UDim2.new(0.03, 0, 0, 100)
 		LblHabegAngle.BackgroundTransparency = 1
@@ -1144,7 +1144,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		Instance.new("UICorner", SldHabegAngleBg).CornerRadius = UDim.new(0, 4)
 		RegisterTheme(SldHabegAngleBg, "BackgroundColor3", "Side")
 
-		local habegAngle = 135 -- Default: 135 degrees offset (classic habeg)
+		local habegAngle = 90 -- Default: 90 degrees offset
 		local SldHabegAngleFill = Instance.new("Frame", SldHabegAngleBg)
 		SldHabegAngleFill.Size = UDim2.new(math.clamp((habegAngle - 90) / 90, 0, 1), 0, 1, 0) -- Range 90-180
 		SldHabegAngleFill.BackgroundColor3 = C_ACCENT
@@ -1153,7 +1153,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 		-- Jump Boost Slider (upward velocity boost, 0 = natural)
 		local LblHabegPower = Instance.new("TextLabel", CardHabeg)
-		LblHabegPower.Text = "JUMP BOOST: 0"
+		LblHabegPower.Text = "JUMP BOOST: 15"
 		LblHabegPower.Size = UDim2.new(0.35, 0, 0, 20)
 		LblHabegPower.Position = UDim2.new(0.03, 0, 0, 125)
 		LblHabegPower.BackgroundTransparency = 1
@@ -1172,9 +1172,9 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		Instance.new("UICorner", SldHabegPowerBg).CornerRadius = UDim.new(0, 4)
 		RegisterTheme(SldHabegPowerBg, "BackgroundColor3", "Side")
 
-		local habegPower = 0 -- Default: 0 = pure natural habeg (range 0-100)
+		local habegPower = 15 -- Default: 15 boost
 		local SldHabegPowerFill = Instance.new("Frame", SldHabegPowerBg)
-		SldHabegPowerFill.Size = UDim2.new(0, 0, 1, 0) -- Start at 0
+		SldHabegPowerFill.Size = UDim2.new(habegPower / 100, 0, 1, 0)
 		SldHabegPowerFill.BackgroundColor3 = C_ACCENT
 		Instance.new("UICorner", SldHabegPowerFill).CornerRadius = UDim.new(0, 4)
 		RegisterTheme(SldHabegPowerFill, "BackgroundColor3", "Accent")
@@ -1392,6 +1392,12 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			end
 		end)
 		table.insert(Connections, habegInputCon)
+
+		-- Enable by default
+		task.spawn(function()
+			task.wait(0.5)
+			ToggleHabeg(true)
+		end)
 	end
 
 	-- 4.5 CLIMB STRAFE

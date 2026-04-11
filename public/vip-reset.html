@@ -1,249 +1,240 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reset HWID - Starship VIP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Reset HWID - Starship Core</title>
+    <link rel="icon" type="image/png" href="/starship-logo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
         :root {
-            --black: #1a1a2e;
-            --white: #ffffff;
-            --bg: #f5f5f5;
-            --accent-1: #e94560;
-            --accent-2: #5865F2;
-            --accent-3: #43d9ad;
-            --border: 3px solid var(--black);
-            --shadow: 6px 6px 0 var(--black);
+            --bg-body: #050507;
+            --bg-surface: #0a0a0f;
+            --bg-card: rgba(15, 15, 22, 0.7);
+            --accent: #ff2d2d;
+            --accent-glow: rgba(255, 45, 45, 0.4);
+            --gold: #ffb800;
+            --cyan: #00f2ff;
+            --success: #00e676;
+            --text: #ffffff;
+            --text-muted: #888899;
+            --border: 1px solid rgba(255, 255, 255, 0.04);
+            --border-bright: 1px solid rgba(255, 255, 255, 0.1);
+            --radius-lg: 24px;
+            --radius-md: 16px;
+            --radius-sm: 8px;
+            --font-main: 'Inter', sans-serif;
+            --font-tech: 'Space Grotesk', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
+            --transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
-            font-family: 'Space Grotesk', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-color: var(--bg-body);
+            color: var(--text);
+            font-family: var(--font-main);
             min-height: 100vh;
+            overflow-x: hidden;
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(255, 45, 45, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(0, 242, 255, 0.03) 0%, transparent 40%),
+                url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
         }
 
-        .reset-card {
-            background: var(--white);
-            border: var(--border);
-            box-shadow: var(--shadow);
-            max-width: 450px;
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.04;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .main-content {
+            position: relative;
+            z-index: 10;
             width: 100%;
-            padding: 40px 30px;
+            max-width: 500px;
+        }
+
+        .star-panel {
+            background: var(--bg-surface);
+            border: var(--border-bright);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(20px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel-glow {
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            opacity: 0.1;
+            pointer-events: none;
+        }
+
+        .header {
             text-align: center;
+            margin-bottom: 40px;
         }
 
         .logo {
             width: 80px;
+            height: 80px;
             margin-bottom: 20px;
+            filter: drop-shadow(0 0 20px var(--accent-glow));
         }
 
         h1 {
-            font-size: 1.5rem;
+            font-family: var(--font-tech);
+            font-size: 2rem;
             text-transform: uppercase;
+            letter-spacing: 2px;
             margin-bottom: 10px;
         }
 
         .subtitle {
-            color: #666;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        /* Input Styles */
+        .input-group {
+            position: relative;
             margin-bottom: 30px;
         }
 
-        /* Login Form */
-        .login-section {
-            margin-bottom: 20px;
+        .input-elite {
+            width: 100%;
+            padding: 22px 25px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-md);
+            color: #fff;
+            font-family: var(--font-code);
+            font-size: 1.1rem;
+            transition: var(--transition);
         }
 
-        .input-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
-        .input-group input {
-            flex: 1;
-            padding: 12px 15px;
-            border: var(--border);
-            font-family: 'Space Mono', monospace;
-            font-size: 0.9rem;
-        }
-
-        .input-group input:focus {
-            outline: none;
-            box-shadow: 0 0 0 2px var(--accent-2);
+        .input-elite:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 30px rgba(255, 45, 45, 0.1);
+            background: rgba(0, 0, 0, 0.5);
         }
 
         .verify-btn {
-            background: var(--accent-2);
-            color: var(--white);
-            border: var(--border);
-            padding: 12px 20px;
-            font-family: 'Space Grotesk', sans-serif;
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            bottom: 10px;
+            padding: 0 25px;
+            background: var(--accent);
+            border: none;
+            border-radius: var(--radius-sm);
+            color: #fff;
+            font-family: var(--font-tech);
             font-weight: 700;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
             cursor: pointer;
-            transition: all 0.15s ease;
+            transition: var(--transition);
         }
 
         .verify-btn:hover:not(:disabled) {
-            transform: translate(-2px, -2px);
-            box-shadow: 4px 4px 0 var(--black);
+            background: #ff4d4d;
+            box-shadow: 0 5px 15px rgba(255, 45, 45, 0.3);
+            transform: translateY(-2px);
         }
 
         .verify-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            background: #333;
         }
 
-        /* Loading */
-        .loading {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            padding: 20px;
-        }
-
-        .loading.show {
-            display: flex;
-        }
-
-        .spinner {
-            width: 24px;
-            height: 24px;
-            border: 3px solid var(--bg);
-            border-top-color: var(--accent-2);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Error/Success Messages */
-        .message {
-            padding: 15px;
+        /* Status Board */
+        .status-board {
+            background: rgba(255, 255, 255, 0.02);
             border: var(--border);
-            margin-bottom: 20px;
-            display: none;
+            border-radius: var(--radius-md);
+            padding: 25px;
+            margin-bottom: 30px;
         }
 
-        .message.show {
-            display: block;
-        }
-
-        .message.error {
-            background: #ffebee;
-            color: #c62828;
-        }
-
-        .message.success {
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-
-        .message.warning {
-            background: #fff3e0;
-            color: #e65100;
-        }
-
-        /* User Info Section */
-        .user-section {
-            display: none;
-        }
-
-        .user-section.show {
-            display: block;
-        }
-
-        .user-info-card {
-            background: var(--bg);
-            border: var(--border);
-            padding: 20px;
-            margin-bottom: 20px;
-            text-align: left;
-        }
-
-        .user-info-row {
+        .board-row {
             display: flex;
             justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #ddd;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
         }
 
-        .user-info-row:last-child {
+        .board-row:last-child {
             border-bottom: none;
         }
 
-        .user-info-label {
-            font-weight: 500;
-            color: #666;
+        .board-label {
+            color: var(--text-muted);
+            font-family: var(--font-code);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
-        .user-info-value {
-            font-weight: 700;
-            font-family: 'Space Mono', monospace;
-        }
-
-        .user-info-value.vip {
-            color: var(--accent-2);
-        }
-
-        .user-info-value.lifetime {
-            color: var(--accent-3);
-        }
-
-        .user-info-value.registered {
-            color: var(--accent-3);
-        }
-
-        .user-info-value.not-registered {
-            color: var(--accent-1);
-        }
-
-        /* Reset Button */
-        .reset-btn {
-            background: var(--accent-1);
-            color: var(--white);
-            border: var(--border);
-            padding: 15px 30px;
-            font-family: 'Space Grotesk', sans-serif;
+        .board-value {
+            font-family: var(--font-tech);
             font-weight: 700;
             font-size: 1rem;
-            cursor: pointer;
-            width: 100%;
-            transition: all 0.15s ease;
-            box-shadow: 4px 4px 0 var(--black);
         }
 
-        .reset-btn:hover:not(:disabled) {
-            transform: translate(-2px, -2px);
-            box-shadow: 6px 6px 0 var(--black);
+        .board-value.success {
+            color: var(--success);
         }
 
-        .reset-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            background: #999;
+        .board-value.warning {
+            color: var(--gold);
+        }
+
+        .board-value.error {
+            color: var(--accent);
         }
 
         /* Cooldown Timer */
         .cooldown-info {
-            background: #fff3e0;
-            border: var(--border);
-            padding: 15px;
-            margin-bottom: 20px;
+            background: rgba(255, 184, 0, 0.05);
+            border: 1px solid rgba(255, 184, 0, 0.1);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            margin-bottom: 25px;
+            text-align: center;
             display: none;
         }
 
@@ -251,198 +242,284 @@
             display: block;
         }
 
+        .cooldown-label {
+            color: var(--gold);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            font-family: var(--font-code);
+        }
+
         .cooldown-timer {
-            font-family: 'Space Mono', monospace;
-            font-size: 1.5rem;
+            font-family: var(--font-tech);
+            font-size: 1.8rem;
             font-weight: 700;
-            color: #e65100;
+            color: var(--gold);
         }
 
-        /* Logout Button */
-        .logout-btn {
-            background: transparent;
+        /* Buttons */
+        .primary-btn {
+            width: 100%;
+            padding: 22px;
+            background: linear-gradient(135deg, var(--accent) 0%, #a81c1c 100%);
             border: none;
-            color: var(--accent-2);
-            font-family: 'Space Grotesk', sans-serif;
-            font-weight: 500;
+            border-radius: var(--radius-md);
+            color: #fff;
+            font-family: var(--font-tech);
+            font-size: 1rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
             cursor: pointer;
-            margin-top: 15px;
-            text-decoration: underline;
+            transition: var(--transition);
+            box-shadow: 0 10px 30px rgba(255, 45, 45, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
         }
 
-        .logout-btn:hover {
-            color: var(--accent-1);
+        .primary-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(255, 45, 45, 0.3);
         }
 
-        /* Footer */
-        .footer-link {
+        .primary-btn:disabled {
+            background: #222;
+            color: #555;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .secondary-btn {
+            width: 100%;
+            padding: 18px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-md);
+            color: var(--text-muted);
+            font-family: var(--font-tech);
+            font-size: 0.9rem;
+            font-weight: 600;
             margin-top: 20px;
-            font-size: 0.85rem;
+            cursor: pointer;
+            transition: var(--transition);
         }
 
-        .footer-link a {
-            color: var(--accent-2);
+        .secondary-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+        }
+
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 30px;
+            color: var(--text-muted);
             text-decoration: none;
+            font-size: 0.85rem;
+            transition: var(--transition);
         }
 
-        /* Confirmation Modal */
+        .back-link:hover {
+            color: #fff;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 16px 20px;
+            border-radius: var(--radius-md);
+            margin-bottom: 25px;
+            font-size: 0.9rem;
+            display: none;
+            animation: slideDown 0.4s ease;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert-error {
+            background: rgba(255, 45, 45, 0.1);
+            border: 1px solid rgba(255, 45, 45, 0.2);
+            color: #ff8080;
+        }
+
+        .alert-success {
+            background: rgba(0, 230, 118, 0.1);
+            border: 1px solid rgba(0, 230, 118, 0.2);
+            color: #80ffd4;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Modal confirmation */
         .modal-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
             display: none;
             align-items: center;
             justify-content: center;
-            z-index: 1000;
+            padding: 20px;
         }
 
         .modal-overlay.show {
             display: flex;
         }
 
-        .modal {
-            background: var(--white);
-            border: var(--border);
-            box-shadow: var(--shadow);
-            padding: 30px;
-            max-width: 400px;
-            width: 90%;
+        .modal-content {
+            background: var(--bg-surface);
+            border: var(--border-bright);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            max-width: 450px;
+            width: 100%;
             text-align: center;
+            box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5);
         }
 
-        .modal h3 {
+        .modal-title {
+            font-family: var(--font-tech);
+            font-size: 1.5rem;
             margin-bottom: 15px;
+            text-transform: uppercase;
         }
 
-        .modal p {
-            margin-bottom: 20px;
-            color: #666;
+        .modal-text {
+            color: var(--text-muted);
+            margin-bottom: 30px;
+            line-height: 1.6;
         }
 
-        .modal-buttons {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
+        .modal-btns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
         }
 
-        .modal-btn {
-            padding: 12px 25px;
-            border: var(--border);
-            font-family: 'Space Grotesk', sans-serif;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-
-        .modal-btn.confirm {
-            background: var(--accent-1);
-            color: var(--white);
-        }
-
-        .modal-btn.cancel {
-            background: var(--bg);
-            color: var(--black);
-        }
-
-        .modal-btn:hover {
-            transform: translate(-2px, -2px);
-            box-shadow: 4px 4px 0 var(--black);
-        }
-
-        @media (max-width: 500px) {
-            .reset-card {
+        /* Responsive */
+        @media (max-width: 600px) {
+            .star-panel {
                 padding: 30px 20px;
             }
 
-            .input-group {
-                flex-direction: column;
-            }
-
             .verify-btn {
+                position: static;
                 width: 100%;
+                margin-top: 15px;
+                height: 55px;
             }
         }
     </style>
 </head>
+
 <body>
-    <div class="reset-card">
-        <img src="/starship-logo.png" alt="Starship" class="logo">
-        <h1>Reset HWID</h1>
-        <p class="subtitle">Portal self-service untuk reset HWID VIP</p>
+    <div class="main-content">
+        <div class="star-panel">
+            <div class="panel-glow"></div>
 
-        <!-- Error/Success Message -->
-        <div class="message" id="message"></div>
-
-        <!-- Login Section -->
-        <div class="login-section" id="login-section">
-            <div class="input-group">
-                <input type="text" id="userId-input" placeholder="Masukkan Roblox User ID">
-                <button class="verify-btn" id="verify-btn" onclick="verifyUser()">Verifikasi</button>
-            </div>
-            <p style="font-size: 0.85rem; color: #666;">Contoh: 9337569193</p>
-        </div>
-
-        <!-- Loading -->
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <span id="loading-text">Memverifikasi...</span>
-        </div>
-
-        <!-- User Info Section (shown after login) -->
-        <div class="user-section" id="user-section">
-            <div class="user-info-card">
-                <div class="user-info-row">
-                    <span class="user-info-label">Username</span>
-                    <span class="user-info-value" id="info-username">-</span>
-                </div>
-                <div class="user-info-row">
-                    <span class="user-info-label">Platform</span>
-                    <span class="user-info-value" id="info-platform">-</span>
-                </div>
-                <div class="user-info-row">
-                    <span class="user-info-label">Tipe VIP</span>
-                    <span class="user-info-value vip" id="info-type">-</span>
-                </div>
-                <div class="user-info-row">
-                    <span class="user-info-label">Berlaku Sampai</span>
-                    <span class="user-info-value" id="info-expires">-</span>
-                </div>
-                <div class="user-info-row">
-                    <span class="user-info-label">Status HWID</span>
-                    <span class="user-info-value" id="info-hwid">-</span>
-                </div>
+            <div class="header">
+                <img src="/starship-logo.png" alt="Starship" class="logo">
+                <h1>Reset HWID</h1>
+                <p class="subtitle">Self-service portal untuk reset akses VIP</p>
             </div>
 
-            <!-- Cooldown Info -->
-            <div class="cooldown-info" id="cooldown-info">
-                <p>⏳ Tunggu sebelum reset lagi:</p>
-                <div class="cooldown-timer" id="cooldown-timer">00:00</div>
+            <!-- Alert Messages -->
+            <div class="alert" id="alert-msg"></div>
+
+            <!-- Login Section -->
+            <div id="login-section">
+                <div class="input-group">
+                    <input type="text" class="input-elite" id="userId-input" placeholder="Username atau User ID">
+                    <button class="verify-btn" id="verify-btn" onclick="verifyUser()">Verifikasi</button>
+                </div>
+                <p
+                    style="text-align: center; font-family: var(--font-code); font-size: 0.75rem; color: var(--text-muted); opacity: 0.5;">
+                    CONTOH: bee._95 atau 9337569193</p>
             </div>
 
-            <!-- Reset Button -->
-            <button class="reset-btn" id="reset-btn" onclick="showConfirmModal()">
-                🔄 Reset HWID
-            </button>
+            <!-- User Info Section -->
+            <div id="user-section" style="display: none;">
+                <div class="status-board">
+                    <div class="board-row">
+                        <span class="board-label">USERNAME</span>
+                        <span class="board-value" id="info-username">-</span>
+                    </div>
+                    <div class="board-row">
+                        <span class="board-label">PLATFORM</span>
+                        <span class="board-value" id="info-platform">-</span>
+                    </div>
+                    <div class="board-row">
+                        <span class="board-label">ACCESS TYPE</span>
+                        <span class="board-value success" style="text-transform: uppercase;" id="info-type">-</span>
+                    </div>
+                    <div class="board-row">
+                        <span class="board-label">EXPIRES AT</span>
+                        <span class="board-value" id="info-expires">-</span>
+                    </div>
+                    <div class="board-row">
+                        <span class="board-label">HWID STATUS</span>
+                        <span class="board-value" id="info-hwid">-</span>
+                    </div>
+                </div>
 
-            <button class="logout-btn" onclick="logout()">← Kembali ke Login</button>
-        </div>
+                <!-- Cooldown Display -->
+                <div class="cooldown-info" id="cooldown-info">
+                    <div class="cooldown-label">RESET COOLDOWN ACTIVE</div>
+                    <div class="cooldown-timer" id="cooldown-timer">00:00</div>
+                </div>
 
-        <div class="footer-link">
-            <a href="/">← Kembali ke Homepage</a>
+                <button class="primary-btn" id="reset-btn" onclick="showConfirmModal()">
+                    <i class="fas fa-sync-alt"></i> RESET HWID SEKARANG
+                </button>
+
+                <button class="secondary-btn" onclick="logout()">
+                    ← KEMBALI KE LOGIN
+                </button>
+            </div>
+
+            <a href="/" class="back-link">← KEMBALI KE HOMEPAGE</a>
         </div>
     </div>
 
     <!-- Confirmation Modal -->
     <div class="modal-overlay" id="confirm-modal">
-        <div class="modal">
-            <h3>⚠️ Konfirmasi Reset HWID</h3>
-            <p>Apakah Anda yakin ingin mereset HWID? Anda harus menunggu 1 jam sebelum dapat reset lagi.</p>
-            <div class="modal-buttons">
-                <button class="modal-btn cancel" onclick="hideConfirmModal()">Batal</button>
-                <button class="modal-btn confirm" onclick="resetHwid()">Ya, Reset</button>
+        <div class="modal-content">
+            <div class="modal-title">⚠️ KONFIRMASI RESET</div>
+            <p class="modal-text">Apakah Anda yakin ingin mereset HWID? Anda harus menunggu 1 jam sebelum dapat
+                melakukan reset lagi.</p>
+            <div class="modal-btns">
+                <button class="secondary-btn" style="margin-top:0" onclick="hideConfirmModal()">BATAL</button>
+                <button class="primary-btn" onclick="resetHwid()">YA, RESET</button>
             </div>
         </div>
     </div>
@@ -452,228 +529,207 @@
         let currentUser = null;
         let cooldownInterval = null;
 
-        // DOM Elements
-        const loginSection = document.getElementById('login-section');
-        const userSection = document.getElementById('user-section');
-        const loadingEl = document.getElementById('loading');
-        const loadingText = document.getElementById('loading-text');
-        const messageEl = document.getElementById('message');
-        const verifyBtn = document.getElementById('verify-btn');
-        const resetBtn = document.getElementById('reset-btn');
-        const cooldownInfo = document.getElementById('cooldown-info');
-        const cooldownTimer = document.getElementById('cooldown-timer');
-        const confirmModal = document.getElementById('confirm-modal');
-
-        // Show message
-        function showMessage(type, text) {
-            messageEl.className = `message show ${type}`;
-            messageEl.textContent = text;
+        // Message Helper
+        function showAlert(type, text) {
+            const alert = document.getElementById('alert-msg');
+            alert.className = `alert show alert-${type}`;
+            alert.innerHTML = (type === 'success' ? '✓ ' : '✕ ') + text;
+            setTimeout(() => {
+                alert.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
         }
 
-        // Hide message
-        function hideMessage() {
-            messageEl.className = 'message';
+        function hideAlert() {
+            document.getElementById('alert-msg').classList.remove('show');
         }
 
-        // Show loading
-        function showLoading(text = 'Memverifikasi...') {
-            loadingText.textContent = text;
-            loadingEl.classList.add('show');
-        }
+        // Detect if running on local server
+        const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-        // Hide loading
-        function hideLoading() {
-            loadingEl.classList.remove('show');
-        }
-
-        // Verify user
+        // Verify User
         async function verifyUser() {
-            const userId = document.getElementById('userId-input').value.trim();
+            const input = document.getElementById('userId-input');
+            const btn = document.getElementById('verify-btn');
+            const userInput = input.value.trim();
 
-            if (!userId || !/^\d+$/.test(userId)) {
-                showMessage('error', 'Masukkan User ID yang valid (angka saja)');
+            if (!userInput) {
+                showAlert('error', 'Silakan masukkan Username atau User ID Roblox Anda');
                 return;
             }
 
-            hideMessage();
-            showLoading('Memverifikasi...');
-            verifyBtn.disabled = true;
+            hideAlert();
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div>';
 
             try {
-                const response = await fetch('/api/whitelist-manager', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'self_verify', userId })
-                });
+                let data;
 
-                const data = await response.json();
+                if (isDev) {
+                    // Simulate API Delay
+                    await new Promise(r => setTimeout(r, 800));
+
+                    // Mock Success Data for testing
+                    data = {
+                        success: true,
+                        user: {
+                            userId: "9337569193",
+                            username: userInput.includes('bee') ? userInput : "EliteTester",
+                            platform: "pc",
+                            type: "ELITE VIP",
+                            expiresAt: null, // Lifetime
+                            hasHwid: true,
+                            cooldownRemaining: 0
+                        }
+                    };
+                } else {
+                    // Determine if input is numeric (ID) or text (Username)
+                    const isNumeric = /^\d+$/.test(userInput);
+                    const body = { action: 'self_verify' };
+
+                    if (isNumeric) {
+                        body.userId = userInput;
+                    } else {
+                        body.username = userInput;
+                    }
+
+                    const response = await fetch('/api/whitelist-manager', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    });
+                    data = await response.json();
+                }
 
                 if (data.success) {
                     currentUser = data.user;
-                    showUserInfo(data.user);
+                    displayUserInfo(data.user);
                 } else {
-                    showMessage('error', data.message || 'User ID tidak terdaftar sebagai VIP');
+                    showAlert('error', data.message || 'Akun tidak ditemukan atau tidak memiliki akses VIP.');
                 }
-            } catch (error) {
-                console.error('Verify error:', error);
-                showMessage('error', 'Terjadi kesalahan, coba lagi nanti');
+            } catch (err) {
+                showAlert('error', 'Terjadi kesalahan koneksi. Silakan coba sesaat lagi.');
+                console.error('Fetch error:', err);
             }
 
-            hideLoading();
-            verifyBtn.disabled = false;
+            btn.disabled = false;
+            btn.innerHTML = 'VERIFIKASI';
         }
 
-        // Show user info
-        function showUserInfo(user) {
-            loginSection.style.display = 'none';
-            userSection.classList.add('show');
+        function displayUserInfo(user) {
+            document.getElementById('login-section').style.display = 'none';
+            document.getElementById('user-section').style.display = 'block';
 
             document.getElementById('info-username').textContent = user.username;
             document.getElementById('info-platform').textContent = user.platform.toUpperCase();
             document.getElementById('info-type').textContent = user.type;
 
-            // Expiration
-            const expiresEl = document.getElementById('info-expires');
+            const expEl = document.getElementById('info-expires');
             if (user.expiresAt) {
-                const expiresDate = new Date(user.expiresAt);
-                expiresEl.textContent = expiresDate.toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric'
+                expEl.textContent = new Date(user.expiresAt).toLocaleDateString('id-ID', {
+                    day: 'numeric', month: 'long', year: 'numeric'
                 });
-                expiresEl.classList.remove('lifetime');
             } else {
-                expiresEl.textContent = 'Lifetime ♾️';
-                expiresEl.classList.add('lifetime');
+                expEl.innerHTML = 'LIFETIME ACCESS <span style="font-size:0.8rem">∞</span>';
+                expEl.style.color = 'var(--gold)';
             }
 
-            // HWID Status
             const hwidEl = document.getElementById('info-hwid');
             if (user.hasHwid) {
-                hwidEl.textContent = 'Terdaftar ✓';
-                hwidEl.className = 'user-info-value registered';
+                hwidEl.textContent = 'TERDAFTAR ✓';
+                hwidEl.className = 'board-value success';
             } else {
-                hwidEl.textContent = 'Belum Terdaftar';
-                hwidEl.className = 'user-info-value not-registered';
+                hwidEl.textContent = 'BELUM TERDAFTAR';
+                hwidEl.className = 'board-value warning';
             }
 
-            // Cooldown
             updateCooldown(user.cooldownRemaining);
         }
 
-        // Update cooldown display
         function updateCooldown(seconds) {
-            if (cooldownInterval) {
-                clearInterval(cooldownInterval);
-                cooldownInterval = null;
-            }
+            if (cooldownInterval) clearInterval(cooldownInterval);
+
+            const info = document.getElementById('cooldown-info');
+            const timer = document.getElementById('cooldown-timer');
+            const btn = document.getElementById('reset-btn');
 
             if (seconds > 0) {
-                cooldownInfo.classList.add('show');
-                resetBtn.disabled = true;
+                info.classList.add('show');
+                btn.disabled = true;
 
-                const updateTimer = () => {
+                const run = () => {
                     if (seconds <= 0) {
-                        cooldownInfo.classList.remove('show');
-                        resetBtn.disabled = false;
+                        info.classList.remove('show');
+                        btn.disabled = false;
                         clearInterval(cooldownInterval);
-                        cooldownInterval = null;
                         return;
                     }
-
                     const mins = Math.floor(seconds / 60);
                     const secs = seconds % 60;
-                    cooldownTimer.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    timer.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                     seconds--;
                 };
-
-                updateTimer();
-                cooldownInterval = setInterval(updateTimer, 1000);
+                run();
+                cooldownInterval = setInterval(run, 1000);
             } else {
-                cooldownInfo.classList.remove('show');
-                resetBtn.disabled = false;
+                info.classList.remove('show');
+                btn.disabled = false;
             }
         }
 
-        // Show confirmation modal
-        function showConfirmModal() {
-            confirmModal.classList.add('show');
-        }
+        function showConfirmModal() { document.getElementById('confirm-modal').classList.add('show'); }
+        function hideConfirmModal() { document.getElementById('confirm-modal').classList.remove('show'); }
 
-        // Hide confirmation modal
-        function hideConfirmModal() {
-            confirmModal.classList.remove('show');
-        }
-
-        // Reset HWID
         async function resetHwid() {
             hideConfirmModal();
+            if (!currentUser) return;
 
-            if (!currentUser) {
-                showMessage('error', 'Silakan login terlebih dahulu');
-                return;
-            }
-
-            hideMessage();
-            showLoading('Mereset HWID...');
-            resetBtn.disabled = true;
+            hideAlert();
+            const btn = document.getElementById('reset-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div> REDESIGNING HWID...';
 
             try {
-                const response = await fetch('/api/whitelist-manager', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'self_reset_hwid', userId: currentUser.userId })
-                });
-
-                const data = await response.json();
+                let data;
+                if (isDev) {
+                    await new Promise(r => setTimeout(r, 1500));
+                    data = { success: true };
+                } else {
+                    const response = await fetch('/api/whitelist-manager', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'self_reset_hwid', userId: currentUser.userId })
+                    });
+                    data = await response.json();
+                }
 
                 if (data.success) {
-                    showMessage('success', data.message || 'HWID berhasil direset!');
-                    
-                    // Update HWID status display
-                    const hwidEl = document.getElementById('info-hwid');
-                    hwidEl.textContent = 'Belum Terdaftar';
-                    hwidEl.className = 'user-info-value not-registered';
-
-                    // Start cooldown (1 hour = 3600 seconds)
+                    showAlert('success', 'HWID berhasil direset! Anda sekarang bisa login dari perangkat baru.');
+                    document.getElementById('info-hwid').textContent = 'BELUM TERDAFTAR';
+                    document.getElementById('info-hwid').className = 'board-value warning';
                     updateCooldown(3600);
                 } else {
-                    if (data.cooldownRemaining) {
-                        showMessage('warning', data.message);
-                        updateCooldown(data.cooldownRemaining);
-                    } else {
-                        showMessage('error', data.message || 'Gagal mereset HWID');
-                    }
+                    showAlert('error', data.message || 'Gagal melakukan reset.');
+                    if (data.cooldownRemaining) updateCooldown(data.cooldownRemaining);
                 }
-            } catch (error) {
-                console.error('Reset error:', error);
-                showMessage('error', 'Terjadi kesalahan, coba lagi nanti');
+            } catch (err) {
+                showAlert('error', 'Gangguan server. Silakan hubungi admin jika masalah berlanjut.');
             }
 
-            hideLoading();
+            btn.innerHTML = '<i class="fas fa-sync-alt"></i> RESET HWID SEKARANG';
+            // Button state will be managed by updateCooldown automatically
         }
 
-        // Logout
         function logout() {
             currentUser = null;
-            if (cooldownInterval) {
-                clearInterval(cooldownInterval);
-                cooldownInterval = null;
-            }
-            
-            loginSection.style.display = 'block';
-            userSection.classList.remove('show');
-            cooldownInfo.classList.remove('show');
-            hideMessage();
+            if (cooldownInterval) clearInterval(cooldownInterval);
+            document.getElementById('login-section').style.display = 'block';
+            document.getElementById('user-section').style.display = 'none';
             document.getElementById('userId-input').value = '';
+            hideAlert();
         }
 
-        // Enter key to verify
-        document.getElementById('userId-input').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                verifyUser();
-            }
-        });
+        document.getElementById('userId-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') verifyUser(); });
     </script>
 </body>
+
 </html>
