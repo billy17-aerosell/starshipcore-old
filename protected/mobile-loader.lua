@@ -9,7 +9,12 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
+local screenGui = nil -- Shared reference for security system
+
+print("🚀 [Starship] Loader script started. LocalPlayer:", LocalPlayer)
 
 -- Configuration (SECURITY: Obscured endpoint names - v3.0)
 local SECURE_API_URL = "https://starship-core.my.id"
@@ -18,6 +23,330 @@ local MOBILE_AUTH_API = SECURE_API_URL .. "/api/m-auth-k5r9z7"
 
 -- Event Code System API (SECURITY: Obscured)
 local EVENT_CODE_API = SECURE_API_URL .. "/api/m-evt-j3w8p4"
+
+-- -- [ XOR DECRYPT for encrypted module delivery ]
+-- local function xorDecrypt(base64Blob, key)
+-- 	local raw = ""
+-- 	local b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+-- 	local data = base64Blob:gsub("[^" .. b64 .. "=]", "")
+-- 	data = data:gsub(".", function(x)
+-- 		if x == "=" then return "" end
+-- 		local r, f = "", b64:find(x) - 1
+-- 		for i = 6, 1, -1 do r = r .. (f % 2^i - f % 2^(i-1) > 0 and "1" or "0") end
+-- 		return r
+-- 	end)
+-- 	for i = 1, #data, 8 do
+-- 		local byte = data:sub(i, i+7)
+-- 		if #byte == 8 then
+-- 			raw = raw .. string.char(tonumber(byte, 2))
+-- 		end
+-- 	end
+
+-- 	local result = {}
+-- 	for i = 1, #raw do
+-- 		local ki = ((i - 1) % #key) + 1
+-- 		result[i] = string.char(bit32.bxor(string.byte(raw, i), string.byte(key, ki)))
+-- 	end
+-- 	return table.concat(result)
+-- end
+
+-- [ DUMMY MODE & STUDIO SUPPORT ]
+local IS_STUDIO = RunService:IsStudio()
+local DUMMY_MODE = IS_STUDIO -- Auto-enable in Studio for UI testing
+
+-- ══════════════════════════════════════════════════════════════════
+-- STUDIO & EXECUTOR SHIMS (Allowing script to run in Studio)
+-- ══════════════════════════════════════════════════════════════════
+if IS_STUDIO then
+    -- Emulate executor globals for Studio testing
+    if not getgenv then
+        local _G_MOCK = {}
+        getgenv = function() return _G_MOCK end
+    end
+    
+    -- SMART SHIMS: Return original function instead of a dummy
+    -- This ensures scripts can "hook" without breaking the original behavior
+    if not hookfunction then 
+        hookfunction = function(f, h) 
+            print("🛡️ [Starship] Mock HookFunction called for:", tostring(f))
+            return f 
+        end 
+    end
+    
+    if not hookmetamethod then 
+        hookmetamethod = function(o, m, f) 
+            print("🛡️ [Starship] Mock HookMetaMethod called for:", tostring(o), "->", m)
+            -- If it's a namecall or index, we returns the original method proxy
+            -- so that 'old(self, ...)' in the script calls the actual game method
+            return function(self, ...)
+                local method = m:gsub("__", "")
+                if o[method] then
+                    return o[method](self, ...)
+                end
+                return nil
+            end
+        end 
+    end
+    
+    if not newcclosure then newcclosure = function(f) return f end end
+    if not checkcaller then checkcaller = function() return true end end
+    if not identifyexecutor then identifyexecutor = function() return "Roblox Studio", "1.0" end end
+    if not getnamecallmethod then getnamecallmethod = function() return "" end end
+    
+    -- Prevent anti-cheat loading in Studio
+    if not hookmetamethod then hookmetamethod = function(o, m, f) return f end end
+    
+    print("🛠️ [Starship] Studio Mode Active - Dynamic Shims Loaded")
+end
+
+-- ══════════════════════════════════════════════════════════════════
+-- SECURITY: COMPETITIVE URL BLOCKER (Anti-Competitor System)
+-- Detects if other loaders (e.g., Rullzsy) try to load concurrently
+-- ══════════════════════════════════════════════════════════════════
+local function setupCompetitorDetection()
+    local blacklistedDomains = {
+        "rullzsy99.workers.dev",
+        "autowalkdev",
+    }
+    -- Blacklist for Initial Scan (UIs and Globals)
+    local blacklist = {
+        uiNames = { "RullzsyHub", "Rulzsy" },
+        globals = { "RullzsyLoaded", "RulzsyHub", "Rulzsy", "Executed", "isLoaded" }
+    }
+
+    local function checkUrl(url)
+        if not url or type(url) ~= "string" then return false end
+        local urlLower = string.lower(url)
+        for _, domain in ipairs(blacklistedDomains) do
+            if string.find(urlLower, domain) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function reportToWebhook(reason)
+        local webhookUrl = "https://discord.com/api/webhooks/1493402238415016026/0ldqo3Yo13kgpO-J92Y6h9WiXAV4Qjc9HslSop1mIIeo-2sL1WrYnnNCopoCyN7FenJ9"
+        
+        local executor = "Unknown"
+        pcall(function()
+            if identifyexecutor then 
+                local name, ver = identifyexecutor()
+                executor = name .. (ver and (" (" .. ver .. ")") or "")
+            end
+        end)
+
+        local hwid = "Unknown"
+        pcall(function()
+            if gethwid then hwid = gethwid() end
+        end)
+
+        local data = {
+            ["content"] = "🚨 **SECURITY VIOLATION DETECTED!** @everyone",
+            ["embeds"] = {{
+                ["title"] = "Starship Anti-Thief Logs",
+                ["color"] = 16711680, -- Pure Red
+                ["fields"] = {
+                    {["name"] = "Player", ["value"] = "**" .. LocalPlayer.DisplayName .. "** (@" .. LocalPlayer.Name .. ")", ["inline"] = true},
+                    {["name"] = "User ID", ["value"] = "[" .. tostring(LocalPlayer.UserId) .. "](https://www.roblox.com/users/" .. tostring(LocalPlayer.UserId) .. "/profile)", ["inline"] = true},
+                    {["name"] = "Executor", ["value"] = executor, ["inline"] = true},
+                    {["name"] = "HWID (Device)", ["value"] = "```" .. hwid .. "```", ["inline"] = false},
+                    {["name"] = "Detection Reason", ["value"] = reason, ["inline"] = false},
+                    {["name"] = "Location", ["value"] = "Game ID: " .. tostring(game.PlaceId), ["inline"] = false}
+                },
+                ["footer"] = {["text"] = "Starship Security System v3.0"},
+                ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            }}
+        }
+
+        local req = (request or http_request or (syn and syn.request) or (fluxus and fluxus.request))
+        if req then
+            pcall(function()
+                req({
+                    Url = webhookUrl,
+                    Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = game:GetService("HttpService"):JSONEncode(data)
+                })
+            end)
+        end
+    end
+
+    local function terminateScript(reason)
+        -- 0. Report to Webhook First
+        pcall(function() reportToWebhook(reason) end)
+
+        -- 1. System-wide Clean Sweep (Destroy ALL Starship UIs)
+        local function cleanAllStarshipUIs()
+            local containers = { (gethui and gethui()) or game:GetService("CoreGui"), game.Players.LocalPlayer:FindFirstChild("PlayerGui") }
+            for _, container in pairs(containers) do
+                if not container then continue end
+                for _, gui in pairs(container:GetChildren()) do
+                    if gui:IsA("ScreenGui") then
+                        local isStarship = gui.Name:find("Starship") or gui:GetAttribute("StarshipID") or gui.Name:find("STARSHIP")
+                        if isStarship then
+                            pcall(function() gui:Destroy() end)
+                        end
+                    end
+                end
+            end
+        end
+        
+        pcall(cleanAllStarshipUIs)
+        screenGui = nil
+        
+        -- 2. Show Massive Warning Display
+        pcall(function()
+            local warnGui = Instance.new("ScreenGui")
+            warnGui.Name = "StarshipSecurityWarning"
+            warnGui.DisplayOrder = 999999
+            warnGui.IgnoreGuiInset = true
+            warnGui.Parent = (gethui and gethui()) or game:GetService("CoreGui")
+            
+            local bg = Instance.new("Frame")
+            bg.Size = UDim2.new(1, 0, 1, 0)
+            bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            bg.BackgroundTransparency = 0.15
+            bg.Parent = warnGui
+            
+            local msg = Instance.new("TextLabel")
+            msg.Size = UDim2.new(0.9, 0, 0.6, 0)
+            msg.Position = UDim2.new(0.5, 0, 0.5, 0)
+            msg.AnchorPoint = Vector2.new(0.5, 0.5)
+            msg.BackgroundTransparency = 1
+            msg.TextColor3 = Color3.fromRGB(255, 30, 30) -- Bright Red
+            msg.TextScaled = true
+            msg.Font = Enum.Font.GothamBold
+            msg.Text = "MAU NGAPAIN BANG?\nSTOP COPY RECORDING ORANG LAIN!"
+            msg.Parent = bg
+            -- Flashing effect
+            task.spawn(function()
+                while bg and bg.Parent do
+                    msg.Visible = not msg.Visible
+                    task.wait(0.4)
+                end
+            end)
+        end)
+        -- 3. Stop execution silently
+        task.spawn(function()
+            task.cancel(task.running())
+        end)
+    end
+
+    -- ══════════════════════════════════════════════════════════════════
+    -- INITIAL DEEP SCAN (Search memory and UI Content)
+    -- ══════════════════════════════════════════════════════════════════
+    local function performDeepScan()
+        local coreGui = (gethui and gethui()) or game:GetService("CoreGui")
+        -- 1. Check UI Names (Fast check)
+        for _, uiName in ipairs(blacklist.uiNames) do
+            if coreGui:FindFirstChild(uiName) then return true, "UI: " .. uiName end
+        end
+
+        -- 2. UI CONTENT SCAN (Deep search for text inside UI objects)
+        -- This detects them even if they rename their ScreenGui
+        local foundInUI = false
+        pcall(function()
+            for _, descendant in pairs(coreGui:GetDescendants()) do
+                -- SKIP STARSHIP'S OWN UI
+                if screenGui and descendant:IsDescendantOf(screenGui) then continue end
+                
+                if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                    local text = string.lower(descendant.Text)
+                    if string.find(text, "rullzsy") then
+                        foundInUI = true
+                        break
+                    end
+                end
+            end
+        end)
+        if foundInUI then return true, "Competitor UI Content" end
+
+        -- 3. Deep Search Global Environment for the URL string
+        for k, v in pairs(getgenv()) do
+            -- Check keys and string values
+            if type(k) == "string" and string.find(string.lower(k), "rullzsy") then return true, "Global Key" end
+            if type(v) == "string" and string.find(string.lower(v), blacklistedDomains[1]) then return true, "Global String" end
+            -- Deep search inside tables (common for configs)
+            if type(v) == "table" then
+                local foundInTable = false
+                pcall(function()
+                    for _, val in pairs(v) do
+                        if type(val) == "string" and string.find(string.lower(val), blacklistedDomains[1]) then
+                            foundInTable = true
+                            break
+                        end
+                    end
+                end)
+                if foundInTable then return true, "Nested URL String" end
+            end
+        end
+        return false
+    end
+
+    -- Run Initial Check
+    local detected, reason = performDeepScan()
+    if detected then
+        terminateScript("Competitor detected during startup (" .. reason .. ")")
+        return true -- SIGNAL DETECTION
+    end
+
+    -- ══════════════════════════════════════════════════════════════════
+    -- INITIAL & CONTINUOUS PROTECTION
+    -- ══════════════════════════════════════════════════════════════════
+    -- 1. Run Initial Check (Blocking)
+    local detected, reason = performDeepScan()
+    if detected then
+        terminateScript("Competitor detected during startup (" .. reason .. ")")
+        return true 
+    end
+
+    -- 2. Setup Continuous Background Scan (Non-blocking)
+    task.spawn(function()
+        while task.wait(5) do -- Check every 5 seconds
+            local found, r = performDeepScan()
+            if found then
+                terminateScript("Competitor detected during gameplay (" .. r .. ")")
+                break
+            end
+        end
+    end)
+
+    -- 3. Hook HttpGet for future loads (Permanent)
+    if hookmetamethod then
+        local oldNamecall
+        oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
+
+            if (method == "HttpGet" or method == "HttpGetAsync") and args[1] then
+                if checkUrl(args[1]) then
+                    terminateScript("Competitor URL detected (Mencoba buka RullsszyHub): " .. tostring(args[1]))
+                    return "" 
+                end
+            end
+            return oldNamecall(self, ...)
+        end))
+    end
+
+    if hookfunction then
+        local oldHttpGet
+        oldHttpGet = hookfunction(game.HttpGet, newcclosure(function(self, url, ...)
+            if checkUrl(url) then
+                terminateScript("Competitor HttpGet detected (Mencoba buka RullsszyHub)")
+                return ""
+            end
+            return oldHttpGet(self, url, ...)
+        end))
+    end
+    
+    return false 
+end
+
+-- Initialize Security (BLOCKING CALL)
+if setupCompetitorDetection() then 
+    return -- STOP ENTIRE SCRIPT IMMEDIATELY
+end
 
 -- Encryption helpers
 local function xorEncrypt(text, key)
@@ -111,7 +440,7 @@ local function verifySecurePayload(signedData, userId)
 
 	-- Check timestamp locally first (quick check)
 	local now = os.time() * 1000 -- Convert to milliseconds
-	if payload.t and payload.t > now + 5000 then
+	if payload.t and payload.t > now + 60000 then -- 1 minute grace for behind clock
 		return { valid = false, data = nil, error = "FUTURE_TIMESTAMP" }
 	end
 	if payload.e and now > payload.e then
@@ -244,265 +573,827 @@ end
 
 local function createLoadingUI()
 	-- Remove existing UI if any
-	local existingGui = LocalPlayer:FindFirstChild("PlayerGui")
-		and LocalPlayer.PlayerGui:FindFirstChild("StarshipMobileLoader")
+	local existingGui
+	if LocalPlayer then
+		existingGui = LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("StarshipMobileLoader")
+	end
+	
 	if existingGui then
 		existingGui:Destroy()
 	end
 
-	local screenGui = Instance.new("ScreenGui")
+	screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "StarshipMobileLoader"
 	screenGui.ResetOnSpawn = false
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	screenGui.IgnoreGuiInset = true
 
-	-- Try to parent to CoreGui, fallback to PlayerGui
-	pcall(function()
-		screenGui.Parent = game:GetService("CoreGui")
-	end)
-	if not screenGui.Parent then
-		screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	-- Parent logic (Careful with CoreGui in Studio)
+	if IS_STUDIO then
+        if LocalPlayer then
+		    screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+        else
+            -- If still no player (e.g. running in Edit mode command bar), parent to StarterGui for preview
+            screenGui.Parent = game:GetService("StarterGui")
+            print("⚠️ [Starship] No LocalPlayer found, parenting UI to StarterGui")
+        end
+	else
+        -- Modern executors use gethui() to bypass detection
+		local parent = (gethui and gethui()) or game:GetService("CoreGui")
+		pcall(function()
+			screenGui.Parent = parent
+		end)
+		if not screenGui.Parent then
+			screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+		end
 	end
 
-	-- Background (Fullscreen dark)
+	-- Fullscreen Overlay (Smooth Darken)
+	local overlay = Instance.new("Frame")
+	overlay.Name = "Overlay"
+	overlay.Size = UDim2.new(1, 0, 1, 0)
+	overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	overlay.BackgroundTransparency = 1 -- Animate to 0.6
+	overlay.BorderSizePixel = 0
+	overlay.ZIndex = 0
+	overlay.Parent = screenGui
+
+	-- Sleek Modern Frame
 	local background = Instance.new("Frame")
 	background.Name = "Background"
-	background.Size = UDim2.new(1, 0, 1, 0)
-	background.BackgroundColor3 = Color3.fromRGB(8, 8, 15)
+	background.Size = UDim2.new(0, 540, 0, 310)
+	background.Position = UDim2.new(0.5, 0, 1.5, 0) -- Start off-screen (bottom)
+	background.AnchorPoint = Vector2.new(0.5, 0.5)
+	background.BackgroundColor3 = Color3.fromRGB(20, 20, 24) -- Slightly lighter
 	background.BorderSizePixel = 0
+	background.ZIndex = 1
+	background.Active = true
 	background.Parent = screenGui
 
-	-- Large Logo Overlay (Background watermark)
-	local logoOverlay = Instance.new("ImageLabel")
-	logoOverlay.Name = "LogoOverlay"
-	logoOverlay.Size = UDim2.new(0, 350, 0, 350)
-	logoOverlay.Position = UDim2.new(0.5, -175, 0.4, -175)
-	logoOverlay.BackgroundTransparency = 1
-	logoOverlay.Image = "rbxassetid://123840945153526"
-	logoOverlay.ImageTransparency = 0.88
-	logoOverlay.ImageColor3 = Color3.fromRGB(255, 255, 255)
-	logoOverlay.ScaleType = Enum.ScaleType.Fit
-	logoOverlay.ZIndex = 1
-	logoOverlay.Parent = background
-
-	-- Floating Particles Container
-	local particleContainer = Instance.new("Frame")
-	particleContainer.Name = "Particles"
-	particleContainer.Size = UDim2.new(1, 0, 1, 0)
-	particleContainer.BackgroundTransparency = 1
-	particleContainer.ClipsDescendants = true
-	particleContainer.ZIndex = 2
-	particleContainer.Parent = background
-
-	-- Create floating particles
-	task.spawn(function()
-		for i = 1, 15 do
-			if not screenGui or not screenGui.Parent then
-				break
-			end
-
-			local particle = Instance.new("Frame")
-			local size = math.random(3, 6)
-			particle.Size = UDim2.new(0, size, 0, size)
-			particle.Position = UDim2.new(math.random(), 0, math.random(), 0)
-			particle.BackgroundColor3 = Color3.fromHSV(0.65 + math.random() * 0.1, 0.8, 1)
-			particle.BackgroundTransparency = 0.5
-			particle.BorderSizePixel = 0
-			particle.ZIndex = 3
-			particle.Parent = particleContainer
-
-			local corner = Instance.new("UICorner")
-			corner.CornerRadius = UDim.new(1, 0)
-			corner.Parent = particle
-
-			-- Animate particle
-			task.spawn(function()
-				local startY = particle.Position.Y.Scale
-				local startX = particle.Position.X.Scale
-				local floatSpeed = math.random(8, 20) / 10000
-
-				while particle and particle.Parent do
-					local newY = startY - floatSpeed
-					if newY < -0.1 then
-						newY = 1.1
-						startY = 1.1
-						startX = math.random()
-					end
-					startY = newY
-
-					local sway = math.sin(os.clock() * 2 + i) * 0.02
-					particle.Position = UDim2.new(startX + sway, 0, newY, 0)
-					particle.BackgroundTransparency = 0.4 + math.sin(os.clock() * 2 + i) * 0.2
-
-					task.wait(0.03)
+	-- 🧊 DRAGGING SYSTEM (Mobile & PC Friendly)
+	local dragging, dragInput, dragStart, startPos
+	local function update(input)
+		local delta = input.Position - dragStart
+		background.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+	
+	background.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = background.Position
+			
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
 				end
 			end)
-			task.wait(0.05)
+		end
+	end)
+	
+	background.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+	
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			update(input)
 		end
 	end)
 
-	-- Welcome Message (Top)
-	local welcomeMsg = Instance.new("TextLabel")
-	welcomeMsg.Name = "Welcome"
-	welcomeMsg.Size = UDim2.new(1, 0, 0, 25)
-	welcomeMsg.Position = UDim2.new(0, 0, 0.18, 0)
-	welcomeMsg.BackgroundTransparency = 1
-	welcomeMsg.Text = "Welcome back, " .. LocalPlayer.Name .. "!"
-	welcomeMsg.TextColor3 = Color3.fromRGB(60, 255, 180)
-	welcomeMsg.TextSize = 14
-	welcomeMsg.Font = Enum.Font.Gotham
-	welcomeMsg.ZIndex = 10
-	welcomeMsg.Parent = background
+	local cardCorner = Instance.new("UICorner")
+	cardCorner.CornerRadius = UDim.new(0, 16)
+	cardCorner.Parent = background
 
-	-- Logo Container (Large, centered)
-	local logoContainer = Instance.new("Frame")
-	logoContainer.Name = "LogoContainer"
-	logoContainer.Size = UDim2.new(0, 120, 0, 120)
-	logoContainer.Position = UDim2.new(0.5, -60, 0.28, 0)
-	logoContainer.BackgroundTransparency = 1
-	logoContainer.ZIndex = 10
-	logoContainer.Parent = background
+	local cardStroke = Instance.new("UIStroke")
+	cardStroke.Color = Color3.fromRGB(45, 45, 45)
+	cardStroke.Thickness = 1.5
+	cardStroke.Transparency = 0.4
+	cardStroke.Parent = background
 
-	local logo = Instance.new("ImageLabel")
-	logo.Name = "Logo"
-	logo.Image = "rbxassetid://123840945153526"
-	logo.Size = UDim2.new(1, 0, 1, 0)
-	logo.BackgroundTransparency = 1
-	logo.ScaleType = Enum.ScaleType.Fit
-	logo.ZIndex = 10
-	logo.Parent = logoContainer
+	-- Background Texture (Coretan / Watermark)
+	local textureContainer = Instance.new("Frame")
+	textureContainer.Name = "TextureData"
+	textureContainer.Size = UDim2.new(1, 0, 1, 0)
+	textureContainer.BackgroundTransparency = 1
+	textureContainer.ZIndex = 2
+	textureContainer.Parent = background
 
-	-- Title Text
-	local title = Instance.new("TextLabel")
-	title.Name = "Title"
-	title.Text = "STARSHIP"
-	title.Size = UDim2.new(1, 0, 0, 45)
-	title.Position = UDim2.new(0, 0, 0.50, 0)
-	title.BackgroundTransparency = 1
-	title.TextColor3 = Color3.fromRGB(90, 110, 245)
-	title.Font = Enum.Font.GothamBlack
-	title.TextSize = 36
-	title.ZIndex = 10
-	title.Parent = background
+	-- Massive Watermark Logo
+	local watermark = Instance.new("ImageLabel")
+	watermark.Name = "Watermark"
+	watermark.Image = "rbxassetid://85930777472774"
+	watermark.Size = UDim2.new(0, 450, 0, 450)
+	watermark.Position = UDim2.new(0.5, -225, 0.5, -225)
+	watermark.BackgroundTransparency = 1
+	watermark.ImageTransparency = 0.96 -- Very subtle
+	watermark.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	watermark.ScaleType = Enum.ScaleType.Fit
+	watermark.ZIndex = 2
+	watermark.Parent = textureContainer
 
-	-- Subtitle / Status Text
-	local statusLabel = Instance.new("TextLabel")
-	statusLabel.Name = "Status"
-	statusLabel.Text = "Initializing..."
-	statusLabel.Size = UDim2.new(1, 0, 0, 25)
-	statusLabel.Position = UDim2.new(0, 0, 0.58, 0)
-	statusLabel.BackgroundTransparency = 1
-	statusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
-	statusLabel.Font = Enum.Font.GothamMedium
-	statusLabel.TextSize = 13
-	statusLabel.ZIndex = 10
-	statusLabel.Parent = background
-
-	-- Progress Bar Container
-	local progressContainer = Instance.new("Frame")
-	progressContainer.Name = "ProgressBg"
-	progressContainer.Size = UDim2.new(0.6, 0, 0, 6)
-	progressContainer.Position = UDim2.new(0.2, 0, 0.65, 0)
-	progressContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-	progressContainer.BorderSizePixel = 0
-	progressContainer.ZIndex = 10
-	progressContainer.Parent = background
-
-	local progressCorner = Instance.new("UICorner")
-	progressCorner.CornerRadius = UDim.new(1, 0)
-	progressCorner.Parent = progressContainer
-
-	local progressGlow = Instance.new("UIStroke")
-	progressGlow.Color = Color3.fromRGB(90, 110, 245)
-	progressGlow.Thickness = 1
-	progressGlow.Transparency = 0.7
-	progressGlow.Parent = progressContainer
-
-	-- Progress Bar Fill
-	local progressFill = Instance.new("Frame")
-	progressFill.Name = "Fill"
-	progressFill.Size = UDim2.new(0, 0, 1, 0)
-	progressFill.BackgroundColor3 = Color3.fromRGB(90, 110, 245)
-	progressFill.BorderSizePixel = 0
-	progressFill.ZIndex = 11
-	progressFill.Parent = progressContainer
-
-	local fillCorner = Instance.new("UICorner")
-	fillCorner.CornerRadius = UDim.new(1, 0)
-	fillCorner.Parent = progressFill
-
-	-- Progress Percentage
-	local progressText = Instance.new("TextLabel")
-	progressText.Name = "ProgressText"
-	progressText.Text = "0%"
-	progressText.Size = UDim2.new(1, 0, 0, 20)
-	progressText.Position = UDim2.new(0, 0, 0.69, 0)
-	progressText.BackgroundTransparency = 1
-	progressText.TextColor3 = Color3.fromRGB(120, 140, 255)
-	progressText.Font = Enum.Font.GothamBold
-	progressText.TextSize = 12
-	progressText.ZIndex = 10
-	progressText.Parent = background
-
-	-- Version label
-	local versionLabel = Instance.new("TextLabel")
-	versionLabel.Name = "Version"
-	versionLabel.Size = UDim2.new(1, 0, 0, 20)
-	versionLabel.Position = UDim2.new(0, 0, 0.92, 0)
-	versionLabel.BackgroundTransparency = 1
-	versionLabel.Text = "v1.0.0-mobile"
-	versionLabel.TextColor3 = Color3.fromRGB(70, 70, 90)
-	versionLabel.TextSize = 11
-	versionLabel.Font = Enum.Font.Gotham
-	versionLabel.ZIndex = 10
-	versionLabel.Parent = background
-
-	-- Logo Animation: Pulse + Float + Rainbow color
-	task.spawn(function()
-		local t = 0
-		local floatOffset = 0
-		local baseSize = 120
-		while logo and logo.Parent do
-			t = t + 0.02
-			floatOffset = floatOffset + 0.06
-
-			-- Rainbow color cycle for title and progress
-			local c = Color3.fromHSV(t % 1, 0.85, 1)
-			title.TextColor3 = c
-			progressFill.BackgroundColor3 = c
-			progressGlow.Color = c
-
-			-- Pulse size for logo container
-			local pulse = 1 + math.sin(t * 4) * 0.04
-			local newSize = baseSize * pulse
-			logoContainer.Size = UDim2.new(0, newSize, 0, newSize)
-			logoContainer.Position = UDim2.new(0.5, -newSize / 2, 0.28, math.sin(floatOffset) * 5)
-
-			task.wait(0.02)
-		end
-	end)
-
-	-- Update function
-	local function updateStatus(text, progress)
-		-- Obfuscate specific module names
-		if string.find(text, "Downloading:") then
-			text = "Loading Module #" .. math.random(1000, 9999)
-		elseif string.find(text, "Updating") then
-			text = "Preparing Assets..."
-		end
-
-		statusLabel.Text = text
-		TweenService:Create(progressFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Size = UDim2.new(progress, 0, 1, 0),
-		}):Play()
-		progressText.Text = math.floor(progress * 100) .. "%"
+	-- Background Animation (Intense Anime Sword Slash Effect)
+	-- Static "Coretan" (Technical Blueprint Lines)
+	for i = 1, 4 do
+		local line = Instance.new("Frame")
+		line.Size = UDim2.new(1.5, 0, 0, 1)
+		line.Position = UDim2.new(-0.25, 0, 0.25 * i, 0)
+		line.Rotation = 15
+		line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		line.BackgroundTransparency = 0.985
+		line.BorderSizePixel = 0
+		line.ZIndex = 2
+		line.Parent = textureContainer
 	end
 
-	return screenGui, updateStatus
+	-- Premium "Light Sweep" Shimmer Effect
+	local sweep = Instance.new("Frame")
+	sweep.Name = "Shimmer"
+	sweep.Size = UDim2.new(0, 100, 1.6, 0)
+	sweep.Position = UDim2.new(-0.8, 0, -0.3, 0)
+	sweep.Rotation = 35
+	sweep.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	sweep.BackgroundTransparency = 0.94
+	sweep.BorderSizePixel = 0
+	sweep.ZIndex = 3
+	sweep.Parent = background
+
+	local sweepGlow = Instance.new("UIGradient")
+	sweepGlow.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.5, 0.4),
+		NumberSequenceKeypoint.new(1, 1)
+	})
+	sweepGlow.Parent = sweep
+
+	-- Background Animations
+	task.spawn(function()
+		-- Continuous subtle watermark rotation
+		TweenService:Create(watermark, TweenInfo.new(30, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1), {
+			Rotation = 360
+		}):Play()
+
+		while background and background.Parent do
+			-- Slow Sweep every 5 seconds
+			sweep.Position = UDim2.new(-0.8, 0, -0.3, 0)
+			local tween = TweenService:Create(sweep, TweenInfo.new(2.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				Position = UDim2.new(1.5, 0, -0.3, 0)
+			})
+			tween:Play()
+			
+			task.wait(5)
+		end
+	end)
+
+	-- Top Header Bar (Matching Main UI)
+	local header = Instance.new("Frame")
+	header.Name = "Header"
+	header.Size = UDim2.new(1, 0, 0, 50)
+	header.BackgroundTransparency = 1
+	header.ZIndex = 50 -- Top Layer
+	header.Parent = background
+
+	local titleSmall = Instance.new("TextLabel")
+	titleSmall.Text = "STARSHIP | BOOTING"
+	titleSmall.Size = UDim2.new(0, 200, 1, 0)
+	titleSmall.Position = UDim2.new(0, 20, 0, 0)
+	titleSmall.BackgroundTransparency = 1
+	titleSmall.TextColor3 = Color3.fromRGB(240, 240, 240)
+	titleSmall.TextSize = 13
+	titleSmall.Font = Enum.Font.GothamBold
+	titleSmall.TextXAlignment = Enum.TextXAlignment.Left
+	titleSmall.ZIndex = 11
+	titleSmall.Parent = header
+
+	-- Tags (FPS/Ping Style)
+	local tagContainer = Instance.new("Frame")
+	tagContainer.Size = UDim2.new(0, 100, 1, 0)
+	tagContainer.Position = UDim2.new(0, 165, 0, 0) -- Moved closer to the "BOOTING" text
+	tagContainer.BackgroundTransparency = 1
+	tagContainer.Parent = header
+
+	-- Close Button
+	local closeBtn = Instance.new("TextButton")
+	closeBtn.Name = "CloseButton"
+	closeBtn.Size = UDim2.new(0, 28, 0, 28)
+	closeBtn.Position = UDim2.new(1, -38, 0.5, -14)
+	closeBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+	closeBtn.Text = "×"
+	closeBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+	closeBtn.TextSize = 22
+	closeBtn.Font = Enum.Font.GothamMedium
+	closeBtn.Parent = header
+	closeBtn.ZIndex = 12
+
+	local closeCorner = Instance.new("UICorner")
+	closeCorner.CornerRadius = UDim.new(0, 8)
+	closeCorner.Parent = closeBtn
+
+	local closeStroke = Instance.new("UIStroke")
+	closeStroke.Color = Color3.fromRGB(60, 60, 65)
+	closeStroke.Thickness = 1
+	closeStroke.Parent = closeBtn
+
+	closeBtn.MouseEnter:Connect(function()
+		TweenService:Create(closeBtn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(200, 50, 50), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+		TweenService:Create(closeStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(255, 100, 100)}):Play()
+	end)
+
+	closeBtn.MouseLeave:Connect(function()
+		TweenService:Create(closeBtn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(30, 30, 35), TextColor3 = Color3.fromRGB(150, 150, 150)}):Play()
+		TweenService:Create(closeStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(60, 60, 65)}):Play()
+	end)
+
+	closeBtn.MouseButton1Click:Connect(function()
+		TweenService:Create(overlay, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundTransparency = 1,
+		}):Play()
+		TweenService:Create(background, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+			Position = UDim2.new(0.5, 0, 1.5, 0),
+		}):Play()
+		task.wait(0.65)
+		screenGui:Destroy()
+	end)
+
+	local function createTag(text, color, pos)
+		local tag = Instance.new("Frame")
+		tag.Size = UDim2.new(0, 45, 0, 18)
+		tag.Position = UDim2.new(pos, 0, 0.5, -9)
+		tag.BackgroundColor3 = color
+		tag.Parent = tagContainer
+		Instance.new("UICorner", tag).CornerRadius = UDim.new(1, 0)
+		
+		local label = Instance.new("TextLabel")
+		label.Text = text
+		label.Size = UDim2.new(1, 0, 1, 0)
+		label.BackgroundTransparency = 1
+		label.TextColor3 = Color3.fromRGB(0, 0, 0)
+		label.TextSize = 8
+		label.Font = Enum.Font.GothamBold
+		label.Parent = tag
+	end
+	createTag("VIP", Color3.fromRGB(255, 200, 0), 0)
+	createTag("SAFE", Color3.fromRGB(60, 255, 180), 0.52)
+
+	-- 🎮 GAME SELECTION SYSTEM
+	-- Pro Tip: Use rbxthumb://type=GameIcon&id=[PlaceId]&w=150&h=150 to get real game icons!
+	local GAMES = {
+		{ 
+			name = "AUTOWALK", 
+			id = "core", 
+			icon = "rbxassetid://85930777472774", 
+			desc = "AutoWalk with much features",
+			placeIds = {0}, -- 0 means universal/all games
+			scriptUrl = MOBILE_UI_API -- Already includes userId= param
+		},
+		{ 
+			name = "SAMBUNG KATA", 
+			id = "sambung_kata", 
+			icon = "rbxassetid://132473653550044", 
+			desc = "Automated word chain dictionary",
+			placeIds = {130342654546662},
+			scriptUrl = SECURE_API_URL .. "/api/m-sk-p4n6",
+			onProgress = true
+		},
+		{ 
+			name = "SAWAH INDO", 
+			id = "sawah_indo", 
+			icon = "rbxassetid://102985895717089", 
+			desc = "Ultimate farming automation suite",
+			placeIds = {83369512629707},
+			scriptUrl = SECURE_API_URL .. "/api/m-si-r3q5",
+			onProgress = true
+		},
+		{ 
+			name = "VIOLENCE DISTRICT", 
+			id = "violence", 
+			icon = "rbxassetid://83711132621095", 
+			desc = "Advanced combat & robbery tools",
+			placeIds = {93978595733734},
+			scriptUrl = SECURE_API_URL .. "/api/m-vd-x7k2",
+			onProgress = true
+		}
+	}
+
+	-- Game Selection Frame
+	local gameSelection = Instance.new("Frame")
+	gameSelection.Name = "GameSelection"
+	gameSelection.Size = UDim2.new(0, 270, 0, 210)
+	gameSelection.Position = UDim2.new(1, -290, 0.5, -105)
+	gameSelection.BackgroundTransparency = 1
+	gameSelection.ZIndex = 40 -- Middle Layer
+	gameSelection.Parent = background
+
+	local selectTitle = Instance.new("TextLabel")
+	selectTitle.Text = "SELECT MODULE TO EXECUTE"
+	selectTitle.Size = UDim2.new(1, 0, 0, 20)
+	selectTitle.Position = UDim2.new(0, 0, 0, -22) -- Closer to frame
+	selectTitle.BackgroundTransparency = 1
+	selectTitle.TextColor3 = Color3.fromRGB(150, 150, 150)
+	selectTitle.TextSize = 10
+	selectTitle.Font = Enum.Font.GothamBold
+	selectTitle.Parent = gameSelection
+
+	local gameList = Instance.new("ScrollingFrame")
+	gameList.Size = UDim2.new(1, 0, 1, 0)
+	gameList.Position = UDim2.new(0, 0, 0, 0)
+	gameList.BackgroundTransparency = 1
+	gameList.BorderSizePixel = 0
+	gameList.ScrollBarThickness = 3
+	gameList.ScrollBarImageColor3 = Color3.fromRGB(255, 45, 45)
+	gameList.ScrollBarImageTransparency = 0.5
+	gameList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	gameList.CanvasSize = UDim2.new(0, 0, 0, 0)
+	gameList.Parent = gameSelection
+
+	local listLayout = Instance.new("UIListLayout")
+	listLayout.Padding = UDim.new(0, 8)
+	listLayout.Parent = gameList
+
+	local listPadding = Instance.new("UIPadding")
+	listPadding.PaddingBottom = UDim.new(0, 30) -- Bottom padding to show last item
+	listPadding.PaddingTop = UDim.new(0, 2)
+	listPadding.PaddingLeft = UDim.new(0, 2)
+	listPadding.PaddingRight = UDim.new(0, 2)
+	listPadding.Parent = gameList
+
+	-- State
+	local selectedModuleData = nil
+	local moduleProgUI = {}
+
+	local function createGameBtn(gameData)
+		local btn = Instance.new("TextButton")
+		btn.Name = gameData.id
+		btn.Size = UDim2.new(1, -6, 0, 70)
+		btn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		btn.BorderSizePixel = 0
+		btn.Text = ""
+		btn.AutoButtonColor = false
+		btn.Parent = gameList
+		btn.ZIndex = 51
+
+		local btnCorner = Instance.new("UICorner")
+		btnCorner.CornerRadius = UDim.new(0, 12)
+		btnCorner.Parent = btn
+
+		local btnStroke = Instance.new("UIStroke")
+		btnStroke.Color = Color3.fromRGB(45, 45, 50)
+		btnStroke.Thickness = 1
+		btnStroke.Transparency = 0.5
+		btnStroke.Parent = btn
+
+		-- Game Icon
+		local iconFrame = Instance.new("Frame")
+		iconFrame.Size = UDim2.new(0, 50, 0, 50)
+		iconFrame.Position = UDim2.new(0, 10, 0.5, -25)
+		iconFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+		iconFrame.Parent = btn
+		Instance.new("UICorner", iconFrame).CornerRadius = UDim.new(0, 8)
+
+		local icon = Instance.new("ImageLabel")
+		icon.Size = UDim2.new(1, -10, 1, -10)
+		icon.Position = UDim2.new(0.5, 0, 0.5, 0)
+		icon.AnchorPoint = Vector2.new(0.5, 0.5)
+		icon.BackgroundTransparency = 1
+		icon.Image = gameData.icon
+		icon.Parent = iconFrame
+
+		-- Game Name
+		local name = Instance.new("TextLabel")
+		name.Text = gameData.name
+		name.Size = UDim2.new(1, -80, 0, 20)
+		name.Position = UDim2.new(0, 70, 0, 15)
+		name.BackgroundTransparency = 1
+		name.TextColor3 = Color3.fromRGB(255, 255, 255)
+		name.TextSize = 13
+		name.Font = Enum.Font.GothamBold
+		name.TextXAlignment = Enum.TextXAlignment.Left
+		name.TextTruncate = Enum.TextTruncate.AtEnd -- Prevents overlap if title is long
+		name.Parent = btn
+
+		-- Game Description
+		local desc = Instance.new("TextLabel")
+		desc.Text = gameData.desc
+		desc.Size = UDim2.new(1, -100, 0, 15)
+		desc.Position = UDim2.new(0, 70, 0, 35)
+		desc.BackgroundTransparency = 1
+		desc.TextColor3 = Color3.fromRGB(150, 150, 160)
+		desc.TextSize = 10
+		desc.Font = Enum.Font.Gotham
+		desc.TextXAlignment = Enum.TextXAlignment.Left
+		desc.Parent = btn
+
+		-- Indicator Dot
+		local indicator = Instance.new("Frame")
+		indicator.Size = UDim2.new(0, 6, 0, 6)
+		indicator.Position = UDim2.new(1, -20, 0.5, -3)
+		indicator.BackgroundColor3 = gameData.onProgress and Color3.fromRGB(255, 180, 0) or Color3.fromRGB(255, 45, 45)
+		indicator.BackgroundTransparency = 0.8
+		indicator.Visible = not gameData.onProgress -- Hide dot if onProgress to avoid clutter
+		indicator.Parent = btn
+		Instance.new("UICorner", indicator).CornerRadius = UDim.new(1, 0)
+
+		if gameData.onProgress then
+			local statusTag = Instance.new("TextLabel")
+			statusTag.Text = "ON UPDATE"
+			statusTag.Size = UDim2.new(0, 58, 0, 16)
+			statusTag.Position = UDim2.new(1, -12, 0, 15) -- Back to TOP RIGHT, nicely aligned with title
+			statusTag.AnchorPoint = Vector2.new(1, 0)
+			statusTag.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
+			statusTag.TextColor3 = Color3.fromRGB(0, 0, 0)
+			statusTag.TextSize = 7.5
+			statusTag.Font = Enum.Font.GothamBold
+			statusTag.Parent = btn
+			
+			local tagCorner = Instance.new("UICorner")
+			tagCorner.CornerRadius = UDim.new(0, 4)
+			tagCorner.Parent = statusTag
+
+			local tagStroke = Instance.new("UIStroke")
+			tagStroke.Thickness = 1
+			tagStroke.Color = Color3.fromRGB(0, 0, 0)
+			tagStroke.Transparency = 0.7
+			tagStroke.Parent = statusTag
+		end
+
+		-- Progress elements (inside button, hidden by default)
+		local progContainer = Instance.new("Frame")
+		progContainer.Name = "ProgContainer"
+		progContainer.Size = UDim2.new(1, -80, 0, 20)
+		progContainer.Position = UDim2.new(0, 70, 0, 60)
+		progContainer.BackgroundTransparency = 1
+		progContainer.Visible = false
+		progContainer.Parent = btn
+
+		local progStatus = Instance.new("TextLabel")
+		progStatus.Text = "> INITIALIZING..."
+		progStatus.Size = UDim2.new(1, 0, 0, 12)
+		progStatus.BackgroundTransparency = 1
+		progStatus.TextColor3 = Color3.fromRGB(150, 150, 160)
+		progStatus.TextSize = 8
+		progStatus.Font = Enum.Font.Code
+		progStatus.TextXAlignment = Enum.TextXAlignment.Left
+		progStatus.Parent = progContainer
+
+		local progBg = Instance.new("Frame")
+		progBg.Size = UDim2.new(1, -35, 0, 4)
+		progBg.Position = UDim2.new(0, 0, 0, 14)
+		progBg.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+		progBg.BorderSizePixel = 0
+		progBg.Parent = progContainer
+		Instance.new("UICorner", progBg)
+
+		local progFill = Instance.new("Frame")
+		progFill.Size = UDim2.new(0, 0, 1, 0)
+		progFill.BackgroundColor3 = Color3.fromRGB(255, 45, 45)
+		progFill.BorderSizePixel = 0
+		progFill.Parent = progBg
+		Instance.new("UICorner", progFill)
+
+		local progPercent = Instance.new("TextLabel")
+		progPercent.Text = "0%"
+		progPercent.Size = UDim2.new(0, 30, 1, 0)
+		progPercent.Position = UDim2.new(1, -30, 0, 14)
+		progPercent.BackgroundTransparency = 1
+		progPercent.TextColor3 = Color3.fromRGB(255, 45, 45)
+		progPercent.TextSize = 9
+		progPercent.Font = Enum.Font.Code
+		progPercent.Parent = progContainer
+
+		moduleProgUI[gameData.id] = {
+			container = progContainer,
+			status = progStatus,
+			fill = progFill,
+			percent = progPercent
+		}
+
+		btn.MouseEnter:Connect(function()
+			if selectedModuleData then return end
+			TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(35, 35, 40)}):Play()
+			TweenService:Create(btnStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(70, 70, 80), Transparency = 0}):Play()
+			TweenService:Create(indicator, TweenInfo.new(0.3), {BackgroundTransparency = 0.3}):Play()
+		end)
+
+		btn.MouseLeave:Connect(function()
+			if selectedModuleData and selectedModuleData.id == gameData.id then return end
+			TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(30, 30, 35)}):Play()
+			TweenService:Create(btnStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(45, 45, 50), Transparency = 0.5}):Play()
+			TweenService:Create(indicator, TweenInfo.new(0.3), {BackgroundTransparency = 0.8}):Play()
+		end)
+
+		btn.MouseButton1Click:Connect(function()
+			if selectedModuleData then return end -- Don't allow multiple selections
+			
+			if gameData.onProgress then
+				-- Feedback for on progress module
+				local originalDesc = desc.Text
+				desc.Text = "⚠️ STILL ON PROGRESS / ON UPDATE"
+				desc.TextColor3 = Color3.fromRGB(255, 180, 0)
+				
+				local originalBg = btn.BackgroundColor3
+				TweenService:Create(btn, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					BackgroundColor3 = Color3.fromRGB(45, 40, 20)
+				}):Play()
+				
+				task.delay(0.3, function()
+					TweenService:Create(btn, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+						BackgroundColor3 = originalBg
+					}):Play()
+				end)
+
+				task.delay(2, function()
+					desc.Text = originalDesc
+					desc.TextColor3 = Color3.fromRGB(150, 150, 160)
+				end)
+				return
+			end
+
+			selectedModuleData = gameData
+			closeBtn.Visible = false -- Hide close button immediately
+			
+			-- Expand button to show progress
+			TweenService:Create(btn, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, -6, 0, 95),
+				BackgroundColor3 = Color3.fromRGB(26, 26, 28)
+			}):Play()
+			
+			btnStroke.Color = Color3.fromRGB(255, 45, 45)
+			btnStroke.Transparency = 0
+			indicator.BackgroundTransparency = 0
+			progContainer.Visible = true
+		end)
+	end
+
+	for _, g in ipairs(GAMES) do
+		createGameBtn(g)
+	end
+
+	-- Center Brand Area
+	local brandArea = Instance.new("Frame")
+	brandArea.Size = UDim2.new(0, 180, 0, 180) 
+	brandArea.Position = UDim2.new(0, 30, 0.5, -105)
+	brandArea.BackgroundTransparency = 1
+	brandArea.ZIndex = 20 -- Explicit ZIndex
+	brandArea.Visible = true
+	brandArea.Parent = background
+
+	local logoBig = Instance.new("ImageLabel")
+	logoBig.Name = "Logo"
+	logoBig.Image = "rbxassetid://85930777472774"
+	logoBig.Size = UDim2.new(0, 120, 0, 120)
+	logoBig.Position = UDim2.new(0.5, -60, 0, 10)
+	logoBig.BackgroundTransparency = 1
+	logoBig.ScaleType = Enum.ScaleType.Fit
+	logoBig.ZIndex = 20
+	logoBig.Parent = brandArea
+
+	-- Added UIScale for smoother pulse animation
+	local logoScale = Instance.new("UIScale")
+	logoScale.Scale = 1
+	logoScale.Parent = logoBig
+
+	-- Added Glow Effect behind logo
+	local logoGlow = Instance.new("ImageLabel")
+	logoGlow.Name = "Glow"
+	logoGlow.Image = "rbxassetid://13973345471"
+	logoGlow.Size = UDim2.new(1.8, 0, 1.8, 0)
+	logoGlow.Position = UDim2.new(-0.4, 0, -0.4, 0)
+	logoGlow.BackgroundTransparency = 1
+	logoGlow.ImageColor3 = Color3.fromRGB(240, 40, 40)
+	logoGlow.ImageTransparency = 0.6
+	logoGlow.ZIndex = 15
+	logoGlow.Parent = logoBig
+
+	-- Dynamic Tech Rings
+	local ring1 = Instance.new("ImageLabel")
+	ring1.Name = "Ring1"
+	ring1.Image = "rbxassetid://6031085116"
+	ring1.Size = UDim2.new(1.3, 0, 1.3, 0)
+	ring1.Position = UDim2.new(-0.15, 0, -0.15, 0)
+	ring1.BackgroundTransparency = 1
+	ring1.ImageColor3 = Color3.fromRGB(255, 45, 45)
+	ring1.ImageTransparency = 0.4
+	ring1.ZIndex = 16
+	ring1.Parent = logoBig
+
+	local ring2 = Instance.new("ImageLabel")
+	ring2.Name = "Ring2"
+	ring2.Image = "rbxassetid://6031070538"
+	ring2.Size = UDim2.new(1.5, 0, 1.5, 0)
+	ring2.Position = UDim2.new(-0.25, 0, -0.25, 0)
+	ring2.BackgroundTransparency = 1
+	ring2.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	ring2.ImageTransparency = 0.8
+	ring2.ZIndex = 14
+	ring2.Parent = logoBig
+
+	-- Premium Rotating Border Circle (Subtle)
+	local circle = Instance.new("ImageLabel")
+	circle.Name = "BorderCircle"
+	circle.Image = "rbxassetid://14321303866"
+	circle.Size = UDim2.new(1.6, 0, 1.6, 0)
+	circle.Position = UDim2.new(-0.3, 0, -0.3, 0)
+	circle.BackgroundTransparency = 1
+	circle.ImageColor3 = Color3.fromRGB(255, 45, 45)
+	circle.ImageTransparency = 0.7
+	circle.ZIndex = 13
+	circle.Parent = logoBig
+
+	-- Logo Specific Animations
+	task.spawn(function()
+		local RunService = game:GetService("RunService")
+		
+		-- Breathing Pulse via UIScale (Much smoother than Size/Position tweening)
+		TweenService:Create(logoScale, TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+			Scale = 1.08
+		}):Play()
+
+		-- Glow Breathing
+		TweenService:Create(logoGlow, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+			ImageTransparency = 0.25
+		}):Play()
+
+		-- Smooth Rotation Loops using RenderStepped (FPS independent)
+		local rotConnection
+		rotConnection = RunService.RenderStepped:Connect(function(dt)
+			if not logoBig or not logoBig.Parent or not screenGui.Parent then
+				rotConnection:Disconnect()
+				return
+			end
+			
+			ring1.Rotation = ring1.Rotation + (80 * dt)
+			ring2.Rotation = ring2.Rotation - (50 * dt)
+			circle.Rotation = circle.Rotation + (25 * dt)
+		end)
+	end)
+
+	local titleBig = Instance.new("TextLabel")
+	titleBig.Text = "STARSHIP"
+	titleBig.Size = UDim2.new(1, 0, 0, 35)
+	titleBig.Position = UDim2.new(0, 0, 0.62, 0)
+	titleBig.BackgroundTransparency = 1
+	titleBig.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titleBig.TextSize = 28 -- Smaller font
+	titleBig.Font = Enum.Font.GothamBlack
+	titleBig.Parent = brandArea
+
+	-- User Greeting (Parented to brandArea for split view)
+	local greet = Instance.new("TextLabel")
+	greet.Text = "Welcome, " .. LocalPlayer.Name .. "!"
+	greet.Size = UDim2.new(1, 0, 0, 20)
+	greet.Position = UDim2.new(0, 0, 0.82, 0)
+	greet.BackgroundTransparency = 1
+	greet.TextColor3 = Color3.fromRGB(230, 230, 230)
+	greet.TextSize = 14 -- Smaller
+	greet.Font = Enum.Font.GothamMedium
+	greet.Parent = brandArea
+
+	local welcomeSub = Instance.new("TextLabel")
+	welcomeSub.Text = "Select a module to begin."
+	welcomeSub.Size = UDim2.new(1, 0, 0, 15)
+	welcomeSub.Position = UDim2.new(0, 0, 0.92, 0)
+	welcomeSub.BackgroundTransparency = 1
+	welcomeSub.TextColor3 = Color3.fromRGB(120, 120, 120)
+	welcomeSub.TextSize = 10 -- Smaller
+	welcomeSub.Font = Enum.Font.Gotham
+	welcomeSub.Parent = brandArea
+
+	-- Initially branding stays visible
+
+	-- Premium Footer (Matching Main UI)
+	local footer = Instance.new("TextLabel")
+	footer.Text = "STARSHIP MOBILE PREMIUM"
+	footer.Size = UDim2.new(1, 0, 0, 20)
+	footer.Position = UDim2.new(0, 0, 1, -20)
+	footer.BackgroundTransparency = 1
+	footer.TextColor3 = Color3.fromRGB(60, 60, 60)
+	footer.TextSize = 8
+	footer.Font = Enum.Font.GothamMedium
+	footer.Parent = background
+
+	-- User Thumbnail (Moved lower)
+	local userCard = Instance.new("Frame")
+	userCard.Size = UDim2.new(0, 150, 0, 40)
+	userCard.Position = UDim2.new(0, 20, 1, -55)
+	userCard.BackgroundTransparency = 1
+	userCard.Parent = background
+
+	local thumb = Instance.new("ImageLabel")
+	thumb.Size = UDim2.new(0, 32, 0, 32)
+	thumb.Position = UDim2.new(0, 0, 0.5, -16)
+	thumb.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	thumb.Parent = userCard
+	Instance.new("UICorner", thumb).CornerRadius = UDim.new(1, 0)
+	
+	task.spawn(function()
+		local content = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+		thumb.Image = content
+	end)
+
+	local name = Instance.new("TextLabel")
+	name.Text = LocalPlayer.Name
+	name.Size = UDim2.new(0, 100, 0, 15)
+	name.Position = UDim2.new(0, 40, 0.5, -12)
+	name.BackgroundTransparency = 1
+	name.TextColor3 = Color3.fromRGB(255, 255, 255)
+	name.TextSize = 12
+	name.Font = Enum.Font.GothamBold
+	name.TextXAlignment = Enum.TextXAlignment.Left
+	name.Parent = userCard
+
+	local role = Instance.new("TextLabel")
+	role.Text = "Premium VIP User"
+	role.Size = UDim2.new(0, 100, 0, 15)
+	role.Position = UDim2.new(0, 40, 0.5, 2)
+	role.BackgroundTransparency = 1
+	role.TextColor3 = Color3.fromRGB(150, 150, 150)
+	role.TextSize = 10
+	role.Font = Enum.Font.Gotham
+	role.TextXAlignment = Enum.TextXAlignment.Left
+	role.Parent = userCard
+
+	-- System Metrics (Moved lower)
+	local systemCard = Instance.new("Frame")
+	systemCard.Size = UDim2.new(0, 180, 0, 40)
+	systemCard.Position = UDim2.new(1, -200, 1, -55)
+	systemCard.BackgroundTransparency = 1
+	systemCard.Parent = background
+
+	local execName = "Unknown"
+	pcall(function() execName = (identifyexecutor and identifyexecutor()) or "Unknown" end)
+
+	local execLabel = Instance.new("TextLabel")
+	execLabel.Text = "EXECUTOR: " .. string.upper(execName)
+	execLabel.Size = UDim2.new(1, 0, 0, 15)
+	execLabel.Position = UDim2.new(0, 0, 0.5, -12)
+	execLabel.BackgroundTransparency = 1
+	execLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	execLabel.TextSize = 10
+	execLabel.Font = Enum.Font.GothamBold
+	execLabel.TextXAlignment = Enum.TextXAlignment.Right
+	execLabel.Parent = systemCard
+
+	local statusLine = Instance.new("TextLabel")
+	statusLine.Text = "SYSTEM_HEALTH: OPTIMAL"
+	statusLine.Size = UDim2.new(1, 0, 0, 15)
+	statusLine.Position = UDim2.new(0, 0, 0.5, 2)
+	statusLine.BackgroundTransparency = 1
+	statusLine.TextColor3 = Color3.fromRGB(60, 255, 180) -- Emerald Green
+	statusLine.TextSize = 9
+	statusLine.Font = Enum.Font.GothamMedium
+	statusLine.TextXAlignment = Enum.TextXAlignment.Right
+	statusLine.Parent = systemCard
+
+	-- Subtle Divider for Footer (Positioned above the metrics cards)
+	local footerLine = Instance.new("Frame")
+	footerLine.Size = UDim2.new(1, -40, 0, 1)
+	footerLine.Position = UDim2.new(0, 20, 1, -65)
+	footerLine.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	footerLine.BackgroundTransparency = 0.98 -- More subtle
+	footerLine.BorderSizePixel = 0
+	footerLine.Parent = background
+
+	-- Intro Animations
+	TweenService:Create(overlay, TweenInfo.new(0.6), {BackgroundTransparency = 0.6}):Play()
+	TweenService:Create(background, TweenInfo.new(0.8, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0.5, 0)
+	}):Play()
+
+	local function updateStatus(text, progress)
+		local ui = moduleProgUI[selectedModuleData and selectedModuleData.id]
+		if ui then
+			if not ui.container.Visible then
+				ui.container.Visible = true
+				closeBtn.Visible = false -- Hide close button when loading starts
+			end
+			ui.status.Text = "> " .. text
+			TweenService:Create(ui.fill, TweenInfo.new(progress == 1 and 0.5 or 0.3, Enum.EasingStyle.Quad), {
+				Size = UDim2.new(progress, 0, 1, 0)
+			}):Play()
+			ui.percent.Text = math.floor(progress * 100) .. "%"
+		end
+		
+		-- Update global welcome sub for additional context
+		if progress < 1 then
+			welcomeSub.Text = "Initializing " .. string.upper(selectedModuleData and selectedModuleData.id or "MODULE") .. "..."
+		else
+			welcomeSub.Text = "Environment ready. Launching."
+		end
+	end
+
+	-- Function to wait for selection
+	local function waitForSelection()
+		repeat task.wait() until selectedModuleData ~= nil
+		return selectedModuleData
+	end
+
+	return screenGui, updateStatus, waitForSelection
 end
 
 -- Show Error UI
-local function showError(message)
+local function showError(message, title)
 	-- Remove existing loader
 	pcall(function()
 		game:GetService("CoreGui"):FindFirstChild("StarshipMobileLoader"):Destroy()
@@ -533,7 +1424,7 @@ local function showError(message)
 
 	-- Container
 	local container = Instance.new("Frame")
-	container.Size = UDim2.new(0, 340, 0, 220)
+	container.Size = UDim2.new(0, 360, 0, 320)
 	container.Position = UDim2.new(0.5, 0, 0.5, 0)
 	container.AnchorPoint = Vector2.new(0.5, 0.5)
 	container.BackgroundColor3 = Color3.fromHex("#1a1a2e")
@@ -567,7 +1458,7 @@ local function showError(message)
 	errorTitle.Position = UDim2.new(0.5, 0, 0, 80)
 	errorTitle.AnchorPoint = Vector2.new(0.5, 0)
 	errorTitle.BackgroundTransparency = 1
-	errorTitle.Text = "ACCESS DENIED"
+	errorTitle.Text = string.upper(title or "ACCESS DENIED")
 	errorTitle.TextColor3 = Color3.fromHex("#ef4444")
 	errorTitle.TextSize = 20
 	errorTitle.Font = Enum.Font.GothamBold
@@ -575,7 +1466,7 @@ local function showError(message)
 
 	-- Error Message
 	local errorMessage = Instance.new("TextLabel")
-	errorMessage.Size = UDim2.new(1, -40, 0, 50)
+	errorMessage.Size = UDim2.new(1, -40, 0, 160)
 	errorMessage.Position = UDim2.new(0.5, 0, 0, 115)
 	errorMessage.AnchorPoint = Vector2.new(0.5, 0)
 	errorMessage.BackgroundTransparency = 1
@@ -1085,45 +1976,68 @@ end
 -- LOAD MOBILE UI FUNCTION
 -- ══════════════════════════════════════════════════════════════════
 
-local function loadMobileUI(sessionData, loaderGui, updateStatus)
+local function loadMobileUI(sessionData, loaderGui, updateStatus, moduleData)
 	-- Store session data globally for periodic access check in MobileUI
 	getgenv().StarshipSessionData = sessionData
 
 	if updateStatus then
-		updateStatus("Loading Starship Mobile...", 0.85)
+		updateStatus("Fetching " .. moduleData.name .. "...", 0.85)
 	end
 	task.wait(0.3)
 
-	-- Load Mobile UI Script (from protected API)
-	local userId = tostring(LocalPlayer.UserId)
-	local mobileScriptSuccess, mobileScript = pcall(function()
-		return game:HttpGet(MOBILE_UI_API .. userId)
+	-- Load Module Script
+	local scriptContent = nil
+	local scriptUrl = moduleData.scriptUrl
+	
+	-- APPEND USERID FOR AUTHENTICATION
+	if scriptUrl:find(SECURE_API_URL, 1, true) then
+		-- Check if URL already ends with "userId=" (like MOBILE_UI_API)
+		if scriptUrl:sub(-7) == "userId=" then
+			scriptUrl = scriptUrl .. tostring(LocalPlayer.UserId)
+		elseif scriptUrl:find("?", 1, true) then
+			scriptUrl = scriptUrl .. "&userId=" .. tostring(LocalPlayer.UserId)
+		else
+			scriptUrl = scriptUrl .. "?userId=" .. tostring(LocalPlayer.UserId)
+		end
+	end
+
+	-- FETCH SCRIPT (Support both URL and Local Workspace)
+	local scriptSuccess, result
+    if scriptUrl:find("local:", 1, true) then
+        local filePath = scriptUrl:gsub("local:", "")
+        scriptSuccess, result = pcall(function()
+            if not isfile(filePath) then error("File not found in workspace: " .. filePath) end
+            return readfile(filePath)
+        end)
+    else
+        -- FETCH FROM URL (Normal Mode)
+        scriptSuccess, result = pcall(function()
+            return game:HttpGet(scriptUrl)
+        end)
+    end
+
+	if scriptSuccess then
+		scriptContent = result
+	end
+
+	if not scriptSuccess or not scriptContent then
+		if loaderGui then
+			loaderGui:Destroy()
+		end
+		showError("Failed to load Module\n\n" .. tostring(result or "Unknown Error"))
+		return false
+	end
+
+	-- Try to decrypt if response is encrypted JSON (key + blob)
+	local decryptOk, decryptedContent = pcall(function()
+		local jsonData = HttpService:JSONDecode(scriptContent)
+		if jsonData and jsonData.key and jsonData.blob then
+			return xorDecrypt(jsonData.blob, jsonData.key)
+		end
+		return nil
 	end)
-
-	if not mobileScriptSuccess then
-		if loaderGui then
-			loaderGui:Destroy()
-		end
-		showError("Failed to load Mobile UI\n\nConnection Error")
-		return false
-	end
-
-	if not mobileScript or mobileScript == "" then
-		if loaderGui then
-			loaderGui:Destroy()
-		end
-		showError("Failed to load Mobile UI\n\nEmpty Response")
-		return false
-	end
-
-	-- Check if response is an error message
-	if mobileScript:find("error%(") then
-		if loaderGui then
-			loaderGui:Destroy()
-		end
-		local errorMsg = mobileScript:match('error%("(.-)"%)')
-		showError(errorMsg or "Mobile UI Access Denied")
-		return false
+	if decryptOk and decryptedContent then
+		scriptContent = decryptedContent
 	end
 
 	if updateStatus then
@@ -1131,34 +2045,42 @@ local function loadMobileUI(sessionData, loaderGui, updateStatus)
 	end
 	task.wait(0.4)
 
-	-- Execute Mobile Script
-	local func, err = loadstring(mobileScript)
+	-- Execute Module Script
+	local func, err = loadstring(scriptContent)
 	if not func then
 		if loaderGui then
 			loaderGui:Destroy()
 		end
-		showError("Execution Error:\n" .. tostring(err))
+		
+		-- Better debugging: If it's a syntax error, show a snippet of the content
+		local debugInfo = ""
+		if #scriptContent > 0 then
+			debugInfo = "\n\nResponse Preview (First 40 chars):\n" .. scriptContent:sub(1, 40)
+		end
+		
+		showError("Execution Error:\n" .. tostring(err) .. debugInfo, "EXECUTION_ERROR")
 		return false
 	end
 
 	-- Smooth exit animation
 	if loaderGui then
 		local MainFrame = loaderGui:FindFirstChild("Background")
-		if MainFrame then
-			local Container = MainFrame:FindFirstChild("Container")
-			if Container then
-				TweenService:Create(Container, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-					Position = UDim2.new(0.5, 0, 0.6, 0),
-					BackgroundTransparency = 1,
-				}):Play()
-			end
+		local Overlay = loaderGui:FindFirstChild("Overlay")
 
-			TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		if Overlay then
+			TweenService:Create(Overlay, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 				BackgroundTransparency = 1,
 			}):Play()
 		end
 
-		task.wait(0.5)
+		if MainFrame then
+			TweenService:Create(MainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+				Position = UDim2.new(0.5, 0, 0.5, 120), -- Slide out downwards
+				BackgroundTransparency = 1,
+			}):Play()
+		end
+
+		task.wait(0.6)
 		loaderGui:Destroy()
 	end
 
@@ -1413,6 +2335,45 @@ end
 -- ══════════════════════════════════════════════════════════════════
 
 local function main()
+	-- 🧪 DUMMY MODE TEST
+	if DUMMY_MODE then
+		local loaderGui, updateStatus, waitForSelection = createLoadingUI()
+		
+		-- Wait for module selection
+		local selectedModule = waitForSelection()
+		
+		updateStatus("Initializing " .. selectedModule.id .. " Dummy...", 0.1)
+		task.wait(1.2)
+		updateStatus("Detecting User Environment...", 0.3)
+		task.wait(1.5)
+		updateStatus("Bypassing Security Layer...", 0.6)
+		task.wait(1.2)
+		updateStatus("Loading Protected Modules...", 0.8)
+		task.wait(1.8)
+		updateStatus("Ready! Launching...", 1.0)
+		task.wait(1)
+
+		-- Smooth exit animation
+		if loaderGui then
+			local MainFrame = loaderGui:FindFirstChild("Background")
+			local Overlay = loaderGui:FindFirstChild("Overlay")
+			if Overlay then
+				TweenService:Create(Overlay, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					BackgroundTransparency = 1,
+				}):Play()
+			end
+			if MainFrame then
+				TweenService:Create(MainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+					Position = UDim2.new(0.5, 0, 0.5, 120),
+					BackgroundTransparency = 1,
+				}):Play()
+			end
+			task.wait(0.6)
+			loaderGui:Destroy()
+		end
+		return
+	end
+
 	-- 🔒 CHECK SYSTEM STATUS FIRST
 	local statusUrl = SECURE_API_URL .. "/api/tags?action=status"
 	local statusOk, statusResponse = pcall(function()
@@ -1553,7 +2514,47 @@ local function main()
 		end
 	end
 
-	local loaderGui, updateStatus = createLoadingUI()
+	local loaderGui, updateStatus, waitForSelection = createLoadingUI()
+
+	-- Wait for module selection
+	local moduleData = waitForSelection()
+
+	-- PLACEID VALIDATION
+	updateStatus("Validating context...", 0.05)
+	local isAllowed = false
+	local currentPlaceId = game.PlaceId
+
+	for _, pid in ipairs(moduleData.placeIds) do
+		if pid == 0 or pid == currentPlaceId then
+			isAllowed = true
+			break
+		end
+	end
+
+	if not isAllowed then
+		updateStatus("WRONG GAME CONTEXT", 0)
+		task.wait(0.5)
+		if loaderGui then loaderGui:Destroy() end
+		showError("Invalid Module\n\nThis script is designed for " .. moduleData.name:gsub("STARSHIP ", "") .. ".\nYou are currently on another game.")
+		return
+	end
+
+	if DUMMY_MODE then
+		updateStatus("Bypassing server checks...", 0.3)
+		task.wait(0.8)
+		updateStatus("Loading dummy session...", 0.6)
+		task.wait(0.8)
+		updateStatus("Access granted!", 1.0)
+		task.wait(0.5)
+		loadMobileUI({
+			Role = "MOBILE VIP",
+			Duration = "LIFETIME",
+			Username = LocalPlayer.Name,
+			Platform = "mobile",
+			IsEventAccess = false
+		}, loaderGui, updateStatus, moduleData)
+		return
+	end
 
 	-- Step 1: Initialize
 	updateStatus("Initializing...", 0.1)
@@ -1590,7 +2591,7 @@ local function main()
 		updateStatus("Access granted! (" .. tostring(eventData.remainingDays or "N/A") .. " days left)", 0.7)
 		task.wait(0.3)
 
-		loadMobileUI(sessionData, loaderGui, updateStatus)
+		loadMobileUI(sessionData, loaderGui, updateStatus, moduleData)
 		return
 	end
 
@@ -1617,7 +2618,7 @@ local function main()
 			local newLoaderGui, newUpdateStatus = createLoadingUI()
 			newUpdateStatus("Access granted!", 0.7)
 			task.wait(0.3)
-			loadMobileUI(sessionData, newLoaderGui, newUpdateStatus)
+			loadMobileUI(sessionData, newLoaderGui, newUpdateStatus, moduleData)
 		end, function()
 			-- On cancel, show error
 			showError("Connection Failed\nServer Unreachable")
@@ -1642,7 +2643,7 @@ local function main()
 		if verifyError == "INVALID_SIGNATURE" then
 			showError("Security Error\nData tampering detected")
 		elseif verifyError == "EXPIRED" then
-			showError("Security Error\nSession expired. Please restart.")
+			showError("Security Error\nSession expired. Please ensure your device clock is set to automatic.\n\n(Clock Desync Detected)")
 		else
 			showError("Server Error\n" .. tostring(verifyError or "Invalid Response"))
 		end
@@ -1672,7 +2673,7 @@ local function main()
 			local newLoaderGui, newUpdateStatus = createLoadingUI()
 			newUpdateStatus("Access granted!", 0.7)
 			task.wait(0.3)
-			loadMobileUI(sessionData, newLoaderGui, newUpdateStatus)
+			loadMobileUI(sessionData, newLoaderGui, newUpdateStatus, moduleData)
 		end, function()
 			-- On cancel, show original error
 			local errorMsg = data.message or "Not Whitelisted for Mobile"
@@ -1716,7 +2717,7 @@ local function main()
 		end)
 	end
 
-	loadMobileUI(sessionData, loaderGui, updateStatus)
+	loadMobileUI(sessionData, loaderGui, updateStatus, moduleData)
 end
 
 -- Execute

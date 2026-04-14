@@ -6,6 +6,7 @@ pcall(function()
 	loadstring(game:HttpGet('https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua'))()
 end)
 
+do -- Wrap bypass locals in scope to free registers
 local sg = game:GetService("StarterGui")
 local cg = game:GetService("CoreGui")
 
@@ -38,7 +39,14 @@ local old; old = hookmetamethod(game, "__namecall", function(self, ...)
             if newText then data.Text = newText end
         end
     end
-    return old(self, ...)
+    
+    -- FAILSAFE: Ensure 'old' exists before calling to prevent "attempt to call a nil value"
+    if old then
+        return old(self, ...)
+    end
+    
+    -- Fallback for namecall if hook fails
+    return game[method](self, ...)
 end)
 
 -- (Rename UI elements that might appear in CoreGui/PlayerGui)
@@ -60,7 +68,7 @@ task.spawn(function()
         end
     end
 end)
-
+end -- End bypass scope
 
 
 local Players = game:GetService("Players")
@@ -123,366 +131,6 @@ pcall(function() getgenv().STARSHIP_MOBILE_ACTIVE = nil end)
 -- DEV_MODE detection (same as StarshipCore)
 local DEV_MODE = _G.StarshipDevMode or false
 
--- ══════════════════════════════════════════════════════════════════
--- ANTI-MULTI-SCRIPT PROTECTION SYSTEM (STRUCTURE-BASED DETECTION)
--- Detects script hubs by their UI structure (key system, authentication, etc)
--- NOT by name to avoid false positives
--- ══════════════════════════════════════════════════════════════════
-local AntiMultiScript = {}
-AntiMultiScript.Enabled = true
-AntiMultiScript.CheckInterval = 5.0 -- Increased from 0.5 to 5.0 for better mobile performance
-AntiMultiScript.UniqueToken = "STARSHIP_MOBILE_" .. tostring(os.clock()) .. "_" .. tostring(math.random(100000, 999999))
-AntiMultiScript.Connections = {}
-AntiMultiScript.Running = true
-AntiMultiScript.Terminated = false
-
--- BLACKLIST: Script hub indicators (case insensitive, searched in VISIBLE TEXT only)
--- Must be VERY SPECIFIC to avoid false positives
-AntiMultiScript.ScriptHubIndicators = {
-	-- RullzsyHUB specific patterns (MOST RELIABLE)
-	"rullzsy", "rullzsyhub", "dsc.gg/rullzsyhub", "@rullzsy_",
-	-- Key System UI text patterns (with spaces - more specific)
-	"| key system", "key system |",  -- Title format like "RullzsyHUB | Key System"
-	"[•] input key", "[•] verify key", -- Button format
-	"get your key", "enter your key", "paste your key",
-	-- Authentication UI patterns
-	"authentication required", "whitelist check", "hwid check",
-	"your key is invalid", "key expired",
-	-- Script hub discord patterns
-	"linkvertise.com", "fluxteam",
-	-- Other known script hubs
-	"scripthub v", "script hub v", -- Versioned hubs
-}
-
--- WHITELIST: ONLY our own GUIs by specific name (NOT 'windui' - other scripts use it too!)
-AntiMultiScript.WhitelistedGUIs = {
-	"starship", "starshipmobile", "starshipcore", "starshipchangelog",
-}
-
--- Direct reference to OUR GUI (set when created)
-AntiMultiScript.OurGUI = nil
-
--- NOTE: Do NOT set _G.StarshipCleanup here - it causes premature termination
--- Cleanup is handled by DestroyAllStarshipGUIs() at script start
-
-local function PerformDetectionScan()
-	local detected = false
-	local detectedGUI = ""
-	local detectedIndicator = ""
-	
-	pcall(function()
-		local containers = GetAllGUIContainers()
-		
-		for _, container in ipairs(containers) do
-			if not container then continue end
-			
-			for _, gui in pairs(container:GetChildren()) do
-				-- ONLY scan ScreenGuis that are NOT whitelisted
-				if gui:IsA("ScreenGui") and not IsWhitelistedGUI(gui.Name, gui) then
-					-- Scan this specific GUI for the indicators the user specified
-					local hasIndicators, indicator = HasScriptHubIndicators(gui)
-					if hasIndicators then
-						detected = true
-						detectedGUI = gui:GetFullName()
-						detectedIndicator = indicator
-						return
-					end
-				end
-			end
-		end
-	end)
-	
-	return detected, detectedGUI, detectedIndicator
-end
-
--- ══════════════════════════════════════════════════════════════════
--- INITIAL PRE-EXECUTION SCAN (at the very top)
--- ══════════════════════════════════════════════════════════════════
-do
-	local isPresent, loc, ind = PerformDetectionScan()
-	if not isPresent then 
-		task.wait(1.5) -- Delay to let other scripts fully load
-		isPresent, loc, ind = PerformDetectionScan()
-	end
-	
-	if isPresent then
-		if DEV_MODE then
-			warn("═══════════════════════════════════════════════════════════")
-			warn("[STARSHIP] 🛡️ BLOCKED: unauthorized script active!")
-			warn("[STARSHIP] Reason: " .. tostring(ind))
-			warn("═══════════════════════════════════════════════════════════")
-		end
-		error("[STARSHIP] Execution blocked - unauthorized script detected") -- Force complete halt
-	end
-end
-
--- Cleanup function
-local function TerminateScript(reason)
-	if AntiMultiScript.Terminated then return end
-	AntiMultiScript.Terminated = true
-	AntiMultiScript.Running = false
-	
-	if DEV_MODE then warn("[STARSHIP] ⚠️ Terminating script: " .. tostring(reason)) end
-	
-	-- Disconnect all connections
-	for _, conn in pairs(AntiMultiScript.Connections) do
-		pcall(function() conn:Disconnect() end)
-	end
-	
-	-- AGGRESSIVE GUI DESTRUCTION (Using Attribute-based detection)
-	if DEV_MODE then warn("[STARSHIP] 🗑️ Finding and destroying Starship UI...") end
-	
-	-- Use our reliable attribute-based destruction
-	local destroyed = DestroyAllStarshipGUIs()
-	
-	-- Clear global references
-	_G.STARSHIP_MOBILE_ACTIVE = nil
-	_G.StarshipWindow = nil
-	_G.StarshipWindUI = nil
-	_G.StarshipSession = nil
-	_G.StarshipCleanup = nil
-	pcall(function() getgenv().STARSHIP_MOBILE_ACTIVE = nil end)
-	pcall(function() getgenv().StarshipWindow = nil end)
-	pcall(function() getgenv().StarshipWindUI = nil end)
-	
-	if DEV_MODE then warn("[STARSHIP] ⚠️ Script terminated! Destroyed " .. destroyed .. " GUI(s)") end
-end
-
--- Check if GUI is whitelisted (our own GUIs)
-local function IsWhitelistedGUI(guiName, guiInstance)
-	if not guiName then return false end
-	
-	-- Check if this is OUR specific GUI instance (most reliable)
-	if guiInstance and AntiMultiScript.OurGUI and guiInstance == AntiMultiScript.OurGUI then
-		return true
-	end
-	
-	local lowerName = guiName:lower()
-	
-	-- Check our own GUIs by specific name pattern
-	for _, pattern in ipairs(AntiMultiScript.WhitelistedGUIs) do
-		if lowerName:find(pattern, 1, true) then
-			return true
-		end
-	end
-	
-	return false
-end
-
--- Check if GUI has script hub indicators in its VISIBLE TEXT (not element names)
-local function HasScriptHubIndicators(gui)
-	local found = false
-	local foundIndicator = ""
-	
-	pcall(function()
-		local descendants = gui:GetDescendants()
-		local checkCount = 0
-		local MAX_CHECKS = 200 -- Limit to prevent lag on complex UIs
-		
-		for _, desc in pairs(descendants) do
-			if checkCount >= MAX_CHECKS then break end
-			
-			-- ONLY check VISIBLE TEXT content (not element names - they cause false positives)
-			if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
-				checkCount = checkCount + 1
-				local text = (desc.Text or ""):lower()
-				
-				-- Skip empty or very short text
-				if #text < 3 then continue end
-				
-				for _, indicator in ipairs(AntiMultiScript.ScriptHubIndicators) do
-					if text:find(indicator, 1, true) then
-						found = true
-						foundIndicator = indicator .. " (visible text: '" .. string.sub(desc.Text or "", 1, 40) .. "')"
-						return
-					end
-				end
-			end
-		end
-	end)
-	
-	return found, foundIndicator
-end
-
--- Get all GUI containers to scan
-local function GetAllGUIContainers()
-	local containers = {}
-	
-	pcall(function()
-		table.insert(containers, game:GetService("CoreGui"))
-	end)
-	
-	pcall(function()
-		local pg = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
-		if pg then table.insert(containers, pg) end
-	end)
-	
-	pcall(function()
-		if gethui then
-			local hui = gethui()
-			if hui then table.insert(containers, hui) end
-		end
-	end)
-	
-	return containers
-end
-
--- MAIN SCAN FUNCTION - ONLY detect based on specific text indicators
-local function ScanForScriptHubs()
-	if not AntiMultiScript.Running then return false end
-	
-	local DEBUG = DEV_MODE -- Set to true to see all GUIs being scanned
-	
-	for _, container in pairs(GetAllGUIContainers()) do
-		pcall(function()
-			for _, gui in pairs(container:GetChildren()) do
-				if gui:IsA("ScreenGui") then
-					local guiName = gui.Name or "Unknown"
-					
-					-- Skip whitelisted GUIs (our own + Roblox system + game admins)
-					if IsWhitelistedGUI(guiName, gui) then 
-						continue 
-					end
-					
-					-- Log non-whitelisted GUIs for debugging
-					local descendantCount = #gui:GetDescendants()
-					
-					-- Check for script hub indicators ONLY (text-based detection)
-					local hasIndicators, indicator = HasScriptHubIndicators(gui)
-					if hasIndicators then
-						if DEV_MODE then
-							warn("[STARSHIP] ⚠️ DETECTED SCRIPT HUB: " .. guiName)
-							warn("[STARSHIP] ⚠️ Found indicator: " .. indicator)
-						end
-						TerminateScript("Script hub: " .. guiName .. " (" .. indicator .. ")")
-						return true
-					end
-				end
-			end
-		end)
-	end
-	
-	return false
-end
-
--- Monitor for new GUIs
-local function SetupGUIMonitors()
-	for _, container in pairs(GetAllGUIContainers()) do
-		pcall(function()
-			local conn = container.ChildAdded:Connect(function(child)
-				if not AntiMultiScript.Running then return end
-				
-				-- Wait for GUI to fully load
-				task.wait(1.5) -- Wait for script hub UI to fully populate
-				
-				if not child:IsA("ScreenGui") then return end
-				
-				local guiName = child.Name or "Unknown"
-				if IsWhitelistedGUI(guiName, child) then return end
-				
-				local descendantCount = #child:GetDescendants()
-				
-				-- Check for script hub indicators ONLY
-				local hasIndicators, indicator = HasScriptHubIndicators(child)
-				if hasIndicators then
-					if DEV_MODE then
-						warn("[STARSHIP] ⚠️ NEW SCRIPT HUB DETECTED: " .. guiName)
-						warn("[STARSHIP] ⚠️ Found indicator: " .. indicator)
-					end
-					TerminateScript("New script hub: " .. guiName .. " (" .. indicator .. ")")
-				end
-			end)
-			
-			table.insert(AntiMultiScript.Connections, conn)
-		end)
-	end
-end
-
--- Monitor getgenv() changes for script libraries
-local function MonitorGlobalEnv()
-	local startupKeys = {}
-	
-	-- Record existing keys
-	pcall(function()
-		local genv = getgenv()
-		for k, _ in pairs(genv) do
-			startupKeys[k] = true
-		end
-	end)
-	
-	-- Periodic check for new libraries
-	task.spawn(function()
-		while AntiMultiScript.Running do
-			task.wait(AntiMultiScript.CheckInterval)
-			
-			-- Check token integrity
-			if _G.STARSHIP_MOBILE_ACTIVE ~= AntiMultiScript.UniqueToken then
-				TerminateScript("Token modified by another script")
-				break
-			end
-			
-			-- Check for new UI libraries
-			local suspiciousLibs = {
-				"OrionLib", "RayfieldLib", "KavoUI", "VenyxLib",
-				"LinoriaLib", "Fluent", "Rayfield", "Orion", "Kavo"
-			}
-			
-			pcall(function()
-				local genv = getgenv()
-				for _, libName in ipairs(suspiciousLibs) do
-					if not startupKeys[libName] and genv[libName] ~= nil then
-						if type(genv[libName]) == "table" then
-							local lib = genv[libName]
-							if lib.CreateWindow or lib.MakeWindow or lib.CreateTab or lib.new then
-								if DEV_MODE then warn("[STARSHIP] ⚠️ Detected script library: " .. libName) end
-								TerminateScript("Library: " .. libName)
-								return
-							end
-						end
-					end
-				end
-			end)
-			
-			-- Also check _G
-			for _, libName in ipairs(suspiciousLibs) do
-				if not startupKeys[libName] and _G[libName] ~= nil then
-					if type(_G[libName]) == "table" then
-						local lib = _G[libName]
-						if lib.CreateWindow or lib.MakeWindow or lib.CreateTab or lib.new then
-							if DEV_MODE then warn("[STARSHIP] ⚠️ Detected _G library: " .. libName) end
-							TerminateScript("_G Library: " .. libName)
-							return
-						end
-					end
-				end
-			end
-			
-			-- Periodic full scan for script hubs
-			ScanForScriptHubs()
-		end
-	end)
-end
-
--- INITIALIZE PROTECTION (Deferred to reduce startup lag)
-task.defer(function()
-	task.wait(2) -- Wait for UI to fully render first
-	
-	if AntiMultiScript.Enabled then
-		-- Initial scan - check for existing script hubs
-		local foundExisting = ScanForScriptHubs()
-		
-		if not foundExisting and AntiMultiScript.Running then
-			-- Setup monitors
-			SetupGUIMonitors()
-			MonitorGlobalEnv()
-			
-			if DEV_MODE then warn("[STARSHIP] 🛡️ Anti-Multi-Script protection ACTIVE (Structure-Based)") end
-		end
-	end
-end)
-
--- Export
-getgenv().StarshipAntiMultiScript = AntiMultiScript
 
 -- ══════════════════════════════════════════════════════════════════
 -- LOAD WINDUI (Boreal first, original as fallback)
@@ -491,9 +139,39 @@ local WindUI = nil
 _G.WindUIIsBoreal = false
 
 -- 🛡️ ROBUST LOADER SYSTEM (Try multiple sources for Boreal)
-local function AttemptLoad(url)
+-- 🛡️ ROBUST CACHED LOADER SYSTEM
+local function AttemptLoad(url, fileName)
+    local folder = "StarshipCore/Libraries"
+    local localPath = fileName and (folder .. "/" .. fileName) or nil
+    
+    -- Try loading from LOCAL CACHE first
+    if localPath and isfile and isfile(localPath) then
+        local success, content = pcall(readfile, localPath)
+        if success and content and #content > 100 then
+            local func, err = loadstring(content)
+            if func then
+                local ok, result = pcall(func)
+                if ok and result then 
+                    warn("[STARSHIP] 📂 Loaded library from cache: " .. fileName)
+                    return result 
+                end
+            end
+        end
+    end
+
+    -- Download if not in cache or cache load failed
     local success, content = pcall(game.HttpGet, game, url)
     if success and content and #content > 100 then
+        -- Save to cache for next time
+        if localPath and makefolder and writefile then
+            pcall(function()
+                if not isfolder("StarshipCore") then makefolder("StarshipCore") end
+                if not isfolder(folder) then makefolder(folder) end
+                writefile(localPath, content)
+                warn("[STARSHIP] 📥 Library saved to cache: " .. fileName)
+            end)
+        end
+
         local func, err = loadstring(content)
         if func then
             local ok, result = pcall(func)
@@ -504,14 +182,13 @@ local function AttemptLoad(url)
 end
 
 -- Primary: Boreal (Most features)
--- Verified working URL for Boreal
-WindUI = AttemptLoad('https://raw.githubusercontent.com/orialdev/WindUI-Boreal/main/WindUI%20Boreal')
+WindUI = AttemptLoad('https://raw.githubusercontent.com/orialdev/WindUI-Boreal/main/WindUI%20Boreal', "WindUI_Boreal.lua")
 
 if WindUI then 
     _G.WindUIIsBoreal = true 
 else
-    -- Fallback: Original WindUI (If Boreal fails, we load this but features will be limited)
-    WindUI = AttemptLoad('https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua')
+    -- Fallback: Original WindUI
+    WindUI = AttemptLoad('https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua', "WindUI_Standard.lua")
 end
 
 -- Final check & Notification
@@ -521,14 +198,14 @@ if not WindUI then
 end
 
 -- Inform user about current mode
-task.spawn(function()
-    task.wait(1)
-    if _G.WindUIIsBoreal then
-        WindUI:Notify({ Title = "Boreal Active", Content = "All premium UI features are loaded!", Duration = 3 })
-    else
-        warn("[STARSHIP] ⚠️ WARNING: Boreal failed to load! Falling back to standard WindUI. Some features will be hidden.")
-    end
-end)
+-- task.spawn(function()
+--     task.wait(1)
+--     if _G.WindUIIsBoreal then
+--         WindUI:Notify({ Title = "Boreal Active", Content = "All premium UI features are loaded!", Duration = 3 })
+--     else
+--         warn("[STARSHIP] ⚠️ WARNING: Boreal failed to load! Falling back to standard WindUI. Some features will be hidden.")
+--     end
+-- end)
 
 -- ══════════════════════════════════════════════════════════════════
 -- SAFE API HELPERS (stored in _G to save local slots)
@@ -1109,20 +786,20 @@ task.wait(0.1)
 -- ══════════════════════════════════════════════════════════════════
 task.wait(0.2)
 local Window = WindUI:CreateWindow({
-	Title = "✨ STARSHIP┃dsc.gg-starshipcore",
-	Icon = "rbxassetid://123840945153526", -- Logo next to title
-	IconSize = 36, -- Larger icon for premium look
+	Title = "STARSHIP┃dsc.gg-starshipcore",
+	Icon = "rbxassetid://85930777472774", 
+	IconSize = 45, 
 
-	Author = "Premium Edition • StarshipCore",
-	Size = UDim2.fromOffset(770, 500),
+	Author = "Premium Edition | StarshipCore",
+	Size = UDim2.fromOffset(770, 475),
 	SideBarWidth = 180,
 	Transparent = true,
 	BackgroundImageTransparency = 0.92,
-	Background = "rbxassetid://123840945153526",
+	Background = "rbxassetid://132820581372516",
 	Theme = Settings.Theme or "Crimson",
-	ModernLayout = _G.WindUIIsBoreal or true, -- Boreal: compact layout
-	BottomDragBarEnabled = _G.WindUIIsBoreal or true, -- Boreal: mobile drag handle
-	TransparentNav = false, -- Disabled to maintain consistent boxed styling for all tabs
+	ModernLayout = true, 
+	BottomDragBarEnabled = true, 
+	TransparentNav = false, 
 	User = {
 		Enabled = true,
 		Anonymous = true,
@@ -1135,43 +812,69 @@ local Window = WindUI:CreateWindow({
 		end,
 	},
 	Topbar = {
-		Height = 65,
+		Height = 48,
 		ButtonsType = "Default",
 	},
 
-	-- ═══ FLOATING OPEN BUTTON (PREMIUM GRADIENT) ═══
+	-- ═══ FLOATING OPEN BUTTON (PREMIUM SLEEK DESIGN) ═══
 	OpenButton = {
 		Title = "STARSHIP ✨",
-		Icon = "rbxassetid://123840945153526",
-		Size = UDim2.fromOffset(140, 52), -- Ukuran diperbesar (140x52) agar lebih nyaman di mobile
-		CornerRadius = UDim.new(1, 0),
-		StrokeThickness = 2.5,
+		Icon = "rbxassetid://85930777472774",
+		IconSize = 22, -- Mengecilkan alokasi ruang agar teks mendekat ke kiri
+		IconThemed = false,
+		Size = UDim2.fromOffset(155, 48), 
+		CornerRadius = UDim.new(0.5, 0),
+		StrokeThickness = 1.5,
 		Enabled = true,
 		Draggable = true,
 		OnlyMobile = false,
 		Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromHex("#667eea")),
-			ColorSequenceKeypoint.new(0.5, Color3.fromHex("#764ba2")),
-			ColorSequenceKeypoint.new(1, Color3.fromHex("#f093fb")),
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 15, 15)),
+			ColorSequenceKeypoint.new(0.6, Color3.fromRGB(45, 10, 10)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 45, 45)),
 		}),
 	},
+
+-- Manual Fix: Memaksa posisi icon logo agar pas (Rapat dengan teks)
+task.spawn(function()
+    task.wait(1.5)
+    pcall(function()
+        local openBtn = Window.OpenButtonMain
+        if openBtn and openBtn.Button then
+            for _, icon in ipairs(openBtn.Button:GetDescendants()) do
+                if icon:IsA("ImageLabel") and (icon.Image:find("85930777472774") or icon.Image:find("123840945153526")) then
+                    icon.AnchorPoint = Vector2.new(0.5, 0.5)
+                    icon.Position = UDim2.new(0.5, 5, 0.5, 0) -- Beri sedikit offset kanan agar pas
+                    icon.Size = UDim2.new(0, 32, 0, 32) -- Ukuran 32 (tetap besar)
+                    icon.ImageColor3 = Color3.new(1, 1, 1)
+                    icon.ImageTransparency = 0
+                    
+                    if icon.Parent:IsA("Frame") then
+                        icon.Parent.Size = UDim2.new(0, 32, 0, 32)
+                    end
+                end
+            end
+        end
+    end)
+end)
 
 
 })
 
 -- Global token
-_G.STARSHIP_MOBILE_ACTIVE = AntiMultiScript.UniqueToken
-pcall(function() getgenv().STARSHIP_MOBILE_ACTIVE = AntiMultiScript.UniqueToken end)
+_G.STARSHIP_MOBILE_ACTIVE = STARSHIP_ID
+pcall(function() getgenv().STARSHIP_MOBILE_ACTIVE = STARSHIP_ID end)
 
 -- Window reference stored below in the main cleanup section
 getgenv().StarshipWindow = Window
 getgenv().StarshipWindUI = WindUI
 
 -- CRITICAL: Tag our GUI with unique identifier IMMEDIATELY
+local OurGUI = nil
 if Window.Internal and Window.Internal.ScreenGui then
-	AntiMultiScript.OurGUI = Window.Internal.ScreenGui
+	OurGUI = Window.Internal.ScreenGui
 	-- TAG WITH UNIQUE ID FOR RELIABLE DESTRUCTION
-	AntiMultiScript.OurGUI:SetAttribute("StarshipID", STARSHIP_ID)
+	OurGUI:SetAttribute("StarshipID", STARSHIP_ID)
 	if DEV_MODE then warn("[STARSHIP] 🛡️ GUI tagged with ID: " .. STARSHIP_ID) end
 else
 	-- Fallback: scan and tag
@@ -1196,7 +899,7 @@ else
 					end
 					
 					if hasStarship then
-						AntiMultiScript.OurGUI = gui
+						OurGUI = gui
 						gui:SetAttribute("StarshipID", STARSHIP_ID)
 						if DEV_MODE then warn("[STARSHIP] 🛡️ GUI tagged via scan: " .. gui.Name) end
 						break
@@ -1204,131 +907,38 @@ else
 				end
 			end
 		end
-		if AntiMultiScript.OurGUI then break end
+		if OurGUI then break end
 	end
 end
 
 -- 📌 PRE-DECLARE TABS FOR SIDEBAR CALLBACKS
 local DashboardTab, AccountTab, CustomAnimTab, AvatarTab, SkyBoxTab, ListMapTab, ToolsTab, SpoofTab, SettingsTab
 
--- 📌 SIDEBAR ELEMENTS (Boreal Premium)
-    -- Consolidate Watermark here to keep it clean
-    Window:Watermark({
-        Text = "STARSHIP PREMIUM┃v" .. VERSION,
-        Position = "bottom-right",
-        Opacity = 0.45,
-        Size = 12,
-    })
+-- Consolidate Watermark here to keep it clean
+Window:Watermark({
+    Text = "STARSHIP PREMIUM┃v" .. VERSION,
+    Position = "bottom-right",
+    Opacity = 0.45,
+    Size = 12,
+})
 
--- ══════════════════════════════════════════════════════════════════
--- CONTINUOUS PROTECTION LOOP (Background Monitoring)
--- ══════════════════════════════════════════════════════════════════
-task.spawn(function()
-	task.wait(3) -- Wait for GUI to be fully created and tagged
-	
-	-- Reset terminated flag in case old code set it
-	AntiMultiScript.Terminated = false
-	if DEV_MODE then warn("[STARSHIP] 🛡️ Background protection active...") end
-	
-	local loopTerminated = false -- LOCAL flag to prevent interference from old code
-	local scanCount = 0
-	while not loopTerminated do
-		task.wait(5.0) -- Increased from 1.5 to 5.0 for performance
-		scanCount = scanCount + 1
-		
-		local detected, detectedGUI, detectedIndicator = PerformDetectionScan()
-		
-		if detected then
-			if DEV_MODE then
-				warn("═══════════════════════════════════════════════════════════")
-				warn("[STARSHIP] ⚠️ SCRIPT HUB DETECTED! Closing Starship...")
-				warn("[STARSHIP] Evidence: " .. detectedIndicator)
-				warn("═══════════════════════════════════════════════════════════")
-			end
-			
-		-- DIRECT GUI DESTRUCTION (bypass TerminateScript)
-			loopTerminated = true
-			
-			-- Method 1: Destroy saved reference
-			if AntiMultiScript.OurGUI then
-				if DEV_MODE then warn("[STARSHIP] 🗑️ Destroying OurGUI: " .. AntiMultiScript.OurGUI.Name) end
-				pcall(function() 
-					AntiMultiScript.OurGUI.Enabled = false
-					AntiMultiScript.OurGUI:Destroy() 
-				end)
-			end
-			
-			-- Method 2: Destroy by attribute
-			local destroyed = DestroyAllStarshipGUIs()
-			if DEV_MODE then warn("[STARSHIP] 🗑️ DestroyAllStarshipGUIs() removed: " .. destroyed) end
-			
-			-- Method 3: Brute force - destroy ALL WindUI with STARSHIP content
-			pcall(function()
-				local containers = {game:GetService("CoreGui")}
-				pcall(function() table.insert(containers, game.Players.LocalPlayer.PlayerGui) end)
-				pcall(function() if gethui then table.insert(containers, gethui()) end end)
-				
-				for _, container in pairs(containers) do
-					if not container then continue end
-					for _, gui in pairs(container:GetChildren()) do
-						if gui:IsA("ScreenGui") then
-							local guiName = gui.Name:lower()
-							if guiName:find("windui") or guiName:find("starship") then
-								-- Check content
-								for _, desc in pairs(gui:GetDescendants()) do
-									if desc:IsA("TextLabel") then
-										local text = desc.Text or ""
-										if (text:find("STARSHIP") or text:find("dsc.gg")) and not text:lower():find("rullzsy") then
-											if DEV_MODE then warn("[STARSHIP] 🗑️ Force destroying: " .. gui.Name) end
-											gui.Enabled = false
-											gui:Destroy()
-											break
-										end
-									end
-								end
-							end
-						end
-					end
-				end
-			end)
-			
-			-- Clear globals
-			_G.STARSHIP_MOBILE_ACTIVE = nil
-			pcall(function() getgenv().StarshipWindow = nil end)
-			
-			if DEV_MODE then warn("[STARSHIP] ⚠️ Protection complete - Starship closed") end
-			break
-		end
-		
-		if scanCount <= 2 then
-			if DEV_MODE then warn("[STARSHIP] Scan #" .. scanCount .. " complete - no threats") end
-		end
-	end
-end)
 
-task.wait(0.1)
 
 -- ══════════════════════════════════════════════════════════════════
 -- LOGO OVERLAY (Using WindUI's built-in Background Image Settings)
 -- ══════════════════════════════════════════════════════════════════
-Window:SetBackgroundImage("rbxassetid://91946746369709")
-Window:SetBackgroundImageTransparency(0.85)
+Window:SetBackgroundImage("rbxassetid://132820581372516")
+Window:SetBackgroundImageTransparency(0.88)
 
--- ══════════════════════════════════════════════════════════════════
--- TOPBAR THEME SWITCH BUTTON
--- ══════════════════════════════════════════════════════════════════
--- getgenv().Theme = Settings.Theme or "Indigo"
--- Window:CreateTopbarButton(
--- 	"SwitchTheme",
--- 	"eye",
--- 	function()
--- 		getgenv().Theme = getgenv().Theme == "Indigo" and "Dark" or "Indigo"
--- 		WindUI:SetTheme(getgenv().Theme)
--- 		Settings.Theme = getgenv().Theme
--- 		SaveSettings()
--- 	end,
--- 	990
--- )
+-- Fix: Set ScaleType to Fit so the whole logo is visible
+pcall(function()
+    local bgFrame = Window.Internal.Background
+    local img = bgFrame:FindFirstChildOfClass("ImageLabel")
+    if img then
+        img.ScaleType = Enum.ScaleType.Fit
+    end
+end)
+
 
 -- Get session data from StarshipSession (set by main loader)
 local function GetSessionData()
@@ -1350,81 +960,101 @@ local function FormatRole(role)
 	return role or "VIP"
 end
 
--- Role Tag (VIP/OWNER)
-local roleColor = "#a855f7" -- Purple default
+-- Role Tag (VIP/OWNER) - wrapped in do..end to free registers
+do
+local roleColor = Color3.fromRGB(168, 85, 247) -- Purple default
 if sessionData.Role == "OWNER" then
-	roleColor = "#f59e0b" -- Orange/Gold for OWNER
+	roleColor = Color3.fromRGB(245, 158, 11) -- Amber/Gold for OWNER
 elseif sessionData.Role == "VIP" or sessionData.Role == "MOBILE_VIP" then
-	roleColor = "#a855f7" -- Purple for VIP
+	roleColor = Color3.fromRGB(168, 85, 247) -- Purple for VIP
 end
+
+-- Wait for window to be fully ready before adding tags to topbar
+task.wait(0.5)
 
 local RoleTag = Window:Tag({
 	Title = '<font size="11">' .. FormatRole(sessionData.Role) .. "</font>",
-	Color = Color3.fromHex(roleColor),
+	Color = roleColor,
 })
 
+if DEV_MODE then
+	local DevModeTag = Window:Tag({
+		Title = '<font size="11">DEV MODE</font>',
+		Color = Color3.fromRGB(165, 96, 255),
+	})
+end
+end -- End RoleTag scope
+
 local FPSTag = Window:Tag({
-	Title = '<font size="11">FPS: 0</font>',
-	Icon = "monitor",
-	Color = Color3.fromHex("#22c55e"),
+	Title = '<font size="11">⚡ FPS: --</font>',
+	Color = Color3.fromRGB(68, 216, 114),
 })
 
 local PingTag = Window:Tag({
-	Title = '<font size="11">PING: 0ms</font>',
-	Icon = "wifi",
-	Color = Color3.fromHex("#3b82f6"),
+	Title = '<font size="11">📶 PING: --ms</font>',
+	Color = Color3.fromRGB(75, 155, 255),
 })
 
--- Live update FPS & PING (Optimized for mobile - no per-frame callback)
+-- ══════════════════════════════════════════════════════════════════
+-- LIVE STATUS UPDATES (Guideline: 300-500ms)
+-- ══════════════════════════════════════════════════════════════════
 task.spawn(function()
+	local function clampInt(v, min, max)
+		v = tonumber(v) or min
+		if v < min then return min end
+		if v > max then return max end
+		return math.floor(v + 0.5)
+	end
+
 	local frameCount = 0
-	local lastTime = tick()
+	local lastUpdate = tick()
 	
-	-- Use a separate connection just for counting frames
 	local countConn = RunService.Heartbeat:Connect(function()
 		frameCount = frameCount + 1
 	end)
 	
-	-- Update UI every 2 seconds (less frequent = better performance)
 	while true do
-		task.wait(2)
+		task.wait(0.5) -- 500ms update interval
 		
 		local now = tick()
-		local elapsed = now - lastTime
+		local elapsed = now - lastUpdate
 		if elapsed > 0 then
-			local fps = math.floor(frameCount / elapsed)
-			local fpsColor = "#22c55e" -- Green
+			local rawFps = frameCount / elapsed
+			local fps = clampInt(rawFps, 0, 999)
+			
+			local fpsColor = Color3.fromRGB(68, 216, 114)
 			if fps < 30 then
-				fpsColor = "#ef4444" -- Red
+				fpsColor = Color3.fromRGB(239, 68, 68)
 			elseif fps < 50 then
-				fpsColor = "#eab308" -- Yellow
+				fpsColor = Color3.fromRGB(234, 179, 8)
 			end
 			
 			pcall(function()
-				FPSTag:SetTitle('<font size="11">FPS: ' .. fps .. "</font>")
-				FPSTag:SetColor(Color3.fromHex(fpsColor))
+				FPSTag:SetTitle('<font size="11">⚡ FPS: ' .. fps .. "</font>")
+				FPSTag:SetColor(fpsColor)
 			end)
 			
 			-- Update Ping
-			local ping = 0
+			local rawPing = 0
 			pcall(function()
-				ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+				rawPing = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
 			end)
+			local ping = clampInt(rawPing, 0, 999)
 			
-			local pingColor = "#3b82f6" -- Blue
+			local pingColor = Color3.fromRGB(75, 155, 255)
 			if ping > 150 then
-				pingColor = "#ef4444" -- Red
+				pingColor = Color3.fromRGB(239, 68, 68)
 			elseif ping > 80 then
-				pingColor = "#eab308" -- Yellow
+				pingColor = Color3.fromRGB(234, 179, 8)
 			end
 
 			pcall(function()
-				PingTag:SetTitle('<font size="11">PING: ' .. ping .. "ms</font>")
-				PingTag:SetColor(Color3.fromHex(pingColor))
+				PingTag:SetTitle('<font size="11">📶 PING: ' .. ping .. "ms</font>")
+				PingTag:SetColor(pingColor)
 			end)
 
 			frameCount = 0
-			lastTime = now
+			lastUpdate = now
 		end
 	end
 end)
@@ -1694,6 +1324,15 @@ local function CheckBanStatus()
 				return true
 			end
 		end
+
+		-- ══════════════════════════════════════════════════════════════════
+		-- VIP TIMER SYNC - Update expiry from server to prevent UI manipulation
+		-- ══════════════════════════════════════════════════════════════════
+		if data.isVIP and data.vipExpiry then
+			_G.StarshipServerExpiry = data.vipExpiry
+		elseif data.isVIP and not data.vipExpiry then
+			_G.StarshipServerExpiry = nil -- Lifetime
+		end
 	end
 
 	-- Check if response contains error indicating ban
@@ -1730,6 +1369,8 @@ _G.StarshipCloud = _G.StarshipCloud or {
 	RecordingName = nil,
 	RecordingsCache = {},
 	DropdownValues = {},
+	PrivateRecordingsCache = {},
+	PrivateDropdownValues = {},
 	EventCode = _G.StarshipEventCode or "",
 	Endpoints = {
 		main = "/api/cloud-store-x7k9",
@@ -1747,6 +1388,11 @@ _G.StarshipCloud = _G.StarshipCloud or {
 		loadProgress = 0,
 	}
 }
+
+-- Always refresh event code on each execution (important for direct-run/re-execute)
+if _G.StarshipEventCode and _G.StarshipEventCode ~= "" then
+	_G.StarshipCloud.EventCode = _G.StarshipEventCode
+end
 
 -- Helper function to build cloud API URL with event code and userId
 -- @param params: table of query parameters
@@ -1780,6 +1426,29 @@ local function BuildCloudURL(params, useChunked)
 
 	return url
 end
+
+-- Check whether current user has private-request access
+local function DetectPrivateRequestAccess()
+	local httpService = game:GetService("HttpService")
+	local apiUrl = BuildCloudURL({ list = "private", probe = "1" })
+	local ok, response = pcall(function()
+		return game:HttpGet(apiUrl)
+	end)
+	if not ok or not response then
+		return false
+	end
+
+	local parseOk, data = pcall(function()
+		return httpService:JSONDecode(response)
+	end)
+	if not parseOk or not data then
+		return false
+	end
+
+	return (data.success and data.hasPrivateAccess == true) or false
+end
+
+local HasPrivateRequestAccess = DetectPrivateRequestAccess()
 
 -- Forward declarations for chunked loading functions (defined later in file)
 local PreloadNextChunks
@@ -2165,8 +1834,10 @@ end
 -- ══════════════════════════════════════════════════════════════════
 -- 🏠 DASHBOARD TAB
 -- ══════════════════════════════════════════════════════════════════
+
+
 -- ══════════════════════════════════════════════════════════════════
--- 🏠 TABS SETUP
+-- 🏠 TABS SETUP (STARSHIP PREMIUM)
 -- ══════════════════════════════════════════════════════════════════
 DashboardTab = Window:Tab({
 	Title = "Dashboard",
@@ -2191,161 +1862,6 @@ AvatarTab = Window:Tab({
 	Icon = "solar:user-plus-bold",
 })
 RunService.Heartbeat:Wait()
-
--- ══════════════════════════════════════════════════════════════════
--- 🌟 PRIVATE RECORDINGS SYSTEM (CLOUDFLARE R2)
--- ══════════════════════════════════════════════════════════════════
-task.spawn(function()
-    -- URL menuju file database.json di Cloudflare R2 kamu.
-    -- URL menuju file database.json
-    -- Hardcode domain utama untuk mencegah bug localhost saat Dev Mode aktif
-    local CLOUD_API_BASE = "https://starship-core.my.id"
-    local eventCode = _G.StarshipEventCode or ""
-    local PRIVATE_DB_URL = CLOUD_API_BASE .. "/api/cloud-store-x7k9?recordingId=database&folder=private_recordings&eventCode=" .. eventCode .. "&userId=" .. tostring(game:GetService("Players").LocalPlayer.UserId)
-    
-    local PlayerId = tostring(game:GetService("Players").LocalPlayer.UserId)
-    local HttpService = game:GetService("HttpService")
-    
-    -- Fungsi fetch custom untuk menghindari 'Callback crashed' dari game:HttpGet
-    local function SafeFetch(url)
-        local requestFunc = (syn and syn.request) or (http and http.request) or http_request or fluxus and fluxus.request or request
-        if requestFunc then
-            local success, res = pcall(function()
-                return requestFunc({
-                    Url = url,
-                    Method = "GET"
-                })
-            end)
-            if success and res and res.Body then
-                return true, res.Body
-            end
-            return false, "Request function failed or no body returned."
-        else
-            -- Fallback
-            local success, res = pcall(function() return game:HttpGet(url) end)
-            return success, res
-        end
-    end
-
-    local success, response = SafeFetch(PRIVATE_DB_URL)
-    
-    print("[STARSHIP DEBUG] Fetching PRIVATE_DB_URL:", PRIVATE_DB_URL)
-    print("[STARSHIP DEBUG] PlayerId:", PlayerId)
-    print("[STARSHIP DEBUG] Fetch Success:", success)
-    
-    if not success then
-        print("[STARSHIP ERROR] HTTP GET FAILED:", tostring(response))
-    end
-    
-    if success and response then
-        print("[STARSHIP DEBUG] Response Length:", #response)
-        
-        local parseSuccess, dbData = pcall(function()
-            return HttpService:JSONDecode(response)
-        end)
-        
-        print("[STARSHIP DEBUG] Parse JSON Success:", parseSuccess)
-        if not parseSuccess then
-            print("[STARSHIP ERROR] Failed parsing JSON. Raw Output (First 150 chars):")
-            print(string.sub(tostring(response), 1, 150))
-        end
-        
-        if parseSuccess and type(dbData) == "table" and dbData[PlayerId] then
-            
-            print("[STARSHIP DEBUG] User found in database!")
-            local userData = dbData[PlayerId]
-            
-            -- User ada di database! Buat tab khusus
-            local PrivateTab = Window:Tab({
-                Title = "Private",
-                Icon = "solar:star-bold",
-            })
-            
-            PrivateTab:Paragraph({
-                Title = "Welcome VIP, " .. (userData.RobloxName or "Player") .. "!",
-                Desc = "Ini adalah daftar recording yang khusus dibuat untuk kamu."
-            })
-            
-            if userData.Recordings and type(userData.Recordings) == "table" then
-                for _, recName in ipairs(userData.Recordings) do
-                    PrivateTab:Button({
-                        Title = "Load: " .. recName,
-                        Desc = "Jalankan private recording ini",
-                        Callback = function()
-                            -- Menggunakan CLOUD_API_BASE agar sesuai server terbaru
-                            -- Dan sekarang menggunakan ENDPOINT API, BUKAN link file mentah!
-                            local recUrl = CLOUD_API_BASE .. "/api/cloud-store-x7k9?recordingId=" .. recName .. "&folder=private_recordings/" .. PlayerId .. "&eventCode=" .. eventCode .. "&userId=" .. PlayerId
-                            
-                            local successLoad, recContent = SafeFetch(recUrl)
-                            
-                            if successLoad and recContent then
-                                local parseSuccess, data = pcall(function()
-                                    return HttpService:JSONDecode(recContent)
-                                end)
-                                
-                                if parseSuccess and data then
-                                    _G.StarshipCloud = _G.StarshipCloud or {}
-                                    _G.StarshipCloud.ChunkedState = _G.StarshipCloud.ChunkedState or {}
-                                    
-                                    if data.data then
-                                        _G.StarshipCloud.RecordingData = data.data
-                                    elseif data.recording then
-                                        _G.StarshipCloud.RecordingData = data.recording
-                                    else
-                                        _G.StarshipCloud.RecordingData = data
-                                    end
-                                    
-                                    _G.StarshipCloud.RecordingName = recName
-                                    _G.StarshipCloud.ChunkedState.isChunked = false
-                                    CloudRecordingLoaded = true
-                                    
-                                    pcall(function() selectedFile = "CLOUD:" .. recName end)
-                                    
-                                    -- Load menggunakan StarSpacePlayback global module
-                                    if getgenv().StarSpacePlayback and getgenv().StarSpacePlayback.LoadData then
-                                        getgenv().StarSpacePlayback.LoadData(recContent)
-                                    end
-                                    
-                                    -- Munculkan GUI Mini Player & Buka section Playback
-                                    pcall(function()
-                                        if CreatePlaybackControls then
-                                            CreatePlaybackControls()
-                                        end
-                                    end)
-                                    
-                                    WindUI:Notify({
-                                        Title = "🔐 Private Load",
-                                        Content = "Berhasil memuat: " .. recName,
-                                        Duration = 4
-                                    })
-                                else
-                                    WindUI:Notify({
-                                        Title = "Private Error",
-                                        Content = "JSON rusak atau gagal di-parse (Format salah).",
-                                        Duration = 4
-                                    })
-                                end
-                            else
-                                WindUI:Notify({
-                                    Title = "Private Error",
-                                    Content = "Gagal mengunduh file " .. recName .. " dari server.",
-                                    Duration = 4
-                                })
-                            end
-                        end
-                    })
-                end
-            else
-                PrivateTab:AddParagraph({
-                    Title = "Kosong",
-                    Desc = "Belum ada file recording untuk akun kamu saat ini."
-                })
-            end
-        end
-    end
-end)
-RunService.Heartbeat:Wait()
-
 
 -- ══════════════════════════════════════════════════════════════════
 -- UTILITY FUNCTIONS FOR DASHBOARD
@@ -2573,6 +2089,7 @@ end
 -- 🏠 DASHBOARD CONTENT
 -- ══════════════════════════════════════════════════════════════════
 -- 🏠 DASHBOARD CONTENT (Boreal MultiSection)
+task.wait(0.2) -- Memberi nafas render frame
 pcall(function()
 	_G.DashboardMulti = DashboardTab:MultiSection({
 		Title = "Dashboard Overview",
@@ -2623,12 +2140,6 @@ _G.LiveStatsCard = _G.DashStatusContainer:Paragraph({
 		.. #Players:GetPlayers()
 		.. "/"
 		.. Players.MaxPlayers
-		.. "\n"
-		.. "Ping: "
-		.. GetPing()
-		.. " ms\n"
-		.. "FPS: "
-		.. GetFPS()
 		.. "\n"
 		.. "Server Age: "
 		.. GetServerAge(),
@@ -2685,6 +2196,7 @@ local function FormatRole(role)
 end
 
 -- 👤 ACCOUNT CONTENT (Boreal MultiSection)
+task.wait(0.2) -- Jeda antar pemuatan tab utama
 pcall(function()
 	_G.AccountMulti = AccountTab:MultiSection({
 		Title = "Account Management",
@@ -2709,6 +2221,7 @@ _G.AccVIPContainer:Section({ Title = "VIP Status", Desc = "Manage your subscript
 _G.AccVIPContainer:Space({ Columns = 0.5 })
 
 -- Parse VIP expiry time from sessionData
+do -- Wrap VIP status in scope to save registers
 local vipExpiryTime = nil
 local vipParagraph = nil
 
@@ -2754,16 +2267,13 @@ local function FormatTimeRemaining(seconds)
 end
 
 -- Calculate VIP expiry time
--- Calculate VIP expiry time
--- Fix: Prioritize absolute 'Expiry' timestamp from loader over relative 'Duration' string
+-- SECURITY: Only trust absolute Expiry timestamp from server, never parse Duration string
 if sessionData.Expiry and type(sessionData.Expiry) == "number" then
 	vipExpiryTime = sessionData.Expiry
 elseif sessionData.Expiry and type(sessionData.Expiry) == "string" and tonumber(sessionData.Expiry) then
-    -- Handle string timestamp if passed as string
 	vipExpiryTime = tonumber(sessionData.Expiry)
 else
-	-- Fallback: Calculate from duration string (Warning: This resets timer every session if used!)
-	vipExpiryTime = ParseVIPExpiry(sessionData.Duration)
+	vipExpiryTime = nil -- Lifetime or unknown - will be synced by periodic server check
 end
 
 -- Initial VIP status description
@@ -2789,16 +2299,23 @@ vipParagraph = _G.AccVIPContainer:Paragraph({
 	Desc = GetVIPStatusDesc(),
 })
 
--- Update VIP timer every second
-if vipExpiryTime then
-	task.spawn(function()
-		while true do
-			task.wait(1)
-			
+-- Update VIP timer every second (with server sync)
+task.spawn(function()
+	while true do
+		task.wait(1)
+
+		-- Sync expiry from server periodic check (prevents UI manipulation)
+		if _G.StarshipServerExpiry then
+			vipExpiryTime = _G.StarshipServerExpiry
+		elseif _G.StarshipServerExpiry == nil and vipExpiryTime ~= nil then
+			-- Server says lifetime but we had expiry — could be upgrade or manipulation
+			-- Keep current value, server periodic check handles access control
+		end
+
+		if vipExpiryTime then
 			local remaining = vipExpiryTime - os.time()
-			
+
 			if remaining <= 0 then
-				-- VIP expired
 				pcall(function()
 					if vipParagraph and vipParagraph.SetDesc then
 						vipParagraph:SetDesc('<font size="16">Role: '
@@ -2810,7 +2327,6 @@ if vipExpiryTime then
 				end)
 				break
 			else
-				-- Update countdown
 				pcall(function()
 					if vipParagraph and vipParagraph.SetDesc then
 						vipParagraph:SetDesc(GetVIPStatusDesc())
@@ -2818,8 +2334,9 @@ if vipExpiryTime then
 				end)
 			end
 		end
-	end)
-end
+	end
+end)
+end -- End VIP scope
 
 -- ══════════════════════════════════════════════════════════════════
 -- GAME DETECTION
@@ -3390,9 +2907,7 @@ if not AnimDB or not next(AnimDB) then
 	}
 end -- End of fallback AnimDB
 
-local CurrentAnimType = "Idle"
-local AnimTypes = { "Idle", "Walk", "Run", "Jump", "Fall", "Swim", "SwimIdle", "Climb" }
-local ANIM_FILE = "Starship_Animations.json"
+local CurrentAnimType, AnimTypes, ANIM_FILE, OriginalAnims = "Idle", { "Idle", "Walk", "Run", "Jump", "Fall", "Swim", "SwimIdle", "Climb" }, "Starship_Animations.json", {}
 
 -- Load saved animations
 if isfile and isfile(ANIM_FILE) then
@@ -3414,7 +2929,7 @@ local function SaveAnimDB()
 	end
 end
 
-local OriginalAnims = {}
+-- OriginalAnims moved above to consolidate declarations
 local function CaptureOriginalAnims()
 	local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 	local animate = char:WaitForChild("Animate", 10)
@@ -3508,6 +3023,7 @@ local function SetAnimation(animType, animId)
 end
 
 -- 🎭 ANIMATIONS CONTENT (Boreal MultiSection)
+task.wait(0.2) -- Pembuatan ribuan objek animasi sangat berat, perlu jeda
 pcall(function()
 	_G.AnimMulti = CustomAnimTab:MultiSection({
 		Title = "Animations",
@@ -3577,6 +3093,7 @@ end
 _G.AnimManageContainer:Section({ Title = "➕ Animation Manager", TextSize = 16 })
 _G.AnimManageContainer:Divider()
 
+do -- Wrap Animation Manager variables in scope
 local newAnimName = ""
 local newAnimID = ""
 
@@ -3622,11 +3139,12 @@ _G.AnimManageContainer:Button({
 		AnimDB[CurrentAnimType][newAnimName] = newAnimID
 		SaveAnimDB()
 		SetAnimation(CurrentAnimType, newAnimID)
-		WindUI:Notify({ Title = "Saved", Content = "Added custom animation", Duration = 2 })
 	end,
 })
+end -- End Animation Manager scope
 
 -- 🎭 AVATAR CONTENT (Boreal MultiSection)
+task.wait(0.1)
 pcall(function()
 	_G.AvatarMulti = AvatarTab:MultiSection({
 		Title = "Avatar Customizer",
@@ -3732,6 +3250,7 @@ _G.AvCloneContainer:Section({ Title = "📋 Clone by Username", Desc = "Enter an
 _G.AvCloneContainer:Space({ Columns = 1 })
 
 -- Store username input
+do -- Wrap Avatar Username Input in scope
 local avatarUsernameInput = ""
 
 _G.AvCloneContainer:Input({
@@ -3821,6 +3340,7 @@ _G.AvCloneContainer:Button({
 		end)
 	end,
 })
+end -- End Avatar Clone scope
 
 AvatarTab:Divider()
 
@@ -3912,14 +3432,11 @@ SkyBoxTab = Window:Tab({
 })
 task.wait(0.1)
 
+task.wait(0.1)
 SkyBoxTab:Section({ Title = "🌌 Skybox Changer", Desc = "Modify the atmosphere and environment visuals" })
 SkyBoxTab:Space({ Columns = 0.5 })
 
-local originalSky = nil
-local originalAtmosphere = nil
-local currentSkybox = "Default"
-local skyboxBypassConnection = nil
-local RunService = game:GetService("RunService")
+local originalSky, originalAtmosphere, currentSkybox, skyboxBypassConnection = nil, nil, "Default", nil
 
 local SkyboxPresets = {
 	["Default"] = nil,
@@ -4106,6 +3623,7 @@ ListMapTab = Window:Tab({
 task.wait(0.1)
 
 -- 🚶 AUTO WALK CONTENT (Synchronous Initialization to prevent race conditions)
+task.wait(0.2)
 pcall(function()
 	_G.AutoWalkMulti = ListMapTab:MultiSection({
 		Title = "Auto Walk System",
@@ -4118,6 +3636,9 @@ pcall(function()
 	_G.AWRecordingTab = _G.AutoWalkMulti:Tab({ Title = "Recording", Icon = "solar:folder-2-bold" })
 	_G.AWPlaybackTab = _G.AutoWalkMulti:Tab({ Title = "Playback", Icon = "solar:play-bold" })
 	_G.AWProtectionTab = _G.AutoWalkMulti:Tab({ Title = "Protection", Icon = "solar:shield-bold" })
+	if HasPrivateRequestAccess then
+		_G.AWPrivateRequestTab = _G.AutoWalkMulti:Tab({ Title = "Private Request", Icon = "solar:lock-password-bold" })
+	end
 
 	-- Pre-create sections (Containers for elements)
 	_G.PlaybackSectionRef = _G.AWPlaybackTab:Section({
@@ -4142,6 +3663,7 @@ pcall(function()
 	_G.AWRecordingContainer = _G.AWRecordingTab
 	_G.AWPlaybackContainer = _G.PlaybackSectionRef
 	_G.AWProtectionContainer = _G.ProtectionSectionRef
+	_G.AWPrivateRequestContainer = _G.AWPrivateRequestTab
 end)
 
 -- Finalize containers
@@ -4156,6 +3678,7 @@ ToolsTab = Window:Tab({
 })
 task.wait(0.1)
 
+task.wait(0.1)
 pcall(function()
 	_G.PlayerMulti = ToolsTab:MultiSection({
 		Title = "Player Enhancement",
@@ -4196,29 +3719,115 @@ _G.PlayerSettingsContainer:Slider({
 	end,
 })
 
+-- Invisible Core (lightweight)
+_G.StarshipInvisibleCore = _G.StarshipInvisibleCore or {
+	enabled = false,
+	originalTransparency = {},
+	loopToken = 0,
+}
+
+local function InvisApplyVisual(char)
+	if not char then return end
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+			if _G.StarshipInvisibleCore.originalTransparency[part] == nil then
+				_G.StarshipInvisibleCore.originalTransparency[part] = {
+					transparency = part.Transparency,
+					localTransparency = part.LocalTransparencyModifier,
+				}
+			end
+			-- Keep body visible for the local player while still reducing flicker.
+			part.LocalTransparencyModifier = 0.35
+		end
+	end
+end
+
+local function InvisRestoreVisual()
+	for part, tr in pairs(_G.StarshipInvisibleCore.originalTransparency) do
+		if part and part.Parent then
+			if type(tr) == "table" then
+				if typeof(tr.transparency) == "number" then
+					part.Transparency = tr.transparency
+				end
+				if typeof(tr.localTransparency) == "number" then
+					part.LocalTransparencyModifier = tr.localTransparency
+				else
+					part.LocalTransparencyModifier = 0
+				end
+			elseif typeof(tr) == "number" then
+				-- Backward compatibility for old cached format
+				part.Transparency = tr
+				part.LocalTransparencyModifier = 0
+			end
+		end
+	end
+	_G.StarshipInvisibleCore.originalTransparency = {}
+end
+
+local InvisibleCoreToggle = _G.SafeToggleKeybind(_G.PlayerSettingsContainer, {
+	Title = "Invisible Core",
+	Desc = "Enable lightweight invisible core",
+	Value = false,
+	Callback = function(state)
+		_G.StarshipInvisibleCore.enabled = state
+		_G.StarshipInvisibleCore.loopToken = _G.StarshipInvisibleCore.loopToken + 1
+		local myToken = _G.StarshipInvisibleCore.loopToken
+
+		if not state then
+			InvisRestoreVisual()
+			return
+		end
+
+		task.spawn(function()
+			while _G.StarshipInvisibleCore.enabled and myToken == _G.StarshipInvisibleCore.loopToken do
+				local char = LocalPlayer.Character
+				local hum = char and char:FindFirstChildOfClass("Humanoid")
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				if hum and root and root.Parent then
+					InvisApplyVisual(char)
+					local ocf = root.CFrame
+					local oco = hum.CameraOffset
+					local dcf = ocf * CFrame.new(0, -2500, 0)
+					root.CFrame = dcf
+					hum.CameraOffset = dcf:ToObjectSpace(CFrame.new(ocf.Position)).Position
+					RunService.RenderStepped:Wait()
+					if root.Parent then root.CFrame = ocf end
+					if hum.Parent then hum.CameraOffset = oco end
+				end
+				task.wait()
+			end
+		end)
+	end,
+})
+
+if not _G.StarshipInvisibleCoreCharConn then
+	_G.StarshipInvisibleCoreCharConn = LocalPlayer.CharacterAdded:Connect(function()
+		if not _G.StarshipInvisibleCore.enabled then
+			InvisRestoreVisual()
+		end
+	end)
+end
+
 -- ══════════════════════════════════════════════════════════════════
 -- 🎯 ADMIN ESP SYSTEM (File-level scope for toggle callbacks)
 -- Includes: Box ESP, Chams, Health Bar
 -- ══════════════════════════════════════════════════════════════════
-local AdminESPDrawings = {}
-local AdminESPTrackedPlayers = {}
-local AdminESPRenderConnection = nil
 local AdminESPToggle = nil
-local ESPGeneration = 0 -- Increments each toggle, async callbacks check this to avoid stale updates
-local ESPHandlerConnections = {} -- Store PlayerAdded/CharacterAdded connections for cleanup
-local AdminChatConnections = {} -- Store chat monitoring connections for cleanup
-
--- Check if Drawing API exists
-local HasDrawingAPI = pcall(function()
-	local test = Drawing.new("Line")
-	pcall(function() test:Remove() end)
-	pcall(function() test.Visible = false end)
-end)
-if not HasDrawingAPI then
-	warn("[ESP] ⚠️ Drawing API not available — Box ESP will be disabled, only Chams/Highlight will work")
-end
-
 local espOk, espErr = pcall(function()
+	local AdminESPDrawings, AdminESPTrackedPlayers = {}, {}
+	local AdminESPRenderConnection = nil
+	local ESPGeneration = 0 -- Increments each toggle, async callbacks check this to avoid stale updates
+	local ESPHandlerConnections, AdminChatConnections = {}, {} -- PlayerAdded/CharacterAdded + chat monitoring connections
+
+	-- Check if Drawing API exists (Wrapped inside section to save global registers)
+	local HasDrawingAPI = pcall(function()
+		local test = Drawing.new("Line")
+		pcall(function() test:Remove() end)
+		pcall(function() test.Visible = false end)
+	end)
+	if not HasDrawingAPI then
+		warn("[ESP] ⚠️ Drawing API not available — Box ESP will be disabled")
+	end
 
 local function CreateDrawing(drawType, props)
 	if not HasDrawingAPI then return nil end
@@ -5721,26 +5330,20 @@ _G.PlayerSettingsContainer:Slider({
 -- 🚶 AUTO WALK TAB CONTENT
 -- ══════════════════════════════════════════════════════════════════
 
--- Constants for Playback
-local HttpService = game:GetService("HttpService")
-local FOLDER_NAME = "StarshipCore"
-local MERGER_FOLDER = FOLDER_NAME .. "/StarshipMerger"
-
--- Create folders if not exist (with error handling)
-local folderStatus = "Unknown"
-pcall(function()
-	if isfolder then
-		if not isfolder(FOLDER_NAME) then
-			makefolder(FOLDER_NAME)
+-- HttpService already declared above (line 3028)
+local MERGER_FOLDER = "StarshipCore/StarshipMerger"
+do -- Wrap folder init to free registers
+	pcall(function()
+		if isfolder then
+			if not isfolder("StarshipCore") then
+				makefolder("StarshipCore")
+			end
+			if not isfolder(MERGER_FOLDER) then
+				makefolder(MERGER_FOLDER)
+			end
 		end
-		if not isfolder(MERGER_FOLDER) then
-			makefolder(MERGER_FOLDER)
-		end
-		folderStatus = isfolder(MERGER_FOLDER) and "OK" or "Failed"
-	else
-		folderStatus = "No File API"
-	end
-end)
+	end)
+end
 
 -- Playback State
 local PlaybackState = {
@@ -5802,9 +5405,7 @@ local function GaussianWeight(distance, sigma)
 	return math.exp(-(distance * distance) / (2 * sigma * sigma))
 end
 
-local function CFToTbl(cf)
-	return { cf:GetComponents() }
-end
+-- CFToTbl removed (unused) to save local registers
 
 local function TblToCF(t)
 	return CFrame.new(unpack(t))
@@ -6154,93 +5755,7 @@ local function GetSmoothedFrames(frames, strength)
 	return processedFrames
 end
 
--- Tool Handling
-local function ToolColorMatches(tool, recordedColor)
-	if not recordedColor then return true end
-	local handle = tool:FindFirstChild("Handle")
-	if handle and handle:IsA("BasePart") then
-		local currentColor = handle.BrickColor.Name
-		return currentColor == recordedColor
-	end
-	return true
-end
-
-local function ToolConfigMatches(tool, recordedConfig)
-	if not recordedConfig then return true end
-	local config = tool:FindFirstChild("Configuration") or tool:FindFirstChild("Config")
-	if config then
-		for key, expectedValue in pairs(recordedConfig) do
-			local valObj = config:FindFirstChild(key)
-			if valObj and valObj:IsA("ValueBase") then
-				if valObj.Value ~= expectedValue then return false end
-			end
-		end
-	end
-	return true
-end
-
-local function UpdateToolEquip(char, recordedToolName, recordedToolTip, recordedToolColor, recordedToolConfig)
-	if not char then return end
-	local now = os.clock()
-	if now - PlaybackState.lastToolEquipTime < PlaybackState.TOOL_THROTTLE_INTERVAL then return end
-	
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if not hum then return end
-	
-	local currentTool = char:FindFirstChildOfClass("Tool")
-	local currentToolName = currentTool and currentTool.Name or nil
-	
-	if not recordedToolName then
-		if currentTool then
-			PlaybackState.lastToolEquipTime = now
-			PlaybackState.lastEquippedTool = nil
-			hum:UnequipTools()
-		end
-		return
-	end
-	
-	if currentTool and currentToolName == recordedToolName then
-		PlaybackState.lastEquippedTool = currentTool
-		return
-	end
-	
-	PlaybackState.lastToolEquipTime = now
-	local backpack = LocalPlayer:FindFirstChild("Backpack")
-	if not backpack then return end
-	
-	local toolToEquip = nil
-	if recordedToolTip or recordedToolColor or recordedToolConfig then
-		for _, tool in pairs(backpack:GetChildren()) do
-			if tool:IsA("Tool") and tool.Name == recordedToolName then
-				local tipMatch = (not recordedToolTip) or (tool.ToolTip == recordedToolTip)
-				local colorMatch = ToolColorMatches(tool, recordedToolColor)
-				local configMatch = ToolConfigMatches(tool, recordedToolConfig)
-				if tipMatch and colorMatch and configMatch then
-					toolToEquip = tool
-					break
-				end
-			end
-		end
-	end
-	
-	if not toolToEquip and recordedToolTip then
-		for _, tool in pairs(backpack:GetChildren()) do
-			if tool:IsA("Tool") and tool.Name == recordedToolName and tool.ToolTip == recordedToolTip then
-				toolToEquip = tool
-				break
-			end
-		end
-	end
-	
-	if not toolToEquip then
-		toolToEquip = backpack:FindFirstChild(recordedToolName)
-	end
-	
-	if toolToEquip and toolToEquip:IsA("Tool") and toolToEquip ~= currentTool then
-		PlaybackState.lastEquippedTool = toolToEquip
-		hum:EquipTool(toolToEquip)
-	end
-end
+-- ToolColorMatches, ToolConfigMatches, UpdateToolEquip removed (unused) to save local registers
 
 -- Reset character state
 local function ResetCharacter()
@@ -6293,10 +5808,7 @@ end
 -- ═══════════════════════════════════════════════════════════════════
 -- PATH VISUALIZATION (PREMIUM ENHANCED)
 -- ═══════════════════════════════════════════════════════════════════
-local isPathVisualsEnabled = false
-local pathVisualsFolder = nil
-local pathAnimationConnection = nil
-local currentPositionMarker = nil
+local isPathVisualsEnabled, pathVisualsFolder, pathAnimationConnection, currentPositionMarker = false, nil, nil, nil
 
 -- Premium gradient colors (Green → Cyan → Blue → Purple → Pink)
 local PATH_GRADIENT_COLORS = {
@@ -7404,24 +6916,7 @@ local selectedFile = nil
 local selectedFileDisplay = nil -- Reference to paragraph element
 
 -- Function to select file (Defined early)
-local function SelectFile(fileName)
-	selectedFile = fileName
-	local displayName = fileName:gsub("%.json$", "")
-
-	-- Update the paragraph display
-	if selectedFileDisplay then
-		pcall(function()
-			selectedFileDisplay:SetTitle("🎬 " .. displayName)
-			selectedFileDisplay:SetDesc("Ready to play • Tap Play to start")
-		end)
-	end
-
-	WindUI:Notify({
-		Title = "File Selected",
-		Content = displayName,
-		Duration = 1.5,
-	})
-end
+-- SelectFile removed (unused) to save local registers
 
 -- ══════════════════════════════════════════════════════════════════
 -- CLOUD RECORDINGS (Main file source for mobile)
@@ -7612,18 +7107,13 @@ _G.AWRecordingContainer:Button({
 _G.AWRecordingContainer:Space()
 
 -- Cloud Recordings Dropdown
-local selectedCloudRecording = nil
-local CloudRecordingLoaded = false -- Flag to show playback controls
+local CloudRecordingLoaded = false
 
 -- ══════════════════════════════════════════════════════════════════
 -- CHUNKED LOADING - DISABLED (Mobile uses direct loading now)
 -- Keeping code for potential future use
 -- ══════════════════════════════════════════════════════════════════
-local CHUNKED_LOADING_ENABLED = false -- Set to true to re-enable chunked loading
-
--- Track retry attempts per chunk to prevent infinite loops
-local ChunkRetryCount = {}
-local MAX_CHUNK_RETRIES = 2 -- Maximum retry attempts per chunk
+local CHUNKED_LOADING_ENABLED, ChunkRetryCount, MAX_CHUNK_RETRIES = false, {}, 2
 
 -- Helper function to load a single chunk (DISABLED)
 local function LoadChunk(recordingId, chunkIndex, callback)
@@ -7802,21 +7292,7 @@ PreloadNextChunks = function(recordingId, currentChunkIndex, numToPreload)
 end
 
 -- Helper function to assemble all loaded chunks into frame data
-local function AssembleFrameData()
-	local allFrames = {}
-
-	-- Assemble chunks in order
-	for chunkIdx = 0, _G.StarshipCloud.ChunkedState.totalChunks - 1 do
-		local chunkData = _G.StarshipCloud.ChunkedState.loadedChunks[chunkIdx]
-		if chunkData and chunkData.frames then
-			for _, frame in ipairs(chunkData.frames) do
-				table.insert(allFrames, frame)
-			end
-		end
-	end
-
-	return allFrames
-end
+-- AssembleFrameData removed (unused) to save local registers
 
 -- Forward declaration for direct loading function (used as fallback)
 local LoadCloudRecordingDirect
@@ -7840,7 +7316,7 @@ local function LoadCloudRecording(recInfo)
 	-- Note: No collectgarbage() here — it blocks 100ms+ on mobile and causes visible lag
 	-- Lua GC runs automatically and handles this fine
 
-	selectedCloudRecording = recInfo
+	-- selectedCloudRecording removed (unused)
 	CloudRecordingLoaded = false -- Reset until loaded
 
 	-- ═══════════════════════════════════════════════════════════════
@@ -8120,14 +7596,162 @@ CloudRecordingDropdown = _G.AWRecordingContainer:Dropdown({
 })
 
 -- ══════════════════════════════════════════════════════════════════
+
+-- Private Request tab (only available for assigned users)
+if _G.AWPrivateRequestContainer then
+	local PrivateRecordingDropdown = nil
+	local PrivateParagraph = nil
+
+	local function UpdatePrivateCloudUI()
+		if not PrivateRecordingDropdown then return end
+
+		local values = _G.StarshipCloud.PrivateDropdownValues
+		if #values == 0 then
+			values = {"No private requests"}
+		end
+
+		pcall(function()
+			if typeof(PrivateRecordingDropdown) ~= "table" then return end
+			if PrivateRecordingDropdown.SetValues then
+				PrivateRecordingDropdown:SetValues(values)
+			elseif PrivateRecordingDropdown.Refresh then
+				PrivateRecordingDropdown:Refresh(values)
+			elseif PrivateRecordingDropdown.UpdateValues then
+				PrivateRecordingDropdown:UpdateValues(values)
+			end
+		end)
+
+		if PrivateParagraph then
+			pcall(function()
+				PrivateParagraph:SetTitle("[PRIVATE] Requests (" .. #_G.StarshipCloud.PrivateDropdownValues .. ")")
+			end)
+		end
+	end
+
+	local function ReloadPrivateRequestList(showNotify)
+		local httpService = game:GetService("HttpService")
+		if _G.StarshipCloud.PrivateListLoading then
+			return
+		end
+		_G.StarshipCloud.PrivateListLoading = true
+
+		if showNotify then
+			WindUI:Notify({
+				Title = "Refreshing...",
+				Content = "Reloading private requests...",
+				Duration = 2,
+			})
+		end
+
+		local newValues = {}
+		local newCache = {}
+
+		local apiUrl = BuildCloudURL({ list = "private" })
+		local success, response = pcall(function()
+			return game:HttpGet(apiUrl)
+		end)
+
+		if success and response then
+			local parseSuccess, data = pcall(function()
+				return httpService:JSONDecode(response)
+			end)
+
+			if parseSuccess and data and data.success and data.recordings then
+				for _, rec in ipairs(data.recordings) do
+					local displayName = "[P] " .. (rec.name or rec.recordingId)
+					table.insert(newValues, displayName)
+					local recEntry = {
+						name = rec.name or rec.recordingId,
+						recordingId = rec.recordingId,
+					}
+					-- Cache with multiple keys to avoid dropdown value mismatch
+					newCache[displayName] = recEntry
+					newCache[tostring(rec.recordingId)] = recEntry
+					newCache[tostring(rec.name or rec.recordingId)] = recEntry
+				end
+
+				table.sort(newValues, function(a, b)
+					return string.lower(a) < string.lower(b)
+				end)
+
+				-- Atomic swap after successful parse/load
+				_G.StarshipCloud.PrivateDropdownValues = newValues
+				_G.StarshipCloud.PrivateRecordingsCache = newCache
+			end
+		end
+
+		_G.StarshipCloud.PrivateListLoading = false
+		UpdatePrivateCloudUI()
+	end
+
+	PrivateParagraph = _G.AWPrivateRequestContainer:Paragraph({
+		Title = "[PRIVATE] Requests (Loading...)",
+		Desc = "Only your assigned private recordings are shown here.",
+	})
+
+	_G.AWPrivateRequestContainer:Button({
+		Title = "Refresh Private List",
+		Desc = "Reload your private request recordings",
+		Callback = function()
+			ReloadPrivateRequestList(true)
+		end,
+	})
+
+	_G.AWPrivateRequestContainer:Space()
+
+	PrivateRecordingDropdown = _G.AWPrivateRequestContainer:Dropdown({
+		Title = "Select Private Recording",
+		Desc = "Only visible to assigned user",
+		Values = _G.StarshipCloud.PrivateDropdownValues,
+		SearchBarEnabled = true,
+		Callback = function(selected)
+			if _G.StarshipCloud.PrivateListLoading then
+				WindUI:Notify({
+					Title = "Please wait",
+					Content = "Private list is still loading...",
+					Duration = 1.5,
+				})
+				return
+			end
+
+			if type(selected) == "table" then
+				selected = selected[1] or selected.Value or selected.value or selected.Title or selected.title
+			end
+			selected = tostring(selected or "")
+
+			if selected == "No private requests" then
+				return
+			end
+
+			local recInfo = _G.StarshipCloud.PrivateRecordingsCache[selected]
+			local normalized = selected:gsub("^%[P%]%s*", ""):gsub("^%s+", ""):gsub("%s+$", "")
+			if not recInfo and type(selected) == "string" then
+				recInfo = _G.StarshipCloud.PrivateRecordingsCache[normalized]
+			end
+			if not recInfo then
+				-- Hard fallback: use selected value directly as recordingId
+				if normalized == "" or normalized == "No private requests" then
+					return
+				end
+				recInfo = {
+					name = normalized,
+					recordingId = normalized,
+				}
+			end
+
+			LoadCloudRecording(recInfo)
+		end,
+	})
+
+	task.spawn(function()
+		ReloadPrivateRequestList(false)
+	end)
+end
 -- 2. PLAYBACK CONTROLS (Bottom)
 -- ══════════════════════════════════════════════════════════════════
 
 -- Mini Player Logic (Raw GUI) - Compact Modern Design with 3 Buttons
-local MiniPlayerGui = nil
-local MiniPlayerAnimations = {}
-local MiniPlayerToggle = nil
-local PathVisToggle, RespawnEndToggle -- Global references for sync
+local MiniPlayerGui, MiniPlayerAnimations, MiniPlayerToggle, PathVisToggle, RespawnEndToggle = nil, {}, nil, nil, nil
 
 -- Pre-load Icons to prevent delay/pop-in
 local MiniPlayerIcons = {
@@ -8158,7 +7782,7 @@ local function ToggleMiniPlayer(state)
 		
 		-- Smaller, more compact size (Reduceed further as requested)
 		local mainFrame = Instance.new("Frame")
-		mainFrame.Name, mainFrame.Size, mainFrame.Position = "MiniPlayerMain", UDim2.fromOffset(280, 90), UDim2.new(0.5, -140, 0.78, 0)
+		mainFrame.Name, mainFrame.Size, mainFrame.Position = "MiniPlayerMain", UDim2.fromOffset(300, 95), UDim2.new(0.5, -150, 0.78, 0)
 		mainFrame.BackgroundColor3, mainFrame.BorderSizePixel, mainFrame.Active, mainFrame.Draggable = Color3.fromRGB(0, 0, 0), 0, true, true
 		mainFrame.ClipsDescendants = true
 		mainFrame.Parent = screen
@@ -8192,8 +7816,8 @@ local function ToggleMiniPlayer(state)
 		mainFrame.Size = UDim2.fromOffset(0, 0)
 		mainFrame.Position = UDim2.new(0.5, 0, 0.78, 0)
 		TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			Size = UDim2.fromOffset(280, 90),
-			Position = UDim2.new(0.5, -140, 0.78, 0),
+			Size = UDim2.fromOffset(300, 95),
+			Position = UDim2.new(0.5, -150, 0.78, 0),
 		}):Play()
 
 		-- Title with stroke for clarity
@@ -8229,11 +7853,12 @@ local function ToggleMiniPlayer(state)
 		artist.Parent = mainFrame
 		
 		-- Buttons Area Adjusted for Compact Look
-		local btnCenterY = 65 -- Relative to 90 Height
+		local btnCenterY = 68 -- Relative to 95 Height
 		
-		local function createBtn(iconId, sz, xPos, cb, isIcon, textLabel)
+		local function createBtn(iconId, sz, xPos, cb, isIcon, textLabel, yPos, tooltipText)
 			local b = Instance.new("TextButton")
-			b.Size, b.Position, b.AnchorPoint = UDim2.fromOffset(sz, sz), UDim2.new(xPos, 0, 0, btnCenterY), Vector2.new(0.5, 0.5)
+			local finalY = yPos or btnCenterY
+			b.Size, b.Position, b.AnchorPoint = UDim2.fromOffset(sz, sz), UDim2.new(xPos, 0, 0, finalY), Vector2.new(0.5, 0.5)
 			b.BackgroundTransparency = isIcon and 0.2 or 0
 			b.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 			b.Text = textLabel or ""
@@ -8263,11 +7888,47 @@ local function ToggleMiniPlayer(state)
 				img.Parent = b
 			end
 			
+			if tooltipText and tooltipText ~= "" then
+				local tooltip = Instance.new("TextLabel")
+				tooltip.Name = "Tooltip"
+				tooltip.Text = tooltipText
+				tooltip.Size = UDim2.fromOffset(100, 20)
+				tooltip.Position = UDim2.new(0.5, 0, 0, -28) -- Above the button
+				tooltip.AnchorPoint = Vector2.new(0.5, 1)
+				tooltip.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+				tooltip.TextColor3 = Color3.fromRGB(255, 255, 255)
+				tooltip.Font = Enum.Font.Gotham
+				tooltip.TextSize = 11
+				tooltip.ZIndex = 10
+				tooltip.Visible = false
+				tooltip.Parent = b
+				Instance.new("UICorner", tooltip).CornerRadius = UDim.new(0, 4)
+			end
+
+			-- Hover effect
+			local originalColor = b.BackgroundColor3
+			b.MouseEnter:Connect(function()
+				b:SetAttribute("IsHovered", true)
+				local targetColor = b:GetAttribute("BaseBgColor") or originalColor
+				local h, s, v = targetColor:ToHSV()
+				b.BackgroundColor3 = Color3.fromHSV(h, s, math.clamp(v + 0.15, 0, 1))
+				
+				local tooltip = b:FindFirstChild("Tooltip")
+				if tooltip then tooltip.Visible = true end
+			end)
+			b.MouseLeave:Connect(function()
+				b:SetAttribute("IsHovered", false)
+				b.BackgroundColor3 = b:GetAttribute("BaseBgColor") or originalColor
+				
+				local tooltip = b:FindFirstChild("Tooltip")
+				if tooltip then tooltip.Visible = false end
+			end)
+			
 			b.MouseButton1Click:Connect(cb)
 			return b
 		end
 		
-		local play = createBtn(MiniPlayerIcons.Play, 42, 0.5, function()
+		local play = createBtn(MiniPlayerIcons.Play, 44, 0.5, function()
 			if not selectedFile then return end
 			if PlaybackState.isPlaying and not PlaybackState.isPaused then
 				if _G.StarSpace and _G.StarSpace.PausePlayback then _G.StarSpace.PausePlayback() else PausePlayback() end
@@ -8278,7 +7939,7 @@ local function ToggleMiniPlayer(state)
 					else _G.StarSpace.LoadRecording(selectedFile) end
 				else PlayRecording(selectedFile) end
 			end
-		end)
+		end, false, nil, nil, "Play/Pause")
 		
 		-- Function to update speed globally and sync UI
 		local function ChangeSpeed(delta)
@@ -8290,10 +7951,10 @@ local function ToggleMiniPlayer(state)
 			WindUI:Notify({ Title = "Speed", Content = "Speed: " .. tostring(newVal) .. "x", Duration = 0.5 })
 		end
 		
-		local speedDown = createBtn(MiniPlayerIcons.Minus, 28, 0.35, function() ChangeSpeed(-0.1) end, true)
-		local speedUp = createBtn(MiniPlayerIcons.Plus, 28, 0.65, function() ChangeSpeed(0.1) end, true)
+		local speedDown = createBtn(MiniPlayerIcons.Minus, 32, 0.35, function() ChangeSpeed(-0.1) end, true, nil, nil, "Speed Down")
+		local speedUp = createBtn(MiniPlayerIcons.Plus, 32, 0.65, function() ChangeSpeed(0.1) end, true, nil, nil, "Speed Up")
 		
-		local pathBtn = createBtn(MiniPlayerIcons.Path, 30, 0.09, function()
+		local pathBtn = createBtn(MiniPlayerIcons.Path, 32, 0.08, function()
 			local newState = not (isPathVisualsEnabled or false)
 			isPathVisualsEnabled = newState
 			if _G.StarSpace and _G.StarSpace.SetShowPath then _G.StarSpace.SetShowPath(newState) end
@@ -8304,21 +7965,21 @@ local function ToggleMiniPlayer(state)
 					if PathVisToggle.Set then PathVisToggle:Set(newState) end
 				end)
 			end
-		end, true)
+		end, true, nil, nil, "Path Visuals")
 
-		local moonBtn = createBtn(MiniPlayerIcons.Moonlight, 30, 0.22, function()
+		local moonBtn = createBtn(MiniPlayerIcons.Moonlight, 32, 0.21, function()
 			local newState = not (PlaybackState.isMoonwalk or false)
 			PlaybackState.isMoonwalk = newState
 			if _G.StarSpace and _G.StarSpace.SetMoonwalk then _G.StarSpace.SetMoonwalk(newState) end
-		end, true)
+		end, true, nil, nil, "Moonwalk")
 		
-		local loopBtn = createBtn(MiniPlayerIcons.Loop, 30, 0.78, function()
+		local loopBtn = createBtn(MiniPlayerIcons.Loop, 32, 0.79, function()
 			local newState = not (PlaybackState.isLooping or false)
 			PlaybackState.isLooping = newState
 			if _G.StarSpace and _G.StarSpace.SetLooping then _G.StarSpace.SetLooping(newState) end
-		end, true)
+		end, true, nil, nil, "Loop")
 
-		local respawnBtn = createBtn(MiniPlayerIcons.Respawn, 30, 0.91, function()
+		local respawnBtn = createBtn(MiniPlayerIcons.Respawn, 32, 0.92, function()
 			local newState = not (PlaybackState.respawnOnEnd or false)
 			PlaybackState.respawnOnEnd = newState
 			if _G.StarSpace and _G.StarSpace.SetRespawnOnEnd then _G.StarSpace.SetRespawnOnEnd(newState) end
@@ -8328,7 +7989,7 @@ local function ToggleMiniPlayer(state)
 					if RespawnEndToggle.Set then RespawnEndToggle:Set(newState) end
 				end)
 			end
-		end, true)
+		end, true, nil, nil, "Respawn On End")
 
 		local closeX = Instance.new("ImageButton")
 		closeX.Name, closeX.Size, closeX.Position = "CloseBtn", UDim2.fromOffset(20, 20), UDim2.new(1, -28, 0, 8)
@@ -8370,29 +8031,42 @@ local function ToggleMiniPlayer(state)
 				local inactiveImg = Color3.fromRGB(200, 200, 200)
 				local inactiveBg = Color3.fromRGB(45, 45, 50)
 				
-				-- Path: Yellow
-				if pathIcon then
-					pathIcon.ImageColor3 = isPathVisualsEnabled and Color3.fromRGB(255, 200, 0) or inactiveImg
-					pathBtn.BackgroundColor3 = isPathVisualsEnabled and Color3.fromRGB(150, 120, 0) or inactiveBg
+				-- Function to get original color or base color
+				local function applyColor(btn, icon, isActive, activeImgClr, activeBgClr)
+					if not btn or not icon then return end
+					
+					-- Store base colors as attributes to preserve them during hover
+					if not btn:GetAttribute("BaseBgColor") then
+						btn:SetAttribute("BaseBgColor", inactiveBg)
+					end
+					
+					local currentBg = isActive and activeBgClr or inactiveBg
+					local currentImg = isActive and activeImgClr or inactiveImg
+					
+					-- Only update attribute if it changed
+					if btn:GetAttribute("BaseBgColor") ~= currentBg then
+						btn:SetAttribute("BaseBgColor", currentBg)
+						
+						-- Only update real color if not hovered to avoid flicker
+						if not btn:GetAttribute("IsHovered") then
+							btn.BackgroundColor3 = currentBg
+						end
+					end
+					
+					icon.ImageColor3 = currentImg
 				end
+
+				-- Path: Yellow
+				applyColor(pathBtn, pathIcon, isPathVisualsEnabled, Color3.fromRGB(255, 200, 0), Color3.fromRGB(150, 120, 0))
 				
 				-- Moonwalk: Purple
-				if moonIcon then
-					moonIcon.ImageColor3 = PlaybackState.isMoonwalk and Color3.fromRGB(180, 100, 255) or inactiveImg
-					moonBtn.BackgroundColor3 = PlaybackState.isMoonwalk and Color3.fromRGB(100, 50, 150) or inactiveBg
-				end
+				applyColor(moonBtn, moonIcon, PlaybackState.isMoonwalk, Color3.fromRGB(180, 100, 255), Color3.fromRGB(100, 50, 150))
 				
 				-- Loop: Green
-				if loopIcon then
-					loopIcon.ImageColor3 = PlaybackState.isLooping and Color3.fromRGB(0, 255, 120) or inactiveImg
-					loopBtn.BackgroundColor3 = PlaybackState.isLooping and Color3.fromRGB(0, 120, 60) or inactiveBg
-				end
-				
+				applyColor(loopBtn, loopIcon, PlaybackState.isLooping, Color3.fromRGB(0, 255, 120), Color3.fromRGB(0, 120, 60))
+
 				-- Respawn: Red
-				if respawnIcon then
-					respawnIcon.ImageColor3 = PlaybackState.respawnOnEnd and Color3.fromRGB(255, 80, 80) or inactiveImg
-					respawnBtn.BackgroundColor3 = PlaybackState.respawnOnEnd and Color3.fromRGB(150, 40, 40) or inactiveBg
-				end
+				applyColor(respawnBtn, respawnIcon, PlaybackState.respawnOnEnd, Color3.fromRGB(255, 80, 80), Color3.fromRGB(150, 40, 40))
 
 				if _G.StarshipCloud.RecordingName and title then title.Text = _G.StarshipCloud.RecordingName end
 				
@@ -8445,6 +8119,10 @@ local function ToggleMiniPlayer(state)
 			if LoopToggle then
 				if LoopToggle.SetValue then LoopToggle:SetValue(false)
 				elseif LoopToggle.Set then LoopToggle:Set(false) end
+			end
+			if InvisibleCoreToggle then
+				if InvisibleCoreToggle.SetValue then InvisibleCoreToggle:SetValue(false)
+				elseif InvisibleCoreToggle.Set then InvisibleCoreToggle:Set(false) end
 			end
 		end)
 
@@ -8769,7 +8447,6 @@ function CreatePlaybackControls(isInit)
 		Desc = "Permanently enabled for maximum protection",
 		Value = true,
 		Callback = function(state)
-			-- Force it back to true if they try to turn it off
 			if not state then
 				task.wait(0.1)
 				setAfkState(true)
@@ -8777,8 +8454,6 @@ function CreatePlaybackControls(isInit)
 			end
 		end,
 	})
-
-	-- ══════════════════════════════════════════════════════════════════
 	-- 🛡️ BYPASS ADMIN FEATURE (Enhanced)
 	-- ══════════════════════════════════════════════════════════════════
 	local isBypassAdminOn = false
@@ -9299,7 +8974,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════
 SpoofTab = Window:Tab({
 	Title = "Spoof System",
-	Icon = "solar:tuning-square-bold",
+	Icon = "solar:ghost-bold",
 })
 
 RunService.Heartbeat:Wait()
@@ -9311,7 +8986,7 @@ local dsOk, dsErr = pcall(function()
 
 _G.SpoofMulti = SpoofTab:MultiSection({
 	Title = "Spoof System",
-	Icon = "solar:tuning-square-bold",
+	Icon = "solar:ghost-bold",
 	Box = true,
 	BoxBorder = true,
 	Opened = true,
@@ -10830,9 +10505,10 @@ end) -- end task.spawn for Device Spoof Tab
 
 -- ⚙️ SETTINGS TAB
 -- ══════════════════════════════════════════════════════════════════
+task.wait(0.2)
 SettingsTab = Window:Tab({
 	Title = "Settings",
-	Icon = "settings",
+	Icon = "solar:settings-bold",
 })
 
 -- ══════════════════════════════════════════════════════════════════
@@ -10847,7 +10523,7 @@ pcall(function()
 	_G._SettingsMulti = SettingsTab:MultiSection({
 		Title = "Settings",
 		Desc = "Configure your Starship experience",
-		Icon = "sliders-horizontal",
+		Icon = "solar:settings-bold",
 		Box = true,
 		BoxBorder = true,
 		Opened = true,
@@ -11092,6 +10768,7 @@ SettingsTab:Button({
 -- ══════════════════════════════════════════════════════════════════
 -- SELECT DEFAULT TAB & WELCOME
 -- ══════════════════════════════════════════════════════════════════
+task.wait(0.3) -- Tunggu semua inisialisasi selesai sebelum memilih tab
 DashboardTab:Select()
 
 -- Track window state untuk cleanup (use _G to reduce local count)
@@ -11210,5 +10887,3 @@ task.delay(1, function()
 
 	-- Notifications removed for performance
 end)
-
--- Update check removed for performance
