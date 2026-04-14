@@ -6,8 +6,13 @@
     ╚═══════════════════════════════════════════════════════════════╝
 ]]
 
-local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+
+-- [[ ADONIS BYPASS ]]
+pcall(function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/sadia4ek/adbypass/refs/heads/main/adonisbypass.lua"))()
+end)
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -312,22 +317,9 @@ local function setupCompetitorDetection()
         end
     end)
 
-    -- 3. Hook HttpGet for future loads (Permanent)
-    if hookmetamethod then
-        local oldNamecall
-        oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            local args = {...}
+    -- Note: Removed __namecall hook as it triggers "namecallInstance detector" kicks in some games.
+    -- We still have the hookfunction on game.HttpGet below for basic protection.
 
-            if (method == "HttpGet" or method == "HttpGetAsync") and args[1] then
-                if checkUrl(args[1]) then
-                    terminateScript("Competitor URL detected (Mencoba buka RullsszyHub): " .. tostring(args[1]))
-                    return "" 
-                end
-            end
-            return oldNamecall(self, ...)
-        end))
-    end
 
     if hookfunction then
         local oldHttpGet
