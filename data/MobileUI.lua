@@ -13,20 +13,15 @@ local function rebrand(name, data)
             return true
         end
     end
-    return false
+    return false	
 end
 
 pcall(function()
-    -- Apply rebrand hooks immediately
-    local oldSetCore; oldSetCore = hookfunction(sg.SetCore, newcclosure(function(self, n, d) rebrand(n, d) return oldSetCore(self, n, d) end))
-    local oldNC; oldNC = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if self == sg and (method == "SetCore" or method == "setCore") then
-            local args = {...}
-            rebrand(args[1], args[2])
-            return oldNC(self, unpack(args))
-        end
-        return oldNC(self, ...)
+    -- [[ STEALTH REBRANDING ]]
+    -- Menggunakan hookfunction (lebih aman dari deteksi namecallInstance)
+    local oldSetCore; oldSetCore = hookfunction(sg.SetCore, newcclosure(function(self, n, d) 
+        rebrand(n, d) 
+        return oldSetCore(self, n, d) 
     end))
 end)
 
