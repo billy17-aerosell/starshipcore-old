@@ -5,14 +5,10 @@
     ║              + Event Code System                              ║
     ╚═══════════════════════════════════════════════════════════════╝
 ]]
-
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 
--- [[ ADONIS BYPASS ]]
-pcall(function()
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/sadia4ek/adbypass/refs/heads/main/adonisbypass.lua"))()
-end)
+
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
