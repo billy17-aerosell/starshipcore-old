@@ -31,7 +31,7 @@
     },
     {
       "source": "/api/m-vd-x7k2",
-      "destination": "/api/get-module?name=violence-district.lua&platform=mobile"
+      "destination": "/api/get-module?name=violence-district-obfuscated.lua&platform=mobile"
     },
     {
       "source": "/api/protected/(.*)",
