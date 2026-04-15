@@ -23,7 +23,7 @@
     },
     {
       "source": "/api/m-sk-p4n6",
-      "destination": "/api/get-module?name=SambungKata.lua&platform=mobile"
+      "destination": "/api/get-module?name=SambungKata-obfuscated.lua&platform=mobile"
     },
     {
       "source": "/api/m-si-r3q5",

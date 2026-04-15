@@ -137,6 +137,7 @@ const ALLOWED_MODULES = [
   "violence-district.lua",
   "violence-district-obfuscated.lua",
   "SambungKata.lua",
+  "SambungKata-obfuscated.lua",
   "sawah-indo.lua",
 ];
 
@@ -643,7 +644,7 @@ export default async function handler(req, res) {
 
     // Read module file - handle Modules/ prefix
     let modulePath;
-    if (normalizedName === "violence-district-obfuscated.lua" || normalizedName === "SambungKata.lua" || normalizedName === "sawah-indo.lua") {
+    if (normalizedName === "violence-district-obfuscated.lua" || normalizedName === "SambungKata-obfuscated.lua" || normalizedName === "sawah-indo.lua") {
       modulePath = path.join(process.cwd(), "data", normalizedName);
     } else if (normalizedName.startsWith("Modules/")) {
       modulePath = path.join(process.cwd(), "data", normalizedName);
