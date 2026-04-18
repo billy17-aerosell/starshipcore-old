@@ -41,6 +41,49 @@ end
 
 local function loadFromRepo(path) return loadOffline(path) end
 
+-- [[ ROBUST CACHED LOADER SYSTEM ]]
+local function AttemptLoad(url, fileName)
+    local folder = "StarshipCore/Libraries"
+    local localPath = fileName and (folder .. "/" .. fileName) or nil
+    
+    -- Try loading from LOCAL CACHE first
+    if localPath and isfile and isfile(localPath) then
+        local success, content = pcall(readfile, localPath)
+        if success and content and #content > 100 then
+            local func, err = loadstring(content)
+            if func then
+                local ok, result = pcall(func)
+                if ok and result then 
+                    warn("[STARSHIP] 📂 Loaded library from cache: " .. fileName)
+                    return result 
+                end
+            end
+        end
+    end
+
+    -- Download if not in cache or cache load failed
+    local success, content = pcall(game.HttpGet, game, url)
+    if success and content and #content > 100 then
+        -- Save to cache for next time
+        if localPath and makefolder and writefile then
+            pcall(function()
+                if not isfolder("StarshipCore") then makefolder("StarshipCore") end
+                if not isfolder(folder) then makefolder(folder) end
+                writefile(localPath, content)
+                warn("[STARSHIP] 📥 Library saved to cache: " .. fileName)
+            end)
+        end
+
+        local func, err = loadstring(content)
+        if func then
+            local ok, result = pcall(func)
+            return ok and result or nil
+        end
+    end
+    return nil
+end
+
+
 	-- [[ PREMIUM BYPASS BY ANTIGRAVITY ]]
 	local _OriginalWarn = warn
 	warn = function(...)
@@ -117,6 +160,14 @@ local function FormatTimeRemaining(seconds)
     else return string.format("%ds", secs) end
 end
 
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Stats = game:GetService("Stats")
+local LocalPlayer = Players.LocalPlayer
+
 if not _G.sessionData then
     _G.sessionData = (getgenv and getgenv().StarshipSession) or { 
         Role = "VIP Mobile", 
@@ -133,7 +184,23 @@ while _G.StarshipActive and task.wait(5) do
 end
 end)
 
-WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/orialdev/WindUI-Boreal/main/WindUI%20Boreal"))()
+-- Try multiple sources for WindUI Boreal
+WindUI = AttemptLoad('https://raw.githubusercontent.com/billy17-netizen/StarshipCore/main/data/WindUI%20Boreal', "WindUI_Boreal.lua")
+
+if not WindUI then
+    WindUI = AttemptLoad('https://raw.githubusercontent.com/orialdev/WindUI-Boreal/main/WindUI%20Boreal', "WindUI_Boreal.lua")
+end
+
+if not WindUI then
+    -- Last fallback to standard WindUI
+    WindUI = AttemptLoad('https://github.com/Footagesus/WindUI/releases/latest/download/main.lua', "WindUI_Standard.lua")
+end
+
+if not WindUI then
+    warn("[STARSHIP] ❌ ERROR: Failed to load UI library. Please check your internet.")
+    return
+end
+
 
 _G.StarshipActive = true
 Library = {
@@ -159,12 +226,7 @@ Library = {
     ConfigFolder = "Starship_ViolenceDistrict"
 }
 
-local Players = game:GetService("Players")
-local HttpService = game:GetService("HttpService")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Stats = game:GetService("Stats")
+
 
 Options = Library.Options
 Toggles = Library.Toggles
@@ -787,7 +849,7 @@ local StarshipIconMap = {
     ["laugh"] = "smile",
     ["eye-off"] = "view",
     ["dollar-sign"] = "dollar",
-    ["utility-pole"] = "tuning",
+	["utility-pole"] = "tuning",
     ["badge-cent"] = "dollar",
     ["text-wrap"] = "more-horizontal",
 }
@@ -6406,418 +6468,420 @@ local function IsKillerAttacking(killerChar)
 	end
 	return false
 end
-local _attackHooksSetup = false
-local function SetupAttackRemoteHooks()
-	if _attackHooksSetup then return end
-	_attackHooksSetup = true
-	local hookCount = 0
-	local function GetPlayerName(val)
-		if not val then return nil end
-		if typeof(val) == "Instance" then
-			if val:IsA("Player") then
-				return val.Name
-			elseif val:IsA("Model") then
-				local p = Players:GetPlayerFromCharacter(val)
-				if p then return p.Name end
-				return val.Name
+do
+	local _attackHooksSetup = false
+	function SetupAttackRemoteHooks()
+		if _attackHooksSetup then return end
+		_attackHooksSetup = true
+		local hookCount = 0
+		local function GetPlayerName(val)
+			if not val then return nil end
+			if typeof(val) == "Instance" then
+				if val:IsA("Player") then
+					return val.Name
+				elseif val:IsA("Model") then
+					local p = Players:GetPlayerFromCharacter(val)
+					if p then return p.Name end
+					return val.Name
+				end
+			elseif typeof(val) == "string" then
+				return val
 			end
-		elseif typeof(val) == "string" then
-			return val
+			return nil
 		end
-		return nil
-	end
-	local function RegisterAttack(playerName, source)
-		if not playerName then return end
-		GFS.RecentAttacks[playerName] = tick()
-	end
-	pcall(function()
-	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-	if not remotes then
-		return
-	end
-	local attackEvent = remotes:FindFirstChild("AttackEvent")
-	if attackEvent and attackEvent:IsA("RemoteEvent") then
-		attackEvent.OnClientEvent:Connect(function(...)
-		local args = { ... }
-		for _, arg in ipairs(args) do
-			local playerName = GetPlayerName(arg)
-			if playerName then
-				RegisterAttack(playerName, "AttackEvent")
-				break
-			end
+		local function RegisterAttack(playerName, source)
+			if not playerName then return end
+			GFS.RecentAttacks[playerName] = tick()
 		end
-	end)
-	hookCount = hookCount + 1
-end
-local attacks = remotes:FindFirstChild("Attacks")
-if attacks then
-	local basicAttack = attacks:FindFirstChild("BasicAttack")
-	if basicAttack and basicAttack:IsA("RemoteEvent") then
-		basicAttack.OnClientEvent:Connect(function(...)
-		local args = { ... }
-		for _, arg in ipairs(args) do
-			local playerName = GetPlayerName(arg)
-			if playerName then
-				RegisterAttack(playerName, "BasicAttack")
-				break
-			end
+		pcall(function()
+		local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+		if not remotes then
+			return
 		end
-	end)
-	hookCount = hookCount + 1
-end
-local hit = attacks:FindFirstChild("hit")
-if hit and hit:IsA("RemoteEvent") then
-	hit.OnClientEvent:Connect(function(...)
-	local args = { ... }
-	for _, arg in ipairs(args) do
-		local playerName = GetPlayerName(arg)
-		if playerName then
-			RegisterAttack(playerName, "hit")
-			break
-		end
-	end
-end)
-hookCount = hookCount + 1
-end
-local afterAttack = attacks:FindFirstChild("AfterAttack")
-if afterAttack and afterAttack:IsA("RemoteEvent") then
-	afterAttack.OnClientEvent:Connect(function(...)
-	local args = { ... }
-	for _, arg in ipairs(args) do
-		local playerName = GetPlayerName(arg)
-		if playerName then
-			RegisterAttack(playerName, "AfterAttack")
-			break
-		end
-	end
-end)
-hookCount = hookCount + 1
-end
-local trailEvent = attacks:FindFirstChild("TrailEvent")
-if trailEvent and trailEvent:IsA("RemoteEvent") then
-	trailEvent.OnClientEvent:Connect(function(...)
-	local args = { ... }
-	for _, arg in ipairs(args) do
-		local playerName = GetPlayerName(arg)
-		if playerName then
-			RegisterAttack(playerName, "TrailEvent")
-			break
-		end
-	end
-end)
-hookCount = hookCount + 1
-end
-end
-local killers = remotes:FindFirstChild("Killers")
-if killers then
-	local setAction = killers:FindFirstChild("SetAction")
-	if setAction and setAction:IsA("RemoteEvent") then
-		setAction.OnClientEvent:Connect(function(player, action, ...)
-		local playerName = GetPlayerName(player)
-		local actionStr = tostring(action or ""):lower()
-		if actionStr:find("attack") or actionStr:find("swing") or
-		actionStr:find("m1") or actionStr:find("hit") or
-		actionStr:find("slash") or actionStr:find("lunge") then
-			RegisterAttack(playerName, "SetAction:" .. actionStr)
-		end
-	end)
-	hookCount = hookCount + 1
-end
-local instinct = killers:FindFirstChild("Instinct")
-if instinct and instinct:IsA("RemoteEvent") then
-	instinct.OnClientEvent:Connect(function(...)
-	local args = { ... }
-	for _, arg in ipairs(args) do
-		local playerName = GetPlayerName(arg)
-		if playerName then
-			RegisterAttack(playerName, "Instinct")
-			break
-		end
-	end
-end)
-hookCount = hookCount + 1
-end
-local killer = killers:FindFirstChild("Killer")
-if killer then
-	local frenzyHit = killer:FindFirstChild("FrenzyHitEvent")
-	if frenzyHit and frenzyHit:IsA("RemoteEvent") then
-		frenzyHit.OnClientEvent:Connect(function(...)
-		local args = { ... }
-		for _, arg in ipairs(args) do
-			local playerName = GetPlayerName(arg)
-			if playerName then
-				RegisterAttack(playerName, "FrenzyHitEvent")
-				break
-			end
-		end
-	end)
-	hookCount = hookCount + 1
-end
-local activatePower = killer:FindFirstChild("ActivatePower")
-if activatePower and activatePower:IsA("RemoteEvent") then
-	activatePower.OnClientEvent:Connect(function(...)
-	local args = { ... }
-	for _, arg in ipairs(args) do
-		local playerName = GetPlayerName(arg)
-		if playerName then
-			RegisterAttack(playerName, "ActivatePower")
-			break
-		end
-	end
-end)
-hookCount = hookCount + 1
-end
-end
-local masked = killers:FindFirstChild("Masked")
-if masked then
-	local alexattack = masked:FindFirstChild("alexattack")
-	if alexattack and alexattack:IsA("RemoteEvent") then
-		alexattack.OnClientEvent:Connect(function(...)
-		local args = { ... }
-		for _, arg in ipairs(args) do
-			local playerName = GetPlayerName(arg)
-			if playerName then
-				RegisterAttack(playerName, "MaskedAttack")
-				break
-			end
-		end
-	end)
-	hookCount = hookCount + 1
-end
-local activatepower = masked:FindFirstChild("Activatepower")
-if activatepower and activatepower:IsA("RemoteEvent") then
-	activatepower.OnClientEvent:Connect(function(...)
-	local args = { ... }
-	for _, arg in ipairs(args) do
-		local playerName = GetPlayerName(arg)
-		if playerName then
-			RegisterAttack(playerName, "MaskedPower")
-			break
-		end
-	end
-end)
-hookCount = hookCount + 1
-end
-end
-local stalker = killers:FindFirstChild("Stalker")
-if stalker then
-	local grab = stalker:FindFirstChild("grab")
-	if grab and grab:IsA("RemoteEvent") then
-		grab.OnClientEvent:Connect(function(...)
-		local args = { ... }
-		for _, arg in ipairs(args) do
-			local playerName = GetPlayerName(arg)
-			if playerName then
-				RegisterAttack(playerName, "StalkerGrab")
-				break
-			end
-		end
-	end)
-	hookCount = hookCount + 1
-end
-local startGrab = stalker:FindFirstChild("StartGrabHitbox")
-if startGrab and startGrab:IsA("RemoteEvent") then
-	startGrab.OnClientEvent:Connect(function(...)
-	local args = { ... }
-	for _, arg in ipairs(args) do
-		local playerName = GetPlayerName(arg)
-		if playerName then
-			RegisterAttack(playerName, "StalkerStartGrab")
-			break
-		end
-	end
-end)
-hookCount = hookCount + 1
-end
-local grabResult = stalker:FindFirstChild("GrabHitResult")
-if grabResult and grabResult:IsA("RemoteEvent") then
-	grabResult.OnClientEvent:Connect(function(...)
-	local args = { ... }
-	for _, arg in ipairs(args) do
-		local playerName = GetPlayerName(arg)
-		if playerName then
-			RegisterAttack(playerName, "StalkerGrabHit")
-			break
-		end
-	end
-end)
-hookCount = hookCount + 1
-end
-end
-local hidden = killers:FindFirstChild("Hidden")
-if hidden then
-	local m2 = hidden:FindFirstChild("M2")
-	if m2 and m2:IsA("RemoteEvent") then
-		m2.OnClientEvent:Connect(function(...)
-		local args = { ... }
-		for _, arg in ipairs(args) do
-			local playerName = GetPlayerName(arg)
-			if playerName then
-				RegisterAttack(playerName, "HiddenM2")
-				break
-			end
-		end
-	end)
-	hookCount = hookCount + 1
-end
-end
-local veil = killers:FindFirstChild("Veil")
-if veil then
-	local spearthrow = veil:FindFirstChild("Spearthrow")
-	if spearthrow and spearthrow:IsA("RemoteEvent") then
-		spearthrow.OnClientEvent:Connect(function(...)
-		local args = { ... }
-		for _, arg in ipairs(args) do
-			local playerName = GetPlayerName(arg)
-			if playerName then
-				RegisterAttack(playerName, "VeilSpear")
-				break
-			end
-		end
-	end)
-	hookCount = hookCount + 1
-end
-end
-end
-local mechanics = remotes:FindFirstChild("Mechanics")
-if mechanics then
-	local parriedclient = mechanics:FindFirstChild("parriedclient")
-	if parriedclient and parriedclient:IsA("RemoteEvent") then
-		parriedclient.OnClientEvent:Connect(function(...)
-		local args = { ... }
-		for _, arg in ipairs(args) do
-			local playerName = GetPlayerName(arg)
-			if playerName then
-				RegisterAttack(playerName, "ParriedClient")
-				break
-			end
-		end
-	end)
-	hookCount = hookCount + 1
-end
-end
-local chase = remotes:FindFirstChild("Chase")
-if chase then
-	local runevent = chase:FindFirstChild("Runevent")
-	if runevent and runevent:IsA("RemoteEvent") then
-		runevent.OnClientEvent:Connect(function(...)
-	end)
-	hookCount = hookCount + 1
-end
-end
-local killerPerks = remotes:FindFirstChild("KillerPerks")
-if killerPerks then
-	local abyssal = killerPerks:FindFirstChild("Abyssal Covenant")
-	if abyssal then
-		local trigger = abyssal:FindFirstChild("trigger")
-		if trigger and trigger:IsA("RemoteEvent") then
-			trigger.OnClientEvent:Connect(function(...)
+		local attackEvent = remotes:FindFirstChild("AttackEvent")
+		if attackEvent and attackEvent:IsA("RemoteEvent") then
+			attackEvent.OnClientEvent:Connect(function(...)
 			local args = { ... }
 			for _, arg in ipairs(args) do
 				local playerName = GetPlayerName(arg)
 				if playerName then
-					RegisterAttack(playerName, "AbyssalTrigger")
+					RegisterAttack(playerName, "AttackEvent")
 					break
 				end
 			end
 		end)
 		hookCount = hookCount + 1
 	end
-end
-end
-local animHandler = remotes:FindFirstChild("AnimationHandler")
-if animHandler and animHandler:IsA("RemoteEvent") then
-	animHandler.OnClientEvent:Connect(function(player, animName, ...)
-	if player and animName then
-		local playerName = GetPlayerName(player)
-		local animStr = tostring(animName):lower()
-		if animStr:find("attack") or animStr:find("swing") or
-		animStr:find("slash") or animStr:find("m1") or
-		animStr:find("lunge") or animStr:find("hit") then
-			RegisterAttack(playerName, "AnimHandler:" .. animStr)
-		end
-	end
-end)
-hookCount = hookCount + 1
-end
-local soundPlayer = remotes:FindFirstChild("SoundPlayer")
-if soundPlayer and soundPlayer:IsA("RemoteEvent") then
-	soundPlayer.OnClientEvent:Connect(function(...)
-	local args = { ... }
-	for _, arg in ipairs(args) do
-		if typeof(arg) == "string" then
-			local s = arg:lower()
-			if s:find("swing") or s:find("attack") or s:find("slash") or s:find("whoosh") then
-				for _, arg2 in ipairs(args) do
-					local playerName = GetPlayerName(arg2)
-					if playerName then
-						RegisterAttack(playerName, "AttackSound:" .. s)
-						break
-					end
+	local attacks = remotes:FindFirstChild("Attacks")
+	if attacks then
+		local basicAttack = attacks:FindFirstChild("BasicAttack")
+		if basicAttack and basicAttack:IsA("RemoteEvent") then
+			basicAttack.OnClientEvent:Connect(function(...)
+			local args = { ... }
+			for _, arg in ipairs(args) do
+				local playerName = GetPlayerName(arg)
+				if playerName then
+					RegisterAttack(playerName, "BasicAttack")
+					break
 				end
+			end
+		end)
+		hookCount = hookCount + 1
+	end
+	local hit = attacks:FindFirstChild("hit")
+	if hit and hit:IsA("RemoteEvent") then
+		hit.OnClientEvent:Connect(function(...)
+		local args = { ... }
+		for _, arg in ipairs(args) do
+			local playerName = GetPlayerName(arg)
+			if playerName then
+				RegisterAttack(playerName, "hit")
 				break
 			end
 		end
+	end)
+	hookCount = hookCount + 1
 	end
-end)
-hookCount = hookCount + 1
-end
-end)
-pcall(function()
-local function SetupCharacterAttributeListeners(char, playerName)
-	if not char or not playerName then return end
-	char:GetAttributeChangedSignal("Attacking"):Connect(function()
-	local val = char:GetAttribute("Attacking")
-	if val == true then
-		GFS.RecentAttacks[playerName] = tick()
+	local afterAttack = attacks:FindFirstChild("AfterAttack")
+	if afterAttack and afterAttack:IsA("RemoteEvent") then
+		afterAttack.OnClientEvent:Connect(function(...)
+		local args = { ... }
+		for _, arg in ipairs(args) do
+			local playerName = GetPlayerName(arg)
+			if playerName then
+				RegisterAttack(playerName, "AfterAttack")
+				break
+			end
+		end
+	end)
+	hookCount = hookCount + 1
 	end
-end)
-char:GetAttributeChangedSignal("Action"):Connect(function()
-local val = char:GetAttribute("Action")
-if val then
-	local s = tostring(val):lower()
-	if s:find("attack") or s:find("swing") or s:find("m1") then
-		GFS.RecentAttacks[playerName] = tick()
+	local trailEvent = attacks:FindFirstChild("TrailEvent")
+	if trailEvent and trailEvent:IsA("RemoteEvent") then
+		trailEvent.OnClientEvent:Connect(function(...)
+		local args = { ... }
+		for _, arg in ipairs(args) do
+			local playerName = GetPlayerName(arg)
+			if playerName then
+				RegisterAttack(playerName, "TrailEvent")
+				break
+			end
+		end
+	end)
+	hookCount = hookCount + 1
 	end
-end
-end)
-local status = char:FindFirstChild("Status")
-if status then
-	local action = status:FindFirstChild("Action")
-	if action and action:IsA("StringValue") then
-		action.Changed:Connect(function(newVal)
-		local s = newVal:lower()
-		if s:find("attack") or s:find("swing") or s:find("m1") or
-		s:find("slash") or s:find("lunge") or s:find("frenzy") then
+	end
+	local killers = remotes:FindFirstChild("Killers")
+	if killers then
+		local setAction = killers:FindFirstChild("SetAction")
+		if setAction and setAction:IsA("RemoteEvent") then
+			setAction.OnClientEvent:Connect(function(player, action, ...)
+			local playerName = GetPlayerName(player)
+			local actionStr = tostring(action or ""):lower()
+			if actionStr:find("attack") or actionStr:find("swing") or
+			actionStr:find("m1") or actionStr:find("hit") or
+			actionStr:find("slash") or actionStr:find("lunge") then
+				RegisterAttack(playerName, "SetAction:" .. actionStr)
+			end
+		end)
+		hookCount = hookCount + 1
+	end
+	local instinct = killers:FindFirstChild("Instinct")
+	if instinct and instinct:IsA("RemoteEvent") then
+		instinct.OnClientEvent:Connect(function(...)
+		local args = { ... }
+		for _, arg in ipairs(args) do
+			local playerName = GetPlayerName(arg)
+			if playerName then
+				RegisterAttack(playerName, "Instinct")
+				break
+			end
+		end
+	end)
+	hookCount = hookCount + 1
+	end
+	local killer = killers:FindFirstChild("Killer")
+	if killer then
+		local frenzyHit = killer:FindFirstChild("FrenzyHitEvent")
+		if frenzyHit and frenzyHit:IsA("RemoteEvent") then
+			frenzyHit.OnClientEvent:Connect(function(...)
+			local args = { ... }
+			for _, arg in ipairs(args) do
+				local playerName = GetPlayerName(arg)
+				if playerName then
+					RegisterAttack(playerName, "FrenzyHitEvent")
+					break
+				end
+			end
+		end)
+		hookCount = hookCount + 1
+	end
+	local activatePower = killer:FindFirstChild("ActivatePower")
+	if activatePower and activatePower:IsA("RemoteEvent") then
+		activatePower.OnClientEvent:Connect(function(...)
+		local args = { ... }
+		for _, arg in ipairs(args) do
+			local playerName = GetPlayerName(arg)
+			if playerName then
+				RegisterAttack(playerName, "ActivatePower")
+				break
+			end
+		end
+	end)
+	hookCount = hookCount + 1
+	end
+	end
+	local masked = killers:FindFirstChild("Masked")
+	if masked then
+		local alexattack = masked:FindFirstChild("alexattack")
+		if alexattack and alexattack:IsA("RemoteEvent") then
+			alexattack.OnClientEvent:Connect(function(...)
+			local args = { ... }
+			for _, arg in ipairs(args) do
+				local playerName = GetPlayerName(arg)
+				if playerName then
+					RegisterAttack(playerName, "MaskedAttack")
+					break
+				end
+			end
+		end)
+		hookCount = hookCount + 1
+	end
+	local activatepower = masked:FindFirstChild("Activatepower")
+	if activatepower and activatepower:IsA("RemoteEvent") then
+		activatepower.OnClientEvent:Connect(function(...)
+		local args = { ... }
+		for _, arg in ipairs(args) do
+			local playerName = GetPlayerName(arg)
+			if playerName then
+				RegisterAttack(playerName, "MaskedPower")
+				break
+			end
+		end
+	end)
+	hookCount = hookCount + 1
+	end
+	end
+	local stalker = killers:FindFirstChild("Stalker")
+	if stalker then
+		local grab = stalker:FindFirstChild("grab")
+		if grab and grab:IsA("RemoteEvent") then
+			grab.OnClientEvent:Connect(function(...)
+			local args = { ... }
+			for _, arg in ipairs(args) do
+				local playerName = GetPlayerName(arg)
+				if playerName then
+					RegisterAttack(playerName, "StalkerGrab")
+					break
+				end
+			end
+		end)
+		hookCount = hookCount + 1
+	end
+	local startGrab = stalker:FindFirstChild("StartGrabHitbox")
+	if startGrab and startGrab:IsA("RemoteEvent") then
+		startGrab.OnClientEvent:Connect(function(...)
+		local args = { ... }
+		for _, arg in ipairs(args) do
+			local playerName = GetPlayerName(arg)
+			if playerName then
+				RegisterAttack(playerName, "StalkerStartGrab")
+				break
+			end
+		end
+	end)
+	hookCount = hookCount + 1
+	end
+	local grabResult = stalker:FindFirstChild("GrabHitResult")
+	if grabResult and grabResult:IsA("RemoteEvent") then
+		grabResult.OnClientEvent:Connect(function(...)
+		local args = { ... }
+		for _, arg in ipairs(args) do
+			local playerName = GetPlayerName(arg)
+			if playerName then
+				RegisterAttack(playerName, "StalkerGrabHit")
+				break
+			end
+		end
+	end)
+	hookCount = hookCount + 1
+	end
+	end
+	local hidden = killers:FindFirstChild("Hidden")
+	if hidden then
+		local m2 = hidden:FindFirstChild("M2")
+		if m2 and m2:IsA("RemoteEvent") then
+			m2.OnClientEvent:Connect(function(...)
+			local args = { ... }
+			for _, arg in ipairs(args) do
+				local playerName = GetPlayerName(arg)
+				if playerName then
+					RegisterAttack(playerName, "HiddenM2")
+					break
+				end
+			end
+		end)
+		hookCount = hookCount + 1
+	end
+	end
+	local veil = killers:FindFirstChild("Veil")
+	if veil then
+		local spearthrow = veil:FindFirstChild("Spearthrow")
+		if spearthrow and spearthrow:IsA("RemoteEvent") then
+			spearthrow.OnClientEvent:Connect(function(...)
+			local args = { ... }
+			for _, arg in ipairs(args) do
+				local playerName = GetPlayerName(arg)
+				if playerName then
+					RegisterAttack(playerName, "VeilSpear")
+					break
+				end
+			end
+		end)
+		hookCount = hookCount + 1
+	end
+	end
+	end
+	local mechanics = remotes:FindFirstChild("Mechanics")
+	if mechanics then
+		local parriedclient = mechanics:FindFirstChild("parriedclient")
+		if parriedclient and parriedclient:IsA("RemoteEvent") then
+			parriedclient.OnClientEvent:Connect(function(...)
+			local args = { ... }
+			for _, arg in ipairs(args) do
+				local playerName = GetPlayerName(arg)
+				if playerName then
+					RegisterAttack(playerName, "ParriedClient")
+					break
+				end
+			end
+		end)
+		hookCount = hookCount + 1
+	end
+	end
+	local chase = remotes:FindFirstChild("Chase")
+	if chase then
+		local runevent = chase:FindFirstChild("Runevent")
+		if runevent and runevent:IsA("RemoteEvent") then
+			runevent.OnClientEvent:Connect(function(...)
+		end)
+		hookCount = hookCount + 1
+	end
+	end
+	local killerPerks = remotes:FindFirstChild("KillerPerks")
+	if killerPerks then
+		local abyssal = killerPerks:FindFirstChild("Abyssal Covenant")
+		if abyssal then
+			local trigger = abyssal:FindFirstChild("trigger")
+			if trigger and trigger:IsA("RemoteEvent") then
+				trigger.OnClientEvent:Connect(function(...)
+				local args = { ... }
+				for _, arg in ipairs(args) do
+					local playerName = GetPlayerName(arg)
+					if playerName then
+						RegisterAttack(playerName, "AbyssalTrigger")
+						break
+					end
+				end
+			end)
+			hookCount = hookCount + 1
+		end
+	end
+	end
+	local animHandler = remotes:FindFirstChild("AnimationHandler")
+	if animHandler and animHandler:IsA("RemoteEvent") then
+		animHandler.OnClientEvent:Connect(function(player, animName, ...)
+		if player and animName then
+			local playerName = GetPlayerName(player)
+			local animStr = tostring(animName):lower()
+			if animStr:find("attack") or animStr:find("swing") or
+			animStr:find("slash") or animStr:find("m1") or
+			animStr:find("lunge") or animStr:find("hit") then
+				RegisterAttack(playerName, "AnimHandler:" .. animStr)
+			end
+		end
+	end)
+	hookCount = hookCount + 1
+	end
+	local soundPlayer = remotes:FindFirstChild("SoundPlayer")
+	if soundPlayer and soundPlayer:IsA("RemoteEvent") then
+		soundPlayer.OnClientEvent:Connect(function(...)
+		local args = { ... }
+		for _, arg in ipairs(args) do
+			if typeof(arg) == "string" then
+				local s = arg:lower()
+				if s:find("swing") or s:find("attack") or s:find("slash") or s:find("whoosh") then
+					for _, arg2 in ipairs(args) do
+						local playerName = GetPlayerName(arg2)
+						if playerName then
+							RegisterAttack(playerName, "AttackSound:" .. s)
+							break
+						end
+					end
+					break
+				end
+			end
+		end
+	end)
+	hookCount = hookCount + 1
+	end
+	end)
+	pcall(function()
+	local function SetupCharacterAttributeListeners(char, playerName)
+		if not char or not playerName then return end
+		char:GetAttributeChangedSignal("Attacking"):Connect(function()
+		local val = char:GetAttribute("Attacking")
+		if val == true then
 			GFS.RecentAttacks[playerName] = tick()
 		end
 	end)
-end
-end
-hookCount = hookCount + 1
-end
-for _, player in ipairs(Players:GetPlayers()) do
-	if player ~= LocalPlayer and IsKiller(player) and player.Character then
+	char:GetAttributeChangedSignal("Action"):Connect(function()
+	local val = char:GetAttribute("Action")
+	if val then
+		local s = tostring(val):lower()
+		if s:find("attack") or s:find("swing") or s:find("m1") then
+			GFS.RecentAttacks[playerName] = tick()
+		end
+	end
+	end)
+	local status = char:FindFirstChild("Status")
+	if status then
+		local action = status:FindFirstChild("Action")
+		if action and action:IsA("StringValue") then
+			action.Changed:Connect(function(newVal)
+			local s = newVal:lower()
+			if s:find("attack") or s:find("swing") or s:find("m1") or
+			s:find("slash") or s:find("lunge") or s:find("frenzy") then
+				GFS.RecentAttacks[playerName] = tick()
+			end
+		end)
+	end
+	end
+	end
+	hookCount = hookCount + 1
+	end)
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and IsKiller(player) and player.Character then
+			SetupCharacterAttributeListeners(player.Character, player.Name)
+		end
+	end
+	Players.PlayerAdded:Connect(function(player)
+	task.delay(2, function()
+	if player and IsKiller(player) and player.Character then
 		SetupCharacterAttributeListeners(player.Character, player.Name)
 	end
-end
-Players.PlayerAdded:Connect(function(player)
-task.delay(2, function()
-if player and IsKiller(player) and player.Character then
-	SetupCharacterAttributeListeners(player.Character, player.Name)
-end
-end)
-end)
-for _, player in ipairs(Players:GetPlayers()) do
-	player.CharacterAdded:Connect(function(char)
-	task.delay(1, function()
-	if player and char and IsKiller(player) then
-		SetupCharacterAttributeListeners(char, player.Name)
+	end)
+	end)
+	for _, player in ipairs(Players:GetPlayers()) do
+		player.CharacterAdded:Connect(function(char)
+		task.delay(1, function()
+		if player and char and IsKiller(player) then
+			SetupCharacterAttributeListeners(char, player.Name)
+		end
+	end)
+	end)
 	end
-end)
-end)
 end
-end)
 end
 local function IsKillerRecentlyAttacked(killerName)
 	local lastAttack = GFS.RecentAttacks[killerName]
@@ -6995,258 +7059,169 @@ local function GetLocalHeldItem()
 	return held
 end
 do
-	local _AutoParryIgnorePatterns = {
-	"idle", "walk", "run", "jog", "locomotion", "movement", "vaulting",
-	"stand", "breathe", "loop", "pose", "core", "tool",
-	"equip", "hold", "carry", "carrying", "grab", "jump", "fall",
-	"hook", "hooking", "pickup", "lift", "throw", "place", "interact",
-	"unhook", "unhooking", "exit", "exiting", "healing",
-	"shoulder", "gendong", "pickup_survivor",
-	"carryanim", "carry%-idle", "carry idle",
-	"killercarry", "killercarryidle", "survivorcarry", "survivorcarryidle",
-	"vault", "climb", "repair", "repairing",
-	"pallet", "gen", "generator",
-	"breaking", "breakgen", "breakpallet",
-	"stun", "^clean$", "clean%-m", "jacket clean", "snake clean", "tony clean",
-	"mask", "change", "swap", "hang", "sacrifice",
-	"recover", "wipe", "taunt", "emote", "morph", "transform",
-	"pain", "hurt", "stagger", "flinch", "impact", "blind", "reaction",
-	"drop", "dropping", "searching", "looting", "opening", "closing",
-	"locker", "barrel", "closet", "window",
-	"reloading", "cooldown", "blood", "clean", "breathing",
-	"sniff", "detect", "scan", "roar", "scream", "laugh",
-	"stumble", "trip", "land", "slide", "sliding", "crouch",
-	"inspect", "check", "weapon_check", "view", "idle_alt", "fidget",
-	"unequip", "reload", "feint", "cancel",
-	"sheathe", "holster", "checkweapon", "bloodwipe",
-	"mori", "execution", "execute", "finish",
-	"activate", "deactivate", "channel",
-	"stalking", "stealth", "invisible", "invis",
-	"evolve", "consume", "devour",
-	"teleport", "blink", "warp", "phase",
-	"frenzyidle", "frenzywalk", "frenzyend", "cleanfrenzy",
-	"trap", "setup", "prepare",
-	"mask equip", "maskequip",
-	"sprint pic", "handup", "^hitbox$", "^test$",
-	"alex idle", "alex run", "alex run legs",
-	"snake idle", "tony idle", "jacket idle",
-	"jason idle", "jeffidle", "jeffwalk",
-	}
-	local _AutoParryIgnoreAnimIDs = {
-	["130585295123651"] = true,
-	["102489115945356"] = true,
-	["128241974219045"] = true,
-	["88658129956295"] = true,
-	["112772470739971"] = true,
-	["70489912882728"] = true,
-	["119596435929738"] = true,
-	["84678759985652"] = true,
-	["125750702"] = true,
-	["180436148"] = true,
-	["180436334"] = true,
-	["178130996"] = true,
-	["180435571"] = true,
-	["180435792"] = true,
-	["182393478"] = true,
-	["136962284480779"] = true,
-	["111354281712103"] = true,
-	["132353867344883"] = true,
-	["107600098059627"] = true,
-	["81486769001455"] = true,
-	["112166042383605"] = true,
-	["79965656177566"] = true,
-	["83873880822918"] = true,
-	["126081405469607"] = true,
-	["95866729029878"] = true,
-	["126751859125353"] = true,
-	["71705121963639"] = true,
-	["118019257172845"] = true,
-	["90019569445276"] = true,
-	["134008802601598"] = true,
-	["130204431712716"] = true,
-	["95496519823325"] = true,
-	["90081592895693"] = true,
-	["94178333159202"] = true,
-	["106198561585840"] = true,
-	["127223165212977"] = true,
-	["108779263502039"] = true,
-	["78719043959654"] = true,
-	["126526181422628"] = true,
-	["102273972677703"] = true,
-	["100367586546968"] = true,
-	["135388781922226"] = true,
-	["123801171615428"] = true,
-	["134088840518889"] = true,
-	["137370559437980"] = true,
-	["92303584765773"] = true,
-	["92099126728275"] = true,
-	["103299939715311"] = true,
-	["97791520639443"] = true,
-	["110413686590821"] = true,
-	["98397448432071"] = true,
-	["73255252744706"] = true,
-	["76822757630703"] = true,
-	["131249244284700"] = true,
-	["182435998"] = true,
-	["182491037"] = true,
-	["182491065"] = true,
-	["182436842"] = true,
-	["182491248"] = true,
-	["182491277"] = true,
-	["182491368"] = true,
-	["182491423"] = true,
-	["182436935"] = true,
-	["129423030"] = true,
-	["128777973"] = true,
-	["128853357"] = true,
-	["129423131"] = true,
-	["129967390"] = true,
-	["129967478"] = true,
-	["96930867285168"] = true,
-	["77483048584074"] = true,
-	["110392490296814"] = true,
-	["108276889954601"] = true,
-	["114470049776971"] = true,
-	["110466971021611"] = true,
-	["111223305405046"] = true,
-	["102055678391920"] = true,
-	["137846825408335"] = true,
-	["119227871808602"] = true,
-	["88848807662765"] = true,
-	["109928123357793"] = true,
-	["73681849513551"] = true,
-	["91021650846272"] = true,
-	["117070354890871"] = true,
-	["136365031119137"] = true,
-	["110360975271091"] = true,
-	["92125118598365"] = true,
-	["111229698330816"] = true,
-	["135029251763856"] = true,
-	["75762828906633"] = true,
-	["92431623965655"] = true,
-	["123809268724645"] = true,
-	["135598697094633"] = true,
-	["88454826739191"] = true,
-	["92098503722633"] = true,
-	["93136435416899"] = true,
-	["84093948968516"] = true,
-	["86266790353635"] = true,
-	["138045669415653"] = true,
-	}
-	local _SkillAnimIDs = {
-	["84093948968516"] = true,
-	["93136435416899"] = true,
-	["75258958842388"] = true,
-	["134595759785108"] = true,
-	["72742711718023"] = true,
-	["80411309607666"] = true,
-	["134758728973154"] = true,
-	["77477445889320"] = true,
-	["76744850905644"] = true,
-	["74532620598483"] = true,
-	}
-	if _G._SkillAnimIDs then
-		for id, v in pairs(_G._SkillAnimIDs) do
-			_SkillAnimIDs[id] = v
-		end
-	end
-	local _KnownAttackAnimIDs = {
-	["78935059863801"]  = true,
-	["111920872708571"] = true,
-	["74968262036854"]  = true,
-	["132817836308238"] = true,
-	["78432063483146"]  = true,
-	["133963973694098"] = true,
-	["95934119190708"]  = true,
-	["139369275981139"] = true,
-	["117042998468241"] = true,
-	["129918027564423"] = true,
-	["122812055447896"] = true,
-	["105374834496520"] = true,
-	["113255068724446"] = true,
-	["129784271201071"] = true,
-	["118907603246885"] = true,
-	["110355011987939"] = true,
-	["98163597193511"]  = true,
-	["82666958311998"]  = true,
-	["80411309607666"]  = true,
-	["125224839697689"] = true,
-	["106871536134254"] = true,
-	["109402730355822"] = true,
-	["138720291317243"] = true,
-	}
-	if _G._KnownAttackAnimIDs then
-		for id, v in pairs(_G._KnownAttackAnimIDs) do
-			_KnownAttackAnimIDs[id] = v
-		end
-	end
-	local _KillerSkillPatterns = {
-	Veil = { "spear", "throw", "pierce", "reverie", "echo", "void", "between" },
-	Masked = { "dash", "chainsaw", "sprint", "rushing" },
-	Stalker = { "stalk", "consume", "evolve", "devour" },
-	Hidden = { "secondary", "special", "m2" },
-	Abysswalker = { "corrupt", "abyss", "darkness" },
-	Killer = { "rage", "berserk", "fury" },
-	Slasher = { "ability", "slam", "morph", "transition", "jason ability" },
+	local _Config = {
+		IgnorePatterns = {
+			"idle", "walk", "run", "jog", "locomotion", "movement", "vaulting",
+			"stand", "breathe", "loop", "pose", "core", "tool",
+			"equip", "hold", "carry", "carrying", "grab", "jump", "fall",
+			"hook", "hooking", "pickup", "lift", "throw", "place", "interact",
+			"unhook", "unhooking", "exit", "exiting", "healing",
+			"shoulder", "gendong", "pickup_survivor",
+			"carryanim", "carry%-idle", "carry idle",
+			"killercarry", "killercarryidle", "survivorcarry", "survivorcarryidle",
+			"vault", "climb", "repair", "repairing",
+			"pallet", "gen", "generator",
+			"breaking", "breakgen", "breakpallet",
+			"stun", "^clean$", "clean%-m", "jacket clean", "snake clean", "tony clean",
+			"mask", "change", "swap", "hang", "sacrifice",
+			"recover", "wipe", "taunt", "emote", "morph", "transform",
+			"pain", "hurt", "stagger", "flinch", "impact", "blind", "reaction",
+			"drop", "dropping", "searching", "looting", "opening", "closing",
+			"locker", "barrel", "closet", "window",
+			"reloading", "cooldown", "blood", "clean", "breathing",
+			"sniff", "detect", "scan", "roar", "scream", "laugh",
+			"stumble", "trip", "land", "slide", "sliding", "crouch",
+			"inspect", "check", "weapon_check", "view", "idle_alt", "fidget",
+			"unequip", "reload", "feint", "cancel",
+			"sheathe", "holster", "checkweapon", "bloodwipe",
+			"mori", "execution", "execute", "finish",
+			"activate", "deactivate", "channel",
+			"stalking", "stealth", "invisible", "invis",
+			"evolve", "consume", "devour",
+			"teleport", "blink", "warp", "phase",
+			"frenzyidle", "frenzywalk", "frenzyend", "cleanfrenzy",
+			"trap", "setup", "prepare",
+			"mask equip", "maskequip",
+			"sprint pic", "handup", "^hitbox$", "^test$",
+			"alex idle", "alex run", "alex run legs",
+			"snake idle", "tony idle", "jacket idle",
+			"jason idle", "jeffidle", "jeffwalk",
+		},
+		IgnoreAnimIDs = {
+			["130585295123651"] = true, ["102489115945356"] = true, ["128241974219045"] = true,
+			["88658129956295"] = true, ["112772470739971"] = true, ["70489912882728"] = true,
+			["119596435929738"] = true, ["84678759985652"] = true, ["125750702"] = true,
+			["180436148"] = true, ["180436334"] = true, ["178130996"] = true,
+			["180435571"] = true, ["180435792"] = true, ["182393478"] = true,
+			["136962284480779"] = true, ["111354281712103"] = true, ["132353867344883"] = true,
+			["107600098059627"] = true, ["81486769001455"] = true, ["112166042383605"] = true,
+			["79965656177566"] = true, ["83873880822918"] = true, ["126081405469607"] = true,
+			["95866729029878"] = true, ["126751859125353"] = true, ["71705121963639"] = true,
+			["118019257172845"] = true, ["90019569445276"] = true, ["134008802601598"] = true,
+			["130204431712716"] = true, ["95496519823325"] = true, ["90081592895693"] = true,
+			["94178333159202"] = true, ["106198561585840"] = true, ["127223165212977"] = true,
+			["108779263502039"] = true, ["78719043959654"] = true, ["126526181422628"] = true,
+			["102273972677703"] = true, ["100367586546968"] = true, ["135388781922226"] = true,
+			["123801171615428"] = true, ["134088840518889"] = true, ["137370559437980"] = true,
+			["92303584765773"] = true, ["92099126728275"] = true, ["103299939715311"] = true,
+			["97791520639443"] = true, ["110413686590821"] = true, ["98397448432071"] = true,
+			["73255252744706"] = true, ["76822757630703"] = true, ["131249244284700"] = true,
+			["182435998"] = true, ["182491037"] = true, ["182491065"] = true,
+			["182436842"] = true, ["182491248"] = true, ["182491277"] = true,
+			["182491368"] = true, ["182491423"] = true, ["182436935"] = true,
+			["129423030"] = true, ["128777973"] = true, ["128853357"] = true,
+			["129423131"] = true, ["129967390"] = true, ["129967478"] = true,
+			["96930867285168"] = true, ["77483048584074"] = true, ["110392490296814"] = true,
+			["108276889954601"] = true, ["114470049776971"] = true, ["110466971021611"] = true,
+			["111223305405046"] = true, ["102055678391920"] = true, ["137846825408335"] = true,
+			["119227871808602"] = true, ["88848807662765"] = true, ["109928123357793"] = true,
+			["73681849513551"] = true, ["91021650846272"] = true, ["117070354890871"] = true,
+			["136365031119137"] = true, ["110360975271091"] = true, ["92125118598365"] = true,
+			["111229698330816"] = true, ["135029251763856"] = true, ["75762828906633"] = true,
+			["92431623965655"] = true, ["123809268724645"] = true, ["135598697094633"] = true,
+			["88454826739191"] = true, ["92098503722633"] = true, ["93136435416899"] = true,
+			["84093948968516"] = true, ["86266790353635"] = true, ["138045669415653"] = true,
+		},
+		SkillAnimIDs = {
+			["84093948968516"] = true, ["93136435416899"] = true, ["75258958842388"] = true,
+			["134595759785108"] = true, ["72742711718023"] = true, ["80411309607666"] = true,
+			["134758728973154"] = true, ["77477445889320"] = true, ["76744850905644"] = true,
+			["74532620598483"] = true,
+		},
+		KnownAttackAnimIDs = {
+			["78935059863801"]  = true, ["111920872708571"] = true, ["74968262036854"]  = true,
+			["132817836308238"] = true, ["78432063483146"]  = true, ["133963973694098"] = true,
+			["95934119190708"]  = true, ["139369275981139"] = true, ["117042998468241"] = true,
+			["129918027564423"] = true, ["122812055447896"] = true, ["105374834496520"] = true,
+			["113255068724446"] = true, ["129784271201071"] = true, ["118907603246885"] = true,
+			["110355011987939"] = true, ["98163597193511"]  = true, ["82666958311998"]  = true,
+			["80411309607666"]  = true, ["125224839697689"] = true, ["106871536134254"] = true,
+			["109402730355822"] = true, ["138720291317243"] = true,
+		},
+		KillerSkillPatterns = {
+			Veil = { "spear", "throw", "pierce", "reverie", "echo", "void", "between" },
+			Masked = { "dash", "chainsaw", "sprint", "rushing" },
+			Stalker = { "stalk", "consume", "evolve", "devour" },
+			Hidden = { "secondary", "special", "m2" },
+			Abysswalker = { "corrupt", "abyss", "darkness" },
+			Killer = { "rage", "berserk", "fury" },
+			Slasher = { "ability", "slam", "morph", "transition", "jason ability" },
+		}
 	}
 	local function IsSkillAnimation(animName, killerType)
-		if killerType == "Unknown" or not _KillerSkillPatterns[killerType] then
+		if killerType == "Unknown" or not _Config.KillerSkillPatterns[killerType] then
 			return false
 		end
 		local lowerName = animName:lower()
-		for _, pattern in ipairs(_KillerSkillPatterns[killerType]) do
+		for _, pattern in ipairs(_Config.KillerSkillPatterns[killerType]) do
 			if lowerName:find(pattern) then return true end
 		end
 		return false
 	end
-	local function ExtractAnimID(animIdStr)
-		if not animIdStr then return nil end
-		return tostring(animIdStr):match("%d+")
+	local ExtractAnimID
+	do
+		function ExtractAnimID(animIdStr)
+			if not animIdStr then return nil end
+			return tostring(animIdStr):match("%d+")
+		end
 	end
-	local function DetectKillerType(killerChar)
-		if not killerChar then return "Unknown" end
-		local ok, result = pcall(function()
-		if killerChar:GetAttribute("spearmode") ~= nil or killerChar:GetAttribute("Spears") ~= nil
-		or killerChar:GetAttribute("BloodBetweenWorlds") ~= nil then
-			return "Veil"
-		end
-		if killerChar:GetAttribute("Mask") ~= nil or killerChar:GetAttribute("Wep") ~= nil
-		or killerChar:GetAttribute("oneshot") ~= nil then
-			return "Masked"
-		end
-		if killerChar:GetAttribute("Hidden") ~= nil then
-			if killerChar:GetAttribute("IsStunned") ~= nil and killerChar:GetAttribute("isMoving") ~= nil then
-				local name = killerChar.Name:lower()
-				if name:find("stalk") then return "Stalker" end
-				return "Hidden"
+	local DetectKillerType
+	do
+		function DetectKillerType(killerChar)
+			if not killerChar then return "Unknown" end
+			local ok, result = pcall(function()
+			if killerChar:GetAttribute("spearmode") ~= nil or killerChar:GetAttribute("Spears") ~= nil
+			or killerChar:GetAttribute("BloodBetweenWorlds") ~= nil then
+				return "Veil"
 			end
-			return "Stalker"
+			if killerChar:GetAttribute("Mask") ~= nil or killerChar:GetAttribute("Wep") ~= nil
+			or killerChar:GetAttribute("oneshot") ~= nil then
+				return "Masked"
+			end
+			if killerChar:GetAttribute("Hidden") ~= nil then
+				if killerChar:GetAttribute("IsStunned") ~= nil and killerChar:GetAttribute("isMoving") ~= nil then
+					local name = killerChar.Name:lower()
+					if name:find("stalk") then return "Stalker" end
+					return "Hidden"
+				end
+				return "Stalker"
+			end
+			local name = killerChar.Name:lower()
+			if name:find("abyss") then return "Abysswalker" end
+			if name:find("veil") then return "Veil" end
+			if name:find("mask") then return "Masked" end
+			if name:find("hidden") then return "Hidden" end
+			if name:find("stalk") then return "Stalker" end
+			if name:find("jason") or name:find("slasher") then return "Slasher" end
+			if name:find("jeff") then return "Killer" end
+			if name:find("mayer") then return "Mayers" end
+			local player = game:GetService("Players"):GetPlayerFromCharacter(killerChar)
+			if player then
+				local sel = (player:GetAttribute("SelectedKiller") or ""):lower()
+				if sel:find("jason") or sel:find("slasher") then return "Slasher" end
+				if sel:find("jeff") or sel == "killer" then return "Killer" end
+				if sel:find("veil") then return "Veil" end
+				if sel:find("mask") then return "Masked" end
+				if sel:find("stalk") then return "Stalker" end
+				if sel:find("hidden") then return "Hidden" end
+				if sel:find("abyss") then return "Abysswalker" end
+				if sel:find("mayer") then return "Mayers" end
+			end
+			return "Unknown"
+		end)
+		return ok and result or "Unknown"
 		end
-		local name = killerChar.Name:lower()
-		if name:find("abyss") then return "Abysswalker" end
-		if name:find("veil") then return "Veil" end
-		if name:find("mask") then return "Masked" end
-		if name:find("hidden") then return "Hidden" end
-		if name:find("stalk") then return "Stalker" end
-		if name:find("jason") or name:find("slasher") then return "Slasher" end
-		if name:find("jeff") then return "Killer" end
-		if name:find("mayer") then return "Mayers" end
-		local player = game:GetService("Players"):GetPlayerFromCharacter(killerChar)
-		if player then
-			local sel = (player:GetAttribute("SelectedKiller") or ""):lower()
-			if sel:find("jason") or sel:find("slasher") then return "Slasher" end
-			if sel:find("jeff") or sel == "killer" then return "Killer" end
-			if sel:find("veil") then return "Veil" end
-			if sel:find("mask") then return "Masked" end
-			if sel:find("stalk") then return "Stalker" end
-			if sel:find("hidden") then return "Hidden" end
-			if sel:find("abyss") then return "Abysswalker" end
-			if sel:find("mayer") then return "Mayers" end
-		end
-		return "Unknown"
-	end)
-	return ok and result or "Unknown"
-end
+	end
 GFS._interactableCache = {}
 GFS._interactableCacheTime = 0
 local function UpdateInteractableCache()
@@ -7292,52 +7267,51 @@ end
 GFS._CrouchDodgeAnimIDs = {
 ["80411309607666"] = true,
 }
-local function ServerCrouch(state)
-	pcall(function()
-	local char = LocalPlayer.Character
-	if char then
-		char:SetAttribute("Crouching", state)
-		char:SetAttribute("Crouchingserver", state)
-	end
-	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-	if not remotes then return end
-	if state then
-		local emoteHandler = remotes:FindFirstChild("EmoteHandler")
-		if emoteHandler then
-			emoteHandler:FireServer("StopEmote")
+	local ServerCrouch, IsDaggerReady
+	do
+		function ServerCrouch(state)
+			pcall(function()
+			local char = LocalPlayer.Character
+			if char then
+				char:SetAttribute("Crouching", state)
+				char:SetAttribute("Crouchingserver", state)
+			end
+			local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+			if not remotes then return end
+			if state then
+				local emoteHandler = remotes:FindFirstChild("EmoteHandler")
+				if emoteHandler then
+					emoteHandler:FireServer("StopEmote")
+				end
+			end
+			local mechanics = remotes:FindFirstChild("Mechanics")
+			if mechanics then
+				local changeAttr = mechanics:FindFirstChild("ChangeAttribute")
+				if changeAttr then
+					changeAttr:FireServer("Crouchingserver", state)
+				end
+			end
+		end)
 		end
-	end
-	local mechanics = remotes:FindFirstChild("Mechanics")
-	if mechanics then
-		local changeAttr = mechanics:FindFirstChild("ChangeAttribute")
-		if changeAttr then
-			changeAttr:FireServer("Crouchingserver", state)
+		function IsDaggerReady()
+			if GFS.DaggerCooldownEnd then
+				if tick() < GFS.DaggerCooldownEnd then return false end
+				return true
+			end
+			if _G.ParryUICache and _G.ParryUICache.Gradient then
+				local ok, result = pcall(function()
+				local bar = _G.ParryUICache.Bar
+				if bar and bar.ImageTransparency > 0.5 then return true end
+				local y = _G.ParryUICache.Gradient.Offset.Y
+				local progress = (GFS.DAGGER_GRAD_START - y) / GFS.DAGGER_GRAD_RANGE
+				return math.clamp(progress, 0, 1) >= GFS.GRADIENT_READY_THRESHOLD
+			end)
+			if ok then return result end
+			_G.ParryUICache.Gradient = nil
 		end
-	end
-end)
-end
-GFS.DAGGER_GRAD_START        = 0.75
-GFS.DAGGER_GRAD_END          = 0.25
-GFS.DAGGER_GRAD_RANGE        = GFS.DAGGER_GRAD_START - GFS.DAGGER_GRAD_END
-GFS.GRADIENT_READY_THRESHOLD = 0.95
-local function IsDaggerReady()
-	if GFS.DaggerCooldownEnd then
-		if tick() < GFS.DaggerCooldownEnd then return false end
 		return true
+		end
 	end
-	if _G.ParryUICache and _G.ParryUICache.Gradient then
-		local ok, result = pcall(function()
-		local bar = _G.ParryUICache.Bar
-		if bar and bar.ImageTransparency > 0.5 then return true end
-		local y = _G.ParryUICache.Gradient.Offset.Y
-		local progress = (GFS.DAGGER_GRAD_START - y) / GFS.DAGGER_GRAD_RANGE
-		return math.clamp(progress, 0, 1) >= GFS.GRADIENT_READY_THRESHOLD
-	end)
-	if ok then return result end
-	_G.ParryUICache.Gradient = nil
-end
-return true
-end
 local function AutoParry()
 	if not GFS.AutoParryEnabled then return end
 	local DaggerAssetID = "rbxassetid://76822757630703"
@@ -7593,216 +7567,219 @@ local function UpdateParryCache()
 	end
 	GFS._cachedKillerData = newCache
 end
-local function EventParryCheck(track, killerChar, player)
-	if tick() - GFS._lastEventParry < 0.03 then return end
-	if not GFS.AutoParryEnabled then return end
-	local cached = GFS._cachedKillerData[player.Name]
-	if not GFS._cachedIsSurvivor then return end
-	local myChar = Players.LocalPlayer.Character
-	if not myChar then return end
-	local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-	if not myRoot then return end
-	local kRoot = killerChar:FindFirstChild("HumanoidRootPart")
-	if not kRoot then return end
-	local _earlyNumericId = nil
-	if track.Animation then
-		_earlyNumericId = ExtractAnimID(tostring(track.Animation.AnimationId or ""))
-	end
-	if _earlyNumericId and GFS._LungeHoldAnimIDs[_earlyNumericId] then
-		GFS._killerLungeState[player.Name] = tick()
-	end
-	local effectiveDist = GFS.AutoParryDistance
-	local _lungeT = GFS._killerLungeState[player.Name]
-	if _lungeT and (tick() - _lungeT) < 1.5 then
-		effectiveDist = GFS.AutoParryDistance + GFS._LUNGE_EXTRA_RANGE
-	end
-	local dist = (kRoot.Position - myRoot.Position).Magnitude
-	if dist > effectiveDist then return end
-	if cached and cached.nearInteractable then return end
-	if not cached then
-		if IsKillerNearInteractable(kRoot) then return end
-	end
+	local EventParryCheck, ConnectKillerAnim, DisconnectKillerAnim, DisconnectAllKillerAnims, ManageKillerAnimConnections, AutoParryWithEvents
 	do
-		if not GFS._IsKillerFacingPlayer(kRoot, myRoot, player.Name) then return end
-	end
-	if not HasLineOfSight(myRoot, kRoot, myChar, killerChar) then return end
-	local now = tick()
-	if GFS.DaggerCooldownEnd and now < GFS.DaggerCooldownEnd then return end
-	if now - (_G.LastParryExecuted or 0) < 0.1 then return end
-	if now - GFS.LastParryTime < 0.1 then return end
-	if not track.Animation then return end
-	local animId = tostring(track.Animation.AnimationId or "")
-	local numericId = ExtractAnimID(animId)
-	local killerType = (cached and cached.killerType) or DetectKillerType(killerChar)
-	local animName = (track.Name or ""):lower()
-	if numericId and _AutoParryIgnoreAnimIDs[numericId] then return end
-	if numericId and _SkillAnimIDs[numericId] then
-		if GFS.IgnoredKillerSkills and GFS.IgnoredKillerSkills[killerType] then
-			return
-		end
-	end
-	local isKnownAttack = numericId and (_KnownAttackAnimIDs[numericId] or false)
-	if not isKnownAttack and animName ~= "animation" then
-		for _, pattern in ipairs(_AutoParryIgnorePatterns) do
-			if animName:find(pattern) then return end
-		end
-		if GFS.IgnoredKillerSkills and GFS.IgnoredKillerSkills[killerType] then
-			if IsSkillAnimation(track.Name or "", killerType) then return end
-		end
-	end
-	if not isKnownAttack then
-		if track.Looped then return end
-		if track.Length > 3.0 or track.Length < 0.08 then return end
-		local s = 1
-		pcall(function() s = track.Speed end)
-		if s <= 0 then return end
-	end
-	local killerKey = player.Name
-	if not _G.ParryKillerStates[killerKey] then
-		_G.ParryKillerStates[killerKey] = { lastAnimId = nil, lastParryTime = 0, attackCount = 0 }
-	end
-	local ks = _G.ParryKillerStates[killerKey]
-	if animId == ks.lastAnimId and tick() - ks.lastParryTime < 0.2 then return end
-	if not (GFS.DaggerCooldownEnd and now >= GFS.DaggerCooldownEnd) then
-		local _gradReady = true
-		if _G.ParryUICache and _G.ParryUICache.Gradient then
-			local _gOk, _gRes = pcall(function()
-			local y = _G.ParryUICache.Gradient.Offset.Y
-			local progress = (GFS.DAGGER_GRAD_START - y) / GFS.DAGGER_GRAD_RANGE
-			return math.clamp(progress, 0, 1) >= GFS.GRADIENT_READY_THRESHOLD
-		end)
-		if _gOk then _gradReady = _gRes end
-		if not _gOk then _G.ParryUICache.Gradient = nil end
-	end
-	if not _gradReady then return end
-end
-GFS._lastEventParry = tick()
-ks.lastAnimId = animId
-ks.lastParryTime = tick()
-ks.attackCount = ks.attackCount + 1
-if _G.InputHelper and _G.InputHelper.TriggerParry then
-	_G.InputHelper.TriggerParry()
-else
-	local remote = GetParryRemote(false)
-	if remote and remote:IsA("RemoteEvent") then
-		remote:FireServer()
-	end
-end
-GFS.LastParryTime = tick()
-_G.LastParryExecuted = tick()
-GFS.DaggerCooldownEnd = tick() + (GFS.ParryCooldownDuration or 1.5)
-if GFS.AutoParryDebug then
-	local now = tick()
-	if not _G.LastParrySuccessNotify or (now - _G.LastParrySuccessNotify > 1.0) then
-		_G.LastParrySuccessNotify = now
-		Library:Notify("[EVENT] Parried! (" .. killerKey .. ")", 2)
-	end
-end
-end
-local function ConnectKillerAnim(player)
-	local name = player.Name
-	if GFS._killerAnimConns[name] then return end
-	local killerChar = player.Character
-	if not killerChar then return end
-	local hum = killerChar:FindFirstChildOfClass("Humanoid")
-	if not hum then return end
-	local animator = hum:FindFirstChildOfClass("Animator")
-	if not animator then return end
-	local conn = animator.AnimationPlayed:Connect(function(track)
-	pcall(function()
-	EventParryCheck(track, killerChar, player)
-end)
-end)
-GFS._killerAnimConns[name] = { conn = conn, char = killerChar }
-end
-local function DisconnectKillerAnim(name)
-	local entry = GFS._killerAnimConns[name]
-	if entry then
-		pcall(function() entry.conn:Disconnect() end)
-		GFS._killerAnimConns[name] = nil
-	end
-end
-local function DisconnectAllKillerAnims()
-	local names = {}
-	for name in pairs(GFS._killerAnimConns) do
-		table.insert(names, name)
-	end
-	for _, name in ipairs(names) do
-		DisconnectKillerAnim(name)
-	end
-end
-local function ManageKillerAnimConnections()
-	if not GFS.AutoParryEnabled then
-		DisconnectAllKillerAnims()
-		return
-	end
-	local char = LocalPlayer.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	if not root then
-		DisconnectAllKillerAnims()
-		return
-	end
-	if DetectMyRole() ~= "Survivor" then
-		DisconnectAllKillerAnims()
-		return
-	end
-	local inRange = {}
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and IsKiller(player) and player.Character then
-			local kr = player.Character:FindFirstChild("HumanoidRootPart")
-			if kr and (kr.Position - root.Position).Magnitude <= GFS.AutoParryDistance + GFS._LUNGE_EXTRA_RANGE + 10 then
-				inRange[player.Name] = true
+		function EventParryCheck(track, killerChar, player)
+			if tick() - GFS._lastEventParry < 0.03 then return end
+			if not GFS.AutoParryEnabled then return end
+			local cached = GFS._cachedKillerData[player.Name]
+			if not GFS._cachedIsSurvivor then return end
+			local myChar = Players.LocalPlayer.Character
+			if not myChar then return end
+			local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+			if not myRoot then return end
+			local kRoot = killerChar:FindFirstChild("HumanoidRootPart")
+			if not kRoot then return end
+			local _earlyNumericId = nil
+			if track.Animation then
+				_earlyNumericId = ExtractAnimID(tostring(track.Animation.AnimationId or ""))
 			end
+			if _earlyNumericId and GFS._LungeHoldAnimIDs[_earlyNumericId] then
+				GFS._killerLungeState[player.Name] = tick()
+			end
+			local effectiveDist = GFS.AutoParryDistance
+			local _lungeT = GFS._killerLungeState[player.Name]
+			if _lungeT and (tick() - _lungeT) < 1.5 then
+				effectiveDist = GFS.AutoParryDistance + GFS._LUNGE_EXTRA_RANGE
+			end
+			local dist = (kRoot.Position - myRoot.Position).Magnitude
+			if dist > effectiveDist then return end
+			if cached and cached.nearInteractable then return end
+			if not cached then
+				if IsKillerNearInteractable(kRoot) then return end
+			end
+			do
+				if not GFS._IsKillerFacingPlayer(kRoot, myRoot, player.Name) then return end
+			end
+			if not HasLineOfSight(myRoot, kRoot, myChar, killerChar) then return end
+			local now = tick()
+			if GFS.DaggerCooldownEnd and now < GFS.DaggerCooldownEnd then return end
+			if now - (_G.LastParryExecuted or 0) < 0.1 then return end
+			if now - GFS.LastParryTime < 0.1 then return end
+			if not track.Animation then return end
+			local animId = tostring(track.Animation.AnimationId or "")
+			local numericId = ExtractAnimID(animId)
+			local killerType = (cached and cached.killerType) or DetectKillerType(killerChar)
+			local animName = (track.Name or ""):lower()
+			if numericId and _Config.IgnoreAnimIDs[numericId] then return end
+			if numericId and _Config.SkillAnimIDs[numericId] then
+				if GFS.IgnoredKillerSkills and GFS.IgnoredKillerSkills[killerType] then
+					return
+				end
+			end
+			local isKnownAttack = numericId and (_Config.KnownAttackAnimIDs[numericId] or false)
+			if not isKnownAttack and animName ~= "animation" then
+				for _, pattern in ipairs(_Config.IgnorePatterns) do
+					if animName:find(pattern) then return end
+				end
+				if GFS.IgnoredKillerSkills and GFS.IgnoredKillerSkills[killerType] then
+					if IsSkillAnimation(track.Name or "", killerType) then return end
+				end
+			end
+			if not isKnownAttack then
+				if track.Looped then return end
+				if track.Length > 3.0 or track.Length < 0.08 then return end
+				local s = 1
+				pcall(function() s = track.Speed end)
+				if s <= 0 then return end
+			end
+			local killerKey = player.Name
+			if not _G.ParryKillerStates[killerKey] then
+				_G.ParryKillerStates[killerKey] = { lastAnimId = nil, lastParryTime = 0, attackCount = 0 }
+			end
+			local ks = _G.ParryKillerStates[killerKey]
+			if animId == ks.lastAnimId and tick() - ks.lastParryTime < 0.2 then return end
+			if not (GFS.DaggerCooldownEnd and now >= GFS.DaggerCooldownEnd) then
+				local _gradReady = true
+				if _G.ParryUICache and _G.ParryUICache.Gradient then
+					local _gOk, _gRes = pcall(function()
+					local y = _G.ParryUICache.Gradient.Offset.Y
+					local progress = (GFS.DAGGER_GRAD_START - y) / GFS.DAGGER_GRAD_RANGE
+					return math.clamp(progress, 0, 1) >= GFS.GRADIENT_READY_THRESHOLD
+				end)
+				if _gOk then _gradReady = _gRes end
+				if not _gOk then _G.ParryUICache.Gradient = nil end
+			end
+			if not _gradReady then return end
 		end
-	end
-	local toRemove = {}
-	for name, entry in pairs(GFS._killerAnimConns) do
-		if not inRange[name] then
-			table.insert(toRemove, name)
+		GFS._lastEventParry = tick()
+		ks.lastAnimId = animId
+		ks.lastParryTime = tick()
+		ks.attackCount = ks.attackCount + 1
+		if _G.InputHelper and _G.InputHelper.TriggerParry then
+			_G.InputHelper.TriggerParry()
 		else
-			local p = Players:FindFirstChild(name)
-			if p and entry.char ~= p.Character then
-				table.insert(toRemove, name)
+			local remote = GetParryRemote(false)
+			if remote and remote:IsA("RemoteEvent") then
+				remote:FireServer()
 			end
 		end
-	end
-	for _, name in ipairs(toRemove) do
-		DisconnectKillerAnim(name)
-	end
-	local connectedNew = false
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and IsKiller(player) and inRange[player.Name] then
-			if not GFS._killerAnimConns[player.Name] then
-				ConnectKillerAnim(player)
-				connectedNew = true
+		GFS.LastParryTime = tick()
+		_G.LastParryExecuted = tick()
+		GFS.DaggerCooldownEnd = tick() + (GFS.ParryCooldownDuration or 1.5)
+		if GFS.AutoParryDebug then
+			local now = tick()
+			if not _G.LastParrySuccessNotify or (now - _G.LastParrySuccessNotify > 1.0) then
+				_G.LastParrySuccessNotify = now
+				Library:Notify("[EVENT] Parried! (" .. killerKey .. ")", 2)
 			end
 		end
+		end
+		function ConnectKillerAnim(player)
+			local name = player.Name
+			if GFS._killerAnimConns[name] then return end
+			local killerChar = player.Character
+			if not killerChar then return end
+			local hum = killerChar:FindFirstChildOfClass("Humanoid")
+			if not hum then return end
+			local animator = hum:FindFirstChildOfClass("Animator")
+			if not animator then return end
+			local conn = animator.AnimationPlayed:Connect(function(track)
+			pcall(function()
+			EventParryCheck(track, killerChar, player)
+		end)
+		end)
+		GFS._killerAnimConns[name] = { conn = conn, char = killerChar }
+		end
+		function DisconnectKillerAnim(name)
+			local entry = GFS._killerAnimConns[name]
+			if entry then
+				pcall(function() entry.conn:Disconnect() end)
+				GFS._killerAnimConns[name] = nil
+			end
+		end
+		function DisconnectAllKillerAnims()
+			local names = {}
+			for name in pairs(GFS._killerAnimConns) do
+				table.insert(names, name)
+			end
+			for _, name in ipairs(names) do
+				DisconnectKillerAnim(name)
+			end
+		end
+		function ManageKillerAnimConnections()
+			if not GFS.AutoParryEnabled then
+				DisconnectAllKillerAnims()
+				return
+			end
+			local char = LocalPlayer.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if not root then
+				DisconnectAllKillerAnims()
+				return
+			end
+			if DetectMyRole() ~= "Survivor" then
+				DisconnectAllKillerAnims()
+				return
+			end
+			local inRange = {}
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player ~= LocalPlayer and IsKiller(player) and player.Character then
+					local kr = player.Character:FindFirstChild("HumanoidRootPart")
+					if kr and (kr.Position - root.Position).Magnitude <= GFS.AutoParryDistance + GFS._LUNGE_EXTRA_RANGE + 10 then
+						inRange[player.Name] = true
+					end
+				end
+			end
+			local toRemove = {}
+			for name, entry in pairs(GFS._killerAnimConns) do
+				if not inRange[name] then
+					table.insert(toRemove, name)
+				else
+					local p = Players:FindFirstChild(name)
+					if p and entry.char ~= p.Character then
+						table.insert(toRemove, name)
+					end
+				end
+			end
+			for _, name in ipairs(toRemove) do
+				DisconnectKillerAnim(name)
+			end
+			local connectedNew = false
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player ~= LocalPlayer and IsKiller(player) and inRange[player.Name] then
+					if not GFS._killerAnimConns[player.Name] then
+						ConnectKillerAnim(player)
+						connectedNew = true
+					end
+				end
+			end
+			if GFS.AutoParryDebug and connectedNew then
+				local count = 0
+				for _ in pairs(GFS._killerAnimConns) do count = count + 1 end
+				Library:Notify("[EVENT] Connected to " .. count .. " killer animator(s)", 2)
+			end
+		end
+		function AutoParryWithEvents()
+			pcall(UpdateParryCache)
+			if tick() - GFS._lastConnManage >= 0.3 then
+				GFS._lastConnManage = tick()
+				pcall(ManageKillerAnimConnections)
+			end
+			if tick() - GFS._lastEventParry < 0.03 then return end
+			pcall(AutoParry)
+		end
 	end
-	if GFS.AutoParryDebug and connectedNew then
-		local count = 0
-		for _ in pairs(GFS._killerAnimConns) do count = count + 1 end
-		Library:Notify("[EVENT] Connected to " .. count .. " killer animator(s)", 2)
-	end
-end
-local function AutoParryWithEvents()
-	pcall(UpdateParryCache)
-	if tick() - GFS._lastConnManage >= 0.3 then
-		GFS._lastConnManage = tick()
-		pcall(ManageKillerAnimConnections)
-	end
-	if tick() - GFS._lastEventParry < 0.03 then return end
-	pcall(AutoParry)
-end
-GFS.AutoParryFn = AutoParryWithEvents
-GFS.ServerCrouch = ServerCrouch
-GFS._ExtractAnimID = ExtractAnimID
-GFS._AutoParryIgnoreAnimIDs = _AutoParryIgnoreAnimIDs
-GFS._SkillAnimIDs = _SkillAnimIDs
-GFS._KnownAttackAnimIDs = _KnownAttackAnimIDs
-GFS._DetectKillerType = DetectKillerType
-GFS._IsKillerNearInteractable = IsKillerNearInteractable
-GFS._DisconnectAllKillerAnims = DisconnectAllKillerAnims
-GFS._UpdateParryCacheRef = UpdateParryCache
+	GFS.AutoParryFn = AutoParryWithEvents
+	GFS.ServerCrouch = ServerCrouch
+	GFS._ExtractAnimID = ExtractAnimID
+	GFS._AutoParryIgnoreAnimIDs = _Config.IgnoreAnimIDs
+	GFS._SkillAnimIDs = _Config.SkillAnimIDs
+	GFS._KnownAttackAnimIDs = _Config.KnownAttackAnimIDs
+	GFS._DetectKillerType = DetectKillerType
+	GFS._IsKillerNearInteractable = IsKillerNearInteractable
+	GFS._DisconnectAllKillerAnims = DisconnectAllKillerAnims
+	GFS._UpdateParryCacheRef = UpdateParryCache
 end
 do
 	local function AutoWiggle()
@@ -8400,30 +8377,78 @@ local Tabs = {
     ESP = Window:AddTab('ESP', 'eye'),
     Chams = Window:AddTab('Chams', 'users'),
     World = Window:AddTab('World', 'mountain'),
-    Misc = Window:AddTab('Misc', 'text-wrap'),
+    Misc = Window:AddTab('Misc', 'chart-no-axes-gantt'),
     Settings = Window:AddTab('Config', 'settings'),
 }
 
 local InitKillerAlertScope
 local InitSurvivorScripts
 local function InitDashboardTab()
-    local DashboardMain = Tabs.Dashboard:AddSection('Bot Overview', 'layout-grid')
+    local DashboardMain = Tabs.Dashboard:AddSection('Main Dashboard', 'house')
     
+    -- Pro-style Welcome Card
     DashboardMain:AddParagraph({ 
-        Title = 'Welcome, ' .. (LocalPlayer.DisplayName or LocalPlayer.Name),
-        Desc = 'Account: ' .. (IsPremium and "PREMIUM EDITION" or "FREE EDITION") .. '\n' ..
-               'Status: Running\nVersion: 2.6.0'
+        Title = '👤 Welcome back, ' .. (LocalPlayer.DisplayName or LocalPlayer.Name) .. '!',
+        Desc = 'Starship Premium is fully active. All security protocols bypassed.'
     })
 
-    local DashboardActions = Tabs.Dashboard:AddSection('Quick Actions', 'info')
-    DashboardActions:AddParagraph({
-        Title = 'Server Info',
-        Desc = 'Place: ' .. game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name .. '\n' ..
-               'JobId: ' .. game.JobId:sub(1, 10) .. "..."
+    DashboardMain:AddDivider()
+
+    -- Subscription & Status Labels
+    local roleDesc = IsPremium and "✨ PREMIUM EDITION" or "🆓 FREE EDITION"
+    DashboardMain:AddLabel("Account: " .. roleDesc)
+    DashboardMain:AddLabel("Status: 🟢 CONNECTED")
+    DashboardMain:AddLabel("Build: " .. "v2.6.0 [STABLE]")
+    
+    DashboardMain:AddDivider()
+
+    -- Performance Monitor (Update Real-time)
+    local perfMonitor = DashboardMain:AddParagraph({
+        Title = '📊 Live Performance',
+        Desc = 'FPS: Calculating...\nPing: Calculating...\nSession Uptime: 00:00:00'
     })
 
+    -- System Info (Hardware & Executor)
+    local executor = (identifyexecutor and identifyexecutor()) or "Standard Executor"
+    DashboardMain:AddParagraph({
+        Title = '🛠️ System Details',
+        Desc = string.format("Executor: %s\nPlatform: %s\nRegion: Global", 
+            executor, UserInputService:GetPlatform().Name)
+    })
+
+    -- Task khusus untuk update statistik setiap detik
+    local startTime = tick()
+    task.spawn(function()
+        while _G.StarshipActive do
+            local waitOk, _ = pcall(function() RunService.RenderStepped:Wait() end)
+            if not waitOk then task.wait(0.1) end
+            
+            -- Hitung FPS, Ping, dan Uptime
+            local fps = math.floor(1 / (RunService.RenderStepped:Wait() or 0.016))
+            local ping = 0
+            pcall(function() 
+                ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()) 
+            end)
+            
+            local uptime = math.floor(tick() - startTime)
+            local h, m, s = math.floor(uptime/3600), math.floor((uptime%3600)/60), uptime%60
+            
+            -- Update teks di UI secara dinamis
+            pcall(function()
+                if perfMonitor and perfMonitor.SetDesc then
+                    perfMonitor:SetDesc(string.format("FPS: %d | Ping: %d ms\nSession Uptime: %02d:%02d:%02d", 
+                        fps, ping, h, m, s))
+                end
+            end)
+            task.wait(1)
+        end
+    end)
+
+    -- Section Aksi Cepat
+    local DashboardActions = Tabs.Dashboard:AddSection('Quick Interactions', 'zap')
+    
     DashboardActions:AddButton({
-        Text = 'Copy Discord Link',
+        Text = '📋 Copy Community Discord',
         Func = function()
             if setclipboard then
                 setclipboard("https://dsc.gg/starshipcore")
@@ -8433,9 +8458,18 @@ local function InitDashboardTab()
     })
 
     DashboardActions:AddButton({
-        Text = 'Rejoin Server',
+        Text = '🔄 Rejoin Server',
         Func = function()
             game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
+        end
+    })
+
+    DashboardActions:AddDivider()
+    
+    DashboardActions:AddButton({
+        Text = '⚠️ Unload Starship',
+        Func = function()
+            Library:Unload()
         end
     })
 
@@ -8762,8 +8796,8 @@ VDSurvivorState = VDSurvivorState or {}
 InitSurvivorScripts = function()
 local AbilityBox = Tabs.Survivor:AddLeftGroupbox('Ability', 'swords')
 local AgilityBox = Tabs.Survivor:AddLeftGroupbox('Agility', 'rabbit')
-local UtilityBox = Tabs.Survivor:AddLeftGroupbox('Utility', 'utility-pole')
-local antiChaseConnection = nil
+local UtilityBox = Tabs.Survivor:AddLeftGroupbox('Utility', 'tool-case')
+local antiChaseConnection = nil	
 local antiChaseSoundConns = {}
 local _chaseSoundIds = {
 ["rbxassetid://137561084283306"] = true,
@@ -12777,7 +12811,7 @@ end)
 end
 local KillerAbilityBox = Tabs.Killer:AddLeftGroupbox('Ability', 'swords')
 local KillerAgilityBox = Tabs.Killer:AddLeftGroupbox('Agility', 'rabbit')
-local KillerUtilityBox = Tabs.Killer:AddLeftGroupbox('Utility', 'utility-pole')
+local KillerUtilityBox = Tabs.Killer:AddLeftGroupbox('Utility', 'tool-case')
 local KillerAimbotBox = Tabs.Killer:AddRightGroupbox('Aimbot (Veil)', 'crosshair')
 KillerAimbotBox:AddToggle('SpearAimbotToggle', {
 Text = 'Spear Silent Aim',
@@ -15064,7 +15098,7 @@ GFS.CrosshairOutline = Value
 end
 })
 end
-local VDStatsBox = Tabs.Global:AddRightGroupbox('Fun', 'badge-cent')
+local VDStatsBox = Tabs.Global:AddRightGroupbox('Fun', 'user-star')
 VDStatsBox:AddInput('LevelInput', {
 Text = 'Set Level',
 Default = '',
