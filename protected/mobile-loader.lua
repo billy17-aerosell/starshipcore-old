@@ -207,14 +207,18 @@ local function setupCompetitorDetection()
                 
                 if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
                     local text = string.lower(descendant.Text)
-                    if string.find(text, "rullzsy") then
-                        foundInUI = true
+                    -- Check for "rullzsy" and "rulzsy" (common misspellings)
+                    if string.find(text, "rullzsy") or string.find(text, "rulzsy") then
+                        local uiParent = descendant:FindFirstAncestorOfClass("ScreenGui")
+                        local uiName = uiParent and uiParent.Name or "Unknown"
+                        
+                        foundInUI = "Text: '" .. descendant.Text .. "' in " .. descendant.Name .. " (UI: " .. uiName .. ")"
                         break
                     end
                 end
             end
         end)
-        if foundInUI then return true, "Competitor UI Content" end
+        if foundInUI then return true, "Competitor UI ( " .. foundInUI .. " )" end
 
         -- 3. Deep Search Global Environment for the URL string
         for k, v in pairs(getgenv()) do
@@ -796,7 +800,7 @@ local function createLoadingUI()
 			desc = "Automated word chain dictionary",
 			placeIds = {130342654546662},
 			scriptUrl = SECURE_API_URL .. "/api/m-sk-p4n6",
-			onProgress = true
+			onProgress = false
 		},
 		{ 
 			name = "SAWAH INDO", 
@@ -814,7 +818,7 @@ local function createLoadingUI()
 			desc = "Advanced combat & robbery tools",
 			placeIds = {93978595733734},
 			scriptUrl = SECURE_API_URL .. "/api/m-vd-x7k2",
-			onProgress = true
+			onProgress = false
 		}
 	}
 
