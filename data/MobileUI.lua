@@ -141,7 +141,7 @@ local function AttemptLoad(url, fileName)
 end
 
 -- Primary: Boreal (Most features)
-WindUI = AttemptLoad('https://raw.githubusercontent.com/orialdev/WindUI-Boreal/main/WindUI%20Boreal', "WindUI_Boreal.lua")
+WindUI = AttemptLoad('https://raw.githubusercontent.com/billy17-netizen/windUIBoreal/refs/heads/main/WindUI_Boreal.lua', "WindUI_Boreal.lua")
 
 if WindUI then 
     _G.WindUIIsBoreal = true 
@@ -7272,8 +7272,21 @@ local function LoadCloudRecording(recInfo)
 	-- ═══════════════════════════════════════════════════════════════
 	_G.StarshipCloud.RecordingData = nil
 	PlaybackState.frameData = nil
-	-- Note: No collectgarbage() here — it blocks 100ms+ on mobile and causes visible lag
-	-- Lua GC runs automatically and handles this fine
+	
+	-- 🛡️ CRITICAL RAM PROTECTION: For mobile/large maps, we must clear memory NOW
+	-- Lag spike 100ms is acceptable to prevent a full app crash.
+	if UserInputService.TouchEnabled or _G.StarshipLowMemoryMode then
+		pcall(function()
+			-- Clear garbage twice for thorough cleanup
+			collectgarbage("collect")
+			task.defer(function()
+				for i=1, 2 do 
+					collectgarbage("collect")
+					task.wait(0.1) 
+				end
+			end)
+		end)
+	end
 
 	-- selectedCloudRecording removed (unused)
 	CloudRecordingLoaded = false -- Reset until loaded
@@ -7436,6 +7449,15 @@ LoadCloudRecordingDirect = function(recInfo)
 			end
 
 			local fileData = HttpService:JSONDecode(dlResponse)
+			dlResponse = nil -- ⚡ FREE RAM IMMEDIATELY: Delete large raw string
+			
+			-- Prevent "Script Timeout" on very large files
+			local frameCount = fileData.data and #fileData.data or (fileData.Frames and #fileData.Frames or 0)
+			if frameCount > 10000 then
+				if selectedFileDisplay then selectedFileDisplay:SetDesc("⚙️ Stabilizing RAM...") end
+				task.wait(0.1)
+				collectgarbage("collect")
+			end
 
 			-- Normalize data structure
 			if fileData.data then
@@ -7474,9 +7496,13 @@ LoadCloudRecordingDirect = function(recInfo)
 		end
 
 		if data.success and data.recording then
+			local recordingRaw = data.recording
+			local nameRaw = data.name
+			data = nil -- ⚡ FREE RAM: Delete wrapper table
+			
 			-- Store in memory
-			_G.StarshipCloud.RecordingData = data.recording
-			_G.StarshipCloud.RecordingName = data.name or recInfo.name
+			_G.StarshipCloud.RecordingData = recordingRaw
+			_G.StarshipCloud.RecordingName = nameRaw or recInfo.name
 			CloudRecordingLoaded = true -- Mark as loaded!
 			_G.StarshipCloud.ChunkedState.isChunked = false
 
@@ -8928,8 +8954,7 @@ task.spawn(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════
--- 📱 DEVICE SPOOF TAB
--- Ported from StarSpace.lua — Full device spoofing system
+-- 👤 NAME SPOOF TAB
 -- ══════════════════════════════════════════════════════════════════
 SpoofTab = Window:Tab({
 	Title = "Spoof System",
@@ -8945,64 +8970,18 @@ local dsOk, dsErr = pcall(function()
 
 _G.SpoofMulti = SpoofTab:MultiSection({
 	Title = "Spoof System",
-	Icon = "solar:ghost-bold",
+	Icon = "solar:user-id-bold",
 	Box = true,
 	BoxBorder = true,
 	Opened = true,
 })
 
 _G.NameSpoofContainer = _G.SpoofMulti:Tab({ Title = "Name Spoof", Icon = "solar:user-id-bold" })
-_G.DeviceSpoofContainer = _G.SpoofMulti:Tab({ Title = "Device Spoof", Icon = "solar:smartphone-bold" })
 
--- 👑 Independent System Flags
+-- 👑 Name Spoof State
 _G.NameSpoofEnabled = false
-_G.DeviceSpoofEnabled = false
 local DS_HooksApplied = false
 local DS_OriginalValues = {}
-local DS_ScanRunning = false
-
-SpoofTab:Divider()
-
-_G.DeviceSpoofContainer:Section({ Title = "📱 Device Spoof System", Desc = "Spoof your device type to appear as PC, Mobile, or Console" })
-_G.DeviceSpoofContainer:Space({ Columns = 1 })
-
-_G.DeviceSpoofContainer:Paragraph({
-	Title = "💡 Tips",
-	Desc = "• Pilih 'PC' untuk menampilkan ikon 💻 di atas kepala\\n"
-		.. "• Pilih 'Mobile' untuk menampilkan ikon 📱 (terlihat sebagai pemain HP)\\n"
-		.. "• Pilih 'Console' untuk menampilkan ikon 🎮 (terlihat sebagai pemain Xbox/PS)\\n"
-		.. "• Respawn setelah mengaktifkan untuk hasil terbaik\\n"
-		.. "• Pengaturan tersimpan otomatis & diterapkan saat rejoin\\n"
-		.. "• Berfungsi di sebagian besar game yang menggunakan ikon device overhead",
-})
-_G.DeviceSpoofContainer:Space({ Columns = 1 })
-
--- ═══ Device Spoof State ═══
-local DS_SpoofName = ""
-local DS_DeviceSpoof = "Default"
-
--- No persistent settings for spoof — always starts fresh (Default/OFF)
-
--- ═══ Per-Game Icon Database ═══
-local DS_GameIconSets = {
-	["16624148448"] = { Name = "MT Yahayukk", PC = "rbxassetid://16624148448", Mobile = "rbxassetid://16624149840", Console = "rbxassetid://16624150956" },
-	["94089970073947"] = { Name = "MT Moonlight", PC = "rbxassetid://106290076073871", Mobile = "rbxassetid://94089970073947", Console = "rbxassetid://139663456027187" },
-	["106290076073871"] = { Name = "MT Moonlight", PC = "rbxassetid://106290076073871", Mobile = "rbxassetid://94089970073947", Console = "rbxassetid://139663456027187" },
-	["139663456027187"] = { Name = "MT Moonlight", PC = "rbxassetid://106290076073871", Mobile = "rbxassetid://94089970073947", Console = "rbxassetid://139663456027187" },
-	["110487074518360"] = { Name = "MT Velora", PC = "rbxassetid://133663694484547", Mobile = "rbxassetid://110487074518360", Console = "rbxassetid://6034509537" },
-	["6034789893"] = { Name = "NameTag Game", PC = "rbxassetid://6034789893", Mobile = "rbxassetid://6034848733", Console = "rbxassetid://6034509537" },
-	["12684119225"] = { Name = "User Requested", PC = "rbxassetid://12684119225", Mobile = "rbxassetid://13021320268", Console = "rbxassetid://6034509537" },
-}
-
-local DS_DefaultIcons = { PC = "rbxassetid://6034509993", Mobile = "rbxassetid://6034509012", Console = "rbxassetid://6034509537" }
-
--- Reverse lookup: asset -> icon set
-local DS_AssetToIconSet = {}
-for _, iconSet in pairs(DS_GameIconSets) do
-	DS_AssetToIconSet[iconSet.PC:lower()] = iconSet
-	DS_AssetToIconSet[iconSet.Mobile:lower()] = iconSet
-	DS_AssetToIconSet[iconSet.Console:lower()] = iconSet
-end
 
 -- ═══ Name Spoof Section ═══
 _G.NameSpoofContainer:Section({ Title = "👤 Name Spoofing", Desc = "Temporarily change how your name appears to YOU only" })
@@ -9020,7 +8999,6 @@ _G.NameSpoofContainer:Input({
 	Callback = function(v)
 		NameInput = v
 		_G.StarshipSpoofNameInput = v
-		if DEV_MODE then warn("[STARSHIP] Name input set to: " .. tostring(v)) end
 	end,
 })
 
@@ -9034,331 +9012,125 @@ _G.NameSpoofContainer:Input({
 	end,
 })
 
+-- Shared Name Spoof Logic
+local DS_inProcessing = false
+local DS_SpoofName = ""
+
+-- Helper to escape string for gsub
+local function DS_escape(str)
+	return str:gsub("([^%w])", "%%%1")
+end
+
+local function DS_processNameReplacement(text)
+	if DS_inProcessing then return text end
+	if not text or text == "" or not _G.NameSpoofEnabled or DS_SpoofName == "" then return text end
+	local lp = LocalPlayer
+	if not lp then return text end
+	
+	DS_inProcessing = true
+	local result = text
+	
+	local function doReplace(target)
+		if not target or target == "" or target == DS_SpoofName then return end
+		if result:lower():find(target:lower(), 1, true) then
+			result = result:gsub(DS_escape(target), DS_SpoofName)
+			result = result:gsub(DS_escape(target:upper()), DS_SpoofName:upper())
+			result = result:gsub(DS_escape(target:lower()), DS_SpoofName:lower())
+		end
+	end
+	
+	if _G.ManualTargetName then doReplace(_G.ManualTargetName) end
+	doReplace(lp.Name)
+	doReplace(lp.DisplayName)
+	
+	DS_inProcessing = false
+	return result
+end
+
+local function DS_spoof(obj)
+	if not obj or not obj.Parent then return end
+	if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+		if _G.NameSpoofEnabled and DS_SpoofName ~= "" then
+			local currentText = obj.Text
+			local newText = DS_processNameReplacement(currentText)
+			if newText ~= currentText then
+				pcall(function() obj.Text = newText end)
+			end
+		end
+	end
+end
+
+local function DS_ApplyPrivacyHooks()
+	pcall(function()
+		local mt = getrawmetatable(game)
+		local oldIndex = mt.__index
+		setreadonly(mt, false)
+		mt.__index = newcclosure(function(t, k)
+			if not checkcaller() then
+				if k == "Name" and t:IsA("Player") and t == LocalPlayer and _G.NameSpoofEnabled and DS_SpoofName ~= "" then
+					return DS_SpoofName
+				end
+				if k == "DisplayName" and t:IsA("Player") and t == LocalPlayer and _G.NameSpoofEnabled and DS_SpoofName ~= "" then
+					return DS_SpoofName
+				end
+			end
+			return oldIndex(t, k)
+		end)
+		setreadonly(mt, true)
+	end)
+end
+
+local function DS_fullScan()
+	local lp = LocalPlayer
+	if not lp then return end
+	local targets = {}
+	if lp.Character then table.insert(targets, lp.Character) end
+	if lp:FindFirstChild("PlayerGui") then table.insert(targets, lp.PlayerGui) end
+	for _, root in ipairs(targets) do
+		for _, desc in pairs(root:GetDescendants()) do
+			DS_spoof(desc)
+		end
+	end
+end
+
 _G.NameSpoofContainer:Toggle({
 	Title = "🔄 Enable Name Spoofing",
 	Desc = "Toggle ON to instantly replace your name everywhere",
 	Value = _G.NameSpoofEnabled,
 	Callback = function(v)
-		if DEV_MODE then warn("[STARSHIP] Toggle callback fired, v=" .. tostring(v)) end
 		_G.NameSpoofEnabled = v
 		if v then
-			-- Read current input values (try both local and global)
-			DS_SpoofName = NameInput
-			if DS_SpoofName == "" then DS_SpoofName = _G.StarshipSpoofNameInput or "" end
-			
-			if DEV_MODE then warn("[STARSHIP] DS_SpoofName = '" .. tostring(DS_SpoofName) .. "'") end
-			
+			DS_SpoofName = NameInput ~= "" and NameInput or _G.StarshipSpoofNameInput or ""
 			if DS_SpoofName == "" then
-				WindUI:Notify({ Title = "⚠️ Name Spoof", Content = "Enter a name in 'Rename Spoof' first! (Press Enter after typing)", Duration = 5 })
+				WindUI:Notify({ Title = "⚠️ Name Spoof", Content = "Enter a name first!", Duration = 3 })
 				_G.NameSpoofEnabled = false
 				return
 			end
 			_G.ManualTargetName = NameToHideInput ~= "" and NameToHideInput or nil
 			
-			-- Hooks (wrapped in pcall to prevent crash)
-			local hOk, hErr = pcall(function()
-				if not DS_HooksApplied then
-					DS_ApplyPrivacyHooks()
-					DS_HooksApplied = true
-				end
-			end)
-			if DEV_MODE then warn("[STARSHIP] Hooks: " .. tostring(hOk) .. " " .. tostring(hErr)) end
+			if not DS_HooksApplied then
+				DS_ApplyPrivacyHooks()
+				DS_HooksApplied = true
+			end
 			
-			-- Kill old loop if running
-			if _G.StarshipOmegaLoop then _G.StarshipOmegaLoop = false task.wait(0.3) end
 			_G.StarshipOmegaLoop = true
-			
-			-- Full scan (wrapped in pcall)
-			local sOk, sErr = pcall(DS_fullScan)
-			if DEV_MODE then warn("[STARSHIP] FullScan: " .. tostring(sOk) .. " " .. tostring(sErr)) end
-			
-			-- 🚀 SMART NAME SPOOF (only replaces name labels, not everything)
 			task.spawn(function()
-				local lp = LocalPlayer
-				if DEV_MODE then warn("[STARSHIP] Spoof loop started, name=" .. DS_SpoofName) end
-				
-				-- Step 1: DISCOVER what name is shown above our head
-				local realName = lp.Name
-				local realDisplay = lp.DisplayName
-				local overheadName = nil -- will be discovered from BillboardGui
-				
-				local function discoverOverheadName()
-					local char = lp.Character
-					if not char then return end
-					
-					-- Read from BillboardGui on our character
-					for _, desc in pairs(char:GetDescendants()) do
-						if desc:IsA("BillboardGui") then
-							for _, label in pairs(desc:GetDescendants()) do
-								if (label:IsA("TextLabel") or label:IsA("TextButton")) and label.Text ~= "" then
-									local labelName = label.Name:lower()
-									-- Look for the NAME label specifically (skip device, level, role labels)
-									if labelName:find("name") or labelName == "textlabel" then
-										local txt = label.Text:gsub("<[^>]+>", "") -- strip RichText
-										if txt ~= "" and txt ~= DS_SpoofName then
-											overheadName = txt
-											if DEV_MODE then warn("[STARSHIP] Discovered overhead name: " .. txt .. " (from " .. label.Name .. ")") end
-											return
-										end
-									end
-								end
-							end
-						end
-					end
-					
-					-- Also check workspace adorned BillboardGuis
+				while _G.NameSpoofEnabled and _G.StarshipOmegaLoop and task.wait(0.5) do
+					DS_fullScan()
+					-- Humanoid Highlight fix
 					pcall(function()
-						local head = char:FindFirstChild("Head")
-						for _, desc in pairs(workspace:GetDescendants()) do
-							if desc:IsA("BillboardGui") and desc.Adornee then
-								if desc.Adornee:IsDescendantOf(char) or desc.Adornee == head then
-									for _, label in pairs(desc:GetDescendants()) do
-										if (label:IsA("TextLabel") or label:IsA("TextButton")) and label.Text ~= "" then
-											local labelName = label.Name:lower()
-											if labelName:find("name") or labelName == "textlabel" then
-												local txt = label.Text:gsub("<[^>]+>", "")
-												if txt ~= "" and txt ~= DS_SpoofName then
-													overheadName = txt
-													if DEV_MODE then warn("[STARSHIP] Discovered overhead name (workspace): " .. txt) end
-													return
-												end
-											end
-										end
-									end
-								end
-							end
+						local char = LocalPlayer.Character
+						if char then
+							local hum = char:FindFirstChildOfClass("Humanoid")
+							if hum then hum.DisplayName = DS_SpoofName end
 						end
 					end)
-					
-					-- Fallback: check Humanoid DisplayName
-					pcall(function()
-						local hum = char:FindFirstChildOfClass("Humanoid")
-						if hum and hum.DisplayName ~= "" and hum.DisplayName ~= DS_SpoofName then
-							if not overheadName then
-								overheadName = hum.DisplayName
-								if DEV_MODE then warn("[STARSHIP] Using Humanoid.DisplayName: " .. overheadName) end
-							end
-						end
-					end)
-				end
-				
-				-- Step 2: Build list of names to replace
-				local function getTargets()
-					local targets = {realName, realDisplay}
-					if overheadName and overheadName ~= "" then
-						table.insert(targets, overheadName)
-					end
-					if _G.ManualTargetName and _G.ManualTargetName ~= "" then
-						table.insert(targets, _G.ManualTargetName)
-					end
-					-- Add cached names
-					for _, c in ipairs(_G.StarshipOriginalNames or {}) do
-						local exists = false
-						for _, t in ipairs(targets) do if t == c then exists = true break end end
-						if not exists then table.insert(targets, c) end
-					end
-					return targets
-				end
-				
-				-- Step 3: Replace function (only replaces if text matches a target)
-				_G.StarshipSpoofedOriginals = _G.StarshipSpoofedOriginals or {}
-				local function smartReplace(obj, targets)
-					if not obj or not obj.Parent then return false end
-					local text = obj.Text
-					if not text or text == "" then return false end
-					
-					local newText = text
-					for _, target in ipairs(targets) do
-						if target ~= DS_SpoofName and newText:find(target, 1, true) then
-							newText = newText:gsub(target:gsub("([^%w])", "%%%1"), DS_SpoofName)
-						end
-					end
-					
-					if newText ~= text then
-						-- Save ORIGINAL text (only if not already saved)
-						if not _G.StarshipSpoofedOriginals[obj] then
-							_G.StarshipSpoofedOriginals[obj] = text
-						end
-						pcall(function() obj.Text = newText end)
-						return true
-					end
-					return false
-				end
-
-				
-				-- Step 4: Main spoofing function
-				local discoveredOnce = false
-				local function doSpoof()
-					DS_SpoofName = NameInput
-					if DS_SpoofName == "" then DS_SpoofName = _G.StarshipSpoofNameInput or "" end
-					if DS_SpoofName == "" then return 0 end
-					
-					local char = lp.Character
-					if not char then return 0 end
-					
-					-- Discover name ONLY ONCE (before first replacement)
-					if not discoveredOnce then
-						discoverOverheadName()
-						discoveredOnce = true
-						if DEV_MODE then warn("[STARSHIP] Targets: " .. table.concat(getTargets(), ", ")) end
-					end
-					local targets = getTargets()
-					local count = 0
-
-					
-					-- A. Replace in our character's BillboardGuis
-					for _, desc in pairs(char:GetDescendants()) do
-						if desc:IsA("BillboardGui") then
-							for _, label in pairs(desc:GetDescendants()) do
-								if label:IsA("TextLabel") or label:IsA("TextButton") then
-									if smartReplace(label, targets) then count = count + 1 end
-								end
-							end
-						end
-					end
-					
-					-- B. Replace in workspace BillboardGuis adorned to our char
-					pcall(function()
-						local head = char:FindFirstChild("Head")
-						for _, desc in pairs(workspace:GetDescendants()) do
-							if desc:IsA("BillboardGui") and desc.Adornee then
-								if desc.Adornee:IsDescendantOf(char) or desc.Adornee == head then
-									for _, label in pairs(desc:GetDescendants()) do
-										if label:IsA("TextLabel") or label:IsA("TextButton") then
-											if smartReplace(label, targets) then count = count + 1 end
-										end
-									end
-								end
-							end
-						end
-					end)
-					
-					-- C. Replace in PlayerGui (leaderboard, chat, etc)
-					pcall(function()
-						for _, obj in pairs(lp.PlayerGui:GetDescendants()) do
-							if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-								smartReplace(obj, targets)
-							end
-						end
-					end)
-					
-					-- D. Humanoid DisplayName (save original first)
-					pcall(function()
-						local hum = char:FindFirstChildOfClass("Humanoid")
-						if hum then
-							if not _G.StarshipOriginalHumDisplayName then
-								_G.StarshipOriginalHumDisplayName = hum.DisplayName
-							end
-							hum.DisplayName = DS_SpoofName
-						end
-					end)
-					
-					-- E. Force Attributes (save originals first)
-					_G.StarshipOriginalAttributes = _G.StarshipOriginalAttributes or {}
-					pcall(function()
-						for attr, val in pairs(lp:GetAttributes()) do
-							if typeof(val) == "string" and val ~= "" and val ~= DS_SpoofName then
-								local newVal = val
-								for _, target in ipairs(targets) do
-									if target ~= DS_SpoofName and newVal:find(target, 1, true) then
-										newVal = newVal:gsub(target:gsub("([^%w])", "%%%1"), DS_SpoofName)
-									end
-								end
-								if newVal ~= val then
-									if not _G.StarshipOriginalAttributes[attr] then
-										_G.StarshipOriginalAttributes[attr] = val
-									end
-									lp:SetAttribute(attr, newVal)
-								end
-							end
-						end
-					end)
-
-					
-					return count
-				end
-				
-				-- Initial run
-				task.wait(0.1)
-				local changed = doSpoof()
-				WindUI:Notify({ 
-					Title = "🔍 Name Spoof",
-					Content = "Active! Overhead: " .. tostring(overheadName or "?") .. " → " .. DS_SpoofName .. " | Changed: " .. changed,
-					Duration = 5
-				})
-				
-				-- Continue loop
-				while _G.NameSpoofEnabled and _G.StarshipOmegaLoop and task.wait(0.3) do
-					doSpoof()
 				end
 			end)
-
-
-
-			
-			WindUI:Notify({ Title = "👤 Name Spoof", Content = "ACTIVE! Your name is now: " .. DS_SpoofName, Duration = 3 })
+			WindUI:Notify({ Title = "👤 Name Spoof", Content = "ACTIVE! Name: " .. DS_SpoofName, Duration = 3 })
 		else
 			_G.StarshipOmegaLoop = false
-			
-			-- RESTORE all spoofed labels back to original
-			local restored = 0
-			if _G.StarshipSpoofedOriginals then
-				for obj, origText in pairs(_G.StarshipSpoofedOriginals) do
-					pcall(function()
-						if obj and obj.Parent then
-							obj.Text = origText
-							restored = restored + 1
-						end
-					end)
-				end
-				_G.StarshipSpoofedOriginals = {}
-			end
-			
-			-- Restore Humanoid DisplayName
-			pcall(function()
-				local lp = LocalPlayer
-				if lp and lp.Character then
-					local hum = lp.Character:FindFirstChildOfClass("Humanoid")
-					if hum and _G.StarshipOriginalHumDisplayName then
-						hum.DisplayName = _G.StarshipOriginalHumDisplayName
-					end
-				end
-			end)
-			
-			-- Restore attributes
-			pcall(function()
-				local lp = LocalPlayer
-				if lp and _G.StarshipOriginalAttributes then
-					for attr, val in pairs(_G.StarshipOriginalAttributes) do
-						pcall(function() lp:SetAttribute(attr, val) end)
-					end
-					_G.StarshipOriginalAttributes = {}
-				end
-			end)
-			
-			-- Disconnect spoof listeners
-			if _G.StarshipSpoofConnections then
-				for _, con in pairs(_G.StarshipSpoofConnections) do
-					pcall(function() con:Disconnect() end)
-				end
-				_G.StarshipSpoofConnections = {}
-			end
-			
-			-- Clear listener attributes
-			pcall(function()
-				local lp = LocalPlayer
-				if lp and lp.Character then
-					for _, desc in pairs(lp.Character:GetDescendants()) do
-						pcall(function()
-							if desc:GetAttribute("StarshipSpoofListener") then
-								desc:SetAttribute("StarshipSpoofListener", nil)
-							end
-						end)
-					end
-				end
-			end)
-			
-			WindUI:Notify({ Title = "👤 Name Spoof", Content = "Disabled — Restored " .. restored .. " labels", Duration = 3 })
+			WindUI:Notify({ Title = "👤 Name Spoof", Content = "Disabled", Duration = 3 })
 		end
 	end,
 })
@@ -9370,1095 +9142,412 @@ _G.NameSpoofContainer:Button({
 		_G.NameSpoofEnabled = false
 		_G.StarshipOmegaLoop = false
 		DS_SpoofName = ""
-		
-		-- Restore all
-		local restored = 0
-		if _G.StarshipSpoofedOriginals then
-			for obj, origText in pairs(_G.StarshipSpoofedOriginals) do
-				pcall(function()
-					if obj and obj.Parent then
-						obj.Text = origText
-						restored = restored + 1
-					end
-				end)
-			end
-			_G.StarshipSpoofedOriginals = {}
-		end
-		
-		pcall(function()
-			local lp = LocalPlayer
-			if lp and lp.Character then
-				local hum = lp.Character:FindFirstChildOfClass("Humanoid")
-				if hum and _G.StarshipOriginalHumDisplayName then
-					hum.DisplayName = _G.StarshipOriginalHumDisplayName
-				end
-			end
-		end)
-		
-		pcall(function()
-			local lp = LocalPlayer
-			if lp and _G.StarshipOriginalAttributes then
-				for attr, val in pairs(_G.StarshipOriginalAttributes) do
-					pcall(function() lp:SetAttribute(attr, val) end)
-				end
-				_G.StarshipOriginalAttributes = {}
-			end
-		end)
-		
-		WindUI:Notify({ Title = "👤 Name Spoof", Content = "Reset — Restored " .. restored .. " labels", Duration = 2 })
+		WindUI:Notify({ Title = "👤 Name Spoof", Content = "Reset", Duration = 2 })
 	end,
 })
-
 
 _G.NameSpoofContainer:Divider()
 
-local DS_DeviceAssets = {
-	PC = { Emojis = {"💻","🖥️","🖥","⌨️","🖱️"}, Keywords = {"pc","computer","desktop","windows","keyboard"}, TargetEmoji = "💻" },
-	Mobile = { Emojis = {"📱","📲","🤳"}, Keywords = {"mobile","phone","touch","ios","android","iphone","ipad","tablet"}, TargetEmoji = "📱" },
-	Console = { Emojis = {"🎮","🕹️","🎲"}, Keywords = {"console","xbox","playstation","gamepad","controller","ps4","ps5"}, TargetEmoji = "🎮" },
+-- 📱 DEVICE SPOOF TAB (Ported from newspoofDevice.lua)
+_G.DeviceSpoofContainer = _G.SpoofMulti:Tab({ Title = "Device Spoof", Icon = "solar:smartphone-bold" })
+
+local UIS = game:GetService("UserInputService")
+local RepStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Player = game.Players.LocalPlayer
+local PlaceId = game.PlaceId
+
+_G.StarshipDeviceActive = _G.StarshipDeviceActive or false
+_G.StarshipDeviceSettings = _G.StarshipDeviceSettings or {
+    Target = "Phone",
+    Platform = Enum.Platform.Android,
+    Emoji = "📱",
+    Touch = true,
+    Viewport = Vector2.new(375, 667) -- Locked to Phone Diagonal
 }
 
-local DS_AllDeviceEmojis = {}
-for _, data in pairs(DS_DeviceAssets) do
-	for _, emoji in ipairs(data.Emojis) do DS_AllDeviceEmojis[emoji] = true end
-end
-
-local DS_DeviceDetectionPatterns = {
-	Names = {"deviceicon","deviceindicator","platformicon","activetype","inputicon","activeicon"},
-	Parents = {"overhead","_overhead","overheadui","billboard","nametag","playertag","headtag","toprow","line1","deviceframe","logoframe"},
-}
-local DS_UIBlacklist = {"starspace","xan","rayfield","kavo","orion","ventox","wally","infinite","catalyst","linoria","sense","vape","lunar","solara","arctic","starship","windui"}
-
-local function DS_containsKeyword(str, keywords)
-	if not str then return false end
-	str = str:lower()
-	for _, kw in ipairs(keywords) do if str:find(kw) then return true end end
-	return false
-end
-
-local function DS_isBlacklistedUI(obj)
-	local current = obj
-	for i = 1, 10 do
-		if not current then break end
-		local name = current.Name:lower()
-		for _, bl in ipairs(DS_UIBlacklist) do if name:find(bl) then return true end end
-		if current:IsA("ScreenGui") and current.Parent and current.Parent.Name == "CoreGui" then
-			if not (obj:FindFirstAncestorOfClass("BillboardGui") or obj:FindFirstAncestorOfClass("SurfaceGui")) then return true end
-		end
-		current = current.Parent
-	end
-	return false
-end
-
-local function DS_isOwnedByLocalPlayer(obj)
-	local lp = LocalPlayer
-	if not lp then return false end
-	local myChar, myPG = lp.Character, lp:FindFirstChild("PlayerGui")
-	if myPG and obj:IsDescendantOf(myPG) then return true end
-	if myChar and (obj:IsDescendantOf(myChar) or obj == myChar) then return true end
-	local rootGui = obj:FindFirstAncestorOfClass("BillboardGui") or obj:FindFirstAncestorOfClass("SurfaceGui")
-	if rootGui and rootGui.Adornee and myChar and rootGui.Adornee:IsDescendantOf(myChar) then return true end
-	return false
-end
-
--- Helper to escape string for gsub
-local function DS_escape(str)
-	return str:gsub("([^%w])", "%%%1")
-end
-
--- Force name replacement on a string
-local DS_inProcessing = false -- CRITICAL: recursion guard
-_G.StarshipOriginalNames = _G.StarshipOriginalNames or {} -- Cache of discovered original names
-local function DS_processNameReplacement(text)
-	if DS_inProcessing then return text end -- prevent infinite loop!
-	if not text or text == "" or not _G.NameSpoofEnabled or DS_SpoofName == "" then return text end
-	local lp = LocalPlayer
-	if not lp then return text end
-	
-	DS_inProcessing = true -- lock
-	
-	local result = text
-	
-	-- Function to clean RichText tags for matching
-	local function cleanRichText(str)
-		return str:gsub("<[^>]+>", "")
-	end
-	
-	local function doReplace(target)
-		if not target or target == "" or target == DS_SpoofName then return end
-		local cleaned = cleanRichText(result)
-		local lowerCleaned = cleaned:lower()
-		local lowerTar = target:lower()
-		
-		if lowerCleaned:find(lowerTar, 1, true) then
-			result = result:gsub(DS_escape(target), DS_SpoofName)
-			result = result:gsub(DS_escape(target:upper()), DS_SpoofName:upper())
-			result = result:gsub(DS_escape(target:lower()), DS_SpoofName:lower())
-		end
-	end
-	
-	-- 1. Check Manual Target Name (highest priority)
-	if _G.ManualTargetName then doReplace(_G.ManualTargetName) end
-	
-	-- 2. Check CACHED original nicknames (these are preserved before attribute overwrite)
-	for _, cachedName in ipairs(_G.StarshipOriginalNames) do
-		doReplace(cachedName)
-	end
-	
-	-- 3. Check current Attribute values (backup)
-	local attrCheck = {"OverheadNameText", "RoleTitle", "RoleDisplayText", "LevelText", "TerminologyName", "Nickname", "CustomName", "PlayerName"}
-	for _, a in ipairs(attrCheck) do
-		pcall(function()
-			local v = lp:GetAttribute(a)
-			if v and typeof(v) == "string" and v ~= "" and v ~= DS_SpoofName then
-				doReplace(v)
-			end
-		end)
-	end
-	
-	-- 4. Check Roblox Name and DisplayName
-	doReplace(lp.Name)
-	doReplace(lp.DisplayName)
-	
-	DS_inProcessing = false -- unlock
-	return result
-end
-
-
-local function DS_isDeviceRelated(obj)
-	-- For Name Spoof, we care about ALL text objects
-	if _G.NameSpoofEnabled and (obj:IsA("TextLabel") or obj:IsA("TextButton")) then return true end
-	
-	-- Fast cache check
-	if DS_DeviceRelatedCache[obj] ~= nil then return DS_DeviceRelatedCache[obj] end
-	
-	local result = false
-	repeat -- using repeat-until false as a breakable block
-		if not DS_isOwnedByLocalPlayer(obj) then break end
-		if DS_isBlacklistedUI(obj) then break end
-		
-		-- Quick name check first (cheapest)
-		local objNameLower = obj.Name:lower()
-		if DS_containsKeyword(objNameLower, DS_DeviceDetectionPatterns.Names) then result = true; break end
-		
-		-- Image check (fast lookup table)
-		if (obj:IsA("ImageLabel") or obj:IsA("ImageButton")) and obj.Image ~= "" then
-			if DS_AssetToIconSet[obj.Image:lower()] then result = true; break end
-			for id, _ in pairs(DS_GameIconSets) do if obj.Image:find(id, 1, true) then result = true; break end end
-			if result then break end
-		end
-		
-		-- Parent walk (max 5 levels instead of 8, combined check)
-		local pCheck = obj.Parent
-		for i = 1, 5 do
-			if not pCheck or pCheck == game then break end
-			local pName = pCheck.Name:lower()
-			if DS_containsKeyword(pName, DS_DeviceDetectionPatterns.Parents) or pName:find("playerlist") or pName:find("leaderboard") then 
-				result = true; break 
-			end
-			pCheck = pCheck.Parent
-		end
-		if result then break end
-		
-		-- BillboardGui/SurfaceGui check (single ancestor walk)
-		local bb = obj:FindFirstAncestorOfClass("BillboardGui") or obj:FindFirstAncestorOfClass("SurfaceGui")
-		if bb and bb.Adornee then
-			local char = bb.Adornee.Parent
-			if char and char:FindFirstChildOfClass("Humanoid") then
-				-- Check if name hints at device
-				if objNameLower:find("icon") or objNameLower:find("device") then result = true; break end
-				local pn = obj.Parent and obj.Parent.Name:lower() or ""
-				if pn:find("icon") or pn:find("device") then result = true; break end
-			end
-		end
-	until true
-	
-	DS_DeviceRelatedCache[obj] = result
-	return result
-end
-
-local function DS_getTargetImage(deviceType, currentImage)
-	if currentImage and currentImage ~= "" then
-		local set = DS_AssetToIconSet[currentImage:lower()]
-		if set and set[deviceType] then return set[deviceType] end
-		for id, iconSet in pairs(DS_GameIconSets) do
-			if currentImage:find(id, 1, true) then return iconSet[deviceType] end
-		end
-	end
-	return DS_DefaultIcons[deviceType]
-end
-
--- ═══ Spoof Function (Visual: text, images, visibility) ═══
--- Track property connections separately to avoid leaks
-local DS_PropertyConnections = {} -- [obj] = {conn1, conn2, ...}
-
-local function DS_trackConnection(obj, conn)
-	if not DS_PropertyConnections[obj] then DS_PropertyConnections[obj] = {} end
-	table.insert(DS_PropertyConnections[obj], conn)
-	-- Also track globally for bulk disconnect
-	_G.StarshipSpoofConnections = _G.StarshipSpoofConnections or {}
-	table.insert(_G.StarshipSpoofConnections, conn)
-end
-
-local function DS_spoof(obj)
-	if not obj or not obj.Parent then return end
-	local lp = LocalPlayer
-	
-	-- TEXT SPOOFING
-	if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-		-- Keep track of what we're doing to avoid recursion
-		if not DS_PropertyConnections[obj] then
-			local conn = obj:GetPropertyChangedSignal("Text"):Connect(function()
-				if not _G.StarshipInternalChange and (_G.NameSpoofEnabled or _G.DeviceSpoofEnabled) then
-					_G.StarshipInternalChange = true
-					DS_spoof(obj)
-					_G.StarshipInternalChange = false
-				end
-			end)
-			DS_trackConnection(obj, conn)
-		end
-		
-		if _G.NameSpoofEnabled or _G.DeviceSpoofEnabled then
-			local currentText = obj.Text
-			local modified = false
-			
-			if _G.NameSpoofEnabled and DS_SpoofName ~= "" then
-				local newText = DS_processNameReplacement(currentText)
-				if newText ~= currentText then
-					currentText = newText
-					modified = true
-				end
-			end
-			
-			-- 2. Device Emoji Replacement
-			if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" and DS_isDeviceRelated(obj) then
-				local targetEmoji = DS_DeviceAssets[DS_DeviceSpoof].TargetEmoji
-				for emoji, _ in pairs(DS_AllDeviceEmojis) do
-					if currentText:find(emoji, 1, true) then 
-						currentText = currentText:gsub(DS_escape(emoji), targetEmoji)
-						modified = true 
-					end
-				end
-			end
-			
-			if modified and obj.Text ~= currentText then 
-				pcall(function()
-					_G.StarshipInternalChange = true
-					obj.Text = currentText 
-					_G.StarshipInternalChange = false
-				end)
-				_G.StarshipInternalChange = false
-			end
-		end
-	end
-	
-	-- IMAGE SPOOFING
-	if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
-		if not DS_OriginalValues[obj] then
-			DS_OriginalValues[obj] = { 
-				Image = obj.Image, 
-				ImageRectOffset = obj.ImageRectOffset, 
-				ImageRectSize = obj.ImageRectSize, 
-				Visible = obj.Visible, 
-				Type = "Image" 
-			}
-			
-			-- INSTANT RE-APPLY (only create once per object lifetime)
-			if not DS_PropertyConnections[obj] then
-				local conn = obj:GetPropertyChangedSignal("Image"):Connect(function()
-					if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" and not _G.StarshipInternalChange then
-						if DS_isDeviceRelated(obj) then
-							local target = DS_getTargetImage(DS_DeviceSpoof, obj.Image)
-							if obj.Image ~= target then
-								_G.StarshipInternalChange = true
-								obj.Image = target
-								_G.StarshipInternalChange = false
-							end
-						end
-					end
-				end)
-				DS_trackConnection(obj, conn)
-			end
-		end
-		
-		if DS_isDeviceRelated(obj) then
-			if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" then
-				local origImg = DS_OriginalValues[obj] and DS_OriginalValues[obj].Image or obj.Image
-				local targetImg = DS_getTargetImage(DS_DeviceSpoof, origImg)
-				if targetImg and obj.Image ~= targetImg then
-					_G.StarshipInternalChange = true
-					obj.Image = targetImg
-					if obj.ImageRectSize ~= Vector2.new(0, 0) then
-						obj.ImageRectOffset = Vector2.new(0, 0)
-						obj.ImageRectSize = Vector2.new(0, 0)
-					end
-					_G.StarshipInternalChange = false
-				end
-			else
-				local orig = DS_OriginalValues[obj]
-				if orig and obj.Image ~= orig.Image then 
-					obj.Image = orig.Image 
-					obj.ImageRectOffset = orig.ImageRectOffset
-					obj.ImageRectSize = orig.ImageRectSize
-				end
-			end
-		end
-	end
-	
-	-- VISIBILITY TOGGLE (For games with multiple frames)
-	if obj:IsA("Frame") or obj:IsA("CanvasGroup") or obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
-		local nameLower = obj.Name:lower()
-		local isDeviceFrame = DS_containsKeyword(nameLower, {"pc","mobile","console","phone","computer","xbox","touch"})
-		if isDeviceFrame and DS_isDeviceRelated(obj) then
-			if not DS_OriginalValues[obj] then 
-				DS_OriginalValues[obj] = { Visible = obj.Visible, Type = "Frame" }
-				if not DS_PropertyConnections[obj] then
-					local conn = obj:GetPropertyChangedSignal("Visible"):Connect(function()
-						if (_G.NameSpoofEnabled or _G.DeviceSpoofEnabled) and not _G.StarshipInternalChange then
-							_G.StarshipInternalChange = true
-							DS_spoof(obj)
-							_G.StarshipInternalChange = false
-						end
-					end)
-					DS_trackConnection(obj, conn)
-				end
-			end
-			
-			if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" then
-				local targetKws = DS_DeviceAssets[DS_DeviceSpoof].Keywords
-				local isTarget = false
-				for _, kw in ipairs(targetKws) do if nameLower:find(kw) then isTarget = true; break end end
-				
-				if isTarget then 
-					if not obj.Visible then obj.Visible = true end
-				else
-					local isOther = false
-					for dt, data in pairs(DS_DeviceAssets) do
-						if dt ~= DS_DeviceSpoof then
-							for _, kw in ipairs(data.Keywords) do if nameLower:find(kw) then isOther = true; break end end
-						end
-						if isOther then break end
-					end
-					if isOther and obj.Visible then obj.Visible = false end
-				end
-			else
-				if DS_OriginalValues[obj] then obj.Visible = DS_OriginalValues[obj].Visible end
-			end
-		end
-	end
-end
-
--- ═══ SMART DEVICE TERM MAPPING ═══
--- Games use their own terms: "Phone"/"Computer"/"Gamepad"
--- We must use the GAME's terms, not generic "Mobile"/"PC"/"Console"
-if not _G._StarshipDeviceTerms then _G._StarshipDeviceTerms = {} end
-
-local DS_TERM_TO_CATEGORY = {
-	computer = "PC", pc = "PC", desktop = "PC", keyboard = "PC",
-	windows = "PC", ["windows10"] = "PC", win64 = "PC", win32 = "PC", uwp = "PC",
-	phone = "Mobile", mobile = "Mobile", touch = "Mobile", tablet = "Mobile",
-	android = "Mobile", ios = "Mobile", iphone = "Mobile", ipad = "Mobile",
-	console = "Console", gamepad = "Console", xbox = "Console",
-	playstation = "Console", controller = "Console",
+local GameDatabase = {
+	[124216358732636] = { Remote = "DeviceDetected", Type = "TerlaSync", AltTarget = "Mobile", PCTarget = "PC" },
+	[88416134735847] = { Remote = "ReportDeviceType", Type = "Direct", AltTarget = "phone", PCTarget = "pc" },
+	[72080217452521] = { Remote = "DeviceUpdateEvent", Folder = "Overhead", Refresh = "RecreateOverheadEvent", AltTarget = "Phone", PCTarget = "Computer", ConfigModule = "OverheadConfig_Client" },
+	[105335476317864] = { Remote = "ReportDeviceType", Type = "MultiArg", AltTarget = "PHONE", PCTarget = "PC", AltOS = "IOS", PCOS = "WINDOWS", Perpetual = true },
+	[135285569232987] = { Remote = "ReportDeviceType", Type = "MultiArg", AltTarget = "PHONE", PCTarget = "PC", AltOS = "IOS", PCOS = "WINDOWS", Perpetual = true },
+	[110552469567668] = { Remote = "GetDevice", Type = "Invoke", Refresh = "RequestBillboardRefresh", AltTarget = "Phone", PCTarget = "PC" },
+    [99405092411386] = { Remote = "GetDevice", Type = "Invoke", Refresh = "RequestBillboardRefresh", AltTarget = "Phone", PCTarget = "PC" },
+    [120319965183001] = { Remote = "SendDeviceInfo", Type = "Direct", Folder = "OverheadRemotes", Refresh = "UpdateOverhead", AltTarget = "Mobile", PCTarget = "Desktop", ConfigModule = "OverheadConfig" },
+    [84918151469196] = { Remote = "ReportDeviceType", Type = "Invoke", Folder = "DeviceInfo", Refresh = "RefreshOverhead", AltTarget = "Mobile", PCTarget = "Desktop" },
+    [101422882971972] = { Remote = "RegisterDevice", Type = "NilArg", Folder = "Remotes", Refresh = "RefreshOverhead", AltTarget = "Phone", PCTarget = "PC" },
+    [94364101720799] = { Remote = "ReportDeviceType", Type = "Direct", Refresh = "DeviceChanged", PCTarget = "PC" },
+    [82151108222533] = { Remote = "ReportDeviceType", Type = "Direct", Refresh = "DeviceChanged", Extra = "donationboard@public.Signals.Refresh", AltTarget = "phone", PCTarget = "pc" },
+    [80803949890816] = { Remote = "ReportDeviceType", Type = "Direct", Refresh = "DeviceChanged", Extra = "ShowDonationGUI", PCTarget = "pc" },
+    [103145862251069] = { Remote = "DeviceDetectionEvent", Type = "EmojiSync" }, -- Sera Obstacle
+    [88355110547275] = { Remote = "ReportDeviceType", Type = "Direct", AltTarget = "phone", PCTarget = "pc" },
+    [113276737579904] = { Remote = "UpdateDeviceEvent", Type = "MultiSync", AltTarget = "Phone", PCTarget = "Computer", Extra = "6928ba03-2e9b-4536-910a-ec62eda12d0c" },
+    [106630825960938] = { Remote = "ReportDeviceType", Type = "MultiSync", AltTarget = "Phone", PCTarget = "PC", Extra = "a09bd334-148d-4973-ad80-727165214eb8" },
+    [122666945748637] = { Remote = "DeviceDetected", Type = "DoubleArg", AltTarget = "Mobile", PCTarget = "PC", Extra = "9d3716a8-3ed6-4e81-bd82-8b376493715a" },
+    [76964310785698] = { Remote = "OV_ReportDevice", Type = "OVSync", AltTarget = "Mobile", PCTarget = "Desktop", Extra = "08c0906b-2cac-4060-a74d-fcf1c08413a1" }
 }
 
--- Initialize with common defaults based on category
-if not _G._StarshipDeviceTerms then 
-	_G._StarshipDeviceTerms = {
-		PC = "Computer",
-		Mobile = "Phone",
-		Console = "Console"
-	} 
+local GameData = GameDatabase[PlaceId]
+
+-- 🛠️ Core Hooks (v19.5 Ghost Guard)
+if not _G.DeviceHooksApplied then
+    local hDepth = 0
+    oldIndex = hookmetamethod(game, "__index", function(self, key)
+        if _G.StarshipDeviceActive and not checkcaller() and hDepth == 0 then
+            hDepth = 1
+            
+            local caller = getcallingscript()
+            local sn = caller and caller.Name or ""
+            -- Ghost Movement: Biarkan script inti Roblox tahu kejujuran agar WASD lancar
+            local isRoblox = (sn:find("Control") or sn:find("Player") or sn:find("Camera") or sn:find("BaseCamera") or sn:find("Input") or sn:find("Rbx"))
+            
+            if not isRoblox then
+                -- 🕵️ Camera Viewport Hook (Diagonal Sniper)
+                if key == "ViewportSize" and self == workspace.CurrentCamera then
+                    hDepth = 0; return _G.StarshipDeviceSettings.Viewport
+                end
+                
+                if self == UIS then
+                    if key == "KeyboardEnabled" or key == "MouseEnabled" or key == "GamepadEnabled" then 
+                        hDepth = 0; return (_G.StarshipDeviceSettings.Target == "PC") 
+                    elseif key == "TouchEnabled" or key == "TouchAvailable" then 
+                        hDepth = 0; return (_G.StarshipDeviceSettings.Target == "Phone") 
+                    elseif key == "GetPlatform" then 
+                        hDepth = 0; return function() return _G.StarshipDeviceSettings.Platform end
+                    end
+                end
+            end
+            hDepth = 0
+        end
+        return oldIndex(self, key)
+    end)
+
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if _G.StarshipDeviceActive and not checkcaller() then
+            -- 1. Engine Truth Hijack (New in v22)
+            if self == UIS then
+                if method == "GetPlatform" or method == "getPlatform" then
+                    return (_G.StarshipDeviceSettings.Target == "Phone" and Enum.Platform.IOS or Enum.Platform.Windows)
+                end
+                if method == "GetLastInputType" or method == "getLastInputType" then
+                    return (_G.StarshipDeviceSettings.Target == "Phone" and Enum.UserInputType.Touch or Enum.UserInputType.Keyboard)
+                end
+            end
+            
+            -- 2. Attribute Hijack (New in v22)
+            if method == "GetAttribute" and self == Player then
+                local attr = args[1]
+                if attr == "DeviceType" or attr == "Device" or attr == "Platform" then
+                    return (GameData and _G.StarshipDeviceSettings.Target == "PC" and GameData.PCTarget) or (_G.StarshipDeviceSettings.Target == "Phone" and "Phone" or "PC")
+                end
+            end
+
+            -- 3. Remote Hijack
+            local isDetRemote = (self.Name == "ReportDeviceType" or self.Name == "SendDeviceInfo" or self.Name == "UpdateDeviceEvent" or (GameData and (self.Name == GameData.Remote or self.Name == GameData.Extra)))
+            if isDetRemote and (method == "FireServer" or method == "InvokeServer") then
+                local t = (GameData and _G.StarshipDeviceSettings.Target == "Phone" and GameData.AltTarget) or (GameData and _G.StarshipDeviceSettings.Target == "PC" and GameData.PCTarget) or (_G.StarshipDeviceSettings.Target == "Phone" and "phone" or "pc")
+                local os = (GameData and _G.StarshipDeviceSettings.Target == "Phone" and GameData.AltOS) or (GameData and _G.StarshipDeviceSettings.Target == "PC" and GameData.PCOS) or (_G.StarshipDeviceSettings.Target == "Phone" and "IOS" or "WINDOWS")
+                
+                if GameData and (GameData.Type == "MultiSync" or GameData.Type == "MultiArg") then
+                    return oldNamecall(self, t, os)
+                elseif GameData and GameData.Type == "DoubleArg" then
+                    return oldNamecall(self, t, _G.StarshipDeviceSettings.Emoji)
+                elseif GameData and GameData.Type == "OVSync" then
+                    return oldNamecall(self, t)
+                elseif GameData and GameData.Type == "TerlaSync" then
+                    return oldNamecall(self, t, _G.StarshipDeviceSettings.Emoji)
+                elseif GameData and GameData.Type == "EmojiSync" then
+                    return oldNamecall(self, _G.StarshipDeviceSettings.Emoji)
+                elseif GameData and GameData.Type == "NilArg" then
+                    return oldNamecall(self, nil, t)
+                else
+                    return oldNamecall(self, t, os)
+                end
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+    _G.DeviceHooksApplied = true
 end
 
-local function DS_getDeviceCategory(val)
-	if typeof(val) ~= "string" then return nil end
-	return DS_TERM_TO_CATEGORY[val:lower()]
-end
+local function ForceSync(targetStr)
+    -- Step 1: Prepare Arguments
+    local t = (GameData and _G.StarshipDeviceSettings.Target == "Phone" and GameData.AltTarget) or (GameData and _G.StarshipDeviceSettings.Target == "PC" and GameData.PCTarget) or targetStr
+    local os = (GameData and _G.StarshipDeviceSettings.Target == "Phone" and GameData.AltOS) or (GameData and _G.StarshipDeviceSettings.Target == "PC" and GameData.PCOS) or (_G.StarshipDeviceSettings.Target == "Phone" and "IOS" or "WINDOWS")
 
-local function DS_getGameTermForTarget()
-	return (_G._StarshipDeviceTerms[DS_DeviceSpoof]) or DS_DeviceSpoof
-end
+    -- Step 2: Multi-Remote Bombardier (Expanded v15 list)
+    local possibleRemotes = {
+        "DeviceDetected", "ReportDeviceType", "SendDeviceInfo", "DeviceDetectionEvent", 
+        "SimpleOverhead.DeviceDetectionEvent", "Remotes.Sync.SyncRemote", "DeviceUpdateEvent", 
+        "ApplyCustomTitle", "UpdateDeviceEvent", "OV_ReportDevice", (GameData and GameData.Remote) or "", (GameData and GameData.Extra) or ""
+    }
+    
+    for _, path in pairs(possibleRemotes) do
+        if path ~= "" then
+            local r = RepStorage
+            for part in path:gmatch("[^%.]+") do
+                r = (r and r:FindFirstChild(part, true)) or (r and r:FindFirstChild(part))
+                if not r then break end
+            end
+            
+            if r then
+                if r:IsA("RemoteFunction") then
+                    pcall(function() r:InvokeServer(t, os or _G.StarshipDeviceSettings.Emoji) end)
+                else
+                    if GameData and (GameData.Type == "MultiArg" or GameData.Type == "MultiSync") then
+                        r:FireServer(t, os)
+                    elseif GameData and GameData.Type == "TerlaSync" then
+                        r:FireServer(t, _G.StarshipDeviceSettings.Emoji)
+                    elseif GameData and GameData.Type == "EmojiSync" then
+                        r:FireServer(_G.StarshipDeviceSettings.Emoji)
+                    elseif GameData and GameData.Type == "DoubleArg" then
+                        r:FireServer(t, _G.StarshipDeviceSettings.Emoji)
+                    elseif GameData and GameData.Type == "OVSync" then
+                        r:FireServer(t)
+                    else
+                        -- Smart Fallback: If 2-args or emoji required
+                        r:FireServer(t, os or _G.StarshipDeviceSettings.Emoji)
+                    end
+                end
+            end
+        end
+    end
 
-local function DS_learnGameTerm(val)
-	local cat = DS_getDeviceCategory(val)
-	if cat then _G._StarshipDeviceTerms[cat] = val end
-end
+    -- Step 3: Refresh (Only if DB requires)
+    local refresh = RepStorage:FindFirstChild((GameData and GameData.Refresh) or "", true)
+    if refresh then 
+        pcall(function() 
+            if refresh:IsA("BindableEvent") then refresh:Fire() else refresh:FireServer() end 
+        end) 
+    end
 
--- Recursive Spoof: only replace values that are a DIFFERENT device category
-local function DS_deepSpoof(val)
-	local tVal = typeof(val)
-	if tVal == "string" then
-		local cat = DS_getDeviceCategory(val)
-		if cat then
-			DS_learnGameTerm(val)
-			if cat == DS_DeviceSpoof then return val end
-			return DS_getGameTermForTarget()
-		end
-	elseif tVal == "EnumItem" then
-		if DS_DeviceSpoof == "Mobile" then
-			if val == Enum.Platform.Windows or val == Enum.Platform.OSX or val == Enum.Platform.UWP then return Enum.Platform.Android end
-		elseif DS_DeviceSpoof == "Console" then
-			if val == Enum.Platform.Windows or val == Enum.Platform.Android or val == Enum.Platform.IOS then return Enum.Platform.XBoxOne end
-		elseif DS_DeviceSpoof == "PC" then
-			if val == Enum.Platform.Android or val == Enum.Platform.IOS then return Enum.Platform.Windows end
-		end
-	elseif tVal == "table" then
-		for k, v in pairs(val) do val[k] = DS_deepSpoof(v) end
-	end
-	return val
-end
-
--- ═══ DEVICE ATTRIBUTE & REMOTE CONSTANTS ═══
-local DS_DEVICE_ATTR_NAMES = {
-	"Device", "Platform", "DeviceType", "InputType",
-	"PlayerDevice", "PlayerPlatform", "device", "platform",
-	"deviceType", "inputType", "playerDevice"
-}
-local DS_DEVICE_VALUE_KEYWORDS = {"device", "platform", "inputtype", "devicetype"}
-
--- ═══ Proactive Device Spoof (Full - matches StarSpace.lua) ═══
-local function DS_proactiveDeviceSpoof()
-	if not DS_SpoofEnabled or DS_DeviceSpoof == "Default" then return end
-	local lp = LocalPlayer
-	if not lp then return end
-	local spoofVal = (DS_DeviceSpoof == "Mobile") and "Phone" or (DS_DeviceSpoof == "PC") and "Computer" or DS_DeviceSpoof
-
-	-- 1. Override device attributes on all targets
-	local targets = {lp}
-	if lp.Character then
-		table.insert(targets, lp.Character)
-		local hum = lp.Character:FindFirstChildOfClass("Humanoid")
-		if hum then table.insert(targets, hum) end
-		local head = lp.Character:FindFirstChild("Head")
-		if head then table.insert(targets, head) end
-	end
-	for _, target in ipairs(targets) do
-		for _, attrName in ipairs(DS_DEVICE_ATTR_NAMES) do
-			pcall(function()
-				local existing = target:GetAttribute(attrName)
-				if existing ~= nil then target:SetAttribute(attrName, spoofVal) end
-			end)
-		end
-	end
-	pcall(function() lp:SetAttribute("Device", spoofVal) end)
-	-- FIX: PROACTIVE DEVICE ICON & TYPE ATTRIBUTES
-	pcall(function()
-		local emojiMap = { Mobile = "\240\159\147\177", PC = "\240\159\146\187", Console = "\240\159\142\174" }
-		lp:SetAttribute("DeviceIcon", emojiMap[DS_DeviceSpoof] or emojiMap.PC)
-		lp:SetAttribute("DeviceType", DS_DeviceSpoof)
-	end)
-
-	-- 2. Game-specific remote overrides
-	pcall(function()
-		local RS = game:GetService("ReplicatedStorage")
-		-- PATTERN A: GetDevice RemoteFunction (Generalized)
-		for _, v in pairs(RS:GetChildren()) do
-			if v:IsA("RemoteFunction") and (v.Name:find("Device") or v.Name:find("Platform")) then
-				if not DS_OriginalValues[v] then 
-					DS_OriginalValues[v] = { OnClientInvoke = v.OnClientInvoke, Type = "Remote" }
-				end
-				v.OnClientInvoke = function()
-					if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
-						if DS_DeviceSpoof == "Mobile" then return "Phone" end
-						if DS_DeviceSpoof == "PC" then return "Computer" end
-						if DS_DeviceSpoof == "Console" then return "Console" end
-					end
-				end
-			end
-		end
-
-		-- PATTERN B: DeviceUpdateEvent & Common Remotes
-		local overhead = RS:FindFirstChild("Overhead") or RS:FindFirstChild("Nametags")
-		if overhead then
-			local de = overhead:FindFirstChild("DeviceUpdateEvent") or overhead:FindFirstChild("UpdateDevice")
-			if de and de:IsA("RemoteEvent") then de:FireServer(spoofVal) end
-			
-			local dr = overhead:FindFirstChild("DeviceRequestFunction") or overhead:FindFirstChild("GetDevice")
-			if dr and dr:IsA("RemoteFunction") then 
-				if not DS_OriginalValues[dr] then 
-					DS_OriginalValues[dr] = { OnClientInvoke = dr.OnClientInvoke, Type = "Remote" }
-				end
-				dr.OnClientInvoke = function() return spoofVal end 
-			end
-		end
-
-		-- Direct Remote Search & Fire (cached to avoid repeated full scans)
-		local _cachedRemoteEvents = {}
-		local _remotesCached = false
-		
-		local function scanAndFire()
-			local emojiMap = { Mobile = "\240\159\147\177", PC = "\240\159\146\187", Console = "\240\159\142\174" }
-			
-			-- Build cache on first run, reuse on subsequent runs
-			if not _remotesCached then
-				_cachedRemoteEvents = {}
-				for _, v in pairs(RS:GetDescendants()) do
-					if v:IsA("RemoteEvent") then
-						local vn = v.Name
-						if vn == "DeviceUpdateEvent" or vn == "UpdateDevice" or vn == "DeviceDetected" or vn == "DeviceRemote" then
-							table.insert(_cachedRemoteEvents, v)
-						end
-					end
-				end
-				_remotesCached = true
-			end
-			
-			for _, v in ipairs(_cachedRemoteEvents) do
-				local vn = v.Name
-				if vn == "DeviceDetected" then
-					v:FireServer(DS_DeviceSpoof, emojiMap[DS_DeviceSpoof] or emojiMap.PC)
-				elseif vn == "DeviceRemote" then
-					local termVal = (DS_DeviceSpoof == "Mobile") and "Mobile" or (DS_DeviceSpoof == "PC") and "Desktop" or DS_DeviceSpoof
-					v:FireServer(termVal)
-				else
-					v:FireServer(spoofVal)
-				end
-			end
-		end
-		
-		scanAndFire()
-		-- Late loading support (reduced from 5 to 2 retries)
-		task.spawn(function()
-			for i = 1, 2 do
-				task.wait(5)
-				_remotesCached = false -- Re-scan in case new remotes appeared
-				scanAndFire()
-			end
-		end)
-	end)
-
-	-- 3. Override StringValues with device-related names
-	pcall(function()
-		local function scanValues(parent)
-			for _, child in pairs(parent:GetDescendants()) do
-				if child:IsA("StringValue") then
-					local nameLower = child.Name:lower()
-					for _, kw in ipairs(DS_DEVICE_VALUE_KEYWORDS) do
-						if nameLower:find(kw) then pcall(function() child.Value = spoofVal end); break end
-					end
-				end
-			end
-		end
-		pcall(function() scanValues(lp) end)
-		if lp.Character then pcall(function() scanValues(lp.Character) end) end
-	end)
-
-	-- 4. Watch attribute changes (prevent server reset)
-	if lp.Character then
-		for _, target in ipairs(targets) do
-			pcall(function()
-				if target:GetAttribute("Device") ~= nil then
-					local conn = target:GetAttributeChangedSignal("Device"):Connect(function()
-						if DS_SpoofEnabled and DS_DeviceSpoof ~= "Default" then
-							local current = target:GetAttribute("Device")
-							local cat = DS_getDeviceCategory(tostring(current))
-							if cat and cat ~= DS_DeviceSpoof then
-								pcall(function() target:SetAttribute("Device", spoofVal) end)
-							end
-						end
-					end)
-					_G.StarshipSpoofConnections = _G.StarshipSpoofConnections or {}
-					table.insert(_G.StarshipSpoofConnections, conn)
-				end
-			end)
-		end
-	end
-end
-
--- ═══ PRIVACY HOOKS (Unified System — Full Device + Name + Anti-AFK) ═══
-local DS_oldIndex = nil
-local DS_oldNamecall = nil
-local function DS_ApplyPrivacyHooks()
-	if DS_HooksApplied then return end
-	
-	if not hookmetamethod or not checkcaller or not getnamecallmethod then
-		warn("[STARSHIP] ⚠️ hookmetamethod/checkcaller/getnamecallmethod not available — visual spoof only")
-		DS_HooksApplied = true
-		return
-	end
-
-	local lp = LocalPlayer
-	local UIS = game:GetService("UserInputService")
-	local GS = game:GetService("GuiService")
-	local _deviceEmojiMap = { Mobile = "📱", PC = "💻", Console = "🎮" }
-
-	-- Pre-cache device remote references
-	local _cachedDeviceRemotes = {}
-	pcall(function()
-		local RS = game:GetService("ReplicatedStorage")
-		local overhead = RS:FindFirstChild("Overhead")
-		if overhead then
-			local de = overhead:FindFirstChild("DeviceUpdateEvent")
-			if de then _cachedDeviceRemotes[de] = "DeviceUpdateEvent" end
-		end
-		local de2 = RS:FindFirstChild("DeviceUpdateEvent")
-		if de2 then _cachedDeviceRemotes[de2] = "DeviceUpdateEvent" end
-		local dd = RS:FindFirstChild("DeviceDetected")
-		if dd then _cachedDeviceRemotes[dd] = "DeviceDetected" end
-	end)
-
-	-- Hook __index
-	local hookOk1, hookErr1 = pcall(function()
-		local oldIndex
-		oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
-			if not checkcaller() then
-				-- ANTI-AFK
-				if _G.StarshipAntiTabDetect then
-					if self == UIS then
-						if key == "IsWindowFocused" then return function() return true end end
-						if key == "GetLastInputTime" then return function() return tick() end end
-					end
-				end
-
-				-- NAME SPOOFING (intercept .Text reads)
-				if _G.NameSpoofEnabled and DS_SpoofName ~= "" then
-					if key == "Text" and (self:IsA("TextLabel") or self:IsA("TextButton")) then
-						return DS_processNameReplacement(oldIndex(self, key))
-					end
-				end
-
-				-- DEVICE SPOOFING (FULL)
-				if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" then
-					if self == UIS then
-						if DS_DeviceSpoof == "Mobile" then
-							if key == "TouchEnabled" or key == "KeyboardEnabled" or key == "MouseEnabled" or key == "AccelerometerEnabled" or key == "GyroscopeEnabled" then return true end
-							if key == "GamepadEnabled" then return false end
-						elseif DS_DeviceSpoof == "PC" then
-							if key == "TouchEnabled" or key == "KeyboardEnabled" or key == "MouseEnabled" then return true end
-						elseif DS_DeviceSpoof == "Console" then
-							if key == "TouchEnabled" then return false end
-							if key == "GamepadEnabled" then return true end
-						end
-					elseif self == GS then
-						if key == "IsTenFootInterface" then return DS_DeviceSpoof == "Console" end
-					elseif DS_DeviceSpoof == "Mobile" and key == "ViewportSize" and self:IsA("Camera") then
-						return Vector2.new(896, 414)
-					end
-					if key == "DeviceIcon" then
-						return _deviceEmojiMap[DS_DeviceSpoof] or _deviceEmojiMap.PC
-					end
-					if key == "GetAttribute" then
-						return function(inst, name)
-							local val = oldIndex(inst, "GetAttribute")
-							val = val(inst, name)
-							local nameL = tostring(name):lower()
-							if nameL == "device" or nameL == "platform" or nameL == "devicetype" then
-								return DS_DeviceSpoof
-							elseif nameL == "deviceicon" then
-								return _deviceEmojiMap[DS_DeviceSpoof] or _deviceEmojiMap.PC
-							end
-							return val
-						end
-					end
-				end
-			end
-			return oldIndex(self, key)
-		end))
-		if oldIndex then DS_oldIndex = oldIndex end
-	end)
-	if not hookOk1 or not DS_oldIndex then
-		warn("[STARSHIP] __index hook failed:", hookErr1 or "hookmetamethod returned nil")
-		DS_oldIndex = nil
-	end
-
-	-- Hook __namecall
-	local hookOk2, hookErr2 = pcall(function()
-		local oldNamecall
-		oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-			local method = getnamecallmethod()
-
-			if not checkcaller() then
-				-- ANTI-AFK
-				if _G.StarshipAntiTabDetect then
-					if (method == "Connect" or method == "connect") and self == UIS.WindowFocusReleased then
-						return {
-							Connected = true,
-							Disconnect = function(s) if type(s) == "table" then s.Connected = false end end,
-							disconnect = function(s) if type(s) == "table" then s.Connected = false end end,
-						}
-					end
-					if method == "IsWindowFocused" then return true end
-					if method == "GetLastInputTime" then return tick() end
-					if method == "FireServer" or method == "InvokeServer" then
-						local nm = tostring(self.Name):lower()
-						if nm:find("afk") or nm:find("focus") or nm:find("tab") or nm:find("idle") or nm:find("activity") then
-							return
-						end
-					end
-					if method == "SetAttribute" then
-						local attr = tostring(...):lower()
-						if attr:find("afk") or attr:find("focus") or attr:find("tab") or attr:find("idle") then
-							return
-						end
-					end
-				end
-
-				-- NAME SPOOFING via GetAttribute
-				if method == "GetAttribute" and _G.NameSpoofEnabled and DS_SpoofName ~= "" then
-					local val = (oldNamecall or DS_oldNamecall)(self, ...)
-					if typeof(val) == "string" then
-						return DS_processNameReplacement(val)
-					end
-					return val
-				end
-
-				-- DEVICE SPOOFING (FULL)
-				if _G.DeviceSpoofEnabled and DS_DeviceSpoof ~= "Default" then
-					-- Device Remote Intercept
-					if method == "FireServer" or method == "InvokeServer" then
-						local isDeviceRemote = _cachedDeviceRemotes[self] ~= nil
-						local remoteName = not isDeviceRemote and tostring(self.Name):lower() or ""
-						
-						if isDeviceRemote or remoteName:find("device") or remoteName:find("platform") or remoteName:find("input") then
-							if _cachedDeviceRemotes[self] == "DeviceUpdateEvent" then
-								local spoofVal = (DS_DeviceSpoof == "Mobile") and "Phone" or
-									(DS_DeviceSpoof == "PC") and "Computer" or DS_DeviceSpoof
-								return (oldNamecall or DS_oldNamecall)(self, spoofVal)
-							elseif _cachedDeviceRemotes[self] == "DeviceDetected" then
-								return (oldNamecall or DS_oldNamecall)(self, DS_DeviceSpoof, _deviceEmojiMap[DS_DeviceSpoof] or _deviceEmojiMap.PC)
-							end
-
-							local args = {...}
-							local argCount = select("#", ...)
-							local changed = false
-							for i = 1, argCount do
-								local spoofed = DS_deepSpoof(args[i])
-								if spoofed ~= args[i] then args[i] = spoofed; changed = true end
-							end
-							if changed then return (oldNamecall or DS_oldNamecall)(self, unpack(args, 1, argCount)) end
-						end
-					end
-
-					-- Attribute Read
-					if method == "GetAttribute" then
-						local name = ...
-						local nameLower = name and tostring(name):lower() or ""
-						if nameLower == "device" or nameLower == "platform" or nameLower == "devicetype" or
-						   nameLower == "inputtype" or nameLower == "playerdevice" or nameLower == "playerplatform" then
-							return DS_DeviceSpoof
-						end
-						if nameLower == "deviceicon" then
-							return _deviceEmojiMap[DS_DeviceSpoof] or _deviceEmojiMap.PC
-						end
-					end
-
-					-- Attribute Write
-					if method == "SetAttribute" then
-						local args = {...}
-						local name = args[1]
-						local nameLower = name and tostring(name):lower() or ""
-						if nameLower == "device" or nameLower == "platform" or nameLower == "devicetype" or
-						   nameLower == "inputtype" or nameLower == "playerdevice" or nameLower == "playerplatform" then
-							local currentVal = tostring(args[2])
-							DS_learnGameTerm(currentVal)
-							args[2] = DS_getGameTermForTarget()
-							return (oldNamecall or DS_oldNamecall)(self, unpack(args, 1, select("#", ...)))
-						end
-						if nameLower == "deviceicon" then
-							args[2] = _deviceEmojiMap[DS_DeviceSpoof] or _deviceEmojiMap.PC
-							return (oldNamecall or DS_oldNamecall)(self, unpack(args, 1, select("#", ...)))
-						end
-					end
-
-					-- Core Service Spoofing
-					if self == GS and method == "IsTenFootInterface" then
-						return DS_DeviceSpoof == "Console"
-					elseif self == UIS then
-						if method == "GetPlatform" then
-							if DS_DeviceSpoof == "Mobile" then return Enum.Platform.Android end
-							if DS_DeviceSpoof == "PC" then return Enum.Platform.Windows end
-							if DS_DeviceSpoof == "Console" then return Enum.Platform.XBoxOne end
-						elseif method == "GetLastInputType" then
-							if DS_DeviceSpoof == "Mobile" then return Enum.UserInputType.Touch end
-							if DS_DeviceSpoof == "PC" then
-								local realInput = (oldNamecall or DS_oldNamecall)(self, ...)
-								if realInput == Enum.UserInputType.Touch then return realInput end
-								return Enum.UserInputType.Keyboard
-							end
-							if DS_DeviceSpoof == "Console" then return Enum.UserInputType.Gamepad1 end
-						elseif method == "GetConnectedGamepads" then
-							if DS_DeviceSpoof == "Mobile" or DS_DeviceSpoof == "PC" then return {} end
-							if DS_DeviceSpoof == "Console" then return {{}} end
-						elseif method == "GetSupportedGamepadKeyCodes" then
-							if DS_DeviceSpoof == "Console" then
-								return {Enum.KeyCode.ButtonA, Enum.KeyCode.ButtonB, Enum.KeyCode.ButtonX, Enum.KeyCode.ButtonY}
-							else return {} end
-						end
-					end
-				end
-			end
-			return (oldNamecall or DS_oldNamecall)(self, ...)
-		end))
-		if oldNamecall then DS_oldNamecall = oldNamecall end
-	end)
-	if not hookOk2 or not DS_oldNamecall then
-		warn("[STARSHIP] __namecall hook failed:", hookErr2 or "hookmetamethod returned nil")
-		DS_oldNamecall = nil
-	end
-
-	-- Create TouchGui for Mobile spoofing
-	if DS_DeviceSpoof == "Mobile" then
-		pcall(function()
-			local pg = lp:FindFirstChild("PlayerGui")
-			if pg and not pg:FindFirstChild("TouchGui") then
-				local tg = Instance.new("ScreenGui")
-				tg.Name = "TouchGui"
-				tg.ResetOnSpawn = false
-				tg.Parent = pg
-				local f = Instance.new("Frame", tg)
-				f.Name = "TouchControlFrame"
-				f.Visible = false
-			end
-		end)
-	end
-
-	DS_HooksApplied = true
-	if DEV_MODE then warn("[STARSHIP] 🕵️ Starship Privacy System ACTIVE (Full Device + Name + Anti-AFK)") end
 end
 
 
--- ═══ Full Scan & Listen Functions (Batched to avoid FPS drops) ═══
-local DS_ScanRunning = false
-local function DS_fullScan()
-	if DS_ScanRunning then return end -- Prevent overlapping scans
-	DS_ScanRunning = true
-	
-	local lp = LocalPlayer
-	_G.StarshipDeviceElements = _G.StarshipDeviceElements or {}
-	local batchCount = 0
-	local BATCH_SIZE = 30 -- Process 30 objects per frame to avoid freeze
-	
-	-- Scan character descendants (batched)
-	for _, player in pairs(Players:GetPlayers()) do
-		if player.Character then
-			for _, g in pairs(player.Character:GetDescendants()) do
-				if g:IsA("GuiObject") then
-					batchCount = batchCount + 1
-					if batchCount % BATCH_SIZE == 0 then RunService.Heartbeat:Wait() end
-					
-					-- Process if device-related OR name-related (text)
-					local isDevice = DS_isDeviceRelated(g)
-					local isNameText = _G.NameSpoofEnabled and (g:IsA("TextLabel") or g:IsA("TextButton"))
-					
-					if isDevice or isNameText then
-						if isDevice then _G.StarshipDeviceElements[g] = true end
-						pcall(DS_spoof, g)
-					end
-				end
-			end
-		end
-	end
-	
-	-- Scan PlayerGui descendants (batched)
-	pcall(function()
-		local scannables = {lp.PlayerGui}
-		-- For Workspace, we only scan billboard/surface guis to avoid huge lag
-		if _G.NameSpoofEnabled then 
-			for _, v in pairs(workspace:GetChildren()) do
-				if v:IsA("BillboardGui") or v:IsA("SurfaceGui") or v:IsA("Model") or v:IsA("Folder") then
-					table.insert(scannables, v)
-				end
-			end
-		end
-		
-		for _, container in ipairs(scannables) do
-			local descendants = container:IsA("Instance") and container:GetDescendants() or {}
-			for _, g in pairs(descendants) do
-				if g:IsA("TextLabel") or g:IsA("TextButton") then
-					batchCount = batchCount + 1
-					if batchCount % BATCH_SIZE == 0 then RunService.Heartbeat:Wait() end
-					pcall(DS_spoof, g)
-				elseif not _G.NameSpoofEnabled and DS_isDeviceRelated(g) then
-					batchCount = batchCount + 1
-					if batchCount % BATCH_SIZE == 0 then RunService.Heartbeat:Wait() end
-					if g:IsA("ImageLabel") or g:IsA("ImageButton") then
-						_G.StarshipDeviceElements[g] = true
-						pcall(DS_spoof, g)
-					end
-				end
-			end
-		end
-	end)
-	
-	DS_ScanRunning = false
-end
-
-local function DS_listenToUI(container)
-	if not container then return end
-	local conn = container.DescendantAdded:Connect(function(g)
-		if (_G.NameSpoofEnabled or _G.DeviceSpoofEnabled) and g:IsA("GuiObject") then
-			task.defer(function()
-				if DS_isDeviceRelated(g) then
-					if _G.DeviceSpoofEnabled then 
-						_G.StarshipDeviceElements = _G.StarshipDeviceElements or {}
-						_G.StarshipDeviceElements[g] = true
-					end
-					pcall(DS_spoof, g)
-				end
-			end)
-		end
-	end)
-	_G.StarshipSpoofConnections = _G.StarshipSpoofConnections or {}
-	table.insert(_G.StarshipSpoofConnections, conn)
-end
-
-local function DS_listenToCharacter(char)
-	DS_listenToUI(char)
-end
-
--- ═══ UI ELEMENTS ═══
-_G.DeviceSpoofContainer:Paragraph({
-	Title = "⚙️ Configuration",
-	Desc = "Select your target device and enable spoofing below.",
-})
+_G.DeviceSpoofContainer:Section({ Title = "Device Spoofer", Desc = "Modify your device so it can be changed on mobile or pc" })
 
 _G.DeviceSpoofContainer:Dropdown({
-	Title = "🎯 Device Type",
-	Desc = "Choose which device to appear as",
-	Values = {"Default", "PC", "Mobile", "Console"},
-	Value = DS_DeviceSpoof,
-	Callback = function(v)
-		local prev = DS_DeviceSpoof
-		DS_DeviceSpoof = v
-		DS_DeviceRelatedCache = {} -- Clear cache when device type changes
-		if _G.DeviceSpoofEnabled then
-			DS_ApplyPrivacyHooks()
-			-- Re-spoof confirmed elements (batched)
-			if _G.StarshipDeviceElements then
-				task.spawn(function()
-					local count = 0
-					for obj, _ in pairs(_G.StarshipDeviceElements) do
-						if typeof(obj) == "Instance" and obj.Parent then pcall(DS_spoof, obj) end
-						count = count + 1
-						if count % 15 == 0 then RunService.Heartbeat:Wait() end
-					end
-				end)
-			end
-			task.spawn(function() task.wait(0.3); DS_proactiveDeviceSpoof() end)
-			if v ~= "Default" and v ~= prev then
-				WindUI:Notify({ Title = "📱 Device Spoof", Content = "Updated to: " .. v .. "\nRespawn for full effect!", Duration = 4 })
-			end
-		end
-		WindUI:Notify({ Title = "📱 Device Spoof", Content = "Device set to: " .. v, Duration = 2 })
-	end,
+   Title = "Select Target Mode",
+   Values = {"Phone 📱", "Windows 💻"},
+   Value = "Phone 📱",
+   Callback = function(v)
+        if v == "Phone 📱" then
+            _G.StarshipDeviceSettings.Target = "Phone"; _G.StarshipDeviceSettings.Platform = Enum.Platform.IOS; _G.StarshipDeviceSettings.Emoji = "📱"; _G.StarshipDeviceSettings.Touch = true; _G.StarshipDeviceSettings.Viewport = Vector2.new(375, 667)
+        else
+            _G.StarshipDeviceSettings.Target = "PC"; _G.StarshipDeviceSettings.Platform = Enum.Platform.Windows; _G.StarshipDeviceSettings.Emoji = "💻"; _G.StarshipDeviceSettings.Touch = false; _G.StarshipDeviceSettings.Viewport = Vector2.new(1920, 1080)
+        end
+        if _G.StarshipDeviceActive then Player:SetAttribute("DeviceType", (_G.StarshipDeviceSettings.Target == "PC" and "PC" or "Phone")) end
+   end
 })
 
 _G.DeviceSpoofContainer:Toggle({
-	Title = "🔄 Enable Device Spoofing",
-	Desc = "Activate device-specific icons and attributes",
-	Value = _G.DeviceSpoofEnabled,
-	Callback = function(v)
-		_G.DeviceSpoofEnabled = v
-		if v then
-			if not DS_HooksApplied then
-				DS_ApplyPrivacyHooks()
-				DS_HooksApplied = true
-			end
-			task.spawn(function() task.wait(0.3); DS_proactiveDeviceSpoof() end)
-			if DS_DeviceSpoof ~= "Default" then
-				_G.StarshipSpoofConnections = _G.StarshipSpoofConnections or {}
-				_G.StarshipDeviceElements = _G.StarshipDeviceElements or {}
-				
-				-- Monitor UI and Characters
-				DS_listenToUI(lp:FindFirstChild("PlayerGui"))
-				
-				for _, player in pairs(Players:GetPlayers()) do
-					if player.Character then DS_listenToCharacter(player.Character) end
-					local cc = player.CharacterAdded:Connect(function(char)
-						task.wait(1); DS_listenToCharacter(char); DS_fullScan()
-						task.spawn(function() task.wait(0.5); DS_proactiveDeviceSpoof() end)
-					end)
-					table.insert(_G.StarshipSpoofConnections, cc)
-				end
-				local jc = Players.PlayerAdded:Connect(function(player)
-					local cc = player.CharacterAdded:Connect(function(char) task.wait(1); DS_listenToCharacter(char); DS_fullScan() end)
-					table.insert(_G.StarshipSpoofConnections, cc)
-				end)
-				table.insert(_G.StarshipSpoofConnections, jc)
-				
-				DS_fullScan()
-				
-				-- Periodic re-spoof
-				task.spawn(function()
-					_G.StarshipRespoofLoopActive = true
-					while (_G.NameSpoofEnabled or _G.DeviceSpoofEnabled) and _G.StarshipRespoofLoopActive and task.wait(10) do
-						if _G.StarshipDeviceElements then
-							local count = 0
-							for obj, isD in pairs(_G.StarshipDeviceElements) do
-								if isD and typeof(obj) == "Instance" and obj.Parent then 
-									pcall(DS_spoof, obj) 
-									count = count + 1
-									if count % 15 == 0 then RunService.Heartbeat:Wait() end
-								end
-							end
-						end
-					end
-				end)
-				WindUI:Notify({ Title = "📱 Device Spoof", Content = "Device spoofing ACTIVE", Duration = 3 })
-			else
-				WindUI:Notify({ Title = "📱 Device Spoof", Content = "Spoofing enabled. Select a device type above!", Duration = 3 })
-			end
-		else
-			-- Check if Name spoofing is also off before full cleanup
-			if not _G.NameSpoofEnabled then
-				_G.StarshipRespoofLoopActive = false
-				if _G.StarshipSpoofConnections then
-					for _, conn in pairs(_G.StarshipSpoofConnections) do pcall(function() conn:Disconnect() end) end
-					_G.StarshipSpoofConnections = {}
-				end
-				for obj, conns in pairs(DS_PropertyConnections) do
-					for _, conn in pairs(conns) do pcall(function() conn:Disconnect() end) end
-				end
-				DS_PropertyConnections = {}
-				
-				-- Restore originals
-				for obj, orig in pairs(DS_OriginalValues) do
-					if typeof(obj) == "Instance" and obj.Parent then
-						pcall(function()
-							if orig.Type == "Image" then
-								obj.Image = orig.Image; obj.ImageRectOffset = orig.ImageRectOffset; obj.ImageRectSize = orig.ImageRectSize
-							elseif orig.Type == "Text" then obj.Text = orig.Text
-							elseif orig.Type == "Frame" then obj.Visible = orig.Visible 
-							elseif orig.Type == "Remote" then obj.OnClientInvoke = orig.OnClientInvoke end
-						end)
-					end
-				end
-				DS_OriginalValues = {}
-				_G.StarshipDeviceElements = {}
-				DS_DeviceRelatedCache = {}
-				DS_HooksApplied = false
-			end
-			WindUI:Notify({ Title = "📱 Device Spoof", Content = "Device spoofing DISABLED", Duration = 3 })
-		end
-	end,
+    Title = "🔄 Enable Device Spoof",
+    Desc = "Apply spoofing to your device",
+    Value = _G.StarshipDeviceActive,
+    Callback = function(v)
+    _G.StarshipDeviceActive = v
+    if v then
+        -- 🧠 Professional Module Hijack (Visual Fix)
+        if GameData and GameData.ConfigModule then
+            pcall(function()
+                local ConfigModule = RepStorage:FindFirstChild(GameData.ConfigModule, true)
+                if ConfigModule then
+                    local Config = require(ConfigModule)
+                    if Config.GetDeviceImage then
+                        local target = (_G.StarshipDeviceSettings.Target == "Phone" and GameData.AltTarget) or (_G.StarshipDeviceSettings.Target == "PC" and GameData.PCTarget) or _G.StarshipDeviceSettings.Target
+                        Config.GetDeviceImage = function(p12, p13)
+                            local icons = p12.DeviceIcons or p12.DeviceNametags -- Robust check
+                            if not icons then return nil end
+                            return icons[target] or icons.Unknown or icons.Phone or icons.Computer
+                        end
+                        if DEV_MODE then warn("[STARSHIP] 🧪 Module Hijacked for: " .. GameData.ConfigModule) end
+                    end
+                end
+            end)
+        end
+
+        local t = (_G.StarshipDeviceSettings.Target == "Phone" and GameData and GameData.AltTarget) or (_G.StarshipDeviceSettings.Target == "PC" and GameData and GameData.PCTarget) or _G.StarshipDeviceSettings.Target
+        local os = (_G.StarshipDeviceSettings.Target == "Phone" and GameData and GameData.AltOS) or (_G.StarshipDeviceSettings.Target == "PC" and GameData and GameData.PCOS) or nil
+        
+        -- 🛡️ God-Mode Attribute Hijack
+        if GameData and GameData.Perpetual then
+            pcall(function()
+                LocalPlayer:SetAttribute("DeviceType", t)
+                LocalPlayer:SetAttribute("DeviceOS", os)
+                LocalPlayer:SetAttribute("DeviceDetectWhy", "platform-ios")
+            end)
+        end
+
+        ForceSync(t)
+        
+        -- 🔄 Universal Sync Engine (v14+)
+        task.spawn(function()
+            local respawnConn = Player.CharacterAdded:Connect(function()
+                if _G.StarshipDeviceActive then task.wait(0.5); ForceSync(t) end
+            end)
+            
+            while _G.StarshipDeviceActive do
+                task.wait(10) -- Slowed to 10s for stability
+                if _G.StarshipDeviceActive then ForceSync(t) end
+            end
+            
+            if respawnConn then respawnConn:Disconnect() end
+        end)
+        
+        WindUI:Notify({ Title = "Device Spoof", Content = "Signals active & Syncing...", Duration = 3 })
+    else
+        -- Clean up visual spoof on disable
+        pcall(function()
+            local char = Player.Character
+            local head = char and char:FindFirstChild("Head")
+            local billboard = head and head:FindFirstChildOfClass("BillboardGui")
+            if billboard then
+                for _, obj in pairs(billboard:GetDescendants()) do
+                    if obj.Name == "EmojiFix" then obj:Destroy() end
+                end
+            end
+        end)
+        WindUI:Notify({ Title = "Device Spoof", Content = "Spoofing Disabled - Back to normal", Duration = 3 })
+    end
+    
+    -- 💀 Global Auto Reset (EXTREME RESPPAWN) - Always triggers on change
+    task.wait(0.1)
+    pcall(function()
+        local lp = game:GetService("Players").LocalPlayer
+        local char = lp.Character
+        if char then
+            -- Cara 1: Standard Health
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then pcall(function() hum.Health = 0 end) end
+            
+            -- Cara 2: Break Joints
+            pcall(function() char:BreakJoints() end)
+            
+            -- Cara 3: Destroy Head (Force Kill)
+            local head = char:FindFirstChild("Head") 
+            if head then pcall(function() head:Destroy() end) end
+            
+            -- Cara 4: Look for Custom Reset Remotes
+            task.spawn(function()
+                local resetNames = {"ResetRemote", "ResetAvatarEvent", "ResetCharacter", "KillPlayer"}
+                for _, name in pairs(resetNames) do
+                    local r = game:GetService("ReplicatedStorage"):FindFirstChild(name, true)
+                    if r and r:IsA("RemoteEvent") then 
+                        r:FireServer() 
+                    end
+                end
+            end)
+        end
+    end)
+end
 })
 
 _G.DeviceSpoofContainer:Divider()
 
 _G.DeviceSpoofContainer:Button({
-	Title = "🔄 Force Respawn",
-	Desc = "Respawn character to apply spoofing",
-	Callback = function()
-		local lp = LocalPlayer
-		if lp and lp.Character then
-			local hum = lp.Character:FindFirstChildOfClass("Humanoid")
-			if hum then hum.Health = 0 end
-			WindUI:Notify({ Title = "📱 Device Spoof", Content = "Respawning to apply spoof...", Duration = 2 })
-		end
-	end,
+    Title = "Nuclear PC Reset 🔄",
+    Desc = "Force reset to PC for all known platforms",
+    Callback = function()
+        local PCRestoreList = {"PC", "Windows", "Desktop", "Computer"}
+        for _, str in pairs(PCRestoreList) do
+            ForceSync(str)
+            task.wait(0.1)
+        end
+        WindUI:Notify({ Title = "Reset", Content = "Nuclear Reset Complete!", Duration = 2 })
+    end
 })
 
+_G.DeviceSpoofContainer:Paragraph({
+	Title = "💡 Pro Tip",
+	Desc = "Gunakan Nuclear Reset jika ikon device Anda 'nyangkut' di server setelah beralih mode.",
+})
 
+-- Visual Emoji & Direct Object Locker (v19.5 High Frequency)
+task.spawn(function()
+    while task.wait(0.1) do
+        if _G.StarshipDeviceActive then
+            pcall(function()
+                local char = Player.Character
+                if char then
+					-- [NEW] Direct Object Hijack for the head overhead
+					-- [NEW] Anti-Blink Shield Logic (v22.3)
+					local function ShieldIcon(icon, isTarget)
+						if not icon or icon:GetAttribute("StarshipShielded") then return end
+						icon:SetAttribute("StarshipShielded", true)
+						icon:GetPropertyChangedSignal("Visible"):Connect(function()
+							if _G.StarshipDeviceActive and icon.Parent then
+								local targetObj = (_G.StarshipDeviceSettings.Target == "Phone" and "Phone" or "Pc")
+								local altObj = (_G.StarshipDeviceSettings.Target == "Phone" and "Mobile" or "PC")
+								local extObj = (_G.StarshipDeviceSettings.Target == "Phone" and "Mobile" or "Desktop")
+								if (icon.Name == targetObj or icon.Name == altObj or icon.Name == extObj) and not icon.Visible then
+									icon.Visible = true
+								end
+							end
+						end)
+					end
+
+					for _, v in pairs(char:GetDescendants()) do
+						if v:IsA("BillboardGui") and (v.Name == "VandraOverhead" or v.Name == "Tag" or v.Name:find("Billboard")) then
+							v.Enabled = true
+							local disp = v:FindFirstChild("Display", true) or v
+							local phone = disp:FindFirstChild("Phone")
+							local pc = disp:FindFirstChild("Pc") or disp:FindFirstChild("PC") or disp:FindFirstChild("Computer")
+							local tablet = disp:FindFirstChild("Tablet")
+							
+							local isTargetPhone = (_G.StarshipDeviceSettings.Target == "Phone")
+							
+							if phone then 
+								phone.Visible = isTargetPhone; phone.ImageTransparency = 0 
+								if isTargetPhone then ShieldIcon(phone) end
+							end
+							if pc then 
+								pc.Visible = not isTargetPhone; pc.ImageTransparency = 0 
+								if not isTargetPhone then ShieldIcon(pc) end
+							end
+							if tablet then tablet.Visible = false end
+						end
+					end
+					
+					-- Standard Emoji Fallback
+                    local head = char:FindFirstChild("Head")
+                    local billboard = head and head:FindFirstChildOfClass("BillboardGui")
+                    if billboard then
+                        for _, obj in pairs(billboard:GetDescendants()) do
+                            if (obj:IsA("TextLabel") or obj:IsA("ImageLabel")) and (obj.Name == "Emote" or obj.Name == "Icon" or obj.Name == "Device") then
+                                if _G.StarshipDeviceSettings.Emoji ~= "" then
+                                    if obj:IsA("TextLabel") then 
+                                        obj.Text = _G.StarshipDeviceSettings.Emoji
+                                    else 
+                                        obj.Image = ""
+                                        local fix = obj:FindFirstChild("EmojiFix") or Instance.new("TextLabel", obj)
+                                        fix.Name = "EmojiFix"
+                                        fix.Text = _G.StarshipDeviceSettings.Emoji
+                                        fix.Size = UDim2.new(1,0,1,0)
+                                        fix.BackgroundTransparency = 1
+                                        fix.TextScaled = true
+                                        fix.TextColor3 = Color3.new(1,1,1)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
 
 end) -- end pcall
 if not dsOk then
-	warn("[STARSHIP] ⚠️ Device Spoof tab error:", tostring(dsErr))
-	pcall(function()
-		_G.DeviceSpoofContainer:Paragraph({ Title = "❌ Error", Desc = "Device Spoof failed to load: " .. tostring(dsErr) })
-	end)
+	warn("[STARSHIP] ⚠️ Name Spoof tab error:", tostring(dsErr))
 end
-end) -- end task.spawn for Device Spoof Tab
+end) -- end task.spawn
+
 
 -- ══════════════════════════════════════════════════════════════════
 
