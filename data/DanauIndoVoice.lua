@@ -108,7 +108,8 @@ local config = {
     sellAllBase = false,
     sellRare = false, sellMythic = false, sellSecret = false,
     sellOre = false,
-    autoDelivery = false, adminDetect = true
+    autoDelivery = false, adminDetect = true,
+    antiAfk = true
 }
 
 local statusLabel -- Global reference for notification
@@ -468,7 +469,7 @@ InfoSection:Paragraph({
 
 -- Account Content (VIP Status)
 do
-    local VIPSection = accountSubTab:Section({ Title = "VIP Status", Icon = "star" })
+    local VIPSection = accountSubTab:Section({ Title = "VIP Status", Icon = "star", Opened = true })
     
     local vipExpiryTime = nil
     if sessionData.Expiry then

@@ -140,7 +140,9 @@ const ALLOWED_MODULES = [
   "SambungKata-obfuscated.lua",
   "sawah-indo.lua",
   "Pantai-VoiceHub.lua",
+  "Pantai-VoiceHub-obfuscated.lua",
   "DanauIndoVoice.lua",
+  "DanauIndoVoice-obfuscated.lua",
 ];
 
 // Owner ID - always has access without whitelist check
@@ -646,7 +648,7 @@ export default async function handler(req, res) {
 
     // Read module file - handle Modules/ prefix
     let modulePath;
-    if (normalizedName === "violence-district-obfuscated.lua" || normalizedName === "SambungKata-obfuscated.lua" || normalizedName === "sawah-indo.lua" || normalizedName === "Pantai-VoiceHub.lua" || normalizedName === "DanauIndoVoice.lua") {
+    if (normalizedName === "violence-district-obfuscated.lua" || normalizedName === "SambungKata-obfuscated.lua" || normalizedName === "sawah-indo.lua" || normalizedName === "Pantai-VoiceHub-obfuscated.lua" || normalizedName === "DanauIndoVoice-obfuscated.lua") {
       modulePath = path.join(process.cwd(), "data", normalizedName);
     } else if (normalizedName.startsWith("Modules/")) {
       modulePath = path.join(process.cwd(), "data", normalizedName);

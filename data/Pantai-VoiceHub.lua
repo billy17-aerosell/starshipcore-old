@@ -552,7 +552,7 @@ local accSubTab = HomeMulti:Tab({ Title = "Account", Icon = "user" })
 -- Info SubTab
 local WelcomeParagraph = infoSubTab:Paragraph({
     Title = "Pantai Voice Chat",
-    Desc = "Status: Activated ✅\nVersion: 2.0 (Premium)\n\nUptime: 0s\nFishing: OFF",
+    Desc = "Status: Activated ✅\nVersion: 2.0 (Premium)\n\nUptime: 0s\nFishing: OFF\nAnti-AFK: ACTIVE 🛡️",
     Image = "rbxassetid://7733965118",
 })
 
@@ -566,7 +566,7 @@ task.spawn(function()
         
         pcall(function()
             WelcomeParagraph:SetDesc(string.format(
-                "Status: Activated ✅\nVersion: 2.0 (Premium)\n\nUptime: %ds\nFishing: %s\nMode: %s\n\nThank you for choosing Starship Core.",
+                "Status: Activated ✅\nVersion: 2.0 (Premium)\n\nUptime: %ds\nFishing: %s\nMode: %s\nAnti-AFK: ACTIVE 🛡️\n\nThank you for choosing Starship Core.",
                 uptime, fishStatus, modeStr
             ))
         end)
@@ -593,7 +593,7 @@ local ply = game.Players.LocalPlayer
 
 -- VIP STATUS SECTION
 do
-    local VIPSection = accSubTab:Section({ Title = "VIP Status", Icon = "star" })
+    local VIPSection = accSubTab:Section({ Title = "VIP Status", Icon = "star", Opened = true })
     
     local vipExpiryTime = nil
     if sessionData.Expiry then
@@ -1442,6 +1442,7 @@ task.spawn(function()
             end
         end
     end))
+    -- [[ INTEGRATED ANTI-AFK SYSTEM (ALWAYS ON) ]]
     local VirtualUser = game:GetService('VirtualUser')
     table.insert(Connections, game.Players.LocalPlayer.Idled:Connect(function() 
         if Running then
@@ -1449,6 +1450,18 @@ task.spawn(function()
             VirtualUser:ClickButton2(Vector2.new()) 
         end
     end))
+    -- Proactive Anti-AFK Loop
+    task.spawn(function()
+        while Running do
+            task.wait(120) -- Click every 2 mins to prevent idle detection
+            if Running then
+                pcall(function()
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton1(Vector2.new(100, 100))
+                end)
+            end
+        end
+    end)
 end)
 
 -- Stealth Sell Management
