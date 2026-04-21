@@ -626,20 +626,28 @@ local function createLoadingUI()
 	textureContainer.ZIndex = 2
 	textureContainer.Parent = background
 
-	-- Massive Watermark Logo
+	-- Massive Ghost Watermark (Restored as requested)
 	local watermark = Instance.new("ImageLabel")
 	watermark.Name = "Watermark"
 	watermark.Image = "rbxassetid://85930777472774"
-	watermark.Size = UDim2.new(0, 450, 0, 450)
-	watermark.Position = UDim2.new(0.5, -225, 0.5, -225)
+	watermark.Size = UDim2.new(0, 480, 0, 480)
+	watermark.Position = UDim2.new(0.5, -240, 0.5, -240)
 	watermark.BackgroundTransparency = 1
-	watermark.ImageTransparency = 0.96 -- Very subtle
+	watermark.ImageTransparency = 0.97 -- Very ghost-like
 	watermark.ImageColor3 = Color3.fromRGB(255, 255, 255)
 	watermark.ScaleType = Enum.ScaleType.Fit
 	watermark.ZIndex = 2
 	watermark.Parent = textureContainer
 
-	-- Background Animation (Intense Anime Sword Slash Effect)
+	-- Static Background (Animations restored for watermark)
+	task.spawn(function()
+		-- Subtle continuous rotation
+		while background and background.Parent do
+			watermark.Rotation = watermark.Rotation + 1
+			task.wait(0.05)
+		end
+	end)
+
 	-- Static "Coretan" (Technical Blueprint Lines)
 	for i = 1, 4 do
 		local line = Instance.new("Frame")
@@ -653,43 +661,9 @@ local function createLoadingUI()
 		line.Parent = textureContainer
 	end
 
-	-- Premium "Light Sweep" Shimmer Effect
-	local sweep = Instance.new("Frame")
-	sweep.Name = "Shimmer"
-	sweep.Size = UDim2.new(0, 100, 1.6, 0)
-	sweep.Position = UDim2.new(-0.8, 0, -0.3, 0)
-	sweep.Rotation = 35
-	sweep.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	sweep.BackgroundTransparency = 0.94
-	sweep.BorderSizePixel = 0
-	sweep.ZIndex = 3
-	sweep.Parent = background
-
-	local sweepGlow = Instance.new("UIGradient")
-	sweepGlow.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.5, 0.4),
-		NumberSequenceKeypoint.new(1, 1)
-	})
-	sweepGlow.Parent = sweep
-
-	-- Background Animations
+	-- Static Background (Animations removed as requested)
 	task.spawn(function()
-		-- Continuous subtle watermark rotation
-		TweenService:Create(watermark, TweenInfo.new(30, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1), {
-			Rotation = 360
-		}):Play()
-
-		while background and background.Parent do
-			-- Slow Sweep every 5 seconds
-			sweep.Position = UDim2.new(-0.8, 0, -0.3, 0)
-			local tween = TweenService:Create(sweep, TweenInfo.new(2.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-				Position = UDim2.new(1.5, 0, -0.3, 0)
-			})
-			tween:Play()
-			
-			task.wait(5)
-		end
+		-- Background logic remains static
 	end)
 
 	-- Top Header Bar (Matching Main UI)
@@ -700,24 +674,9 @@ local function createLoadingUI()
 	header.ZIndex = 50 -- Top Layer
 	header.Parent = background
 
-	local titleSmall = Instance.new("TextLabel")
-	titleSmall.Text = "STARSHIP | BOOTING"
-	titleSmall.Size = UDim2.new(0, 200, 1, 0)
-	titleSmall.Position = UDim2.new(0, 20, 0, 0)
-	titleSmall.BackgroundTransparency = 1
-	titleSmall.TextColor3 = Color3.fromRGB(240, 240, 240)
-	titleSmall.TextSize = 13
-	titleSmall.Font = Enum.Font.GothamBold
-	titleSmall.TextXAlignment = Enum.TextXAlignment.Left
-	titleSmall.ZIndex = 11
-	titleSmall.Parent = header
-
-	-- Tags (FPS/Ping Style)
-	local tagContainer = Instance.new("Frame")
-	tagContainer.Size = UDim2.new(0, 100, 1, 0)
-	tagContainer.Position = UDim2.new(0, 165, 0, 0) -- Moved closer to the "BOOTING" text
-	tagContainer.BackgroundTransparency = 1
-	tagContainer.Parent = header
+	-- Removed legacy labels and tags to fix overlap
+	
+	-- Close Button
 
 	-- Close Button
 	local closeBtn = Instance.new("TextButton")
@@ -803,6 +762,24 @@ local function createLoadingUI()
 			onProgress = false
 		},
 		{ 
+			name = "PANTAI VOICE", 
+			id = "pantai_voice", 
+			icon = "rbxassetid://102601684887390", 
+			desc = "Ocean-side fishing automation suite",
+			placeIds = {126463495082631},
+			scriptUrl = SECURE_API_URL .. "/api/m-pv-q8z3",
+			onProgress = false
+		},
+		{ 
+			name = "DANAU INDO", 
+			id = "danau_indo", 
+			icon = "rbxassetid://125329520492541", 
+			desc = "Lake-side fishing & mining suite",
+			placeIds = {85695526103771},
+			scriptUrl = SECURE_API_URL .. "/api/m-di-x2p1",
+			onProgress = false
+		},
+		{ 
 			name = "SAWAH INDO", 
 			id = "sawah_indo", 
 			icon = "rbxassetid://102985895717089", 
@@ -823,43 +800,127 @@ local function createLoadingUI()
 	}
 
 	-- Game Selection Frame
+	-- 🧩 HEADER (Top - Full Width)
+	local header = Instance.new("Frame")
+	header.Name = "Header"
+	header.Size = UDim2.new(1, -40, 0, 40)
+	header.Position = UDim2.new(0, 20, 0, 10)
+	header.BackgroundTransparency = 1
+	header.Parent = background
+
+	-- 🚀 STARSHIP LOGO (Header)
+	local logoHeader = Instance.new("ImageLabel")
+	logoHeader.Name = "LogoHeader"
+	logoHeader.Image = "rbxassetid://85930777472774"
+	logoHeader.Size = UDim2.new(0, 22, 0, 22)
+	logoHeader.Position = UDim2.new(0, 0, 0.5, -11)
+	logoHeader.BackgroundTransparency = 1
+	logoHeader.ImageColor3 = Color3.fromRGB(255, 45, 90) -- Matching accent color
+	logoHeader.Parent = header
+
+	local loaderTitle = Instance.new("TextLabel")
+	loaderTitle.Text = "STARSHIP LOADER"
+	loaderTitle.Size = UDim2.new(0, 130, 1, 0)
+	loaderTitle.Position = UDim2.new(0, 28, 0, 0)
+	loaderTitle.BackgroundTransparency = 1
+	loaderTitle.TextColor3 = Color3.fromRGB(240, 240, 240)
+	loaderTitle.TextSize = 14
+	loaderTitle.Font = Enum.Font.GothamBold
+	loaderTitle.TextXAlignment = Enum.TextXAlignment.Left
+	loaderTitle.Parent = header
+
+	-- 🏷️ STATUS BADGES (Rightmost in group)
+	local tagFrame = Instance.new("Frame")
+	tagFrame.Size = UDim2.new(0, 110, 0, 18)
+	tagFrame.Position = UDim2.new(1, -50, 0, 4) -- Rightmost position (before Close)
+	tagFrame.AnchorPoint = Vector2.new(1, 0)
+	tagFrame.BackgroundTransparency = 1
+	tagFrame.Parent = header
+
+	local function createBadge(name, color, pos)
+		local b = Instance.new("Frame")
+		b.Size = UDim2.new(0, 42, 1, 0)
+		b.Position = pos
+		b.BackgroundColor3 = color
+		b.Parent = tagFrame
+		Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+		
+		local l = Instance.new("TextLabel")
+		l.Text = name
+		l.Size = UDim2.new(1, 0, 1, 0)
+		l.BackgroundTransparency = 1
+		l.TextColor3 = Color3.fromRGB(0, 0, 0)
+		l.TextSize = 8
+		l.Font = Enum.Font.GothamBold
+		l.Parent = b
+	end
+
+	createBadge("VIP", Color3.fromRGB(255, 200, 0), UDim2.new(1, -42, 0, 0)) -- Aligned right in frame
+	createBadge("SAFE", Color3.fromRGB(60, 255, 180), UDim2.new(1, -88, 0, 0))
+
+	local profileName = Instance.new("TextLabel")
+	profileName.Text = string.upper(LocalPlayer.Name)
+	profileName.Size = UDim2.new(0, 150, 0, 18)
+	profileName.Position = UDim2.new(1, -145, 0, 4) -- Positioned left of the badges
+	profileName.AnchorPoint = Vector2.new(1, 0)
+	profileName.BackgroundTransparency = 1
+	profileName.TextColor3 = Color3.fromRGB(255, 255, 255)
+	profileName.TextSize = 12
+	profileName.Font = Enum.Font.GothamBold
+	profileName.TextXAlignment = Enum.TextXAlignment.Right
+	profileName.Parent = header
+
+	local infoHeader = Instance.new("TextLabel")
+	infoHeader.Size = UDim2.new(0, 250, 0, 15)
+	infoHeader.Position = UDim2.new(1, -50, 0, 22) -- Aligned with name
+	infoHeader.AnchorPoint = Vector2.new(1, 0)
+	infoHeader.BackgroundTransparency = 1
+	infoHeader.TextColor3 = Color3.fromRGB(120, 120, 130)
+	infoHeader.TextSize = 9
+	infoHeader.Font = Enum.Font.Code
+	infoHeader.TextXAlignment = Enum.TextXAlignment.Right
+	infoHeader.Parent = header
+
+	-- Live Header Info Update
+	task.spawn(function()
+		local execName = "Unknown"
+		pcall(function() execName = (identifyexecutor and identifyexecutor()) or "Unknown" end)
+		
+		while header and header.Parent do
+			local timeStr = os.date("%H:%M:%S")
+			infoHeader.Text = "TIME: " .. timeStr .. " | STATUS: ONLINE | EXEC: " .. string.upper(execName)
+			task.wait(1)
+		end
+	end)
+
+	-- 🧩 CONTENT AREA (Full Width Grid - Positioned higher to reduce space)
 	local gameSelection = Instance.new("Frame")
 	gameSelection.Name = "GameSelection"
-	gameSelection.Size = UDim2.new(0, 270, 0, 210)
-	gameSelection.Position = UDim2.new(1, -290, 0.5, -105)
+	gameSelection.Size = UDim2.new(1, -40, 1, -75) -- More height
+	gameSelection.Position = UDim2.new(0, 20, 0, 55) -- Higher up
 	gameSelection.BackgroundTransparency = 1
-	gameSelection.ZIndex = 40 -- Middle Layer
+	gameSelection.ZIndex = 40
 	gameSelection.Parent = background
 
-	local selectTitle = Instance.new("TextLabel")
-	selectTitle.Text = "SELECT MODULE TO EXECUTE"
-	selectTitle.Size = UDim2.new(1, 0, 0, 20)
-	selectTitle.Position = UDim2.new(0, 0, 0, -22) -- Closer to frame
-	selectTitle.BackgroundTransparency = 1
-	selectTitle.TextColor3 = Color3.fromRGB(150, 150, 150)
-	selectTitle.TextSize = 10
-	selectTitle.Font = Enum.Font.GothamBold
-	selectTitle.Parent = gameSelection
-
+	-- CONTENT AREA (Selection Title removed for cleaner look)
 	local gameList = Instance.new("ScrollingFrame")
 	gameList.Size = UDim2.new(1, 0, 1, 0)
-	gameList.Position = UDim2.new(0, 0, 0, 0)
 	gameList.BackgroundTransparency = 1
 	gameList.BorderSizePixel = 0
-	gameList.ScrollBarThickness = 3
-	gameList.ScrollBarImageColor3 = Color3.fromRGB(255, 45, 45)
-	gameList.ScrollBarImageTransparency = 0.5
+	gameList.ScrollBarThickness = 0 -- Hidden for cleaner look
 	gameList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	gameList.CanvasSize = UDim2.new(0, 0, 0, 0)
 	gameList.Parent = gameSelection
 
-	local listLayout = Instance.new("UIListLayout")
-	listLayout.Padding = UDim.new(0, 8)
-	listLayout.Parent = gameList
+	local gridLayout = Instance.new("UIGridLayout")
+	gridLayout.CellSize = UDim2.new(0.33, -8, 0, 120) -- 3 Columns for perfect aspect ratio
+	gridLayout.CellPadding = UDim2.new(0, 8, 0, 8)
+	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	gridLayout.Parent = gameList
 
 	local listPadding = Instance.new("UIPadding")
-	listPadding.PaddingBottom = UDim.new(0, 30) -- Bottom padding to show last item
-	listPadding.PaddingTop = UDim.new(0, 2)
+	listPadding.PaddingBottom = UDim.new(0, 30)
+	listPadding.PaddingTop = UDim.new(0, 5)
 	listPadding.PaddingLeft = UDim.new(0, 2)
 	listPadding.PaddingRight = UDim.new(0, 2)
 	listPadding.Parent = gameList
@@ -871,8 +932,7 @@ local function createLoadingUI()
 	local function createGameBtn(gameData)
 		local btn = Instance.new("TextButton")
 		btn.Name = gameData.id
-		btn.Size = UDim2.new(1, -6, 0, 70)
-		btn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		btn.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 		btn.BorderSizePixel = 0
 		btn.Text = ""
 		btn.AutoButtonColor = false
@@ -880,194 +940,131 @@ local function createLoadingUI()
 		btn.ZIndex = 51
 
 		local btnCorner = Instance.new("UICorner")
-		btnCorner.CornerRadius = UDim.new(0, 12)
+		btnCorner.CornerRadius = UDim.new(0, 14)
 		btnCorner.Parent = btn
 
-		local btnStroke = Instance.new("UIStroke")
-		btnStroke.Color = Color3.fromRGB(45, 45, 50)
-		btnStroke.Thickness = 1
-		btnStroke.Transparency = 0.5
-		btnStroke.Parent = btn
+		-- 🖼️ BANNER IMAGE (Background)
+		local banner = Instance.new("ImageLabel")
+		banner.Name = "Banner"
+		banner.Size = UDim2.new(1, 0, 1, 0)
+		banner.Image = gameData.icon
+		banner.ScaleType = Enum.ScaleType.Crop
+		banner.ImageTransparency = 0.3 -- Much clearer now
+		banner.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+		banner.Parent = btn
+		Instance.new("UICorner", banner).CornerRadius = UDim.new(0, 14)
 
-		-- Game Icon
-		local iconFrame = Instance.new("Frame")
-		iconFrame.Size = UDim2.new(0, 50, 0, 50)
-		iconFrame.Position = UDim2.new(0, 10, 0.5, -25)
-		iconFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-		iconFrame.Parent = btn
-		Instance.new("UICorner", iconFrame).CornerRadius = UDim.new(0, 8)
+		local bannerGradient = Instance.new("UIGradient")
+		bannerGradient.Rotation = 90
+		bannerGradient.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.new(0.2, 0.2, 0.2))
+		bannerGradient.Parent = banner
 
-		local icon = Instance.new("ImageLabel")
-		icon.Size = UDim2.new(1, -10, 1, -10)
-		icon.Position = UDim2.new(0.5, 0, 0.5, 0)
-		icon.AnchorPoint = Vector2.new(0.5, 0.5)
-		icon.BackgroundTransparency = 1
-		icon.Image = gameData.icon
-		icon.Parent = iconFrame
+		-- Play button and icon removed for ultra-minimalist layout
+		
+		-- 🏷️ STATUS BADGE (Top Right)
+		local statusTag = Instance.new("TextLabel")
+		statusTag.Text = gameData.onProgress and "Updating" or "Secure Access"
+		statusTag.Size = UDim2.new(0, 80, 0, 20)
+		statusTag.Position = UDim2.new(1, -10, 0, 10)
+		statusTag.AnchorPoint = Vector2.new(1, 0)
+		statusTag.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		statusTag.BackgroundTransparency = 0.4
+		statusTag.TextColor3 = Color3.fromRGB(240, 240, 240)
+		statusTag.TextSize = 8
+		statusTag.Font = Enum.Font.GothamBold
+		statusTag.Parent = btn
+		Instance.new("UICorner", statusTag).CornerRadius = UDim.new(0, 6)
 
-		-- Game Name
+		-- ✍️ NAME & DESC Overlay
+		local infoFrame = Instance.new("Frame")
+		infoFrame.Size = UDim2.new(1, -20, 0, 50)
+		infoFrame.Position = UDim2.new(0, 15, 0.5, -10) -- Centered for smaller card
+		infoFrame.BackgroundTransparency = 1
+		infoFrame.Parent = btn
+
 		local name = Instance.new("TextLabel")
 		name.Text = gameData.name
-		name.Size = UDim2.new(1, -80, 0, 20)
-		name.Position = UDim2.new(0, 70, 0, 15)
+		name.Size = UDim2.new(1, 0, 0, 20)
 		name.BackgroundTransparency = 1
 		name.TextColor3 = Color3.fromRGB(255, 255, 255)
-		name.TextSize = 13
+		name.TextSize = 14
 		name.Font = Enum.Font.GothamBold
 		name.TextXAlignment = Enum.TextXAlignment.Left
-		name.TextTruncate = Enum.TextTruncate.AtEnd -- Prevents overlap if title is long
-		name.Parent = btn
+		name.Parent = infoFrame
 
-		-- Game Description
 		local desc = Instance.new("TextLabel")
 		desc.Text = gameData.desc
-		desc.Size = UDim2.new(1, -100, 0, 15)
-		desc.Position = UDim2.new(0, 70, 0, 35)
+		desc.Size = UDim2.new(1, -40, 0, 25)
+		desc.Position = UDim2.new(0, 0, 0, 22)
 		desc.BackgroundTransparency = 1
-		desc.TextColor3 = Color3.fromRGB(150, 150, 160)
-		desc.TextSize = 10
+		desc.TextColor3 = Color3.fromRGB(180, 180, 180)
+		desc.TextSize = 8
 		desc.Font = Enum.Font.Gotham
 		desc.TextXAlignment = Enum.TextXAlignment.Left
-		desc.Parent = btn
+		desc.TextWrapped = true
+		desc.Parent = infoFrame
 
-		-- Indicator Dot
-		local indicator = Instance.new("Frame")
-		indicator.Size = UDim2.new(0, 6, 0, 6)
-		indicator.Position = UDim2.new(1, -20, 0.5, -3)
-		indicator.BackgroundColor3 = gameData.onProgress and Color3.fromRGB(255, 180, 0) or Color3.fromRGB(255, 45, 45)
-		indicator.BackgroundTransparency = 0.8
-		indicator.Visible = not gameData.onProgress -- Hide dot if onProgress to avoid clutter
-		indicator.Parent = btn
-		Instance.new("UICorner", indicator).CornerRadius = UDim.new(1, 0)
+		-- Duplicate play button removed for clean layout
+		
 
-		if gameData.onProgress then
-			local statusTag = Instance.new("TextLabel")
-			statusTag.Text = "ON UPDATE"
-			statusTag.Size = UDim2.new(0, 58, 0, 16)
-			statusTag.Position = UDim2.new(1, -12, 0, 15) -- Back to TOP RIGHT, nicely aligned with title
-			statusTag.AnchorPoint = Vector2.new(1, 0)
-			statusTag.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
-			statusTag.TextColor3 = Color3.fromRGB(0, 0, 0)
-			statusTag.TextSize = 7.5
-			statusTag.Font = Enum.Font.GothamBold
-			statusTag.Parent = btn
-			
-			local tagCorner = Instance.new("UICorner")
-			tagCorner.CornerRadius = UDim.new(0, 4)
-			tagCorner.Parent = statusTag
-
-			local tagStroke = Instance.new("UIStroke")
-			tagStroke.Thickness = 1
-			tagStroke.Color = Color3.fromRGB(0, 0, 0)
-			tagStroke.Transparency = 0.7
-			tagStroke.Parent = statusTag
-		end
-
-		-- Progress elements (inside button, hidden by default)
+		-- Progress elements (Hidden initially)
 		local progContainer = Instance.new("Frame")
 		progContainer.Name = "ProgContainer"
-		progContainer.Size = UDim2.new(1, -80, 0, 20)
-		progContainer.Position = UDim2.new(0, 70, 0, 60)
-		progContainer.BackgroundTransparency = 1
+		progContainer.Size = UDim2.new(1, -30, 0, 4)
+		progContainer.Position = UDim2.new(0, 15, 1, -10)
+		progContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
 		progContainer.Visible = false
 		progContainer.Parent = btn
-
-		local progStatus = Instance.new("TextLabel")
-		progStatus.Text = "> INITIALIZING..."
-		progStatus.Size = UDim2.new(1, 0, 0, 12)
-		progStatus.BackgroundTransparency = 1
-		progStatus.TextColor3 = Color3.fromRGB(150, 150, 160)
-		progStatus.TextSize = 8
-		progStatus.Font = Enum.Font.Code
-		progStatus.TextXAlignment = Enum.TextXAlignment.Left
-		progStatus.Parent = progContainer
-
-		local progBg = Instance.new("Frame")
-		progBg.Size = UDim2.new(1, -35, 0, 4)
-		progBg.Position = UDim2.new(0, 0, 0, 14)
-		progBg.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-		progBg.BorderSizePixel = 0
-		progBg.Parent = progContainer
-		Instance.new("UICorner", progBg)
+		Instance.new("UICorner", progContainer)
 
 		local progFill = Instance.new("Frame")
 		progFill.Size = UDim2.new(0, 0, 1, 0)
-		progFill.BackgroundColor3 = Color3.fromRGB(255, 45, 45)
-		progFill.BorderSizePixel = 0
-		progFill.Parent = progBg
+		progFill.BackgroundColor3 = Color3.fromRGB(255, 45, 90)
+		progFill.Parent = progContainer
 		Instance.new("UICorner", progFill)
 
 		local progPercent = Instance.new("TextLabel")
 		progPercent.Text = "0%"
-		progPercent.Size = UDim2.new(0, 30, 1, 0)
-		progPercent.Position = UDim2.new(1, -30, 0, 14)
+		progPercent.Size = UDim2.new(0, 30, 0, 12)
+		progPercent.Position = UDim2.new(1, 0, 0.5, 0)
+		progPercent.AnchorPoint = Vector2.new(1, 0.5)
 		progPercent.BackgroundTransparency = 1
-		progPercent.TextColor3 = Color3.fromRGB(255, 45, 45)
-		progPercent.TextSize = 9
+		progPercent.TextColor3 = Color3.fromRGB(255, 255, 255)
+		progPercent.TextSize = 8
 		progPercent.Font = Enum.Font.Code
-		progPercent.Parent = progContainer
+		progPercent.Visible = false
+		progPercent.Parent = btn
 
 		moduleProgUI[gameData.id] = {
 			container = progContainer,
-			status = progStatus,
 			fill = progFill,
 			percent = progPercent
 		}
 
 		btn.MouseEnter:Connect(function()
 			if selectedModuleData then return end
-			TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(35, 35, 40)}):Play()
-			TweenService:Create(btnStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(70, 70, 80), Transparency = 0}):Play()
-			TweenService:Create(indicator, TweenInfo.new(0.3), {BackgroundTransparency = 0.3}):Play()
+			TweenService:Create(banner, TweenInfo.new(0.4), {ImageTransparency = 0.2}):Play()
 		end)
 
 		btn.MouseLeave:Connect(function()
 			if selectedModuleData and selectedModuleData.id == gameData.id then return end
-			TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(30, 30, 35)}):Play()
-			TweenService:Create(btnStroke, TweenInfo.new(0.3), {Color = Color3.fromRGB(45, 45, 50), Transparency = 0.5}):Play()
-			TweenService:Create(indicator, TweenInfo.new(0.3), {BackgroundTransparency = 0.8}):Play()
+			TweenService:Create(banner, TweenInfo.new(0.4), {ImageTransparency = 0.3}):Play()
 		end)
 
 		btn.MouseButton1Click:Connect(function()
-			if selectedModuleData then return end -- Don't allow multiple selections
+			if selectedModuleData then return end
 			
 			if gameData.onProgress then
-				-- Feedback for on progress module
-				local originalDesc = desc.Text
-				desc.Text = "⚠️ STILL ON PROGRESS / ON UPDATE"
-				desc.TextColor3 = Color3.fromRGB(255, 180, 0)
-				
-				local originalBg = btn.BackgroundColor3
-				TweenService:Create(btn, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					BackgroundColor3 = Color3.fromRGB(45, 40, 20)
-				}):Play()
-				
-				task.delay(0.3, function()
-					TweenService:Create(btn, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-						BackgroundColor3 = originalBg
-					}):Play()
-				end)
-
-				task.delay(2, function()
-					desc.Text = originalDesc
-					desc.TextColor3 = Color3.fromRGB(150, 150, 160)
-				end)
+				-- Feedback for updating
 				return
 			end
 
 			selectedModuleData = gameData
-			closeBtn.Visible = false -- Hide close button immediately
-			
-			-- Expand button to show progress
-			TweenService:Create(btn, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-				Size = UDim2.new(1, -6, 0, 95),
-				BackgroundColor3 = Color3.fromRGB(26, 26, 28)
-			}):Play()
-			
-			btnStroke.Color = Color3.fromRGB(255, 45, 45)
-			btnStroke.Transparency = 0
-			indicator.BackgroundTransparency = 0
+			closeBtn.Visible = false
 			progContainer.Visible = true
+			progPercent.Visible = true
+			
+			TweenService:Create(banner, TweenInfo.new(0.5), {ImageTransparency = 0.1}):Play()
 		end)
 	end
 
@@ -1075,138 +1072,8 @@ local function createLoadingUI()
 		createGameBtn(g)
 	end
 
-	-- Center Brand Area
-	local brandArea = Instance.new("Frame")
-	brandArea.Size = UDim2.new(0, 180, 0, 180) 
-	brandArea.Position = UDim2.new(0, 30, 0.5, -105)
-	brandArea.BackgroundTransparency = 1
-	brandArea.ZIndex = 20 -- Explicit ZIndex
-	brandArea.Visible = true
-	brandArea.Parent = background
-
-	local logoBig = Instance.new("ImageLabel")
-	logoBig.Name = "Logo"
-	logoBig.Image = "rbxassetid://85930777472774"
-	logoBig.Size = UDim2.new(0, 120, 0, 120)
-	logoBig.Position = UDim2.new(0.5, -60, 0, 10)
-	logoBig.BackgroundTransparency = 1
-	logoBig.ScaleType = Enum.ScaleType.Fit
-	logoBig.ZIndex = 20
-	logoBig.Parent = brandArea
-
-	-- Added UIScale for smoother pulse animation
-	local logoScale = Instance.new("UIScale")
-	logoScale.Scale = 1
-	logoScale.Parent = logoBig
-
-	-- Added Glow Effect behind logo
-	local logoGlow = Instance.new("ImageLabel")
-	logoGlow.Name = "Glow"
-	logoGlow.Image = "rbxassetid://13973345471"
-	logoGlow.Size = UDim2.new(1.8, 0, 1.8, 0)
-	logoGlow.Position = UDim2.new(-0.4, 0, -0.4, 0)
-	logoGlow.BackgroundTransparency = 1
-	logoGlow.ImageColor3 = Color3.fromRGB(240, 40, 40)
-	logoGlow.ImageTransparency = 0.6
-	logoGlow.ZIndex = 15
-	logoGlow.Parent = logoBig
-
-	-- Dynamic Tech Rings
-	local ring1 = Instance.new("ImageLabel")
-	ring1.Name = "Ring1"
-	ring1.Image = "rbxassetid://6031085116"
-	ring1.Size = UDim2.new(1.3, 0, 1.3, 0)
-	ring1.Position = UDim2.new(-0.15, 0, -0.15, 0)
-	ring1.BackgroundTransparency = 1
-	ring1.ImageColor3 = Color3.fromRGB(255, 45, 45)
-	ring1.ImageTransparency = 0.4
-	ring1.ZIndex = 16
-	ring1.Parent = logoBig
-
-	local ring2 = Instance.new("ImageLabel")
-	ring2.Name = "Ring2"
-	ring2.Image = "rbxassetid://6031070538"
-	ring2.Size = UDim2.new(1.5, 0, 1.5, 0)
-	ring2.Position = UDim2.new(-0.25, 0, -0.25, 0)
-	ring2.BackgroundTransparency = 1
-	ring2.ImageColor3 = Color3.fromRGB(255, 255, 255)
-	ring2.ImageTransparency = 0.8
-	ring2.ZIndex = 14
-	ring2.Parent = logoBig
-
-	-- Premium Rotating Border Circle (Subtle)
-	local circle = Instance.new("ImageLabel")
-	circle.Name = "BorderCircle"
-	circle.Image = "rbxassetid://14321303866"
-	circle.Size = UDim2.new(1.6, 0, 1.6, 0)
-	circle.Position = UDim2.new(-0.3, 0, -0.3, 0)
-	circle.BackgroundTransparency = 1
-	circle.ImageColor3 = Color3.fromRGB(255, 45, 45)
-	circle.ImageTransparency = 0.7
-	circle.ZIndex = 13
-	circle.Parent = logoBig
-
-	-- Logo Specific Animations
-	task.spawn(function()
-		local RunService = game:GetService("RunService")
-		
-		-- Breathing Pulse via UIScale (Much smoother than Size/Position tweening)
-		TweenService:Create(logoScale, TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
-			Scale = 1.08
-		}):Play()
-
-		-- Glow Breathing
-		TweenService:Create(logoGlow, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
-			ImageTransparency = 0.25
-		}):Play()
-
-		-- Smooth Rotation Loops using RenderStepped (FPS independent)
-		local rotConnection
-		rotConnection = RunService.RenderStepped:Connect(function(dt)
-			if not logoBig or not logoBig.Parent or not screenGui.Parent then
-				rotConnection:Disconnect()
-				return
-			end
-			
-			ring1.Rotation = ring1.Rotation + (80 * dt)
-			ring2.Rotation = ring2.Rotation - (50 * dt)
-			circle.Rotation = circle.Rotation + (25 * dt)
-		end)
-	end)
-
-	local titleBig = Instance.new("TextLabel")
-	titleBig.Text = "STARSHIP"
-	titleBig.Size = UDim2.new(1, 0, 0, 35)
-	titleBig.Position = UDim2.new(0, 0, 0.62, 0)
-	titleBig.BackgroundTransparency = 1
-	titleBig.TextColor3 = Color3.fromRGB(255, 255, 255)
-	titleBig.TextSize = 28 -- Smaller font
-	titleBig.Font = Enum.Font.GothamBlack
-	titleBig.Parent = brandArea
-
-	-- User Greeting (Parented to brandArea for split view)
-	local greet = Instance.new("TextLabel")
-	greet.Text = "Welcome, " .. LocalPlayer.Name .. "!"
-	greet.Size = UDim2.new(1, 0, 0, 20)
-	greet.Position = UDim2.new(0, 0, 0.82, 0)
-	greet.BackgroundTransparency = 1
-	greet.TextColor3 = Color3.fromRGB(230, 230, 230)
-	greet.TextSize = 14 -- Smaller
-	greet.Font = Enum.Font.GothamMedium
-	greet.Parent = brandArea
-
-	local welcomeSub = Instance.new("TextLabel")
-	welcomeSub.Text = "Select a module to begin."
-	welcomeSub.Size = UDim2.new(1, 0, 0, 15)
-	welcomeSub.Position = UDim2.new(0, 0, 0.92, 0)
-	welcomeSub.BackgroundTransparency = 1
-	welcomeSub.TextColor3 = Color3.fromRGB(120, 120, 120)
-	welcomeSub.TextSize = 10 -- Smaller
-	welcomeSub.Font = Enum.Font.Gotham
-	welcomeSub.Parent = brandArea
-
-	-- Initially branding stays visible
-
+	-- Old branding elements removed to prevent overlapping with new Cylone layout. 
+	
 	-- Premium Footer (Matching Main UI)
 	local footer = Instance.new("TextLabel")
 	footer.Text = "STARSHIP MOBILE PREMIUM"
@@ -1219,86 +1086,8 @@ local function createLoadingUI()
 	footer.Parent = background
 
 	-- User Thumbnail (Moved lower)
-	local userCard = Instance.new("Frame")
-	userCard.Size = UDim2.new(0, 150, 0, 40)
-	userCard.Position = UDim2.new(0, 20, 1, -55)
-	userCard.BackgroundTransparency = 1
-	userCard.Parent = background
-
-	local thumb = Instance.new("ImageLabel")
-	thumb.Size = UDim2.new(0, 32, 0, 32)
-	thumb.Position = UDim2.new(0, 0, 0.5, -16)
-	thumb.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	thumb.Parent = userCard
-	Instance.new("UICorner", thumb).CornerRadius = UDim.new(1, 0)
+	-- Legacy bottom elements (User Card, System Metrics, Footer) removed for Cylone layout.
 	
-	task.spawn(function()
-		local content = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
-		thumb.Image = content
-	end)
-
-	local name = Instance.new("TextLabel")
-	name.Text = LocalPlayer.Name
-	name.Size = UDim2.new(0, 100, 0, 15)
-	name.Position = UDim2.new(0, 40, 0.5, -12)
-	name.BackgroundTransparency = 1
-	name.TextColor3 = Color3.fromRGB(255, 255, 255)
-	name.TextSize = 12
-	name.Font = Enum.Font.GothamBold
-	name.TextXAlignment = Enum.TextXAlignment.Left
-	name.Parent = userCard
-
-	local role = Instance.new("TextLabel")
-	role.Text = "Premium VIP User"
-	role.Size = UDim2.new(0, 100, 0, 15)
-	role.Position = UDim2.new(0, 40, 0.5, 2)
-	role.BackgroundTransparency = 1
-	role.TextColor3 = Color3.fromRGB(150, 150, 150)
-	role.TextSize = 10
-	role.Font = Enum.Font.Gotham
-	role.TextXAlignment = Enum.TextXAlignment.Left
-	role.Parent = userCard
-
-	-- System Metrics (Moved lower)
-	local systemCard = Instance.new("Frame")
-	systemCard.Size = UDim2.new(0, 180, 0, 40)
-	systemCard.Position = UDim2.new(1, -200, 1, -55)
-	systemCard.BackgroundTransparency = 1
-	systemCard.Parent = background
-
-	local execName = "Unknown"
-	pcall(function() execName = (identifyexecutor and identifyexecutor()) or "Unknown" end)
-
-	local execLabel = Instance.new("TextLabel")
-	execLabel.Text = "EXECUTOR: " .. string.upper(execName)
-	execLabel.Size = UDim2.new(1, 0, 0, 15)
-	execLabel.Position = UDim2.new(0, 0, 0.5, -12)
-	execLabel.BackgroundTransparency = 1
-	execLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	execLabel.TextSize = 10
-	execLabel.Font = Enum.Font.GothamBold
-	execLabel.TextXAlignment = Enum.TextXAlignment.Right
-	execLabel.Parent = systemCard
-
-	local statusLine = Instance.new("TextLabel")
-	statusLine.Text = "SYSTEM_HEALTH: OPTIMAL"
-	statusLine.Size = UDim2.new(1, 0, 0, 15)
-	statusLine.Position = UDim2.new(0, 0, 0.5, 2)
-	statusLine.BackgroundTransparency = 1
-	statusLine.TextColor3 = Color3.fromRGB(60, 255, 180) -- Emerald Green
-	statusLine.TextSize = 9
-	statusLine.Font = Enum.Font.GothamMedium
-	statusLine.TextXAlignment = Enum.TextXAlignment.Right
-	statusLine.Parent = systemCard
-
-	-- Subtle Divider for Footer (Positioned above the metrics cards)
-	local footerLine = Instance.new("Frame")
-	footerLine.Size = UDim2.new(1, -40, 0, 1)
-	footerLine.Position = UDim2.new(0, 20, 1, -65)
-	footerLine.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	footerLine.BackgroundTransparency = 0.98 -- More subtle
-	footerLine.BorderSizePixel = 0
-	footerLine.Parent = background
 
 	-- Intro Animations
 	TweenService:Create(overlay, TweenInfo.new(0.6), {BackgroundTransparency = 0.6}):Play()
@@ -1311,21 +1100,16 @@ local function createLoadingUI()
 		if ui then
 			if not ui.container.Visible then
 				ui.container.Visible = true
-				closeBtn.Visible = false -- Hide close button when loading starts
+				if closeBtn then closeBtn.Visible = false end -- Hide close button when loading starts
 			end
-			ui.status.Text = "> " .. text
+			-- status.Text line removed to prevent nil error in Grid Mode
 			TweenService:Create(ui.fill, TweenInfo.new(progress == 1 and 0.5 or 0.3, Enum.EasingStyle.Quad), {
 				Size = UDim2.new(progress, 0, 1, 0)
 			}):Play()
 			ui.percent.Text = math.floor(progress * 100) .. "%"
 		end
 		
-		-- Update global welcome sub for additional context
-		if progress < 1 then
-			welcomeSub.Text = "Initializing " .. string.upper(selectedModuleData and selectedModuleData.id or "MODULE") .. "..."
-		else
-			welcomeSub.Text = "Environment ready. Launching."
-		end
+		-- Global welcome sub update removed to fix nil error
 	end
 
 	-- Function to wait for selection
