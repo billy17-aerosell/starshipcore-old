@@ -139,6 +139,8 @@ const ALLOWED_MODULES = [
   "SambungKata.lua",
   "SambungKata-obfuscated.lua",
   "sawah-indo.lua",
+  "Pantai-VoiceHub.lua",
+  "DanauIndoVoice.lua",
 ];
 
 // Owner ID - always has access without whitelist check
@@ -395,7 +397,7 @@ export default async function handler(req, res) {
       // Handle path: if name starts with "Modules/", load from data/ directly
       // Otherwise, load from data/Modules/
       let modulePath;
-      if (normalizedName === "violence-district.lua" || normalizedName === "SambungKata.lua" || normalizedName === "sawah-indo.lua") {
+      if (normalizedName === "violence-district.lua" || normalizedName === "SambungKata.lua" || normalizedName === "sawah-indo.lua" || normalizedName === "Pantai-VoiceHub.lua" || normalizedName === "DanauIndoVoice.lua") {
         modulePath = path.join(process.cwd(), "data", normalizedName);
       } else if (normalizedName.startsWith("Modules/")) {
         modulePath = path.join(process.cwd(), "data", normalizedName);
@@ -445,7 +447,7 @@ export default async function handler(req, res) {
 
       // Handle path mapping
       let modulePath;
-      if (normalizedName === "violence-district.lua" || normalizedName === "SambungKata.lua" || normalizedName === "sawah-indo.lua") {
+      if (normalizedName === "violence-district.lua" || normalizedName === "SambungKata.lua" || normalizedName === "sawah-indo.lua" || normalizedName === "Pantai-VoiceHub.lua" || normalizedName === "DanauIndoVoice.lua") {
         modulePath = path.join(process.cwd(), "data", normalizedName);
       } else if (normalizedName.startsWith("Modules/")) {
         modulePath = path.join(process.cwd(), "data", normalizedName);
@@ -644,7 +646,7 @@ export default async function handler(req, res) {
 
     // Read module file - handle Modules/ prefix
     let modulePath;
-    if (normalizedName === "violence-district-obfuscated.lua" || normalizedName === "SambungKata-obfuscated.lua" || normalizedName === "sawah-indo.lua") {
+    if (normalizedName === "violence-district-obfuscated.lua" || normalizedName === "SambungKata-obfuscated.lua" || normalizedName === "sawah-indo.lua" || normalizedName === "Pantai-VoiceHub.lua" || normalizedName === "DanauIndoVoice.lua") {
       modulePath = path.join(process.cwd(), "data", normalizedName);
     } else if (normalizedName.startsWith("Modules/")) {
       modulePath = path.join(process.cwd(), "data", normalizedName);

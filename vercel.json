@@ -34,6 +34,14 @@
       "destination": "/api/get-module?name=violence-district-obfuscated.lua&platform=mobile"
     },
     {
+      "source": "/api/m-pv-q8z3",
+      "destination": "/api/get-module?name=Pantai-VoiceHub.lua&platform=mobile"
+    },
+    {
+      "source": "/api/m-di-x2p1",
+      "destination": "/api/get-module?name=DanauIndoVoice.lua&platform=mobile"
+    },
+    {
       "source": "/api/protected/(.*)",
       "destination": "/404"
     }
