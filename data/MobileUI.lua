@@ -27,27 +27,7 @@ end)
 
 -- Load Bypass FIRST
 pcall(function()
-    -- Hanya jalankan bypass ini 1x saja meskipun UI di re-execute
-    if getgenv().StarshipAntiKickLoaded then return end
-    getgenv().StarshipAntiKickLoaded = true
-
-    -- BYPASS 1: Core Anti-Kick (Essential)
-    for k, v in pairs(getgc(true)) do
-        -- Cek table dulu agar loop getgc jauh lebih cepat
-        if type(v) == "table" then
-            if pcall(function()
-                return rawget(v, "indexInstance")
-            end) and type(rawget(v, "indexInstance")) == "table" and (rawget(v, "indexInstance"))[1] == "kick" then
-                setreadonly(v, false)
-                v.tvk = {
-                    "kick",
-                    function()
-                        return game.Workspace:WaitForChild("")
-                    end
-                }
-            end
-        end
-    end
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua'))()
 end)
 
 -- Continue with standard services
@@ -175,6 +155,16 @@ if not WindUI then
     warn("[STARSHIP] ❌ ERROR: Failed to load UI library. Please check your internet.")
     return 
 end
+
+-- Inform user about current mode
+-- task.spawn(function()
+--     task.wait(1)
+--     if _G.WindUIIsBoreal then
+--         WindUI:Notify({ Title = "Boreal Active", Content = "All premium UI features are loaded!", Duration = 3 })
+--     else
+--         warn("[STARSHIP] ⚠️ WARNING: Boreal failed to load! Falling back to standard WindUI. Some features will be hidden.")
+--     end
+-- end)
 
 -- ══════════════════════════════════════════════════════════════════
 -- SAFE API HELPERS (stored in _G to save local slots)
@@ -762,12 +752,12 @@ local Window = WindUI:CreateWindow({
 	Author = "Premium Edition | StarshipCore",
 	Size = UDim2.fromOffset(770, 475),
 	SideBarWidth = 180,
-	Transparent = false,
-	BackgroundImageTransparency = 1,
+	Transparent = true,
+	BackgroundImageTransparency = 0.92,
 	Background = "rbxassetid://132820581372516",
 	Theme = Settings.Theme or "Crimson",
-	ModernLayout = false, 
-	BottomDragBarEnabled = false, 
+	ModernLayout = true, 
+	BottomDragBarEnabled = true, 
 	TransparentNav = false, 
 	User = {
 		Enabled = true,
@@ -965,7 +955,7 @@ local PingTag = Window:Tag({
 })
 
 -- ══════════════════════════════════════════════════════════════════
--- LIVE STATUS UPDATES (Optimized: No per-frame Heartbeat connection)
+-- LIVE STATUS UPDATES (Guideline: 300-500ms)
 -- ══════════════════════════════════════════════════════════════════
 task.spawn(function()
 	local function clampInt(v, min, max)
@@ -975,43 +965,56 @@ task.spawn(function()
 		return math.floor(v + 0.5)
 	end
 
-	-- FPS: Use GetRealPhysicsFPS() instead of per-frame Heartbeat counter
+	local frameCount = 0
+	local lastUpdate = tick()
+	
+	local countConn = RunService.Heartbeat:Connect(function()
+		frameCount = frameCount + 1
+	end)
+	
 	while true do
-		task.wait(2) -- 2s update interval (was 0.5s — UI doesn't need faster)
+		task.wait(0.5) -- 500ms update interval
 		
-		-- FPS from engine (no per-frame connection needed)
-		local fps = clampInt(workspace:GetRealPhysicsFPS(), 0, 999)
-		
-		local fpsColor = Color3.fromRGB(68, 216, 114)
-		if fps < 30 then
-			fpsColor = Color3.fromRGB(239, 68, 68)
-		elseif fps < 50 then
-			fpsColor = Color3.fromRGB(234, 179, 8)
-		end
-		
-		pcall(function()
-			FPSTag:SetTitle('<font size="11">⚡ FPS: ' .. fps .. "</font>")
-			FPSTag:SetColor(fpsColor)
-		end)
-		
-		-- Update Ping
-		local rawPing = 0
-		pcall(function()
-			rawPing = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
-		end)
-		local ping = clampInt(rawPing, 0, 999)
-		
-		local pingColor = Color3.fromRGB(75, 155, 255)
-		if ping > 150 then
-			pingColor = Color3.fromRGB(239, 68, 68)
-		elseif ping > 80 then
-			pingColor = Color3.fromRGB(234, 179, 8)
-		end
+		local now = tick()
+		local elapsed = now - lastUpdate
+		if elapsed > 0 then
+			local rawFps = frameCount / elapsed
+			local fps = clampInt(rawFps, 0, 999)
+			
+			local fpsColor = Color3.fromRGB(68, 216, 114)
+			if fps < 30 then
+				fpsColor = Color3.fromRGB(239, 68, 68)
+			elseif fps < 50 then
+				fpsColor = Color3.fromRGB(234, 179, 8)
+			end
+			
+			pcall(function()
+				FPSTag:SetTitle('<font size="11">⚡ FPS: ' .. fps .. "</font>")
+				FPSTag:SetColor(fpsColor)
+			end)
+			
+			-- Update Ping
+			local rawPing = 0
+			pcall(function()
+				rawPing = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
+			end)
+			local ping = clampInt(rawPing, 0, 999)
+			
+			local pingColor = Color3.fromRGB(75, 155, 255)
+			if ping > 150 then
+				pingColor = Color3.fromRGB(239, 68, 68)
+			elseif ping > 80 then
+				pingColor = Color3.fromRGB(234, 179, 8)
+			end
 
-		pcall(function()
-			PingTag:SetTitle('<font size="11">📶 PING: ' .. ping .. "ms</font>")
-			PingTag:SetColor(pingColor)
-		end)
+			pcall(function()
+				PingTag:SetTitle('<font size="11">📶 PING: ' .. ping .. "ms</font>")
+				PingTag:SetColor(pingColor)
+			end)
+
+			frameCount = 0
+			lastUpdate = now
+		end
 	end
 end)
 
@@ -2255,10 +2258,10 @@ vipParagraph = _G.AccVIPContainer:Paragraph({
 	Desc = GetVIPStatusDesc(),
 })
 
--- Update VIP timer every 30 seconds (optimized from 1s — countdown doesn't need per-second precision)
+-- Update VIP timer every second (with server sync)
 task.spawn(function()
 	while true do
-		task.wait(30)
+		task.wait(1)
 
 		-- Sync expiry from server periodic check (prevents UI manipulation)
 		if _G.StarshipServerExpiry then
@@ -3462,69 +3465,27 @@ local function CaptureOriginalSky()
 	originalAtmosphere = lighting.Ambient
 end
 
--- Store all bypass connections for cleanup
-local skyboxBypassConnections = {}
-
 local function StopSkyboxBypass()
 	if skyboxBypassConnection then
 		skyboxBypassConnection:Disconnect()
 		skyboxBypassConnection = nil
 	end
-	-- Disconnect all event-based connections
-	for _, conn in ipairs(skyboxBypassConnections) do
-		pcall(function() conn:Disconnect() end)
-	end
-	skyboxBypassConnections = {}
 end
 
--- OPTIMIZED: Event-based bypass instead of per-frame Heartbeat loop
--- Was: Heartbeat:Connect with for loop every frame (~60x/sec) = HEAVY
--- Now: ChildAdded + PropertyChanged events = only fires when needed = ZERO idle cost
 local function ApplySkyboxWithBypass(preset)
 	local lighting = game:GetService("Lighting")
 
-	-- Helper to apply preset to a Sky object
-	local function applyPresetToSky(sky)
-		pcall(function()
-			sky.SkyboxBk = preset.SkyboxBk
-			sky.SkyboxDn = preset.SkyboxDn
-			sky.SkyboxFt = preset.SkyboxFt
-			sky.SkyboxLf = preset.SkyboxLf
-			sky.SkyboxRt = preset.SkyboxRt
-			sky.SkyboxUp = preset.SkyboxUp
-			sky.StarCount = preset.StarCount or 0
-		end)
-	end
-
-	-- Helper to watch a Sky for property changes (game tries to reset it)
-	local function watchSkyProperties(sky)
-		local props = {"SkyboxBk", "SkyboxDn", "SkyboxFt", "SkyboxLf", "SkyboxRt", "SkyboxUp"}
-		for _, prop in ipairs(props) do
-			local conn = sky:GetPropertyChangedSignal(prop):Connect(function()
-				-- Game tried to change skybox — re-apply our preset after a defer
-				task.defer(function()
-					if sky.Parent then applyPresetToSky(sky) end
-				end)
-			end)
-			table.insert(skyboxBypassConnections, conn)
-		end
-	end
-
-	-- Apply to existing Sky objects and watch them
-	for _, child in pairs(lighting:GetChildren()) do
-		if child:IsA("Sky") then
-			applyPresetToSky(child)
-			watchSkyProperties(child)
-		end
-	end
-
-	-- Watch for new Sky objects added (game might recreate Sky)
-	skyboxBypassConnection = lighting.ChildAdded:Connect(function(child)
-		if child:IsA("Sky") then
-			task.defer(function()
-				applyPresetToSky(child)
-				watchSkyProperties(child)
-			end)
+	skyboxBypassConnection = RunService.Heartbeat:Connect(function()
+		for _, child in pairs(lighting:GetChildren()) do
+			if child:IsA("Sky") then
+				child.SkyboxBk = preset.SkyboxBk
+				child.SkyboxDn = preset.SkyboxDn
+				child.SkyboxFt = preset.SkyboxFt
+				child.SkyboxLf = preset.SkyboxLf
+				child.SkyboxRt = preset.SkyboxRt
+				child.SkyboxUp = preset.SkyboxUp
+				child.StarCount = preset.StarCount or 0
+			end
 		end
 	end)
 end
@@ -4040,18 +4001,9 @@ local function HideAllDrawings()
 	end
 end
 
--- OPTIMIZED: Throttled ESP render loop (max 10 FPS instead of 60 FPS)
--- ESP visuals don't need per-frame precision — 10 FPS is visually smooth enough
-local lastESPUpdateTime = 0
-local ESP_UPDATE_INTERVAL = 0.1 -- 10 FPS max
-
 local function StartESPRenderLoop()
 	if AdminESPRenderConnection then return end
 	AdminESPRenderConnection = RunService.RenderStepped:Connect(function()
-		local now = tick()
-		if now - lastESPUpdateTime < ESP_UPDATE_INTERVAL then return end
-		lastESPUpdateTime = now
-		
 		if Settings.AdminESP then
 			UpdateESPDrawings()
 		else
@@ -5384,7 +5336,7 @@ local PlaybackState = {
 	TOOL_THROTTLE_INTERVAL = 0.1,
 }
 
--- Sync PlaybackState with StarSpace module (optimized: 500ms instead of 100ms)
+-- Sync PlaybackState with StarSpace module
 task.spawn(function()
     while true do
         if StarSpacePlaybackLoaded and _G.StarSpace and _G.StarSpace.GetPlaybackState then
@@ -5394,7 +5346,7 @@ task.spawn(function()
             PlaybackState.currentTime = state.currentTime
             PlaybackState.totalDuration = state.totalDuration
         end
-        task.wait(0.5)
+        task.wait(0.1)
     end
 end)
 
@@ -5638,10 +5590,129 @@ local function FindNearestFrame(frames, rPos)
 	return bestT, minDst, bestFrameIdx
 end
 
--- DUPLICATE FUNCTIONS REMOVED (were defined twice — see L5373-5522 for originals)
--- Removed: GaussianWeight, CatmullRomSpline, CatmullRomVector3,
--- NormalizeFrames, PreprocessFrames, SmoothInterpolateFrames, GetSmoothedFrames
--- This saves ~120 lines of memory and reduces parse time.
+-- Gaussian Weight for smoothing
+local function GaussianWeight(distance, sigma)
+	return math.exp(-(distance * distance) / (2 * sigma * sigma))
+end
+
+-- Catmull-Rom Spline for smooth interpolation
+local function CatmullRomSpline(p0, p1, p2, p3, t)
+	local t2 = t * t
+	local t3 = t2 * t
+	return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
+end
+
+local function CatmullRomVector3(v0, v1, v2, v3, t)
+	return Vector3.new(
+		CatmullRomSpline(v0.X, v1.X, v2.X, v3.X, t),
+		CatmullRomSpline(v0.Y, v1.Y, v2.Y, v3.Y, t),
+		CatmullRomSpline(v0.Z, v1.Z, v2.Z, v3.Z, t)
+	)
+end
+
+-- Normalize frames from external formats
+local function NormalizeFrames(frames)
+	if not frames or #frames == 0 then return frames end
+	local f1 = frames[1]
+	if not f1.pos and f1.position then
+		for _, f in ipairs(frames) do
+			if f.position then f.pos = {x = f.position.x, y = f.position.y, z = f.position.z} end
+			if f.velocity then f.vel = {x = f.velocity.x, y = f.velocity.y, z = f.velocity.z} end
+			if f.rotation then f.rot = math.deg(f.rotation) end
+			if f.moveDirection then f.md = {x = f.moveDirection.x, y = f.moveDirection.y, z = f.moveDirection.z} end
+			if f.state then f.st = "Enum.HumanoidStateType." .. f.state end
+			if f.hipHeight then f.hh = f.hipHeight end
+			if f.time then f.t = f.time end
+		end
+	end
+	return frames
+end
+
+-- Pre-calculate Vector3 values for performance
+local function PreprocessFrames(frames)
+	if not frames or #frames == 0 then return frames end
+	if frames[1].posVector ~= nil or frames._preprocessed then return frames end
+	for i = 1, #frames do
+		local f = frames[i]
+		if f.pos and not f.posVector then f.posVector = Vector3.new(f.pos.x, f.pos.y, f.pos.z) end
+		if f.vel and not f.velVector then f.velVector = Vector3.new(f.vel.x, f.vel.y, f.vel.z) end
+		if f.md and not f.mdVector then f.mdVector = Vector3.new(f.md.x, f.md.y, f.md.z) end
+		if f.charLook and not f.charLookVector then f.charLookVector = Vector3.new(f.charLook.x, f.charLook.y or 0, f.charLook.z) end
+		if f.st and not f.stEnum then
+			local stateName = string.match(f.st, "Enum%.HumanoidStateType%.(%w+)")
+			if stateName then f.stEnum = stateName end
+		end
+		if i % 10000 == 0 then task.wait() end
+	end
+	frames._preprocessed = true
+	return frames
+end
+
+-- Smooth interpolation between frames
+local function SmoothInterpolateFrames(frames, frameIdx, alpha)
+	local n = #frames
+	if n < 2 then return nil, nil, nil end
+	local f1, f2 = frames[frameIdx], frames[frameIdx + 1]
+	if not f1 or not f2 then return nil, nil, nil end
+	alpha = math.clamp(alpha, 0, 1)
+	local i0 = math.max(1, frameIdx - 1)
+	local i3 = math.min(n, frameIdx + 2)
+	local f0, f3 = frames[i0], frames[i3]
+	local smoothPos, smoothVel, smoothLook
+	if f0.posVector and f1.posVector and f2.posVector and f3.posVector then
+		smoothPos = CatmullRomVector3(f0.posVector, f1.posVector, f2.posVector, f3.posVector, alpha)
+	elseif f1.posVector and f2.posVector then
+		smoothPos = f1.posVector:Lerp(f2.posVector, alpha)
+	end
+	if f0.velVector and f1.velVector and f2.velVector and f3.velVector then
+		smoothVel = CatmullRomVector3(f0.velVector, f1.velVector, f2.velVector, f3.velVector, alpha)
+	elseif f1.velVector and f2.velVector then
+		smoothVel = f1.velVector:Lerp(f2.velVector, alpha)
+	end
+	if f0.charLookVector and f1.charLookVector and f2.charLookVector and f3.charLookVector then
+		smoothLook = CatmullRomVector3(f0.charLookVector, f1.charLookVector, f2.charLookVector, f3.charLookVector, alpha)
+		if smoothLook.Magnitude > 0.01 then smoothLook = smoothLook.Unit end
+	elseif f1.charLookVector and f2.charLookVector then
+		smoothLook = f1.charLookVector:Lerp(f2.charLookVector, alpha)
+		if smoothLook.Magnitude > 0.01 then smoothLook = smoothLook.Unit end
+	end
+	return smoothPos, smoothVel, smoothLook
+end
+
+-- Apply Gaussian smoothing to recording data
+local function GetSmoothedFrames(frames, strength)
+	local processedFrames = {}
+	for i, frame in ipairs(frames) do
+		processedFrames[i] = {}
+		for k, v in pairs(frame) do processedFrames[i][k] = v end
+		if frame.pos then processedFrames[i].pos = {x=frame.pos.x, y=frame.pos.y, z=frame.pos.z} end
+		if frame.vel then processedFrames[i].vel = {x=frame.vel.x, y=frame.vel.y, z=frame.vel.z} end
+	end
+	local iterations = math.clamp(strength or 1, 1, 5)
+	local kernelRadius = math.clamp(math.ceil(strength / 2), 1, 3)
+	local sigma = kernelRadius / 2
+	local gaussianWeights = {}
+	for d = 0, kernelRadius do gaussianWeights[d] = GaussianWeight(d, sigma) end
+	for iter = 1, iterations do
+		for i = 2, #processedFrames - 1 do
+			local curr = processedFrames[i]
+			if curr.pos then
+				local weightSum, posSum = 0, Vector3.new(0,0,0)
+				for j = math.max(1, i - kernelRadius), math.min(#processedFrames, i + kernelRadius) do
+					local neighbor = processedFrames[j]
+					if neighbor.pos then
+						local w = gaussianWeights[math.abs(i - j)]
+						posSum = posSum + Vector3.new(neighbor.pos.x, neighbor.pos.y, neighbor.pos.z) * w
+						weightSum = weightSum + w
+					end
+				end
+				local res = posSum / weightSum
+				processedFrames[i].pos = {x=res.X, y=res.Y, z=res.Z}
+			end
+		end
+	end
+	return processedFrames
+end
 
 -- ToolColorMatches, ToolConfigMatches, UpdateToolEquip removed (unused) to save local registers
 
@@ -6040,17 +6111,9 @@ local function DrawPath(frames)
 	end
 
 	-- ═══════════════════════════════════════════════════════════════════
-	-- ANIMATION: Pulsing glow effect on markers (OPTIMIZED: cached refs + throttled 15 FPS)
+	-- ANIMATION: Pulsing glow effect on markers
 	-- ═══════════════════════════════════════════════════════════════════
 	local animTime = 0
-	local lastPathAnimUpdate = 0
-	local PATH_ANIM_INTERVAL = 0.066 -- ~15 FPS (was 60 FPS)
-	-- Cache marker references once (no FindFirstChild per frame)
-	local cachedStartMarker = markersFolder:FindFirstChild("StartMarker")
-	local cachedEndMarker = markersFolder:FindFirstChild("EndMarker")
-	local cachedStartRing = markersFolder:FindFirstChild("StartRing")
-	local cachedEndRing = markersFolder:FindFirstChild("EndRing")
-
 	pathAnimationConnection = RunService.Heartbeat:Connect(function(dt)
 		if not pathVisualsFolder or not pathVisualsFolder.Parent then
 			if pathAnimationConnection then
@@ -6062,32 +6125,31 @@ local function DrawPath(frames)
 
 		animTime = animTime + dt
 
-		-- Throttle visual updates to ~15 FPS (cosmetic animations don't need 60 FPS)
-		local now = tick()
-		if now - lastPathAnimUpdate < PATH_ANIM_INTERVAL then return end
-		lastPathAnimUpdate = now
-
-		-- Pulse START marker (cached ref)
-		if cachedStartMarker and cachedStartMarker.Parent then
+		-- Pulse START marker
+		local startMarker = markersFolder:FindFirstChild("StartMarker")
+		if startMarker then
 			local pulse = 0.9 + 0.1 * math.sin(animTime * 3)
-			cachedStartMarker.Size = Vector3.new(1.2 * pulse, 1.2 * pulse, 1.2 * pulse)
+			startMarker.Size = Vector3.new(1.2 * pulse, 1.2 * pulse, 1.2 * pulse)
 		end
 
-		-- Pulse END marker (cached ref)
-		if cachedEndMarker and cachedEndMarker.Parent then
+		-- Pulse END marker
+		local endMarker = markersFolder:FindFirstChild("EndMarker")
+		if endMarker then
 			local pulse = 0.9 + 0.1 * math.sin(animTime * 3 + math.pi)
-			cachedEndMarker.Size = Vector3.new(1.2 * pulse, 1.2 * pulse, 1.2 * pulse)
+			endMarker.Size = Vector3.new(1.2 * pulse, 1.2 * pulse, 1.2 * pulse)
 		end
 
-		-- Rotate rings (cached refs)
-		if cachedStartRing and cachedStartRing.Parent then
-			local pos = cachedStartRing.Position
-			cachedStartRing.CFrame = CFrame.new(pos) * CFrame.Angles(0, animTime * 0.5, math.rad(90))
+		-- Rotate rings
+		local startRing = markersFolder:FindFirstChild("StartRing")
+		if startRing then
+			local pos = startRing.Position
+			startRing.CFrame = CFrame.new(pos) * CFrame.Angles(0, animTime * 0.5, math.rad(90))
 		end
 
-		if cachedEndRing and cachedEndRing.Parent then
-			local pos = cachedEndRing.Position
-			cachedEndRing.CFrame = CFrame.new(pos) * CFrame.Angles(0, -animTime * 0.5, math.rad(90))
+		local endRing = markersFolder:FindFirstChild("EndRing")
+		if endRing then
+			local pos = endRing.Position
+			endRing.CFrame = CFrame.new(pos) * CFrame.Angles(0, -animTime * 0.5, math.rad(90))
 		end
 
 		-- Update current position indicator during playback
@@ -6602,37 +6664,30 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 			end
 			
 			-- GROUND SNAP: Prevent floating on slopes (only when not in air)
-			-- OPTIMIZED: Throttle raycast to every 3 frames (was every frame)
 			local stateName = fA.stEnum
 			local isInAirState = (stateName == "Jumping" or stateName == "Freefall")
 			
-			_G._groundSnapCounter = (_G._groundSnapCounter or 0) + 1
-			if smoothPos and not isInAirState and not isTeleportFrame and (_G._groundSnapCounter % 3 == 0) then
-				-- Raycast down from smoothPos to find actual ground (every 3rd frame)
-				if not _G._groundSnapRayParams then
-					_G._groundSnapRayParams = RaycastParams.new()
-					_G._groundSnapRayParams.FilterType = Enum.RaycastFilterType.Exclude
-				end
-				_G._groundSnapRayParams.FilterDescendantsInstances = {char}
+			if smoothPos and not isInAirState and not isTeleportFrame then
+				-- Raycast down from smoothPos to find actual ground
+				local rayParams = RaycastParams.new()
+				rayParams.FilterDescendantsInstances = {char}
+				rayParams.FilterType = Enum.RaycastFilterType.Exclude
 				
-				local rayStart = Vector3.new(smoothPos.X, smoothPos.Y + 5, smoothPos.Z)
-				local rayResult = workspace:Raycast(rayStart, Vector3.new(0, -15, 0), _G._groundSnapRayParams)
+				local rayStart = Vector3.new(smoothPos.X, smoothPos.Y + 5, smoothPos.Z) -- Start 5 studs above
+				local rayResult = workspace:Raycast(rayStart, Vector3.new(0, -15, 0), rayParams)
 				
 				if rayResult then
+					-- Calculate expected Y based on HipHeight
 					local groundY = rayResult.Position.Y
 					local expectedY = groundY + hum.HipHeight + (hrp.Size.Y / 2)
+					
+					-- Only snap if the difference is significant (prevents jitter)
 					local yDiff = math.abs(smoothPos.Y - expectedY)
 					if yDiff > 0.3 and yDiff < 5 then
+						-- Smooth interpolation to ground
 						local snappedY = smoothPos.Y + (expectedY - smoothPos.Y) * 0.6
 						smoothPos = Vector3.new(smoothPos.X, snappedY, smoothPos.Z)
 					end
-					_G._lastGroundSnapY = smoothPos.Y
-				end
-			elseif smoothPos and not isInAirState and _G._lastGroundSnapY then
-				-- Non-raycast frames: use last cached ground snap result for smooth interpolation
-				local yDiff = math.abs(smoothPos.Y - _G._lastGroundSnapY)
-				if yDiff > 0.3 and yDiff < 3 then
-					smoothPos = Vector3.new(smoothPos.X, smoothPos.Y + (_G._lastGroundSnapY - smoothPos.Y) * 0.3, smoothPos.Z)
 				end
 			end
 
@@ -9060,7 +9115,7 @@ _G.NameSpoofContainer:Toggle({
 			
 			_G.StarshipOmegaLoop = true
 			task.spawn(function()
-				while _G.NameSpoofEnabled and _G.StarshipOmegaLoop and task.wait(2) do -- OPTIMIZED: 2s (was 0.5s)
+				while _G.NameSpoofEnabled and _G.StarshipOmegaLoop and task.wait(0.5) do
 					DS_fullScan()
 					-- Humanoid Highlight fix
 					pcall(function()
@@ -9412,9 +9467,80 @@ _G.DeviceSpoofContainer:Paragraph({
 	Desc = "Gunakan Nuclear Reset jika ikon device Anda 'nyangkut' di server setelah beralih mode.",
 })
 
--- Visual Emoji & Direct Object Locker — REMOVED (GetDescendants loop was heavy)
--- Device spoofing is already handled by __index/__namecall hooks + ForceSync
--- No polling loop needed — hooks intercept device checks in real-time
+-- Visual Emoji & Direct Object Locker (v19.5 High Frequency)
+task.spawn(function()
+    while task.wait(0.1) do
+        if _G.StarshipDeviceActive then
+            pcall(function()
+                local char = Player.Character
+                if char then
+					-- [NEW] Direct Object Hijack for the head overhead
+					-- [NEW] Anti-Blink Shield Logic (v22.3)
+					local function ShieldIcon(icon, isTarget)
+						if not icon or icon:GetAttribute("StarshipShielded") then return end
+						icon:SetAttribute("StarshipShielded", true)
+						icon:GetPropertyChangedSignal("Visible"):Connect(function()
+							if _G.StarshipDeviceActive and icon.Parent then
+								local targetObj = (_G.StarshipDeviceSettings.Target == "Phone" and "Phone" or "Pc")
+								local altObj = (_G.StarshipDeviceSettings.Target == "Phone" and "Mobile" or "PC")
+								local extObj = (_G.StarshipDeviceSettings.Target == "Phone" and "Mobile" or "Desktop")
+								if (icon.Name == targetObj or icon.Name == altObj or icon.Name == extObj) and not icon.Visible then
+									icon.Visible = true
+								end
+							end
+						end)
+					end
+
+					for _, v in pairs(char:GetDescendants()) do
+						if v:IsA("BillboardGui") and (v.Name == "VandraOverhead" or v.Name == "Tag" or v.Name:find("Billboard")) then
+							v.Enabled = true
+							local disp = v:FindFirstChild("Display", true) or v
+							local phone = disp:FindFirstChild("Phone")
+							local pc = disp:FindFirstChild("Pc") or disp:FindFirstChild("PC") or disp:FindFirstChild("Computer")
+							local tablet = disp:FindFirstChild("Tablet")
+							
+							local isTargetPhone = (_G.StarshipDeviceSettings.Target == "Phone")
+							
+							if phone then 
+								phone.Visible = isTargetPhone; phone.ImageTransparency = 0 
+								if isTargetPhone then ShieldIcon(phone) end
+							end
+							if pc then 
+								pc.Visible = not isTargetPhone; pc.ImageTransparency = 0 
+								if not isTargetPhone then ShieldIcon(pc) end
+							end
+							if tablet then tablet.Visible = false end
+						end
+					end
+					
+					-- Standard Emoji Fallback
+                    local head = char:FindFirstChild("Head")
+                    local billboard = head and head:FindFirstChildOfClass("BillboardGui")
+                    if billboard then
+                        for _, obj in pairs(billboard:GetDescendants()) do
+                            if (obj:IsA("TextLabel") or obj:IsA("ImageLabel")) and (obj.Name == "Emote" or obj.Name == "Icon" or obj.Name == "Device") then
+                                if _G.StarshipDeviceSettings.Emoji ~= "" then
+                                    if obj:IsA("TextLabel") then 
+                                        obj.Text = _G.StarshipDeviceSettings.Emoji
+                                    else 
+                                        obj.Image = ""
+                                        local fix = obj:FindFirstChild("EmojiFix") or Instance.new("TextLabel", obj)
+                                        fix.Name = "EmojiFix"
+                                        fix.Text = _G.StarshipDeviceSettings.Emoji
+                                        fix.Size = UDim2.new(1,0,1,0)
+                                        fix.BackgroundTransparency = 1
+                                        fix.TextScaled = true
+                                        fix.TextColor3 = Color3.new(1,1,1)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
 
 end) -- end pcall
 if not dsOk then
