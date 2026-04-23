@@ -1,34 +1,20 @@
 local Players = game:GetService("Players")
 
--- [[ STARSHIP SECURITY & BYPASS ]]
--- Executed immediately (Main Thread) to ensure highest priority
-local sg = game:GetService("StarterGui")
-local function rebrand(name, data)
-    if name == "SendNotification" and type(data) == "table" then
-        local title = tostring(data.Title or ""):lower()
-        local text = tostring(data.Text or ""):lower()
-        if title:find("adonis") or title:find("pixel") or text:find("adonis") or text:find("pixel") then
-            data.Title = "Starship Protection"
-            data.Text = "Security bypass active!"
-            return true
-        end
+-- BYPASS 1: Core Anti-Kick (Essential)
+-- Modifies a core script to nullify kick actions. This is fundamental.
+for k, v in pairs(getgc(true)) do
+    if pcall(function()
+        return rawget(v, "indexInstance")
+    end) and type(rawget(v, "indexInstance")) == "table" and (rawget(v, "indexInstance"))[1] == "kick" then
+        setreadonly(v, false)
+        v.tvk = {
+            "kick",
+            function()
+                return game.Workspace:WaitForChild("")
+            end
+        }
     end
-    return false	
 end
-
-pcall(function()
-    -- [[ STEALTH REBRANDING ]]
-    -- Menggunakan hookfunction (lebih aman dari deteksi namecallInstance)
-    local oldSetCore; oldSetCore = hookfunction(sg.SetCore, newcclosure(function(self, n, d) 
-        rebrand(n, d) 
-        return oldSetCore(self, n, d) 
-    end))
-end)
-
--- Load Bypass FIRST
-pcall(function()
-    loadstring(game:HttpGet('https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua'))()
-end)
 
 -- Continue with standard services
 local RunService = game:GetService("RunService")
@@ -9467,80 +9453,7 @@ _G.DeviceSpoofContainer:Paragraph({
 	Desc = "Gunakan Nuclear Reset jika ikon device Anda 'nyangkut' di server setelah beralih mode.",
 })
 
--- Visual Emoji & Direct Object Locker (v19.5 High Frequency)
-task.spawn(function()
-    while task.wait(0.1) do
-        if _G.StarshipDeviceActive then
-            pcall(function()
-                local char = Player.Character
-                if char then
-					-- [NEW] Direct Object Hijack for the head overhead
-					-- [NEW] Anti-Blink Shield Logic (v22.3)
-					local function ShieldIcon(icon, isTarget)
-						if not icon or icon:GetAttribute("StarshipShielded") then return end
-						icon:SetAttribute("StarshipShielded", true)
-						icon:GetPropertyChangedSignal("Visible"):Connect(function()
-							if _G.StarshipDeviceActive and icon.Parent then
-								local targetObj = (_G.StarshipDeviceSettings.Target == "Phone" and "Phone" or "Pc")
-								local altObj = (_G.StarshipDeviceSettings.Target == "Phone" and "Mobile" or "PC")
-								local extObj = (_G.StarshipDeviceSettings.Target == "Phone" and "Mobile" or "Desktop")
-								if (icon.Name == targetObj or icon.Name == altObj or icon.Name == extObj) and not icon.Visible then
-									icon.Visible = true
-								end
-							end
-						end)
-					end
-
-					for _, v in pairs(char:GetDescendants()) do
-						if v:IsA("BillboardGui") and (v.Name == "VandraOverhead" or v.Name == "Tag" or v.Name:find("Billboard")) then
-							v.Enabled = true
-							local disp = v:FindFirstChild("Display", true) or v
-							local phone = disp:FindFirstChild("Phone")
-							local pc = disp:FindFirstChild("Pc") or disp:FindFirstChild("PC") or disp:FindFirstChild("Computer")
-							local tablet = disp:FindFirstChild("Tablet")
-							
-							local isTargetPhone = (_G.StarshipDeviceSettings.Target == "Phone")
-							
-							if phone then 
-								phone.Visible = isTargetPhone; phone.ImageTransparency = 0 
-								if isTargetPhone then ShieldIcon(phone) end
-							end
-							if pc then 
-								pc.Visible = not isTargetPhone; pc.ImageTransparency = 0 
-								if not isTargetPhone then ShieldIcon(pc) end
-							end
-							if tablet then tablet.Visible = false end
-						end
-					end
-					
-					-- Standard Emoji Fallback
-                    local head = char:FindFirstChild("Head")
-                    local billboard = head and head:FindFirstChildOfClass("BillboardGui")
-                    if billboard then
-                        for _, obj in pairs(billboard:GetDescendants()) do
-                            if (obj:IsA("TextLabel") or obj:IsA("ImageLabel")) and (obj.Name == "Emote" or obj.Name == "Icon" or obj.Name == "Device") then
-                                if _G.StarshipDeviceSettings.Emoji ~= "" then
-                                    if obj:IsA("TextLabel") then 
-                                        obj.Text = _G.StarshipDeviceSettings.Emoji
-                                    else 
-                                        obj.Image = ""
-                                        local fix = obj:FindFirstChild("EmojiFix") or Instance.new("TextLabel", obj)
-                                        fix.Name = "EmojiFix"
-                                        fix.Text = _G.StarshipDeviceSettings.Emoji
-                                        fix.Size = UDim2.new(1,0,1,0)
-                                        fix.BackgroundTransparency = 1
-                                        fix.TextScaled = true
-                                        fix.TextColor3 = Color3.new(1,1,1)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end
-end)
+-- Visual Emoji & Direct Object Locker - REMOVED (caused FPS drops from 0.1s GetDescendants polling)
 
 end) -- end pcall
 if not dsOk then
