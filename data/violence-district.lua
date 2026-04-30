@@ -10688,6 +10688,14 @@ Callback = function(Value)
 GFS.ParryRadiusOutlineColor = Value
 end
 })
+AbilityBox:AddCheckbox('ParryRadiusFillEnabled', {
+Text = 'Show Radius Fill',
+Default = true,
+Tooltip = 'Show the colored fill area inside the parry radius. Turn off to keep only the outline ring.',
+Callback = function(Value)
+GFS.ParryRadiusFillEnabled = Value
+end
+})
 GFS.IgnoredKillerSkills = {
 Veil = true,
 Masked = true,
@@ -10725,6 +10733,7 @@ GFS.AutoParryMode = Value
 end
 })
 GFS.FakeParryEnabled = false
+GFS.ParryRadiusFillEnabled = true
 GFS.ParryRadiusFillColor = Color3.fromRGB(0, 170, 255)
 GFS.ParryRadiusOutlineColor = Color3.fromRGB(255, 255, 255)
 GFS.ParryRadiusFillTransparency = 0
@@ -10873,7 +10882,12 @@ local function UpdateParryRadius()
 		GFS.ParryRadiusFillPart.Size = Vector3.new(0.05, radius * 2, radius * 2)
 		GFS.ParryRadiusFillPart.CFrame = CFrame.new(cx, groundY + 0.04, cz) * flatRotation
 		GFS.ParryRadiusFillPart.Color = GFS.ParryRadiusFillColor
-		GFS.ParryRadiusFillPart.Transparency = GFS.ParryRadiusFillTransparency
+		-- Kalau toggle Show Radius Fill di-off, paksa transparency = 1 (invisible) tapi part tetep ada
+		if GFS.ParryRadiusFillEnabled == false then
+			GFS.ParryRadiusFillPart.Transparency = 1
+		else
+			GFS.ParryRadiusFillPart.Transparency = GFS.ParryRadiusFillTransparency
+		end
 	end
 	local segmentArc = (2 * math.pi) / OUTLINE_SEGMENTS
 	local segmentLength = (2 * math.pi * radius) / OUTLINE_SEGMENTS * 1.05
@@ -10994,11 +11008,37 @@ end
 local MW_WOBBLE_MAX  = 0.65
 local MW_WOBBLE_LERP = 3.5
 local MW_YAW_LERP    = 6
+local function _readKeyHeld(opt)
+	-- Shim WindUI Boreal gak punya :GetState() & gak update opt.Value pas user re-bind.
+	-- Key actual ada di opt.Element.Value (string nama keycode dari WindUI Boreal Keybind).
+	if not opt then return false end
+	local ok, held = pcall(function()
+		if type(opt.GetState) == "function" then return opt:GetState() end
+		-- Coba beberapa source value: Element.Value (paling akurat utk WindUI Boreal), trus opt.Value
+		local candidates = { opt.Element and opt.Element.Value, opt.Value }
+		for _, v in ipairs(candidates) do
+			if typeof(v) == "EnumItem" and v ~= Enum.KeyCode.None and v ~= Enum.KeyCode.Unknown then
+				return UserInputService:IsKeyDown(v)
+			end
+			if type(v) == "string" and v ~= "" and v ~= "None" then
+				if v == "MouseLeft" then
+					return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+				elseif v == "MouseRight" then
+					return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+				end
+				local kc = Enum.KeyCode[v]
+				if kc then return UserInputService:IsKeyDown(kc) end
+			end
+		end
+		return false
+	end)
+	return ok and held or false
+end
 local function MoonwalkTick()
 	if not MoonwalkState.Enabled then return end
 	if not IsMobile then
-		local fwdHeld  = Options.MoonwalkFwdKey  and Options.MoonwalkFwdKey:GetState()
-		local backHeld = Options.MoonwalkBackKey and Options.MoonwalkBackKey:GetState()
+		local fwdHeld  = _readKeyHeld(Options.MoonwalkFwdKey)
+		local backHeld = _readKeyHeld(Options.MoonwalkBackKey)
 		if fwdHeld and (MoonwalkState.Mode ~= "forward" or MoonwalkState.KeySource ~= "key") and MoonwalkState.KeySource ~= "btn" then
 			StartMode("forward", "key"); UpdateAllBtnVisuals()
 		elseif backHeld and (MoonwalkState.Mode ~= "backward" or MoonwalkState.KeySource ~= "key") and MoonwalkState.KeySource ~= "btn" then
