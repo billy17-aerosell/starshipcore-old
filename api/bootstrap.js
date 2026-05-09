@@ -22,6 +22,11 @@ const MOBILE_MAINTENANCE = false; // <-- SECURITY: Re-enabled after security fix
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import {
+  evaluateRequest,
+  markIPTrusted,
+  getClientIP,
+} from "../lib/ip-ban.js";
 
 // Import mobile-bootstrap handler for secure mobile loading (no URL exposure)
 import mobileBootstrapHandler from "./mobile-bootstrap.js";
@@ -66,83 +71,24 @@ function isCDNEnabled() {
   return CDN_SECRET_KEY && CDN_BASE_URL;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// REDIS FOR IP BAN SYSTEM
-// ═══════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════
+// REDIS LAZY LOADER (untuk maintenance status check, bukan ban)
+// IP ban / strike / trusted-IP logic udah dipindah ke lib/ip-ban.js
+// ════════════════════════════════════════════════════════════════════
 let redis = null;
 let redisInitAttempted = false;
-const BANNED_IPS_KEY = "starship:banned_ips";
-const BAN_DURATION_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 async function getRedis() {
   if (!redisInitAttempted) {
     try {
       const redisModule = await import("../lib/redis.js");
       redis = redisModule.default;
-      console.log("✅ Redis loaded for IP ban system");
     } catch (error) {
-      console.error("⚠️ Redis not available for IP bans:", error.message);
       redis = null;
     }
     redisInitAttempted = true;
   }
   return redis;
-}
-
-// Check if IP is banned (skip owner IPs)
-async function isIPBanned(ip) {
-  // Owner IPs are NEVER banned - auto-unban if they were accidentally banned
-  if (OWNER_IPS.includes(ip)) {
-    console.log(`[IP Ban] 👑 Owner IP detected: ${ip} - skipping ban check`);
-
-    // Auto-unban owner IP if it was accidentally banned
-    try {
-      const redisClient = await getRedis();
-      if (redisClient) {
-        await redisClient.srem(BANNED_IPS_KEY, ip);
-        console.log(`[IP Ban] 🔓 Auto-unbanned owner IP: ${ip}`);
-      }
-    } catch (e) {
-      // Ignore errors during auto-unban
-    }
-
-    return false;
-  }
-
-  try {
-    const redisClient = await getRedis();
-    if (!redisClient) return false;
-
-    const isBanned = await redisClient.sismember(BANNED_IPS_KEY, ip);
-    return isBanned === 1;
-  } catch (error) {
-    console.error("[IP Ban] Check error:", error.message);
-    return false;
-  }
-}
-
-// Ban an IP address (skip owner IPs)
-async function banIP(ip, reason) {
-  // Never ban owner IPs
-  if (OWNER_IPS.includes(ip)) {
-    console.log(`[IP Ban] 👑 Cannot ban owner IP: ${ip}`);
-    return false;
-  }
-
-  try {
-    const redisClient = await getRedis();
-    if (!redisClient) {
-      console.log(`[IP Ban] Redis not available, cannot ban ${ip}`);
-      return false;
-    }
-
-    await redisClient.sadd(BANNED_IPS_KEY, ip);
-    console.log(`[IP Ban] 🚫 BANNED IP: ${ip} - Reason: ${reason}`);
-    return true;
-  } catch (error) {
-    console.error("[IP Ban] Ban error:", error.message);
-    return false;
-  }
 }
 
 // Helper function to send Discord webhook notification
@@ -227,23 +173,12 @@ export default async function handler(req, res) {
   }
 
   const timestamp = new Date().toISOString();
-  const clientIP =
-    req.headers["x-forwarded-for"]?.split(",")[0] ||
-    req.headers["x-real-ip"] ||
-    req.connection?.remoteAddress ||
-    "unknown";
+  const clientIP = getClientIP(req);
   const userAgent = req.headers["user-agent"] || "";
   const referer = req.headers["referer"] || "Direct";
 
-  // ═══════════════════════════════════════════════════════════════
-  // CHECK IF IP IS BANNED
-  // ═══════════════════════════════════════════════════════════════
-  const banned = await isIPBanned(clientIP);
-  if (banned) {
-    console.log(`[${timestamp}] 🚫 BANNED IP BLOCKED: ${clientIP}`);
-    res.setHeader("Content-Type", "text/plain");
-    return res.status(403).send('error("Access denied")');
-  }
+  // Note: full security evaluation (ban/strike/crawler/browser) dilakukan
+  // setelah dev-mode check di bawah, biar dev mode tetap bisa akses dari browser.
 
   // Determine platform (default: pc)
   const platform = req.query.platform === "mobile" ? "mobile" : "pc";
@@ -450,82 +385,54 @@ ${scriptContent}
     }
   }
 
-  // Detect browser access
-  const browserPatterns = [
-    "Mozilla",
-    "Chrome",
-    "Safari",
-    "Firefox",
-    "Edge",
-    "Opera",
-    "MSIE",
-    "Trident",
-    "WebKit",
-    "Gecko",
-  ];
+  // ═══════════════════════════════════════════════════════════════
+  // SECURITY EVALUATION (ban / crawler / browser / strike system)
+  // Diletakkan setelah dev-mode bypass biar developer tetap bisa
+  // akses dari browser di localhost.
+  // ═══════════════════════════════════════════════════════════════
+  const evalResult = await evaluateRequest(req);
 
-  // Roblox executor patterns - these should be allowed even if they contain browser-like UA
-  const robloxPatterns = [
-    "Roblox",
-    "RobloxApp",
-    "RobloxStudio",
-    "RobloxPlayer",
-    "GameClient",
-    "synapse",
-    "SYNAPSE_HTTP",
-    "krnl",
-    "fluxus",
-    "arceus",
-    "delta",
-    "hydrogen",
-    "evon",
-    "vegax",
-    "script-ware",
-    "scriptware",
-    "comet",
-  ];
-
-  // Check if it's a Roblox executor first (case insensitive)
-  const isRobloxExecutor = robloxPatterns.some((pattern) =>
-    userAgent.toLowerCase().includes(pattern.toLowerCase()),
-  );
-
-  // Only flag as browser if it matches browser patterns AND is not a Roblox executor
-  // Also allow empty User-Agent (common for executors)
-  const isBrowser =
-    userAgent !== "" &&
-    !isRobloxExecutor &&
-    browserPatterns.some((pattern) => userAgent.includes(pattern));
-
-  // Log User-Agent for debugging (mobile only for now, can enable for both)
-  if (platform === "mobile") {
-    console.log(
-      `[${timestamp}] ${platformEmoji} Bootstrap - UA: "${userAgent}" | IP: ${clientIP} | IsBrowser: ${isBrowser}`,
-    );
+  if (evalResult.action === "already_banned") {
+    console.log(`[${timestamp}] 🚫 BANNED IP BLOCKED (${platformLabel}): ${clientIP}`);
+    res.setHeader("Content-Type", "text/plain");
+    return res.status(403).send('error("Access denied")');
   }
 
-  // If accessed from browser, log and return fake error page
-  if (isBrowser) {
+  if (evalResult.action === "block_crawler") {
+    console.log(`[${timestamp}] 🤖 CRAWLER blocked (no ban): ${clientIP} - ${userAgent.substring(0, 60)}`);
+    res.setHeader("Content-Type", "text/html");
+    return res.status(403).send(`<!DOCTYPE html><html><head><title>403</title></head><body><h1>403 Forbidden</h1></body></html>`);
+  }
+
+  if (evalResult.action === "block_trusted" || evalResult.action === "warn" || evalResult.action === "ban") {
+    const isBanned = evalResult.action === "ban";
+    const isTrusted = evalResult.action === "block_trusted";
+    const statusLabel = isTrusted
+      ? "⚠️ Trusted IP browser (no ban)"
+      : isBanned
+        ? "🚫 BANNED (3 strikes)"
+        : `⚠️ Strike ${evalResult.strikes}/${evalResult.threshold}`;
+
     console.log(
-      `[${timestamp}] 🚨 BROWSER ACCESS BLOCKED (${platformLabel}) | IP: ${clientIP} | UA: ${userAgent.substring(0, 50)}`,
+      `[${timestamp}] 🚨 BROWSER ${statusLabel} (${platformLabel}) | IP: ${clientIP} | UA: ${userAgent.substring(0, 50)}`,
     );
 
-    // ═══════════════════════════════════════════════════════════════
-    // AUTO-BAN IP FOR BROWSER ACCESS
-    // ═══════════════════════════════════════════════════════════════
-    await banIP(clientIP, `Browser access attempt - UA: ${userAgent.substring(0, 50)}`);
-
-    // Send Discord alert for suspicious browser access + IP banned
-    await sendDiscordLog({
-      title: `🚨 BROWSER ACCESS - IP BANNED - ${platformLabel} Bootstrap`,
-      status: "suspicious",
-      ip: clientIP,
-      userAgent: userAgent,
-      endpoint: `/api/bootstrap${platform === "mobile" ? "?platform=mobile" : ""}`,
-      platform: platformLabel,
-      timestamp: timestamp,
-      message: `⚠️ **Browser access detected - IP AUTO-BANNED!**\n\n**IP:** \`${clientIP}\`\n**Referer:** \`${referer}\`\n**Action:** IP permanently blocked from all endpoints`,
-    });
+    if (!isTrusted) {
+      await sendDiscordLog({
+        title: isBanned
+          ? `� BROWSER ACCESS - IP BANNED - ${platformLabel}`
+          : `⚠️ Browser Access (Strike ${evalResult.strikes}/${evalResult.threshold}) - ${platformLabel}`,
+        status: isBanned ? "blocked" : "warning",
+        ip: clientIP,
+        userAgent: userAgent,
+        endpoint: `/api/bootstrap${platform === "mobile" ? "?platform=mobile" : ""}`,
+        platform: platformLabel,
+        timestamp: timestamp,
+        message: isBanned
+          ? `🚫 **IP banned for 7 days (auto-unban after that)**\n\n**Referer:** \`${referer}\`\n**Strikes:** ${evalResult.strikes}/${evalResult.threshold}`
+          : `⚠️ Browser tried accessing bootstrap. **Not banned yet** - need ${evalResult.threshold - evalResult.strikes} more strike(s).\n\n**Referer:** \`${referer}\``,
+      });
+    }
 
     const bgColor = platform === "mobile" ? "#0f0f1a" : "#1a1a2e";
     const accentColor = platform === "mobile" ? "#8b5cf6" : "#ff6b6b";
@@ -539,24 +446,10 @@ ${scriptContent}
 <head>
     <title>403 - Forbidden</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 50px;
-            background: ${bgColor};
-            color: #eee;
-        }
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: ${bgColor}; color: #eee; }
         h1 { color: ${accentColor}; font-size: 48px; }
         p { color: #888; margin: 10px 0; }
-        .container {
-            max-width: 500px;
-            margin: 0 auto;
-            background: ${containerBg};
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            ${platform === "mobile" ? `border: 1px solid ${accentColor};` : ""}
-        }
+        .container { max-width: 500px; margin: 0 auto; background: ${containerBg}; padding: 40px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); ${platform === "mobile" ? `border: 1px solid ${accentColor};` : ""} }
         .icon { font-size: 64px; margin-bottom: 20px; }
     </style>
 </head>
@@ -577,6 +470,10 @@ ${scriptContent}
   console.log(
     `[${timestamp}] ${platformEmoji} Bootstrap GRANTED | IP: ${clientIP}${platform === "mobile" ? ` | UA: "${userAgent}"` : ""}`,
   );
+
+  // Mark IP sebagai trusted - browser access dari device/IP yang sama
+  // selanjutnya gak akan ke-ban (cuma 403).
+  await markIPTrusted(clientIP);
 
   // ═══════════════════════════════════════════════════════════════
   // PRODUCTION MODE - Serve obfuscated Loader directly (SECURE)

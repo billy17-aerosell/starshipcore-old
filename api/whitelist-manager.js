@@ -11,6 +11,7 @@ const HWID_RESET_COOLDOWN_MS = 60 * 60 * 1000;
 
 import fs from "fs";
 import path from "path";
+import { unbanIP } from "../lib/ip-ban.js";
 
 // Try to initialize Redis
 let redis = null;
@@ -549,6 +550,87 @@ export default async function handler(req, res) {
       return res
         .status(500)
         .json({ error: "Failed to reset HWID", message: error.message });
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // ==== IP BAN MANAGEMENT (consolidated from admin-unban.js) ====
+  // ═════════════════════════════════════════════════════════════════════
+  if (action === "ban_list" && method === "GET") {
+    if (!redisClient) return res.status(500).json({ error: "Redis not available" });
+    try {
+      const legacy = await redisClient.smembers("starship:banned_ips");
+      const ttlKeys = await redisClient.keys("starship:ban:*");
+      const ttlBans = [];
+      for (const key of ttlKeys) {
+        const ip = key.replace("starship:ban:", "");
+        const ttl = await redisClient.ttl(key);
+        ttlBans.push({ ip, ttlSeconds: ttl, ttlHours: Math.round(ttl / 3600) });
+      }
+      return res.status(200).json({
+        legacyBans: legacy,
+        legacyCount: legacy.length,
+        ttlBans,
+        ttlCount: ttlBans.length,
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  if (action === "ban_unban" && (method === "POST" || method === "GET")) {
+    const ip = req.query.ip || req.body?.ip;
+    if (!ip) return res.status(400).json({ error: "ip parameter required" });
+    try {
+      await unbanIP(ip);
+      return res.status(200).json({ success: true, unbanned: ip });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  if (action === "ban_flush" && (method === "POST" || method === "DELETE")) {
+    if (!redisClient) return res.status(500).json({ error: "Redis not available" });
+    try {
+      const legacyCount = await redisClient.scard("starship:banned_ips");
+      await redisClient.del("starship:banned_ips");
+
+      const ttlKeys = await redisClient.keys("starship:ban:*");
+      const strikeKeys = await redisClient.keys("starship:strike:*");
+      const allKeys = [...ttlKeys, ...strikeKeys];
+      if (allKeys.length > 0) await redisClient.del(...allKeys);
+
+      console.log(
+        `[Admin] 🔓 BAN FLUSH: legacy=${legacyCount}, ttl-bans=${ttlKeys.length}, strikes=${strikeKeys.length}`,
+      );
+      return res.status(200).json({
+        success: true,
+        flushed: {
+          legacyBans: legacyCount,
+          ttlBans: ttlKeys.length,
+          strikes: strikeKeys.length,
+        },
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  if (action === "ban_stats" && method === "GET") {
+    if (!redisClient) return res.status(500).json({ error: "Redis not available" });
+    try {
+      const legacyCount = await redisClient.scard("starship:banned_ips");
+      const ttlKeys = await redisClient.keys("starship:ban:*");
+      const strikeKeys = await redisClient.keys("starship:strike:*");
+      const trustedKeys = await redisClient.keys("starship:trusted:*");
+      return res.status(200).json({
+        legacyBans: legacyCount,
+        ttlBans: ttlKeys.length,
+        activeStrikes: strikeKeys.length,
+        trustedIPs: trustedKeys.length,
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
     }
   }
 

@@ -1,5 +1,12 @@
 import fs from "fs";
 import path from "path";
+import {
+  evaluateRequest,
+  isIPBanned,
+  markIPTrusted,
+  getClientIP,
+  OWNER_IPS,
+} from "../lib/ip-ban.js";
 
 // Get Redis client for whitelist check
 let redis = null;
@@ -147,37 +154,7 @@ const ALLOWED_MODULES = [
 
 // Owner ID - always has access without whitelist check
 const OWNER_ID = "9268011358";
-
-// Owner IPs - NEVER ban these IPs
-const OWNER_IPS = ["36.80.245.122"];
-const BANNED_IPS_KEY = "starship:banned_ips";
-
-// Check if IP is banned
-async function isIPBanned(ip) {
-  if (OWNER_IPS.includes(ip)) return false;
-  try {
-    const redisClient = await getRedis();
-    if (!redisClient) return false;
-    const isBanned = await redisClient.sismember(BANNED_IPS_KEY, ip);
-    return isBanned === 1;
-  } catch (error) {
-    return false;
-  }
-}
-
-// Ban an IP address
-async function banIP(ip, reason) {
-  if (OWNER_IPS.includes(ip)) return false;
-  try {
-    const redisClient = await getRedis();
-    if (!redisClient) return false;
-    await redisClient.sadd(BANNED_IPS_KEY, ip);
-    console.log(`[IP Ban] 🚫 BANNED IP: ${ip} - Reason: ${reason}`);
-    return true;
-  } catch (error) {
-    return false;
-  }
-}
+// IP ban / strike / trusted-IP logic udah dipindah ke lib/ip-ban.js
 
 // Send Discord webhook
 async function sendDiscordLog(logData) {
@@ -234,57 +211,59 @@ export default async function handler(req, res) {
   const user = queryUser || userId;
   const timestamp = new Date().toISOString();
 
-  // ══════════════════════════════════════════════════════════════════
-  // BROWSER DETECTION - Block browsers from accessing modules
-  // ══════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════
+  // SECURITY EVALUATION (ban / crawler / browser / strike system)
+  // Owner userId bypasses (legacy behavior)
+  // ═══════════════════════════════════════════════════════════════════
   const userAgent = req.headers["user-agent"] || "";
-  const browserPatterns = ["Mozilla", "Chrome", "Safari", "Firefox", "Edge", "Opera", "MSIE", "Trident", "WebKit", "Gecko"];
-  const robloxPatterns = ["Wave","Roblox", "RobloxApp", "synapse", "SYNAPSE_HTTP", "krnl", "fluxus", "arceus", "delta", "hydrogen", "evon", "vegax", "script-ware", "comet", "codex", "electron", "fury"];
-
-  const isRobloxExecutor = robloxPatterns.some((p) => userAgent.toLowerCase().includes(p.toLowerCase()));
-  const isBrowser = userAgent !== "" && !isRobloxExecutor && browserPatterns.some((p) => userAgent.includes(p));
-
-  // Allow dev mode to bypass browser check
-  const isDevEnv = process.env.NODE_ENV === "development";
-  const isLocalhost = isDevEnv;
-
-  if (isBrowser && !isLocalhost && !isOwner) {
-    const clientIP = req.headers["x-forwarded-for"]?.split(",")[0] || req.headers["x-real-ip"] || "unknown";
-    console.log(`[${timestamp}] 🚨 BROWSER BLOCKED on get-module | IP: ${clientIP} | UA: ${userAgent.substring(0, 60)}`);
-
-    // Ban the IP
-    await banIP(clientIP, `Browser access on get-module - UA: ${userAgent.substring(0, 50)}`);
-
-    // Send Discord webhook
-    await sendDiscordLog({
-      title: "🚨 BROWSER ACCESS - Module Endpoint",
-      status: "suspicious",
-      ip: clientIP,
-      user: "Browser",
-      module: name || "unknown",
-      statusMessage: "🚫 BANNED",
-      message: `Browser tried accessing module endpoint\nUA: ${userAgent.substring(0, 100)}\nModule: ${name || "N/A"}`,
-    });
-
-    res.setHeader("Content-Type", "text/html");
-    return res.status(403).send(`<!DOCTYPE html><html><head><title>403 Forbidden</title><style>body{font-family:Arial;text-align:center;padding:50px;background:#0f0f1a;color:#eee}h1{color:#8b5cf6}</style></head><body><h1>403 Forbidden</h1><p>This endpoint is for authorized applications only.</p></body></html>`);
-  }
-
-  // Check if IP is banned (Owner bypasses IP ban)
-  const clientIP = req.headers["x-forwarded-for"]?.split(",")[0] || req.headers["x-real-ip"] || "unknown";
+  const clientIP = getClientIP(req);
   const isOwner = user === OWNER_ID;
+  const isDevEnv = process.env.NODE_ENV === "development";
 
-  if (!isOwner && await isIPBanned(clientIP)) {
-    console.log(`[${timestamp}] 🚫 BANNED IP BLOCKED: ${clientIP}`);
-    const platform = req.query.platform;
-    if (platform === "mobile") {
-      res.setHeader("Content-Type", "text/plain");
-      return res.status(403).send('error("You have been banned for attempting to access the script via unauthorized methods. Contact admin to request unban.")');
+  if (!isOwner && !isDevEnv) {
+    const evalResult = await evaluateRequest(req);
+
+    if (evalResult.action === "already_banned") {
+      console.log(`[${timestamp}] 🚫 BANNED IP BLOCKED on get-module: ${clientIP}`);
+      const platform = req.query.platform;
+      if (platform === "mobile") {
+        res.setHeader("Content-Type", "text/plain");
+        return res.status(403).send('error("You have been banned for attempting to access the script via unauthorized methods. Contact admin to request unban.")');
+      }
+      return res.status(403).json({
+        error: "IP_BANNED",
+        message: "You have been banned for attempting to access the script via unauthorized methods. Contact admin to request unban.",
+      });
     }
-    return res.status(403).json({
-      error: "IP_BANNED",
-      message: "You have been banned for attempting to access the script via unauthorized methods. Contact admin to request unban."
-    });
+
+    if (evalResult.action === "block_crawler") {
+      console.log(`[${timestamp}] 🤖 CRAWLER blocked on get-module (no ban): ${clientIP}`);
+      res.setHeader("Content-Type", "text/html");
+      return res.status(403).send(`<!DOCTYPE html><html><head><title>403</title></head><body><h1>403 Forbidden</h1></body></html>`);
+    }
+
+    if (evalResult.action === "block_trusted" || evalResult.action === "warn" || evalResult.action === "ban") {
+      const isBanned = evalResult.action === "ban";
+      const isTrusted = evalResult.action === "block_trusted";
+      console.log(
+        `[${timestamp}] 🚨 BROWSER ${isTrusted ? "trusted (no ban)" : isBanned ? "BANNED" : `WARN ${evalResult.strikes}/${evalResult.threshold}`} on get-module | IP: ${clientIP} | UA: ${userAgent.substring(0, 60)}`,
+      );
+
+      if (!isTrusted) {
+        await sendDiscordLog({
+          title: isBanned ? "� BROWSER ACCESS - Module - IP BANNED" : "⚠️ Browser Access - Module (Warning)",
+          status: isBanned ? "blocked" : "warning",
+          ip: clientIP,
+          user: "Browser",
+          module: name || "unknown",
+          statusMessage: isBanned ? "🚫 BANNED" : `⚠️ Strike ${evalResult.strikes}/${evalResult.threshold}`,
+          message: `Browser tried accessing module endpoint\nUA: ${userAgent.substring(0, 100)}\nModule: ${name || "N/A"}\nStatus: ${isBanned ? "🚫 BANNED for 7 days" : `⚠️ Strike ${evalResult.strikes}/${evalResult.threshold} - not banned yet`}`,
+        });
+      }
+
+      res.setHeader("Content-Type", "text/html");
+      return res.status(403).send(`<!DOCTYPE html><html><head><title>403 Forbidden</title><style>body{font-family:Arial;text-align:center;padding:50px;background:#0f0f1a;color:#eee}h1{color:#8b5cf6}</style></head><body><h1>403 Forbidden</h1><p>This endpoint is for authorized applications only.</p></body></html>`);
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════

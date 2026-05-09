@@ -932,6 +932,11 @@
                     <span class="icon">🔧</span>
                     <span class="label">Maintenance</span>
                 </a>
+                <a class="nav-item" data-page="ipbans" onclick="navigateTo('ipbans')">
+                    <span class="icon">🚫</span>
+                    <span class="label">IP Bans</span>
+                    <span class="badge" id="ipBanCount">0</span>
+                </a>
                 <a class="nav-item" data-page="settings" onclick="navigateTo('settings')">
                     <span class="icon">⚙️</span>
                     <span class="label">Settings</span>
@@ -1112,6 +1117,13 @@
                     <div id="maintenanceContent">
                         <p style="text-align: center; padding: 40px; color: var(--text-muted);">Loading maintenance
                             data...</p>
+                    </div>
+                </div>
+
+                <!-- IP Bans Page -->
+                <div id="page-ipbans" class="page-section">
+                    <div id="ipBansContent">
+                        <p style="text-align: center; padding: 40px; color: var(--text-muted);">Loading IP ban data...</p>
                     </div>
                 </div>
 
@@ -1324,6 +1336,7 @@
                 'pc-users': 'PC VIP Users',
                 'mobile-users': 'Mobile VIP Users',
                 'maintenance': 'Maintenance & Compensation',
+                'ipbans': 'IP Ban Management',
                 'settings': 'Settings'
             };
             document.getElementById('pageTitle').textContent = titles[page] || page;
@@ -1331,6 +1344,8 @@
             // Load page-specific data
             if (page === 'maintenance') {
                 loadMaintenanceData();
+            } else if (page === 'ipbans') {
+                loadIPBanData();
             }
         }
 
@@ -1658,6 +1673,190 @@
             const row = document.getElementById('historyDetails' + index);
             if (row) {
                 row.classList.toggle('hidden');
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // IP BAN MANAGEMENT
+        // ═══════════════════════════════════════════════════════════════
+        async function loadIPBanData() {
+            const container = document.getElementById('ipBansContent');
+            container.innerHTML = '<p style="text-align: center; padding: 40px; color: var(--text-muted);">Loading IP ban data...</p>';
+
+            try {
+                const [statsRes, listRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/whitelist-manager?action=ban_stats`, {
+                        headers: { 'X-Admin-Secret': adminSecret }
+                    }),
+                    fetch(`${API_BASE}/api/whitelist-manager?action=ban_list`, {
+                        headers: { 'X-Admin-Secret': adminSecret }
+                    })
+                ]);
+
+                const stats = await statsRes.json();
+                const list = await listRes.json();
+
+                if (!statsRes.ok) throw new Error(stats.error || 'Failed to load stats');
+                if (!listRes.ok) throw new Error(list.error || 'Failed to load list');
+
+                renderIPBanContent(stats, list, container);
+                document.getElementById('ipBanCount').textContent = (stats.legacyBans || 0) + (stats.ttlBans || 0);
+            } catch (error) {
+                container.innerHTML = `<p style="text-align: center; padding: 40px; color: var(--danger);">Error: ${error.message}</p>`;
+            }
+        }
+
+        function renderIPBanContent(stats, list, container) {
+            const ttlBans = list.ttlBans || [];
+            const legacyBans = list.legacyBans || [];
+
+            const allBans = [
+                ...ttlBans.map(b => ({ ip: b.ip, ttl: b.ttlSeconds, type: 'ttl' })),
+                ...legacyBans.filter(ip => !ttlBans.some(t => t.ip === ip)).map(ip => ({ ip, ttl: -1, type: 'legacy' }))
+            ];
+
+            container.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card warning">
+                        <div class="stat-icon">🚫</div>
+                        <div class="stat-value">${(stats.legacyBans || 0) + (stats.ttlBans || 0)}</div>
+                        <div class="stat-label">Total Banned IPs</div>
+                    </div>
+                    <div class="stat-card pc">
+                        <div class="stat-icon">⏱️</div>
+                        <div class="stat-value">${stats.ttlBans || 0}</div>
+                        <div class="stat-label">TTL Bans (auto-expire)</div>
+                    </div>
+                    <div class="stat-card mobile">
+                        <div class="stat-icon">⚠️</div>
+                        <div class="stat-value">${stats.activeStrikes || 0}</div>
+                        <div class="stat-label">Active Strikes</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-icon">✅</div>
+                        <div class="stat-value">${stats.trustedIPs || 0}</div>
+                        <div class="stat-label">Trusted IPs (whitelist)</div>
+                    </div>
+                </div>
+
+                <div class="data-section" style="margin-bottom: 20px; padding: 20px;">
+                    <h3 style="margin-bottom: 15px;">🔧 Quick Actions</h3>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <input type="text" id="manualUnbanIP" class="search-box" placeholder="Enter IP to unban (e.g. 1.2.3.4)" style="flex: 1; min-width: 250px;">
+                        <button class="btn btn-success" onclick="manualUnbanIP()">🔓 Unban IP</button>
+                        <button class="btn btn-primary" onclick="loadIPBanData()">🔄 Refresh</button>
+                        <button class="btn btn-danger" onclick="confirmFlushAllBans()">💥 Flush All Bans</button>
+                    </div>
+                    <p style="margin-top: 10px; color: var(--text-muted); font-size: 13px;">
+                        💡 <strong>Flush All</strong> akan hapus SEMUA banned IP + strike counter (untuk clear false positive massal). Trusted IP whitelist tidak ke-affect.
+                    </p>
+                </div>
+
+                <div class="data-section">
+                    <div class="data-header">
+                        <div class="data-title">🚫 Banned IPs (${allBans.length})</div>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>IP Address</th>
+                                <th>Type</th>
+                                <th>Time Remaining</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${allBans.length === 0 ? `
+                                <tr><td colspan="4" style="text-align: center; padding: 40px; color: var(--text-muted);">✅ No banned IPs</td></tr>
+                            ` : allBans.map(b => `
+                                <tr>
+                                    <td><code style="font-family: 'Courier New', monospace; color: var(--primary); font-size: 14px;">${escapeHtml(b.ip)}</code></td>
+                                    <td>${b.type === 'ttl'
+                                        ? '<span class="status-badge active" style="background: rgba(102, 126, 234, 0.15); color: var(--primary);">⏱️ TTL Ban</span>'
+                                        : '<span class="status-badge expired" style="background: rgba(239, 68, 68, 0.15); color: var(--danger);">♾️ Permanent (legacy)</span>'
+                                    }</td>
+                                    <td style="color: var(--text-muted); font-size: 13px;">${formatTTL(b.ttl, b.type)}</td>
+                                    <td>
+                                        <button class="btn btn-success" style="padding: 6px 12px; font-size: 12px;" onclick="unbanIPFromList('${escapeJsString(b.ip)}')">🔓 Unban</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function formatTTL(ttl, type) {
+            if (type !== 'ttl') return 'Forever (no TTL)';
+            if (ttl > 86400) return `${Math.round(ttl / 86400)} hari`;
+            if (ttl > 3600) return `${Math.round(ttl / 3600)} jam`;
+            return `${Math.round(ttl / 60)} menit`;
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function escapeJsString(s) {
+            return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        async function manualUnbanIP() {
+            const input = document.getElementById('manualUnbanIP');
+            const ip = (input.value || '').trim();
+            if (!ip) {
+                showToast('❌ Masukkan IP dulu', 'error');
+                return;
+            }
+            await unbanIPFromList(ip, false);
+            input.value = '';
+        }
+
+        async function unbanIPFromList(ip, askConfirm = true) {
+            if (askConfirm && !confirm(`Unban IP ${ip}?`)) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=ban_unban&ip=${encodeURIComponent(ip)}`, {
+                    method: 'POST',
+                    headers: { 'X-Admin-Secret': adminSecret }
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(`✅ IP ${ip} unbanned`, 'success');
+                    loadIPBanData();
+                } else {
+                    throw new Error(data.error || 'Failed to unban');
+                }
+            } catch (error) {
+                showToast(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        function confirmFlushAllBans() {
+            if (!confirm('⚠️ FLUSH SEMUA BANNED IP?\n\nIni akan:\n- Hapus semua banned IP (legacy + TTL)\n- Reset semua strike counter\n\nTrusted IP whitelist TIDAK ke-affect.\n\nLanjut?')) return;
+            if (!confirm('Yakin? Action ini tidak bisa di-undo.')) return;
+            flushAllBans();
+        }
+
+        async function flushAllBans() {
+            try {
+                const response = await fetch(`${API_BASE}/api/whitelist-manager?action=ban_flush`, {
+                    method: 'POST',
+                    headers: { 'X-Admin-Secret': adminSecret }
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    const f = data.flushed || {};
+                    showToast(`✅ Flushed: ${f.legacyBans || 0} legacy + ${f.ttlBans || 0} TTL bans + ${f.strikes || 0} strikes`, 'success');
+                    loadIPBanData();
+                } else {
+                    throw new Error(data.error || 'Failed to flush');
+                }
+            } catch (error) {
+                showToast(`❌ Error: ${error.message}`, 'error');
             }
         }
 

@@ -4,6 +4,13 @@
 
 import fs from "fs";
 import path from "path";
+import {
+  evaluateRequest,
+  isIPBanned,
+  markIPTrusted,
+  getClientIP,
+  OWNER_IPS,
+} from "../lib/ip-ban.js";
 
 // Event Code System API (from environment variable for security)
 const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
@@ -61,37 +68,7 @@ async function getRedis() {
 
 // Redis keys
 const MOBILE_WHITELIST_KEY = "starship:mobile_whitelist";
-const BANNED_IPS_KEY = "starship:banned_ips";
-
-// Owner IPs - NEVER ban these
-const OWNER_IPS = ["36.80.245.122"];
-
-// Check if IP is banned
-async function isIPBanned(ip) {
-  if (OWNER_IPS.includes(ip)) return false;
-  try {
-    const redisClient = await getRedis();
-    if (!redisClient) return false;
-    const isBanned = await redisClient.sismember(BANNED_IPS_KEY, ip);
-    return isBanned === 1;
-  } catch (error) {
-    return false;
-  }
-}
-
-// Ban an IP address
-async function banIP(ip, reason) {
-  if (OWNER_IPS.includes(ip)) return false;
-  try {
-    const redisClient = await getRedis();
-    if (!redisClient) return false;
-    await redisClient.sadd(BANNED_IPS_KEY, ip);
-    console.log(`[IP Ban] 🚫 BANNED IP: ${ip} - Reason: ${reason}`);
-    return true;
-  } catch (error) {
-    return false;
-  }
-}
+// IP ban / strike / trusted-IP logic udah dipindah ke lib/ip-ban.js
 
 // Helper to get mobile whitelist from Redis
 async function getMobileWhitelistFromRedis() {
@@ -107,15 +84,7 @@ async function getMobileWhitelistFromRedis() {
   }
 }
 
-// Get client IP
-function getClientIP(req) {
-  return (
-    req.headers["x-forwarded-for"]?.split(",")[0] ||
-    req.headers["x-real-ip"] ||
-    req.connection?.remoteAddress ||
-    "unknown"
-  );
-}
+// getClientIP imported from lib/ip-ban.js
 
 // Send Discord webhook
 async function sendDiscordLog(logData) {
@@ -188,74 +157,47 @@ export default async function handler(req, res) {
   const timestamp = new Date().toISOString();
   const clientIP = getClientIP(req);
   const userAgent = req.headers["user-agent"] || "";
+  const OWNER_USER_ID = "9268011358";
 
-  // Browser detection - block browser access
-  const browserPatterns = [
-    "Mozilla",
-    "Chrome",
-    "Safari",
-    "Firefox",
-    "Edge",
-    "Opera",
-    "MSIE",
-    "Trident",
-    "WebKit",
-    "Gecko",
-  ];
+  // ═══════════════════════════════════════════════════════════════
+  // SECURITY EVALUATION (ban / crawler / browser / strike system)
+  // Owner userId bypasses ban check (tapi tetap kena evaluasi UA)
+  // ═══════════════════════════════════════════════════════════════
+  if (userId !== OWNER_USER_ID) {
+    const evalResult = await evaluateRequest(req);
 
-  // Roblox executor patterns - these should be allowed even if they contain browser-like UA
-  const robloxPatterns = [
-    "Roblox",
-    "RobloxApp",
-    "RobloxStudio",
-    "RobloxPlayer",
-    "GameClient",
-    "synapse",
-    "SYNAPSE_HTTP",
-    "krnl",
-    "fluxus",
-    "arceus",
-    "delta",
-    "hydrogen",
-    "evon",
-    "vegax",
-    "script-ware",
-    "scriptware",
-    "comet",
-  ];
+    if (evalResult.action === "already_banned") {
+      console.log(`[${timestamp}] 🚫 BANNED IP BLOCKED on mobile-ui: ${clientIP}`);
+      return res.status(403).send('error("You have been banned for attempting to access the script via unauthorized methods. Contact admin to request unban.")');
+    }
 
-  // Check if it's a Roblox executor first (case insensitive)
-  const isRobloxExecutor = robloxPatterns.some((pattern) =>
-    userAgent.toLowerCase().includes(pattern.toLowerCase()),
-  );
+    if (evalResult.action === "block_crawler") {
+      console.log(`[${timestamp}] 🤖 CRAWLER blocked on mobile-ui (no ban): ${clientIP}`);
+      res.setHeader("Content-Type", "text/html");
+      return res.status(403).send(`<!DOCTYPE html><html><head><title>403</title></head><body><h1>403 Forbidden</h1></body></html>`);
+    }
 
-  // Only flag as browser if it matches browser patterns AND is not a Roblox executor
-  // Also allow empty User-Agent (common for executors)
-  const isBrowser =
-    userAgent !== "" &&
-    !isRobloxExecutor &&
-    browserPatterns.some((pattern) => userAgent.includes(pattern));
+    if (evalResult.action === "block_trusted" || evalResult.action === "warn" || evalResult.action === "ban") {
+      const isBanned = evalResult.action === "ban";
+      const isTrusted = evalResult.action === "block_trusted";
+      console.log(
+        `[${timestamp}] 🚨 BROWSER ${isTrusted ? "trusted (no ban)" : isBanned ? "BANNED" : `WARN ${evalResult.strikes}/${evalResult.threshold}`} on mobile-ui | IP: ${clientIP}`,
+      );
 
-  if (isBrowser) {
-    console.log(
-      `[${timestamp}] 🚨 BROWSER ACCESS BLOCKED (get-mobile-ui) | IP: ${clientIP}`,
-    );
+      if (!isTrusted) {
+        await sendDiscordLog({
+          title: isBanned ? "� BROWSER ACCESS - Mobile UI - IP BANNED" : "⚠️ Browser Access - Mobile UI (Warning)",
+          status: isBanned ? "blocked" : "warning",
+          owner: "Browser User",
+          authType: "None",
+          ip: clientIP,
+          timestamp: timestamp,
+          message: `⚠️ Browser tried accessing Mobile UI\n**UA:** \`${userAgent.substring(0, 100)}\`\n**Status:** ${isBanned ? "🚫 IP BANNED for 7 days" : `⚠️ Strike ${evalResult.strikes}/${evalResult.threshold} - not banned yet`}`,
+        });
+      }
 
-    // Ban the IP
-    await banIP(clientIP, `Browser access on mobile-ui - UA: ${userAgent.substring(0, 50)}`);
-
-    await sendDiscordLog({
-      title: "🚨 Browser Access Blocked - Mobile UI",
-      status: "blocked",
-      owner: "Browser User",
-      authType: "None",
-      ip: clientIP,
-      timestamp: timestamp,
-      message: `⚠️ Someone tried to access Mobile UI from browser!\n\n**User Agent:** \`${userAgent.substring(0, 100)}\`\n**IP BANNED:** ✅`,
-    });
-
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    return res.status(403).send(`
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(403).send(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -273,14 +215,8 @@ export default async function handler(req, res) {
     </div>
 </body>
 </html>
-    `);
-  }
-
-  // Check if IP is banned (shared across all endpoints, Owner bypasses)
-  const OWNER_USER_ID = "9268011358";
-  if (userId !== OWNER_USER_ID && await isIPBanned(clientIP)) {
-    console.log(`[${timestamp}] 🚫 BANNED IP BLOCKED on mobile-ui: ${clientIP}`);
-    return res.status(403).send('error("You have been banned for attempting to access the script via unauthorized methods. Contact admin to request unban.")');
+      `);
+    }
   }
 
   if (!userId) {
