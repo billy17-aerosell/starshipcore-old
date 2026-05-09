@@ -312,41 +312,55 @@ async function sendDiscordLog(logData) {
     const color = colors[logData.status] || 0x808080;
     const emoji = emojis[logData.status] || "⚪";
 
+    const fields = [
+      {
+        name: "👤 User",
+        value: logData.owner || "Unknown",
+        inline: true,
+      },
+      {
+        name: "🔑 Auth Type",
+        value: `\`${logData.authType || "Key"}\``,
+        inline: true,
+      },
+      {
+        name: "🌐 IP Address",
+        value: `\`${logData.ip}\``,
+        inline: true,
+      },
+      {
+        name: "🔐 HWID Status",
+        value: logData.hwidStatus || "Protected",
+        inline: true,
+      },
+      {
+        name: "📍 Platform",
+        value: logData.platform || "PC",
+        inline: true,
+      },
+      {
+        name: "✅ Status",
+        value: logData.statusMessage || logData.status,
+        inline: true,
+      },
+    ];
+
+    // 🎮 Game info (kalau Lua client kirim placeId)
+    if (logData.placeId) {
+      const gameValue = logData.placeName
+        ? `**${logData.placeName}**\n\`PlaceId: ${logData.placeId}\`\n[Open Game](https://www.roblox.com/games/${logData.placeId})`
+        : `\`PlaceId: ${logData.placeId}\`\n[Open Game](https://www.roblox.com/games/${logData.placeId})`;
+      fields.push({
+        name: "🎮 Game",
+        value: gameValue,
+        inline: false,
+      });
+    }
+
     const embed = {
       title: `${emoji} ${logData.title || "Access Log"}`,
       color: color,
-      fields: [
-        {
-          name: "👤 User",
-          value: logData.owner || "Unknown",
-          inline: true,
-        },
-        {
-          name: "🔑 Auth Type",
-          value: `\`${logData.authType || "Key"}\``,
-          inline: true,
-        },
-        {
-          name: "🌐 IP Address",
-          value: `\`${logData.ip}\``,
-          inline: true,
-        },
-        {
-          name: "🔐 HWID Status",
-          value: logData.hwidStatus || "Protected",
-          inline: true,
-        },
-        {
-          name: "📍 Platform",
-          value: logData.platform || "PC",
-          inline: true,
-        },
-        {
-          name: "✅ Status",
-          value: logData.statusMessage || logData.status,
-          inline: true,
-        },
-      ],
+      fields: fields,
       timestamp: new Date().toISOString(),
       footer: {
         text: `${logData.platform?.includes("Mobile") ? "📱" : "💻"} StarshipCore Access Monitor`,
@@ -355,6 +369,13 @@ async function sendDiscordLog(logData) {
 
     if (logData.message) {
       embed.description = logData.message;
+    }
+
+    // Game thumbnail sebagai embed image (kalau ada placeId)
+    if (logData.placeId) {
+      embed.thumbnail = {
+        url: `https://www.roblox.com/asset-thumbnail/image?assetId=${logData.placeId}&width=150&height=150&format=png`,
+      };
     }
 
     const response = await fetch(webhookUrl, {
@@ -431,6 +452,48 @@ async function sendCrossPlatformAlert(alertData) {
     console.log("[Discord] ✅ Cross-platform alert sent");
   } catch (error) {
     console.error("[Discord] Cross-platform alert error:", error.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ROBLOX PLACE INFO LOOKUP
+// Fetch nama game dari Roblox API. Hasil di-cache 10 menit di-memory
+// biar gak hit Roblox API tiap request (Vercel cold start safe).
+// Endpoint: https://games.roblox.com/v1/games/multiget-place-details
+// ═══════════════════════════════════════════════════════════════════
+const _placeInfoCache = new Map(); // placeId -> { name, ts }
+const PLACE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 menit
+
+async function fetchRobloxPlaceInfo(placeId) {
+  if (!placeId) return null;
+  const pid = String(placeId).trim();
+  if (!/^\d+$/.test(pid)) return null; // invalid placeId
+
+  // Check cache
+  const cached = _placeInfoCache.get(pid);
+  if (cached && Date.now() - cached.ts < PLACE_CACHE_TTL_MS) {
+    return cached.name;
+  }
+
+  try {
+    const url = `https://games.roblox.com/v1/games/multiget-place-details?placeIds=${pid}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000); // 4s timeout
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const name = data[0]?.name || null;
+    if (name) {
+      _placeInfoCache.set(pid, { name, ts: Date.now() });
+    }
+    return name;
+  } catch (e) {
+    // Network/timeout error - silent fail (webhook tetep jalan tanpa nama game)
+    return null;
   }
 }
 
@@ -516,7 +579,7 @@ export default async function handler(req, res) {
   }
 
   // Get parameters
-  const { key, userId, platform: platformParam, hwid } = req.query;
+  const { key, userId, platform: platformParam, hwid, placeId } = req.query;
   const platform = platformParam === "mobile" ? "mobile" : "pc";
   const config = PLATFORM_CONFIG[platform];
   const platformLabel = config.label;
@@ -525,6 +588,20 @@ export default async function handler(req, res) {
   const clientIP = getClientIP(req);
   const timestamp = new Date().toISOString();
   const userAgent = req.headers["user-agent"] || "";
+
+  // Fetch place info dari Roblox API (kalau placeId dikirim dari Lua client)
+  // Hasil di-pass ke semua sendDiscordLog call via closure sendLog di bawah.
+  let placeName = null;
+  if (placeId) {
+    try {
+      placeName = await fetchRobloxPlaceInfo(placeId);
+    } catch (e) {
+      console.error(`[${timestamp}] ⚠️ Failed to fetch place info for ${placeId}:`, e.message);
+    }
+  }
+
+  // Wrapper supaya semua webhook log otomatis dapet field 🎮 Game
+  const sendLog = (data) => sendDiscordLog({ ...data, placeId, placeName });
 
   // Browser detection
   const browserPatterns = [
@@ -574,7 +651,7 @@ export default async function handler(req, res) {
       `[${timestamp}] 🚨 BROWSER ACCESS BLOCKED (get-loader ${platform}) | IP: ${clientIP}`,
     );
 
-    await sendDiscordLog({
+    await sendLog({
       title: `🚨 Browser Access Blocked - ${platformLabel} Loader`,
       status: "blocked",
       owner: "Browser User",
@@ -649,7 +726,7 @@ export default async function handler(req, res) {
               `[${timestamp}] 🚫 HWID MISMATCH - UserID: ${userId} | Platform: ${platform} | Reason: ${hwidResult.reason}`,
             );
 
-            await sendDiscordLog({
+            await sendLog({
               title: `🚫 PC HWID Mismatch Detected`,
               status: "blocked",
               statusMessage: "❌ Device tidak dikenali",
@@ -677,7 +754,7 @@ export default async function handler(req, res) {
               `[${timestamp}] 📱 NEW HWID REGISTERED - UserID: ${userId} (${vipUser.username}) | Platform: ${platform}`,
             );
 
-            await sendDiscordLog({
+            await sendLog({
               title: `📱 New PC HWID Registered`,
               status: "success",
               statusMessage: "✅ HWID Bound",
@@ -905,7 +982,7 @@ export default async function handler(req, res) {
         `[${timestamp}] 🚫 BANNED USER BLOCKED - UserID: ${userId} | IP: ${clientIP}`,
       );
 
-      await sendDiscordLog({
+      await sendLog({
         title: `🚫 Banned User Attempted Access`,
         status: "blocked",
         statusMessage: "🚫 BANNED",
@@ -943,7 +1020,7 @@ export default async function handler(req, res) {
     `[${timestamp}] ❌ NOT ${platform.toUpperCase()} WHITELISTED - ACCESS BLOCKED - UserID: ${userId} | IP: ${clientIP}`,
   );
 
-  await sendDiscordLog({
+  await sendLog({
     title: `🚫 ${platformLabel} Access Blocked - Not Whitelisted`,
     status: "blocked",
     statusMessage: "❌ Not Whitelisted",
@@ -1050,7 +1127,7 @@ async function handleVIPWebhook(
       shouldSendWebhook = true;
       webhookReason = "⚠️ Fallback Mode (Redis Unavailable)";
 
-      await sendDiscordLog({
+      await sendLog({
         title: `💎 ${config.label} VIP Access Granted`,
         status: "success",
         statusMessage: "✅ Authorized (VIP)",
@@ -1127,7 +1204,7 @@ async function handleVIPWebhook(
           ? `${currentDeviceCount} device(s)`
           : `${currentDeviceCount}/${maxDevices} devices`;
 
-      await sendDiscordLog({
+      await sendLog({
         title: `💎 ${config.label} VIP Access Granted`,
         status: "success",
         statusMessage: "✅ Authorized (VIP)",
@@ -1151,7 +1228,7 @@ async function handleVIPWebhook(
   } catch (error) {
     console.error(`[${timestamp}] ❌ Rate limiting error:`, error);
     // Fallback - send webhook anyway
-    await sendDiscordLog({
+    await sendLog({
       title: `💎 ${config.label} VIP Access Granted`,
       status: "success",
       statusMessage: "✅ Authorized (VIP)",

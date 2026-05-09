@@ -346,41 +346,55 @@ async function sendDiscordLog(logData) {
 
     const color = colors[logData.status] || 0x808080;
 
+    const fields = [
+      {
+        name: "👤 User",
+        value: logData.owner || "Unknown",
+        inline: true,
+      },
+      {
+        name: "🔑 Auth Type",
+        value: `\`${logData.authType || "Key"}\``,
+        inline: true,
+      },
+      {
+        name: "🌐 IP Address",
+        value: `\`${logData.ip}\``,
+        inline: true,
+      },
+      {
+        name: "📍 Platform",
+        value: logData.platform || "PC",
+        inline: true,
+      },
+      {
+        name: "🔐 HWID Status",
+        value: logData.hwidStatus || "Protected",
+        inline: true,
+      },
+      {
+        name: "⏰ Timestamp",
+        value: logData.timestamp,
+        inline: true,
+      },
+    ];
+
+    // 🎮 Game info (kalau Lua client kirim placeId)
+    if (logData.placeId) {
+      const gameValue = logData.placeName
+        ? `**${logData.placeName}**\n\`PlaceId: ${logData.placeId}\`\n[Open Game](https://www.roblox.com/games/${logData.placeId})`
+        : `\`PlaceId: ${logData.placeId}\`\n[Open Game](https://www.roblox.com/games/${logData.placeId})`;
+      fields.push({
+        name: "🎮 Game",
+        value: gameValue,
+        inline: false,
+      });
+    }
+
     const embed = {
       title: `${logData.title || "Access Log"}`,
       color: color,
-      fields: [
-        {
-          name: "👤 User",
-          value: logData.owner || "Unknown",
-          inline: true,
-        },
-        {
-          name: "🔑 Auth Type",
-          value: `\`${logData.authType || "Key"}\``,
-          inline: true,
-        },
-        {
-          name: "🌐 IP Address",
-          value: `\`${logData.ip}\``,
-          inline: true,
-        },
-        {
-          name: "📍 Platform",
-          value: logData.platform || "PC",
-          inline: true,
-        },
-        {
-          name: "🔐 HWID Status",
-          value: logData.hwidStatus || "Protected",
-          inline: true,
-        },
-        {
-          name: "⏰ Timestamp",
-          value: logData.timestamp,
-          inline: true,
-        },
-      ],
+      fields: fields,
       timestamp: new Date().toISOString(),
       footer: {
         text: `${logData.platform?.includes("Mobile") ? "📱" : "💻"} StarshipCore Auth Monitor`,
@@ -389,6 +403,12 @@ async function sendDiscordLog(logData) {
 
     if (logData.message) {
       embed.description = logData.message;
+    }
+
+    if (logData.placeId) {
+      embed.thumbnail = {
+        url: `https://www.roblox.com/asset-thumbnail/image?assetId=${logData.placeId}&width=150&height=150&format=png`,
+      };
     }
 
     const response = await fetch(webhookUrl, {
@@ -554,6 +574,41 @@ async function getKeysFromGitHub() {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════
+// ROBLOX PLACE INFO LOOKUP (cached 10 min)
+// ════════════════════════════════════════════════════════════════════
+const _placeInfoCache = new Map();
+const PLACE_CACHE_TTL_MS = 10 * 60 * 1000;
+
+async function fetchRobloxPlaceInfo(placeId) {
+  if (!placeId) return null;
+  const pid = String(placeId).trim();
+  if (!/^\d+$/.test(pid)) return null;
+
+  const cached = _placeInfoCache.get(pid);
+  if (cached && Date.now() - cached.ts < PLACE_CACHE_TTL_MS) {
+    return cached.name;
+  }
+
+  try {
+    const url = `https://games.roblox.com/v1/games/multiget-place-details?placeIds=${pid}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const name = data[0]?.name || null;
+    if (name) _placeInfoCache.set(pid, { name, ts: Date.now() });
+    return name;
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method Not Allowed" });
@@ -571,6 +626,19 @@ export default async function handler(req, res) {
   const timestamp = new Date().toISOString();
   const clientIP = getClientIP(req);
   const userAgent = req.headers["user-agent"] || "";
+
+  // 🎮 Place info enrichment - fetch sekali per request, di-cache di-memory
+  const placeId = req.query.placeId;
+  let placeName = null;
+  if (placeId) {
+    try {
+      placeName = await fetchRobloxPlaceInfo(placeId);
+    } catch (e) {
+      console.error(`[${timestamp}] ⚠️ Failed to fetch place info:`, e.message);
+    }
+  }
+  // Wrapper supaya semua webhook log otomatis dapet field 🎮 Game
+  const sendLog = (data) => sendDiscordLog({ ...data, placeId, placeName });
 
   // === EVENT CODE ACTIONS (for mobile loader) ===
   const action = req.query.action;
@@ -800,7 +868,7 @@ export default async function handler(req, res) {
         // SUCCESS: Always send webhook (Important!)
         console.log(`[${timestamp}] 🎟️ EVENT CODE REDEEMED - User: ${username} (${userId}) | Code: ${code} | IP: ${clientIP}`);
 
-        await sendDiscordLog({
+        await sendLog({
           title: "🎟️ Event Code Redeemed Successfully",
           status: "success",
           statusMessage: "✅ Code Activated",
@@ -817,7 +885,7 @@ export default async function handler(req, res) {
         if (shouldSendWebhook(userId, "redeem_fail")) {
           console.log(`[${timestamp}] ❌ EVENT CODE FAILED - User: ${username} (${userId}) | Code: ${code} | Reason: ${data.message}`);
 
-          await sendDiscordLog({
+          await sendLog({
             title: "❌ Event Code Failed",
             status: "blocked",
             statusMessage: "❌ Invalid Code",
@@ -865,7 +933,7 @@ export default async function handler(req, res) {
             );
 
             if (platform === "mobile") {
-              await sendDiscordLog({
+              await sendLog({
                 title: `${platformLabel} Access Expired`,
                 status: "blocked",
                 authType: `${config.defaultType} (Expired)`,
@@ -900,7 +968,7 @@ export default async function handler(req, res) {
 
           // Send Discord alert for HWID mismatch
           if (shouldSendWebhook(userId, "hwid_mismatch")) {
-            await sendDiscordLog({
+            await sendLog({
               title: `🚫 HWID Mismatch Detected`,
               status: "blocked",
               authType: `${config.defaultType} (HWID Blocked)`,
@@ -974,7 +1042,7 @@ export default async function handler(req, res) {
         );
 
         if (platform === "mobile") {
-          await sendDiscordLog({
+          await sendLog({
             title: `Suspended ${platformLabel} User Attempt`,
             status: "blocked",
             authType: `${config.defaultType} (Suspended)`,
@@ -1272,7 +1340,7 @@ export default async function handler(req, res) {
 
           // Only send webhook if not rate limited (prevents spam on script re-run)
           if (shouldSendWebhook(userId, "event_access")) {
-            await sendDiscordLog({
+            await sendLog({
               title: `🎟️ Event Code Access Granted - ${platformLabel}`,
               status: "success",
               authType: `Event Code: ${eventAccess.codeUsed}`,
@@ -1308,7 +1376,7 @@ export default async function handler(req, res) {
 
     // Only send webhook if not rate limited (prevents spam from repeated attempts)
     if (shouldSendWebhook(userId, "access_denied")) {
-      await sendDiscordLog({
+      await sendLog({
         title: `${platformLabel} Access Denied`,
         status: "blocked",
         authType: "None",
@@ -1373,7 +1441,7 @@ async function handleMobileSuccess(
     }
 
     if (shouldSendWebhook) {
-      await sendDiscordLog({
+      await sendLog({
         title: "Mobile VIP Access Granted",
         status: "success",
         statusMessage: "Authorized (VIP)",
