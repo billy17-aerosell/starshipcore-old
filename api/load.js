@@ -1021,6 +1021,7 @@ export default async function handler(req, res) {
             remainingDays,
             config,
             hwidResult,
+            sendLog,
           );
         } else {
           // PC: Return encrypted script
@@ -1090,6 +1091,8 @@ export default async function handler(req, res) {
           now,
           remainingDays,
           config,
+          null,
+          sendLog,
         );
       } else {
         return await handlePCSuccess(
@@ -1402,6 +1405,7 @@ export default async function handler(req, res) {
 }
 
 // Handle Mobile success (simplified - device limit removed, using HWID instead)
+// `sendLog` di-pass dari handler scope biar dapet placeId/placeName context
 async function handleMobileSuccess(
   res,
   userId,
@@ -1412,6 +1416,7 @@ async function handleMobileSuccess(
   remainingDays,
   config,
   hwidResult = null,
+  sendLog = sendDiscordLog,
 ) {
   // Note: Device limit has been replaced by HWID binding
   // Device tracking kept for logging purposes only

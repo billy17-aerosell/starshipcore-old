@@ -783,6 +783,7 @@ export default async function handler(req, res) {
             platform,
             config,
             hwidResult,
+            sendLog,
           );
         } else {
           console.log(
@@ -1099,6 +1100,7 @@ end
 }
 
 // Helper function to handle VIP webhook with rate limiting
+// `sendLog` di-pass dari handler scope biar dapet placeId/placeName context
 async function handleVIPWebhook(
   userId,
   vipUser,
@@ -1107,6 +1109,7 @@ async function handleVIPWebhook(
   platform,
   config,
   hwidResult = null,
+  sendLog = sendDiscordLog,
 ) {
   const COOLDOWN_MINUTES = 10;
   const redisKey = `webhook_cooldown: ${platform}: ${userId}`;
