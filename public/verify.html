@@ -587,14 +587,32 @@
 
         window.onload = function () {
             setLanguage(currentLang);
+
+            // Check for OAuth code in URL
             const urlParams = new URLSearchParams(window.location.search);
             const code = urlParams.get('code');
-            if (code) exchangeCode(code);
+            const oauthError = urlParams.get('error');
 
-            const savedUser = localStorage.getItem('discord_user');
-            if (savedUser) {
-                discordUser = JSON.parse(savedUser);
-                showDiscordUser(discordUser);
+            if (code) {
+                // Remove code from URL IMMEDIATELY to prevent re-use on page refresh
+                // (Discord OAuth codes can only be exchanged ONCE)
+                window.history.replaceState({}, document.title, '/verify.html');
+                exchangeCode(code);
+            } else if (oauthError) {
+                // User denied authorization or other OAuth flow error
+                window.history.replaceState({}, document.title, '/verify.html');
+                showResult('error', t('login_failed'), 'Discord authorization was cancelled or denied.');
+            } else {
+                // No code in URL, check if user already logged in
+                const savedUser = localStorage.getItem('discord_user');
+                if (savedUser) {
+                    try {
+                        discordUser = JSON.parse(savedUser);
+                        showDiscordUser(discordUser);
+                    } catch (e) {
+                        localStorage.removeItem('discord_user');
+                    }
+                }
             }
         };
 
@@ -621,11 +639,23 @@
                     discordUser = data.user;
                     localStorage.setItem('discord_user', JSON.stringify(discordUser));
                     showDiscordUser(discordUser);
-                    window.history.replaceState({}, document.title, '/verify.html');
                 } else {
-                    showResult('error', t('login_failed'), data.error || t('login_error'));
+                    // Clear stale state on auth failure
+                    localStorage.removeItem('discord_user');
+                    document.getElementById('step1').classList.remove('disabled');
+
+                    // Show specific message for expired codes
+                    if (data.errorType === 'CODE_EXPIRED') {
+                        showResult('error', t('login_failed'),
+                            'Sesi login kedaluwarsa. Silakan klik tombol "Login dengan Discord" lagi untuk mencoba ulang.');
+                    } else {
+                        showResult('error', t('login_failed'), data.error || t('login_error'));
+                    }
                 }
             } catch (error) {
+                console.error('[Verify] Exchange code error:', error);
+                localStorage.removeItem('discord_user');
+                document.getElementById('step1').classList.remove('disabled');
                 showResult('error', t('error'), t('login_issue'));
             }
 

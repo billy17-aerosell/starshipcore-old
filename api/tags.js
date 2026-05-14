@@ -707,6 +707,12 @@ export default async function handler(req, res) {
         }
 
         try {
+            // Normalize redirect URI - strip trailing slash for consistency with Discord app settings
+            const normalizedRedirectUri = (redirectUri || '').replace(/\/$/, '');
+
+            console.log('[OAuth] Exchanging code for token...');
+            console.log('[OAuth] Redirect URI:', normalizedRedirectUri);
+
             // Exchange code for access token
             const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
                 method: 'POST',
@@ -716,16 +722,31 @@ export default async function handler(req, res) {
                     client_secret: CLIENT_SECRET,
                     grant_type: 'authorization_code',
                     code: code,
-                    redirect_uri: redirectUri
+                    redirect_uri: normalizedRedirectUri
                 })
             });
 
             const tokenData = await tokenResponse.json();
 
             if (!tokenData.access_token) {
-                console.error('Token error:', tokenData);
-                return res.status(400).json({ success: false, error: 'Failed to get access token' });
+                console.error('[OAuth] Token exchange failed:', JSON.stringify(tokenData));
+
+                // Provide user-friendly error based on Discord's error response
+                const errorDesc = tokenData.error_description || tokenData.error || 'Unknown error';
+                const isCodeInvalid = errorDesc.toLowerCase().includes('invalid') ||
+                                     errorDesc.toLowerCase().includes('expired') ||
+                                     errorDesc.toLowerCase().includes('used');
+
+                return res.status(400).json({
+                    success: false,
+                    error: isCodeInvalid
+                        ? 'Login session expired. Please close this page and try logging in again.'
+                        : `Authentication failed: ${errorDesc}`,
+                    errorType: isCodeInvalid ? 'CODE_EXPIRED' : 'OAUTH_ERROR'
+                });
             }
+
+            console.log('[OAuth] Token received, fetching user info...');
 
             // Get user info
             const userResponse = await fetch('https://discord.com/api/users/@me', {
@@ -735,8 +756,11 @@ export default async function handler(req, res) {
             const user = await userResponse.json();
 
             if (!user.id) {
+                console.error('[OAuth] Failed to get user info:', user);
                 return res.status(400).json({ success: false, error: 'Failed to get user info' });
             }
+
+            console.log('[OAuth] Success! User:', user.username || user.id);
 
             return res.status(200).json({
                 success: true,
@@ -747,8 +771,8 @@ export default async function handler(req, res) {
                 }
             });
         } catch (error) {
-            console.error('OAuth error:', error);
-            return res.status(500).json({ success: false, error: 'OAuth failed' });
+            console.error('[OAuth] Exception:', error);
+            return res.status(500).json({ success: false, error: 'OAuth failed: ' + error.message });
         }
     }
 
