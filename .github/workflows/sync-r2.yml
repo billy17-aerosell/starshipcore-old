@@ -47,6 +47,21 @@ jobs:
         run: |
           echo "🚀 Starting module sync to R2..."
           
+          # Validate required secrets
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "❌ ERROR: CLOUDFLARE_ACCOUNT_ID secret is not set!"
+            exit 1
+          fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "❌ ERROR: CLOUDFLARE_API_TOKEN secret is not set!"
+            exit 1
+          fi
+          if [ -z "$R2_BUCKET_NAME" ]; then
+            echo "❌ ERROR: R2_BUCKET_NAME secret is not set!"
+            echo "Please add it in GitHub → Settings → Secrets → Actions"
+            exit 1
+          fi
+          
           # Get list of changed files (comparing with previous commit)
           # For workflow_dispatch (manual trigger), upload all files
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
