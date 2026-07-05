@@ -1382,20 +1382,45 @@ local function pressSpecialButton(args)
 	local button = controls:FindFirstChild(args)
 	if not button or not (button:IsA("TextButton") or button:IsA("ImageButton")) then return 0 end
 	local fired = 0
-	for _, ev in ipairs({ "MouseButton1Down", "MouseButton1Up", "MouseButton1Click" }) do
-		if button[ev] then
-			local ok, conns = pcall(getconnections, button[ev])
-			if ok and conns then
-				for _, sig in pairs(conns) do
-					if sig and sig.Function then
-						pcall(sig.Function)
-						fired = fired + 1
+	-- Method 1: getconnections — coba Activated dulu (paling sering kebind via ContextActionService)
+	if typeof(getconnections) == "function" then
+		for _, ev in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up" }) do
+			local ok, sigEvent = pcall(function() return button[ev] end)
+			if ok and sigEvent then
+				local ok2, conns = pcall(getconnections, sigEvent)
+				if ok2 and conns then
+					for _, sig in pairs(conns) do
+						if sig and sig.Function then
+							pcall(sig.Function)
+							fired = fired + 1
+						end
 					end
 				end
 			end
 		end
 	end
-	return fired
+	-- Method 2: firesignal kalau getconnections empty
+	if fired == 0 and typeof(firesignal) == "function" then
+		for _, ev in ipairs({ "Activated", "MouseButton1Click" }) do
+			local ok, sigEvent = pcall(function() return button[ev] end)
+			if ok and sigEvent and pcall(firesignal, sigEvent) then
+				fired = fired + 1
+			end
+		end
+	end
+	-- Method 3: VIM SendTouchEvent ke posisi tombol (last resort, simulasi tap fisik)
+	if fired == 0 then
+		pcall(function()
+		local vim = game:GetService("VirtualInputManager")
+		if not vim then return end
+		local pos = button.AbsolutePosition + button.AbsoluteSize / 2
+		vim:SendTouchEvent(pos, Enum.UserInputState.Begin, 0, game)
+		task.wait(0.02)
+		vim:SendTouchEvent(pos, Enum.UserInputState.End, 0, game)
+		fired = fired + 1
+	end)
+end
+return fired
 end
 function InputHelper.TriggerParry()
 	if InputHelper.IsDoingAction() then
@@ -1814,17 +1839,39 @@ function GateHelpers.HandleBypass(Value)
 								task.spawn(function()
 								local targetGate = currentGate
 								local targetPos = foundGatePos
-								local exitRemotes = ReplicatedStorage:FindFirstChild("Remotes")
-								and ReplicatedStorage.Remotes:FindFirstChild("Exit")
-								if exitRemotes and exitRemotes:FindFirstChild("LeverEvent") then
-									if Toggles.BypassGate.Value then
-										exitRemotes.LeverEvent:FireServer(targetGate, true)
-										task.wait(0.1)
-										exitRemotes.LeverEvent:FireServer(targetGate, false)
+								local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+								local exitRemotes = remotes and remotes:FindFirstChild("Exit")
+								local leverRemote = exitRemotes and exitRemotes:FindFirstChild("LeverEvent")
+								-- Fallback: cari LeverEvent di mana aja dalam Remotes
+								if not leverRemote and remotes then
+									for _, d in ipairs(remotes:GetDescendants()) do
+										if d:IsA("RemoteEvent") and d.Name == "LeverEvent" then
+											leverRemote = d
+											break
+										end
 									end
-									table.insert(ProcessedPositions, targetPos)
-									Library:Notify("Bypass Exit Gate: Success", 3)
 								end
+								if leverRemote then
+									local fireOk = pcall(function()
+										if Toggles.BypassGate.Value then
+											-- Hold lever: fire true → wait → fire false (simulate hold release)
+											leverRemote:FireServer(targetGate, true)
+											task.wait(0.15)
+											leverRemote:FireServer(targetGate, false)
+										end
+									end)
+									if fireOk then
+										-- Masukin ke ProcessedPositions HANYA kalau fire sukses
+										table.insert(ProcessedPositions, targetPos)
+										Library:Notify("Bypass Exit Gate: Success", 3)
+									else
+										Library:Notify("Bypass Gate: FireServer error", 3)
+									end
+								else
+									-- Debug info: remote path gak ketemu
+									Library:Notify("Bypass Gate: LeverEvent remote not found", 4)
+								end
+								task.wait(0.3) -- Cooldown sebelum detect gate berikutnya
 								isHolding = false
 							end)
 						end
@@ -1863,10 +1910,13 @@ aimVisualConnection = nil,
 local AimbotState = _G.AimbotState
 _G.GameFeatureState = _G.GameFeatureState or {
 AutoParryEnabled = false,
-AutoParryDistance = 16,
+AutoParryDistance = 15,
 AutoParryMode = "Animation",
 LastParryTime = 0,
 AutoParryHoldTime = 0.12,
+ParryCooldownDuration = 0.8,
+SkipParryLOSCheck = true,
+AutoParryDebug = false,
 RecentAttacks = {},
 AttackDetectionWindow = 1.0,
 AutoWiggleEnabled = false,
@@ -2123,10 +2173,13 @@ else
 end
 end
 VDSurvivorState = VDSurvivorState or {}
-VDSurvivorState.pressSpaceForSkillcheck = VDSurvivorState.pressSpaceForSkillcheck or function()
+VDSurvivorState.pressSpaceForSkillcheck = function()
 local UIS = game:GetService("UserInputService")
 local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 if isMobile then
+	-- Multi-method fallback: button-press → firesignal → VIM Space → VIM Touch
+	local fired = false
+	local actionBtn
 	pcall(function()
 	local pg = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
 	if not pg then return end
@@ -2134,18 +2187,76 @@ if isMobile then
 	if not survivor then return end
 	local controls = survivor:FindFirstChild("Controls")
 	if not controls then return end
-	local actionBtn = controls:FindFirstChild("action")
-	if not actionBtn or not (actionBtn:IsA("TextButton") or actionBtn:IsA("ImageButton")) then return end
-	for _, ev in ipairs({ "MouseButton1Down", "MouseButton1Up", "MouseButton1Click" }) do
-		if actionBtn[ev] then
-			for _, sig in pairs(getconnections(actionBtn[ev])) do
-				if sig.Function then
-					sig.Function()
+	-- Cari tombol skillcheck (nama bisa beda-beda antar versi game)
+	for _, name in ipairs({ "action", "Action", "skillcheck", "Skillcheck", "SkillCheck", "skill", "Skill" }) do
+		local b = controls:FindFirstChild(name)
+		if b and (b:IsA("TextButton") or b:IsA("ImageButton")) then
+			actionBtn = b
+			break
+		end
+	end
+	if not actionBtn then
+		-- Fallback: scan semua descendant Controls cari button visible
+		for _, d in ipairs(controls:GetDescendants()) do
+			if (d:IsA("TextButton") or d:IsA("ImageButton")) and d.Visible then
+				if d.Name:lower():find("action") or d.Name:lower():find("skill") then
+					actionBtn = d
+					break
 				end
 			end
 		end
 	end
+	if not actionBtn then return end
+	-- Method 1: getconnections (jalan di Wave/Solara/Swift; flaky di Delta/Codex)
+	if typeof(getconnections) == "function" then
+		for _, ev in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up" }) do
+			local ok, sigEvent = pcall(function() return actionBtn[ev] end)
+			if ok and sigEvent then
+				local ok2, conns = pcall(getconnections, sigEvent)
+				if ok2 and conns then
+					for _, sig in pairs(conns) do
+						if sig and sig.Function then
+							pcall(sig.Function)
+							fired = true
+						end
+					end
+				end
+			end
+		end
+	end
+	-- Method 2: firesignal (alternatif kalau getconnections empty)
+	if not fired and typeof(firesignal) == "function" then
+		for _, ev in ipairs({ "Activated", "MouseButton1Click" }) do
+			local ok, sigEvent = pcall(function() return actionBtn[ev] end)
+			if ok and sigEvent then
+				if pcall(firesignal, sigEvent) then fired = true end
+			end
+		end
+	end
 end)
+-- Method 3: VIM Space (game biasanya bind via ContextActionService key+button → callback sama)
+if not fired then
+	pcall(function()
+	local vim = game:GetService("VirtualInputManager")
+	if vim then
+		vim:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+		task.wait(0.01)
+		vim:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+		fired = true
+	end
+end)
+end
+-- Method 4: VIM Touch ke posisi tombol (last resort)
+if not fired and actionBtn then
+	pcall(function()
+	local vim = game:GetService("VirtualInputManager")
+	if not vim then return end
+	local pos = actionBtn.AbsolutePosition + actionBtn.AbsoluteSize / 2
+	vim:SendTouchEvent(pos, Enum.UserInputState.Begin, 0, game)
+	task.wait(0.02)
+	vim:SendTouchEvent(pos, Enum.UserInputState.End, 0, game)
+end)
+end
 elseif _G.InputHelper then
 	_G.InputHelper.PressKey(Enum.KeyCode.Space, 0.01)
 else
@@ -4145,30 +4256,46 @@ local function UpdateESP()
 						espObj.Distance.Visible = false
 					end
 					if Settings.ShowHealth then
+						-- Re-validate cached humanoid tiap frame (character respawn pas match baru invalidate cache)
 						local hum = espObj.CachedHumanoid
 						if not hum or not hum.Parent then
-							hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+							local char = player.Character
+							hum = char and char:FindFirstChildOfClass("Humanoid") or nil
 							espObj.CachedHumanoid = hum
 						end
-						local health, maxHealth = 0, 100
-						if hum then
+						-- Humanoid gak valid / match transisi → hide bar (jangan show 0% = keliatan hitam)
+						local humValid = hum and hum.Parent ~= nil
+						if not humValid then
+							espObj.HealthBarBG.Visible = false
+							espObj.HealthBar.Visible = false
+						else
+							local health, maxHealth = 0, 100
 							local ok, h, mh = pcall(function() return hum.Health, hum.MaxHealth end)
 							if ok then
 								health = h or 0
 								maxHealth = mh or 100
 							end
+							if not maxHealth or maxHealth <= 0 or maxHealth ~= maxHealth then maxHealth = 100 end
+							if not health or health ~= health or health < 0 then health = 0 end
+							-- Humanoid dead (health=0, maxHealth valid) = match end atau player dead → hide juga
+							if health <= 0 then
+								espObj.HealthBarBG.Visible = false
+								espObj.HealthBar.Visible = false
+							else
+								local healthPercent = math.clamp(health / maxHealth, 0, 1)
+								if healthPercent ~= healthPercent then healthPercent = 1 end -- NaN guard
+								local barHeight = math.max(1, height * healthPercent)
+								espObj.HealthBarBG.Visible = true
+								espObj.HealthBarBG.Position = Vector2.new(boxPos.X - 6, boxPos.Y)
+								espObj.HealthBarBG.Size = Vector2.new(4, height)
+								espObj.HealthBar.Visible = true
+								espObj.HealthBar.Position = Vector2.new(boxPos.X - 5, boxPos.Y + (height - barHeight))
+								espObj.HealthBar.Size = Vector2.new(2, barHeight)
+								local r = math.clamp(255 * (1 - healthPercent), 0, 255)
+								local g = math.clamp(255 * healthPercent, 0, 255)
+								espObj.HealthBar.Color = Color3.fromRGB(r, g, 0)
+							end
 						end
-						if not maxHealth or maxHealth <= 0 or maxHealth ~= maxHealth then maxHealth = 100 end
-						if not health or health ~= health then health = 0 end
-						local healthPercent = math.clamp(health / maxHealth, 0, 1)
-						local barHeight = math.max(1, height * healthPercent)
-						espObj.HealthBarBG.Visible = true
-						espObj.HealthBarBG.Position = Vector2.new(boxPos.X - 6, boxPos.Y)
-						espObj.HealthBarBG.Size = Vector2.new(4, height)
-						espObj.HealthBar.Visible = true
-						espObj.HealthBar.Position = Vector2.new(boxPos.X - 5, boxPos.Y + (height - barHeight))
-						espObj.HealthBar.Size = Vector2.new(2, barHeight)
-						espObj.HealthBar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
 					else
 						espObj.HealthBarBG.Visible = false
 						espObj.HealthBar.Visible = false
@@ -6171,42 +6298,67 @@ end)
 end
 end)
 end
-Players.PlayerAdded:Connect(function(player)
-player.CharacterAdded:Connect(function(character)
-task.wait(1)
-if ESPEnabled then
-	CreateESP(player)
-end
-if ChamsEnabled then
-	RemoveChams(player)
-	task.wait(0.1)
-	CreateChams(player)
-end
-end)
-local lastTeam = player.Team
-GFS.playerTeamCache[player] = lastTeam
-player:GetPropertyChangedSignal("Team"):Connect(function()
-local newTeam = player.Team
-if newTeam ~= lastTeam then
-	lastTeam = newTeam
-	GFS.playerTeamCache[player] = newTeam
-	if ChamsEnabled then
-		task.wait(0.1)
-		RemoveChams(player)
-		task.wait(0.1)
-		CreateChams(player)
-		local teamName = newTeam and newTeam.Name or "NO_TEAM"
-		local isKiller = IsKiller(player)
+-- Setup listeners per-player (works untuk existing + new players).
+-- Sebelumnya cuma di dalam PlayerAdded → player yg udah di server pas script load
+-- gak pernah ke-track CharacterAdded, jadi Chams gak re-create pas respawn/match baru.
+GFS._chamsPlayerConns = GFS._chamsPlayerConns or {}
+local function SetupPlayerChamsListeners(player)
+	if player == LocalPlayer then return end
+	-- Cleanup old connections kalau ada (prevent double-connect)
+	local existing = GFS._chamsPlayerConns[player]
+	if existing then
+		for _, c in ipairs(existing) do pcall(function() c:Disconnect() end) end
 	end
+	local conns = {}
+	-- Character respawn → recreate Chams + ESP
+	table.insert(conns, player.CharacterAdded:Connect(function(character)
+		task.wait(1)
+		if ESPEnabled then
+			pcall(function() RemoveESP(player) end)
+			CreateESP(player)
+		end
+		if ChamsEnabled then
+			RemoveChams(player)
+			task.wait(0.1)
+			CreateChams(player)
+		end
+	end))
+	-- Team change → force refresh Chams (role color berubah)
+	local lastTeam = player.Team
+	GFS.playerTeamCache[player] = lastTeam
+	table.insert(conns, player:GetPropertyChangedSignal("Team"):Connect(function()
+		local newTeam = player.Team
+		if newTeam ~= lastTeam then
+			lastTeam = newTeam
+			GFS.playerTeamCache[player] = newTeam
+			if ChamsEnabled then
+				task.wait(0.1)
+				RemoveChams(player)
+				task.wait(0.1)
+				CreateChams(player)
+			end
+		end
+	end))
+	GFS._chamsPlayerConns[player] = conns
 end
-end)
-end)
+-- Apply untuk semua player yg SUDAH di server
+for _, existingPlayer in ipairs(Players:GetPlayers()) do
+	SetupPlayerChamsListeners(existingPlayer)
+end
+-- Apply untuk player yg join setelah script load
+Players.PlayerAdded:Connect(SetupPlayerChamsListeners)
 Players.PlayerRemoving:Connect(function(player)
 RemoveESP(player)
 RemoveChams(player)
 GFS.playerTeamCache[player] = nil
 PerkCache[player] = nil
 ItemCache[player] = nil
+-- Cleanup listener connections biar gak memory leak
+local conns = GFS._chamsPlayerConns and GFS._chamsPlayerConns[player]
+if conns then
+	for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+	GFS._chamsPlayerConns[player] = nil
+end
 end)
 GFS.lastChamsRefresh = tick()
 GFS.lastRoleCheck = tick()
@@ -7312,6 +7464,16 @@ GFS._CrouchDodgeAnimIDs = {
 		return true
 		end
 	end
+-- Debug log helper buat AutoParry — throttle 1x per detik per reason biar gak spam notify
+GFS._lastParryDebug = GFS._lastParryDebug or {}
+local function ParryDebugLog(reason)
+	if not GFS.AutoParryDebug then return end
+	local now = tick()
+	local last = GFS._lastParryDebug[reason] or 0
+	if (now - last) < 1.0 then return end
+	GFS._lastParryDebug[reason] = now
+	pcall(function() Library:Notify("[Parry SKIP] " .. reason, 1.5) end)
+end
 local function AutoParry()
 	if not GFS.AutoParryEnabled then return end
 	local DaggerAssetID = "rbxassetid://76822757630703"
@@ -7324,9 +7486,10 @@ local function AutoParry()
 	local hasDagger = _G.CachedHasDagger
 	if hasDagger == nil then hasDagger = true end
 	if not hasDagger then
+		ParryDebugLog("No dagger detected")
 		return
 	end
-	if not IsDaggerReady() then return end
+	if not IsDaggerReady() then ParryDebugLog("Dagger not ready (cooldown/UI)") return end
 	local globalCooldown = tick() - (_G.LastParryExecuted or 0)
 	if globalCooldown < 0.1 then return end
 	if tick() - GFS.LastParryTime < 0.1 then return end
@@ -7406,7 +7569,9 @@ local function AutoParry()
 										if track.Looped then
 											shouldIgnore = true
 										end
-										if not shouldIgnore and (track.Length > 3.0 or track.Length < 0.08) then
+										-- Length filter relaxed: dulu skip kalau >3.0s atau <0.08s.
+										-- Sekarang cuma skip kalau looping/idle pose (>5s).
+										if not shouldIgnore and track.Length > 5.0 then
 											shouldIgnore = true
 										end
 									end
@@ -7415,13 +7580,19 @@ local function AutoParry()
 										(tick() - killerState.lastParryTime < 0.2)
 										if not isDuplicate then
 											if GFS._IsKillerFacingPlayer(killerRoot, root, player.Name) then
-												if not HasLineOfSight(root, killerRoot, char, killerChar) then
+												-- LOS check sekarang OPTIONAL — default skip (SkipParryLOSCheck=true)
+												if not GFS.SkipParryLOSCheck and not HasLineOfSight(root, killerRoot, char, killerChar) then
+													ParryDebugLog("LOS blocked (" .. player.Name .. ")")
 													break
 												end
 												shouldParry = true
 												detectedAnimId = animId
 												break
+											else
+												ParryDebugLog("Killer not facing me")
 											end
+										else
+											ParryDebugLog("Duplicate anim (cooldown 0.2s)")
 										end
 									end
 								end
@@ -7442,7 +7613,7 @@ local function AutoParry()
 						if _gOk then _gradReady = _gRes end
 						if not _gOk then _G.ParryUICache.Gradient = nil end
 					end
-					if not _gradReady then return end
+					if not _gradReady then ParryDebugLog("UI gradient not ready") return end
 				end
 				killerState.lastAnimId = detectedAnimId
 				killerState.lastParryTime = tick()
@@ -7801,24 +7972,21 @@ do
 			end
 		end
 		if not isCarried then return end
-		pcall(function()
+		-- Always update timestamp biar rate limit kerja walaupun remote gak ketemu (cegah spam loop)
+	GFS.LastWiggleTime = tick()
+	pcall(function()
 		local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
 		if remotes then
 			local wiggled = false
 			local carry = remotes:FindFirstChild("Carry")
-			if carry then
-				local drop = carry:FindFirstChild("DropSurvivorEvent")
-				if drop and drop:IsA("RemoteEvent") then
-					drop:FireServer()
-				end
-			end
+			-- NOTE: DropSurvivorEvent dihapus dari sini — itu remote killer (untuk killer drop survivor),
+			-- survivor fire ini bisa kena anti-cheat detection.
 			if carry then
 				local selfUnhook = carry:FindFirstChild("SelfUnHookEvent") or
 				carry:FindFirstChild("Wiggle") or
 				carry:FindFirstChild("Struggle")
 				if selfUnhook and selfUnhook:IsA("RemoteEvent") then
 					selfUnhook:FireServer()
-					GFS.LastWiggleTime = tick()
 					wiggled = true
 				end
 			end
@@ -7827,7 +7995,6 @@ do
 				remotes:FindFirstChild("Struggle")
 				if wiggleEvent and wiggleEvent:IsA("RemoteEvent") then
 					wiggleEvent:FireServer()
-					GFS.LastWiggleTime = tick()
 				end
 			end
 		end
@@ -7987,36 +8154,44 @@ local function AutoAttack()
 		hum.WalkSpeed = 16
 	end
 	if GFS.AutoAttackAnimationFix then
-		local cam = workspace.CurrentCamera
+		-- Pakai Humanoid.MoveDirection biar cross-platform (PC WASD + mobile thumbstick + gamepad)
 		local moveDir = Vector3.zero
 		local isMoving = false
-		local uis = game:GetService("UserInputService")
-		if uis:IsKeyDown(Enum.KeyCode.W) then
-			moveDir = moveDir + cam.CFrame.LookVector
+		local humMoveDir = hum.MoveDirection
+		if humMoveDir.Magnitude > 0.01 then
+			moveDir = humMoveDir
 			isMoving = true
-		end
-		if uis:IsKeyDown(Enum.KeyCode.S) then
-			moveDir = moveDir - cam.CFrame.LookVector
-			isMoving = true
-		end
-		if uis:IsKeyDown(Enum.KeyCode.A) then
-			moveDir = moveDir - cam.CFrame.RightVector
-			isMoving = true
-		end
-		if uis:IsKeyDown(Enum.KeyCode.D) then
-			moveDir = moveDir + cam.CFrame.RightVector
-			isMoving = true
+		else
+			-- Fallback PC: kalau MoveDirection 0 (humanoid mungkin nge-stop karena animasi),
+			-- baca WASD langsung
+			local uis = game:GetService("UserInputService")
+			local cam = workspace.CurrentCamera
+			if uis:IsKeyDown(Enum.KeyCode.W) then
+				moveDir = moveDir + cam.CFrame.LookVector; isMoving = true
+			end
+			if uis:IsKeyDown(Enum.KeyCode.S) then
+				moveDir = moveDir - cam.CFrame.LookVector; isMoving = true
+			end
+			if uis:IsKeyDown(Enum.KeyCode.A) then
+				moveDir = moveDir - cam.CFrame.RightVector; isMoving = true
+			end
+			if uis:IsKeyDown(Enum.KeyCode.D) then
+				moveDir = moveDir + cam.CFrame.RightVector; isMoving = true
+			end
 		end
 		if isMoving then
-			moveDir = Vector3.new(moveDir.X, 0, moveDir.Z).Unit
-			local speed = hum.WalkSpeed
-			if speed < 16 then speed = 16 end
-			local bv = root:FindFirstChild("KillAuraFixVel") or Instance.new("BodyVelocity")
-			bv.Name = "KillAuraFixVel"
-			bv.MaxForce = Vector3.new(100000, 0, 100000)
-			bv.Velocity = moveDir * speed
-			bv.Parent = root
-			game:GetService("Debris"):AddItem(bv, 0.1)
+			local flat = Vector3.new(moveDir.X, 0, moveDir.Z)
+			if flat.Magnitude > 0.01 then
+				moveDir = flat.Unit
+				local speed = hum.WalkSpeed
+				if speed < 16 then speed = 16 end
+				local bv = root:FindFirstChild("KillAuraFixVel") or Instance.new("BodyVelocity")
+				bv.Name = "KillAuraFixVel"
+				bv.MaxForce = Vector3.new(100000, 0, 100000)
+				bv.Velocity = moveDir * speed
+				bv.Parent = root
+				game:GetService("Debris"):AddItem(bv, 0.1)
+			end
 		end
 	end
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -8851,10 +9026,12 @@ if Value then
 	antiChaseConnection = RunService.Heartbeat:Connect(function()
 	local char = LocalPlayer.Character
 	if not char then return end
+	-- Cuma write attribute kalau berubah, biar gak spam SetAttribute 60x/detik
 	if char:GetAttribute("IsChased") ~= false then
 		pcall(function() char:SetAttribute("IsChased", false) end)
 	end
-	if char:GetAttribute("Chasemusic") ~= nil then
+	local cm = char:GetAttribute("Chasemusic")
+	if cm ~= nil and cm ~= 0 then
 		pcall(function() char:SetAttribute("Chasemusic", 0) end)
 	end
 	for _, obj in ipairs(char:GetChildren()) do
@@ -8914,24 +9091,40 @@ end
 })
 local crouchAAEnabled = false
 local crouchAAConn = nil
+local crouchAALastFlip = 0
+local crouchAAState = false
+local CROUCH_AA_INTERVAL = 0.15  -- 0.15s = ~6.6 flip/detik (server-friendly, masih cukup confuse aim)
 AgilityBox:AddCheckbox('CrouchAA', {
 Text = 'Crouch Spam',
 Default = false,
-Tooltip = 'Rapidly crouch and uncrouch',
+Tooltip = 'Rapidly crouch and uncrouch (server-synced)',
 Callback = function(Value)
 crouchAAEnabled = Value
 if Value then
+	crouchAALastFlip = 0
+	crouchAAState = false
 	crouchAAConn = RunService.Heartbeat:Connect(function()
 	if not crouchAAEnabled then return end
-	if LocalPlayer.Character then
-		local crouching = LocalPlayer.Character:GetAttribute("Crouching") or false
-		LocalPlayer.Character:SetAttribute("Crouching", not crouching)
+	if not LocalPlayer.Character then return end
+	local now = tick()
+	if (now - crouchAALastFlip) < CROUCH_AA_INTERVAL then return end
+	crouchAALastFlip = now
+	crouchAAState = not crouchAAState
+	-- Sync ke server biar anti-aim effect beneran kerasa
+	if GFS.ServerCrouch then
+		pcall(function() GFS.ServerCrouch(crouchAAState) end)
+	else
+		LocalPlayer.Character:SetAttribute("Crouching", crouchAAState)
 	end
 end)
 Library:Notify('Crouch AA: ON', 2)
 else
 	if crouchAAConn then
 		crouchAAConn:Disconnect(); crouchAAConn = nil
+	end
+	-- Reset ke standing pas off
+	if GFS.ServerCrouch then
+		pcall(function() GFS.ServerCrouch(false) end)
 	end
 	Library:Notify('Crouch AA: OFF', 2)
 end
@@ -8958,10 +9151,22 @@ SkillCheckEvent = true,
 SkillCheckFailEvent = true,
 SkillCheckResultEvent = true
 }
+-- Remote yg AMAN di-block (submit/fail). Selain ini = game butuh buat cancel/state sync,
+-- jangan di-block biar character gak ke-lock pas user mau cancel action (WASD).
+local skillBlockableRemotes = {
+SkillCheckEvent = true,
+SkillCheckFailEvent = true,
+}
 local function isSkillcheckInstance(inst)
 	if not inst or not inst.Name then return false end
 	if skillExactNames[inst.Name] then return true end
 	return inst.Name:lower():find("skillcheck", 1, true) ~= nil
+end
+local function isSkillcheckBlockable(inst)
+	-- Cuma block remote yg specifically submit skillcheck result ke server.
+	-- SkillCheckResultEvent + named lain dibiarin lewat.
+	if not inst or not inst.Name then return false end
+	return skillBlockableRemotes[inst.Name] == true
 end
 local function softHideSkillcheck(obj)
 	pcall(function()
@@ -8999,13 +9204,19 @@ local function installSkillcheckHook()
 		local oldNamecall
 		oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 		local method = getnamecallmethod()
-		if VDSurvivorState.noSkillcheckEnabled and typeof(self) == "Instance" and isSkillcheckInstance(self) then
-			if method == "FireServer" or method == "InvokeServer" then
+		-- Cuma block FireServer di remote SPESIFIK (SkillCheckEvent, SkillCheckFailEvent).
+		-- Remote lain (SkillCheckResultEvent, etc) dibiarin lewat karena game butuh buat:
+		--  - Cancel action (unlock character pas press WASD)
+		--  - State sync (unlock humanoid walkspeed)
+		-- InvokeServer juga dibiarin lewat (game script expect return value).
+		if VDSurvivorState.noSkillcheckEnabled and method == "FireServer" and typeof(self) == "Instance" then
+			if isSkillcheckBlockable(self) then
 				local parent = self.Parent
+				-- Healing parent tetep pass-through (heal aura butuh)
 				if parent and parent.Name == "Healing" then
-				else
-					return nil
+					return oldNamecall(self, ...)
 				end
+				return nil
 			end
 		end
 		return oldNamecall(self, ...)
@@ -9797,17 +10008,30 @@ if Value then
 			pcall(function()
 			local btn = GetMobileActionButton()
 			if not btn then return end
-			local pos = btn.AbsolutePosition
-			local size = btn.AbsoluteSize
-			local cx = pos.X + size.X / 2
-			local cy = pos.Y + size.Y / 2
-			VIM:SendTouchEvent(cx, cy, 0, Enum.UserInputState.Begin, game)
-			task.defer(function()
+			local center = btn.AbsolutePosition + btn.AbsoluteSize / 2
+			-- Method 1: VIM SendTouchEvent (signature: Vector2, state, touchId, gameProcessedEvent)
+			local touchOk = false
 			pcall(function()
-			VIM:SendTouchEvent(cx, cy, 0, Enum.UserInputState.End, game)
+			VIM:SendTouchEvent(center, Enum.UserInputState.Begin, 0, game)
+			task.wait(0.02)
+			VIM:SendTouchEvent(center, Enum.UserInputState.End, 0, game)
+			touchOk = true
 		end)
+		-- Method 2: fallback ke direct connection invocation kalau VIM gagal
+		if not touchOk and typeof(getconnections) == "function" then
+			for _, ev in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up" }) do
+				local ok, sigEvent = pcall(function() return btn[ev] end)
+				if ok and sigEvent then
+					local ok2, conns = pcall(getconnections, sigEvent)
+					if ok2 and conns then
+						for _, sig in pairs(conns) do
+							if sig and sig.Function then pcall(sig.Function) end
+						end
+					end
+				end
+			end
+		end
 	end)
-end)
 end
 local mobileConn = RunService.Heartbeat:Connect(function()
 if not GFS.InstantSelfHealEnabled then return end
@@ -10041,10 +10265,12 @@ local function ForceLocalRunning()
 	end
 end)
 end
+GFS._lastStopHealFire = 0
 local function FireLocalHealCancel()
 	pcall(function()
 	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
 	if not remotes then return end
+	-- Client-side cancel (firesignal) - aman buat dipanggil tiap frame, gak ngirim ke server
 	if not IsMobile then
 		local progressRemotes = remotes:FindFirstChild("Progress")
 		if progressRemotes then
@@ -10061,6 +10287,10 @@ local function FireLocalHealCancel()
 			end
 		end
 	end
+	-- Server fire (Stophealing) — DEBOUNCE: max 1x per 0.5s biar gak spam log game
+	local now = tick()
+	if (now - (GFS._lastStopHealFire or 0)) < 0.5 then return end
+	GFS._lastStopHealFire = now
 	local healRemotes = remotes:FindFirstChild("Healing")
 	if healRemotes then
 		local stopHeal = healRemotes:FindFirstChild("Stophealing")
@@ -10227,24 +10457,37 @@ if Value then
 	local bHP = bHum and (bHum.Health / math.max(bHum.MaxHealth, 1)) or 1
 	return aHP < bHP
 end)
+-- Per-player cooldown biar gak spam fire ke player yg sama tiap frame
+GFS._healAuraPlayerLastFire = GFS._healAuraPlayerLastFire or {}
+local PER_PLAYER_HEAL_COOLDOWN = 0.4
 if IsMobile then
+	-- Mobile: round-robin 1 player per tick
 	GFS._healAuraMobileIdx = GFS._healAuraMobileIdx + 1
 	if GFS._healAuraMobileIdx > #injured then
 		GFS._healAuraMobileIdx = 1
 	end
 	local player = injured[GFS._healAuraMobileIdx]
 	if player then
-		pcall(function()
-		SilentHealTarget(player)
-		GFS.HealOthersLastHealTick = tick()
-	end)
+		local last = GFS._healAuraPlayerLastFire[player.UserId] or 0
+		if (tick() - last) >= PER_PLAYER_HEAL_COOLDOWN then
+			GFS._healAuraPlayerLastFire[player.UserId] = tick()
+			pcall(function()
+			SilentHealTarget(player)
+			GFS.HealOthersLastHealTick = tick()
+		end)
+	end
 end
 else
+	-- PC: iterate semua tapi skip yg baru di-fire (per-player cooldown 0.4s)
 	for _, player in ipairs(injured) do
-		pcall(function()
-		SilentHealTarget(player)
-		GFS.HealOthersLastHealTick = tick()
-	end)
+		local last = GFS._healAuraPlayerLastFire[player.UserId] or 0
+		if (tick() - last) >= PER_PLAYER_HEAL_COOLDOWN then
+			GFS._healAuraPlayerLastFire[player.UserId] = tick()
+			pcall(function()
+			SilentHealTarget(player)
+			GFS.HealOthersLastHealTick = tick()
+		end)
+	end
 end
 end
 if GFS.HealOthersLastHealTick > 0 and (tick() - GFS.HealOthersLastHealTick) < 0.5 then
@@ -10328,8 +10571,8 @@ if Value then
 					pcall(function()
 					local animator = kHum:FindFirstChildOfClass("Animator")
 					if not animator then return end
-					local killerType = GFS._DetectKillerType and GFS._DetectKillerType(kChar) or "Unknown"
-					if not (GFS.IgnoredKillerSkills and GFS.IgnoredKillerSkills[killerType]) then return end
+					-- Gak depend lagi ke IgnoredKillerSkills dropdown (yg semantically buat parry).
+					-- AutoCrouchDodge cukup cek apakah animasi yg lagi main ada di whitelist _CrouchDodgeAnimIDs.
 					local tracks = animator:GetPlayingAnimationTracks()
 					for _, track in pairs(tracks) do
 						if track.IsPlaying and track.Animation then
@@ -10368,51 +10611,144 @@ end
 end
 })
 VDSurvivorState.autoRunConn = VDSurvivorState.autoRunConn or nil
+VDSurvivorState.autoRunSprintHeld = false
+-- Cari tombol sprint di GUI mobile (nama bisa beda antar versi game)
+local function FindMobileSprintButton()
+	local pg = LocalPlayer:FindFirstChild("PlayerGui")
+	if not pg then return nil end
+	local survivor = pg:FindFirstChild("Survivor-mob")
+	if not survivor then return nil end
+	local controls = survivor:FindFirstChild("Controls")
+	if not controls then return nil end
+	-- Coba nama umum dulu
+	for _, name in ipairs({ "sprint", "Sprint", "run", "Run", "dash", "Dash" }) do
+		local b = controls:FindFirstChild(name)
+		if b and (b:IsA("TextButton") or b:IsA("ImageButton")) then return b end
+	end
+	-- Fallback: scan descendant cari yg namanya mengandung sprint/run
+	for _, d in ipairs(controls:GetDescendants()) do
+		if d:IsA("TextButton") or d:IsA("ImageButton") then
+			local n = d.Name:lower()
+			if n:find("sprint") or n:find("run") or n:find("dash") then return d end
+		end
+	end
+	return nil
+end
+local function HoldSprint()
+	-- Set attribute biar logic client-side game langsung pickup
+	pcall(function()
+	local char = LocalPlayer.Character
+	if char then
+		char:SetAttribute("IsSprinting", true)
+		char:SetAttribute("Sprinting", true)
+	end
+end)
+-- PC: VIM LeftShift (cross-platform via ContextActionService)
+if _G.InputHelper then
+	_G.InputHelper.HoldKey(Enum.KeyCode.LeftShift)
+else
+	pcall(function()
+	local vim = game:GetService("VirtualInputManager")
+	vim:SendKeyEvent(true, Enum.KeyCode.LeftShift, false, game)
+end)
+end
+-- Mobile: hold tombol sprint via VIM touch (Begin tanpa End)
+if IsMobile and not VDSurvivorState.autoRunSprintHeld then
+	pcall(function()
+	local btn = FindMobileSprintButton()
+	if not btn then return end
+	local pos = btn.AbsolutePosition + btn.AbsoluteSize / 2
+	local vim = game:GetService("VirtualInputManager")
+	if vim then
+		vim:SendTouchEvent(pos, Enum.UserInputState.Begin, 0, game)
+		VDSurvivorState.autoRunSprintHeld = true
+		VDSurvivorState.autoRunSprintPos = pos
+	end
+	-- Trigger button connections sebagai backup
+	if typeof(getconnections) == "function" then
+		for _, ev in ipairs({ "Activated", "MouseButton1Down" }) do
+			local ok, sigEv = pcall(function() return btn[ev] end)
+			if ok and sigEv then
+				local ok2, conns = pcall(getconnections, sigEv)
+				if ok2 and conns then
+					for _, sig in pairs(conns) do
+						if sig and sig.Function then pcall(sig.Function) end
+					end
+				end
+			end
+		end
+	end
+end)
+end
+end
+local function ReleaseSprint()
+	pcall(function()
+	local char = LocalPlayer.Character
+	if char then
+		char:SetAttribute("IsSprinting", false)
+		char:SetAttribute("Sprinting", false)
+	end
+end)
+if _G.InputHelper then
+	_G.InputHelper.ReleaseKey(Enum.KeyCode.LeftShift)
+else
+	pcall(function()
+	local vim = game:GetService("VirtualInputManager")
+	vim:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
+end)
+end
+-- Mobile: kirim TouchEnd ke posisi tombol sprint
+if IsMobile and VDSurvivorState.autoRunSprintHeld then
+	pcall(function()
+	local vim = game:GetService("VirtualInputManager")
+	local pos = VDSurvivorState.autoRunSprintPos
+	if vim and pos then
+		vim:SendTouchEvent(pos, Enum.UserInputState.End, 0, game)
+	end
+	-- Trigger MouseButton1Up kalau ada
+	local btn = FindMobileSprintButton()
+	if btn and typeof(getconnections) == "function" then
+		for _, ev in ipairs({ "MouseButton1Up" }) do
+			local ok, sigEv = pcall(function() return btn[ev] end)
+			if ok and sigEv then
+				local ok2, conns = pcall(getconnections, sigEv)
+				if ok2 and conns then
+					for _, sig in pairs(conns) do
+						if sig and sig.Function then pcall(sig.Function) end
+					end
+				end
+			end
+		end
+	end
+end)
+VDSurvivorState.autoRunSprintHeld = false
+VDSurvivorState.autoRunSprintPos = nil
+end
+end
 AgilityBox:AddCheckbox('AutoRun', {
 Text = 'Auto Run (Sprint)',
 Default = false,
-Tooltip = 'Automatically holds Shift to sprint when moving',
+Tooltip = 'Automatically sprints when moving (PC: hold Shift, Mobile: hold sprint button)',
 Callback = function(Value)
 if Value then
 	VDSurvivorState.autoRunConn = RunService.RenderStepped:Connect(function()
 	if LocalPlayer.Character then
 		local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
 		if hum and hum.MoveDirection.Magnitude > 0 then
-			if _G.InputHelper then
-				_G.InputHelper.HoldKey(Enum.KeyCode.LeftShift)
-			else
-				pcall(function()
-				local vim = game:GetService("VirtualInputManager")
-				vim:SendKeyEvent(true, Enum.KeyCode.LeftShift, false, game)
-			end)
-		end
-	else
-		if _G.InputHelper then
-			_G.InputHelper.ReleaseKey(Enum.KeyCode.LeftShift)
+			HoldSprint()
 		else
-			pcall(function()
-			local vim = game:GetService("VirtualInputManager")
-			vim:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
-		end)
+			ReleaseSprint()
+		end
 	end
-end
-end
 end)
 Library:Notify('Auto Sprint: Enabled', 2)
 else
 	if VDSurvivorState.autoRunConn then
 		VDSurvivorState.autoRunConn:Disconnect()
 		VDSurvivorState.autoRunConn = nil
-		if _G.InputHelper then
-			_G.InputHelper.ReleaseKey(Enum.KeyCode.LeftShift)
-		else
-			pcall(function()
-			local vim = game:GetService("VirtualInputManager")
-			vim:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
-		end)
 	end
-end
-Library:Notify('Auto Sprint: Disabled', 2)
+	ReleaseSprint()
+	Library:Notify('Auto Sprint: Disabled', 2)
 end
 end
 })
@@ -10461,9 +10797,9 @@ GFS.LastParryTime = GFS.LastParryTime or 0
 GFS.ParryCooldownDuration = 1.5
 GFS.ParryDaggerBarCache = nil
 GFS.ParryDaggerCacheTime = 0
-GFS.FaceKillerSensitivity = 0.1
+GFS.FaceKillerSensitivity = 0.45
 GFS.TrajectoryParryCheck = true
-GFS.TrajectoryHitRadius = 3
+GFS.TrajectoryHitRadius = 2
 local function FindParryDaggerBar()
 	if GFS.ParryDaggerBarCache and GFS.ParryDaggerBarCache.Parent then
 		return GFS.ParryDaggerBarCache
@@ -10511,11 +10847,24 @@ local function TryParry()
 	end
 	return true
 end
-local function SetupAutoParryRemotes()
+-- Helper: disconnect SEMUA auto-parry remote connections (DescendantAdded + per-remote OnClientEvent)
+-- Penting buat cegah memory leak / connection accumulation tiap toggle ON.
+local function CleanupAutoParryRemotes()
 	if _G.AutoParryRemoteConnection then
 		pcall(function() _G.AutoParryRemoteConnection:Disconnect() end)
 		_G.AutoParryRemoteConnection = nil
 	end
+	if _G.AutoParryRemoteEventConns then
+		for _, conn in pairs(_G.AutoParryRemoteEventConns) do
+			pcall(function() conn:Disconnect() end)
+		end
+	end
+	_G.AutoParryRemoteEventConns = {}
+	_G.AutoParryConnectedRemotes = {}
+end
+local function SetupAutoParryRemotes()
+	-- Cleanup dulu sebelum bikin connection baru — fix bug accumulation
+	CleanupAutoParryRemotes()
 	local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5)
 	if not remotes then return end
 	local attackRemoteNames = {
@@ -10553,7 +10902,10 @@ local function SetupAutoParryRemotes()
 	end
 	local function ConnectRemote(remote)
 		if remote:IsA("RemoteEvent") and IsAttackRemote(remote.Name) then
-			remote.OnClientEvent:Connect(function(...)
+			-- Cegah duplicate connect ke remote yang sama
+			if _G.AutoParryConnectedRemotes[remote] then return end
+			_G.AutoParryConnectedRemotes[remote] = true
+			local onClientConn = remote.OnClientEvent:Connect(function(...)
 			if not GFS.AutoParryEnabled then return end
 			local success, err = pcall(function()
 			local cachedData = GFS._cachedKillerData
@@ -10628,6 +10980,8 @@ local function SetupAutoParryRemotes()
 end
 end)
 end)
+			-- Track tiap OnClientEvent connection biar bisa di-cleanup pas disable
+			table.insert(_G.AutoParryRemoteEventConns, onClientConn)
 end
 end
 for _, child in ipairs(remotes:GetDescendants()) do
@@ -10666,9 +11020,12 @@ end
 SetupAutoParryRemotes()
 else
 	DestroyParryRadiusVisual()
-	if _G.AutoParryConnection then
-		_G.AutoParryConnection:Disconnect()
-		_G.AutoParryConnection = nil
+	-- Cleanup SEMUA remote connections (DescendantAdded + per-remote OnClientEvent)
+	-- Sebelumnya cuma cek _G.AutoParryConnection (typo, gak ada) jadi connections leak.
+	CleanupAutoParryRemotes()
+	-- Cleanup killer animator connections juga supaya bener-bener stop
+	if GFS._DisconnectAllKillerAnims then
+		pcall(GFS._DisconnectAllKillerAnims)
 	end
 	Library:Notify('Auto Parry: Disabled', 2)
 end
@@ -10742,7 +11099,7 @@ GFS.ParryRadiusFillPart = nil
 GFS.ParryRadiusOutlineRing = {}
 AbilityBox:AddSlider('FaceKillerSensitivity', {
 Text = 'Face Killer Sensitivity',
-Default = 0.1,
+Default = 0.45,
 Min = -1.0,
 Max = 1.0,
 Compact = true,
@@ -10766,7 +11123,7 @@ end
 })
 AbilityBox:AddSlider('TrajectoryHitRadius', {
 Text = 'Aim Strictness',
-Default = 3,
+Default = 2,
 Min = 1,
 Max = 3,
 Rounding = 1,
@@ -10800,6 +11157,25 @@ Compact = true,
 Tooltip = 'Delay before parrying after detection (For ping/timing adjustment)',
 Callback = function(Value)
 GFS.AutoParryDelay = Value
+end
+})
+AbilityBox:AddCheckbox('SkipParryLOSCheck', {
+Text = 'Skip Wall Check',
+Default = true,
+Tooltip = 'Bypass line-of-sight raycast. ON = parry tetep fire walaupun ada prop di antara lo & killer (RECOMMENDED).\nOFF = parry cuma fire kalau killer keliatan jelas (lebih akurat tapi sering miss karena prop kecil)',
+Callback = function(Value)
+GFS.SkipParryLOSCheck = Value
+end
+})
+AbilityBox:AddCheckbox('AutoParryDebug', {
+Text = 'Auto Parry Debug',
+Default = false,
+Tooltip = 'Show notify reason kalau parry gagal fire (LOS blocked, duplicate anim, killer not facing, dll). Buat troubleshooting kapan parry miss',
+Callback = function(Value)
+GFS.AutoParryDebug = Value
+if Value then
+	Library:Notify('Parry Debug: ON - reason kenapa parry skip bakal di-notify', 3)
+end
 end
 })
 local OUTLINE_SEGMENTS = 32
@@ -11262,6 +11638,7 @@ VDSurvivorState.ForceAntiCampDesyncCameraAnchor = nil
 VDSurvivorState.ForceAntiCampDesyncCameraConnection = nil
 local function AntiCampDebug(msg, forceShow)
 	if VDSurvivorState.ForceAntiCampDebug or forceShow then
+		pcall(function() print("[AntiCamp]", msg) end)
 	end
 end
 local AntiCampDesyncStorage = {
@@ -11337,16 +11714,24 @@ local function StartStealthDesync()
 	local orbitYaw = 0
 	local orbitPitch = 0.3
 	local mouseSensitivity = 0.003
+	-- Mobile sensitivity lebih tinggi karena touch Delta lebih kecil per frame
+	local touchSensitivity = 0.006
 	local mouseConnection = nil
+	local touchConnection = nil
 	local UserInputService = game:GetService("UserInputService")
 	mouseConnection = UserInputService.InputChanged:Connect(function(input, gameProcessed)
 	if not VDSurvivorState.ForceAntiCampDesyncActive then return end
 	if input.UserInputType == Enum.UserInputType.MouseMovement then
 		orbitYaw = orbitYaw - input.Delta.X * mouseSensitivity
 		orbitPitch = math.clamp(orbitPitch + input.Delta.Y * mouseSensitivity, -1.2, 1.2)
+	elseif input.UserInputType == Enum.UserInputType.Touch then
+		-- Mobile: drag di layar = rotate camera
+		orbitYaw = orbitYaw - input.Delta.X * touchSensitivity
+		orbitPitch = math.clamp(orbitPitch + input.Delta.Y * touchSensitivity, -1.2, 1.2)
 	end
 end)
 VDSurvivorState.ForceAntiCampMouseConnection = mouseConnection
+VDSurvivorState.ForceAntiCampTouchConnection = touchConnection
 VDSurvivorState.ForceAntiCampDesyncCameraConnection = RunService.RenderStepped:Connect(function()
 if VDSurvivorState.ForceAntiCampDesyncActive then
 	local cam = workspace.CurrentCamera
@@ -12049,6 +12434,9 @@ local function StartForceAntiCamp()
 		StartStealthDesync()
 		VDSurvivorState.ForceAntiCampBodyUnlocked = false
 		VDSurvivorState.ForceAntiCampPhase = "UNLOCKING"
+		-- FIX: tandain wasHooked=true supaya Heartbeat pertama gak deteksi "hook transition"
+		-- yang bakal reset state ini + cleanup fake body yg baru dibikin.
+		VDSurvivorState.ForceAntiCampWasHooked = true
 		AntiCampDebug("Set phase to UNLOCKING - ready to repair!", true)
 	end
 	VDSurvivorState.ForceAntiCampConnection = RunService.Heartbeat:Connect(function()
@@ -14428,10 +14816,20 @@ function InitAimbotScope()
 	end
 end)
 end
+-- Mobile-safe aim reference point: pakai center viewport, bukan GetMouseLocation
+-- (di mobile, GetMouseLocation gak reliable; player aim via camera = crosshair di tengah layar)
+AimbotState.getAimPoint = function()
+local camera = workspace.CurrentCamera
+if IsMobile and camera then
+	local vp = camera.ViewportSize
+	return Vector2.new(vp.X / 2, vp.Y / 2)
+end
+return UserInputService:GetMouseLocation()
+end
 AimbotState.getClosestPlayerInFOV = function()
 local camera = workspace.CurrentCamera
 if not camera then return nil end
-local mousePos = UserInputService:GetMouseLocation()
+local mousePos = AimbotState.getAimPoint()
 local closest = nil
 local closestDist = AimbotState.aimFOV
 for _, player in ipairs(Players:GetPlayers()) do
@@ -14486,7 +14884,7 @@ AimbotState.updateAimVisuals = function()
 if not DrawingAvailable then return end
 local camera = workspace.CurrentCamera
 if not camera then return end
-local mousePos = UserInputService:GetMouseLocation()
+local mousePos = AimbotState.getAimPoint()
 if AimbotState.fovCircle then
 	AimbotState.fovCircle.Position = mousePos
 	AimbotState.fovCircle.Radius = AimbotState.aimFOV
@@ -15196,6 +15594,17 @@ do
 	GFS.ToF_TracerColor        = Color3.fromRGB(255, 50, 50)
 	GFS.ToF_TargetIndicator    = true
 	GFS.ToF_HookInstalled      = false
+	GFS.ToF_ShowFOV            = false
+	GFS.ToF_FOVColor           = Color3.fromRGB(255, 255, 255)
+	-- FOV circle: lingkaran transparan di tengah layar buat visualize ukuran FOV cone
+	local fovCircle            = Drawing.new("Circle")
+	fovCircle.Color            = GFS.ToF_FOVColor
+	fovCircle.Thickness        = 1.5
+	fovCircle.NumSides         = 64
+	fovCircle.Radius           = 60
+	fovCircle.Filled           = false
+	fovCircle.Transparency     = 0.8
+	fovCircle.Visible          = false
 	local snapLine             = Drawing.new("Line")
 	snapLine.Color             = Color3.fromRGB(0, 255, 150)
 	snapLine.Thickness         = 1.5
@@ -15379,6 +15788,25 @@ local function StartVisuals()
 	else
 		snapLine.Visible = false
 	end
+	-- FOV CIRCLE: gambar lingkaran sesuai ukuran FOV cone (degrees → pixel)
+	-- Cuma show pas Silent Aim aktif & user role Survivor (sesuai flow utama)
+	if GFS.ToF_ShowFOV and GFS.ToF_SilentAim and cam then
+		local viewportSize = cam.ViewportSize
+		local camFovDeg = cam.FieldOfView -- vertical FOV
+		-- Konversi cone half-angle (ToF_FOV) ke radius pixel di layar
+		local tofRad  = math.rad(math.min(GFS.ToF_FOV, 89.9))
+		local camRad  = math.rad(camFovDeg / 2)
+		local pxRadius = (viewportSize.Y / 2) * (math.tan(tofRad) / math.tan(camRad))
+		-- Cap radius supaya gak overflow di FOV gede (>90°)
+		local maxR = math.max(viewportSize.X, viewportSize.Y)
+		if pxRadius > maxR then pxRadius = maxR end
+		fovCircle.Position = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+		fovCircle.Radius   = pxRadius
+		fovCircle.Color    = GFS.ToF_FOVColor
+		fovCircle.Visible  = true
+	else
+		fovCircle.Visible = false
+	end
 	local now = tick()
 	for i = 1, TRACER_POOL do
 		local t = tracerLines[i]
@@ -15416,6 +15844,7 @@ local function StopVisuals()
 	snapLine.Visible      = false
 	targetDot.Visible     = false
 	targetOutline.Visible = false
+	fovCircle.Visible     = false
 	for i = 1, TRACER_POOL do
 		tracerLines[i].line.Visible = false; tracerLines[i].active = false
 	end
@@ -15451,25 +15880,54 @@ local function InstallSilentAimHook(source)
 	if method == "FireServer" then
 		if not fireRemote then fireRemote = GetToFFireRemote() end
 		if GFS.ToF_SilentAim and fireRemote and self == fireRemote then
-			local bestPos = GFS._cachedBestPos
-			local origin  = GFS._cachedOrigin
-			if bestPos and origin then
+			-- LAZY COMPUTE: hitung target FRESH pas fire, bukan dari cache stale
+			-- Fix: race condition + flicker DetectMyRole + target invalid mid-frame
+			local bestPlayer, bestPos = GetBestTarget()
+			local myChar = LocalPlayer.Character
+			local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+			local origin = nil
+			-- Coba ambil origin dari args dulu (lebih akurat dari hardcode +1.5 Y)
+			-- karena game biasanya kirim origin CFrame asli sebagai arg pertama
+			local args = { ... }
+			for i = 1, #args do
+				if typeof(args[i]) == "CFrame" then
+					origin = args[i].Position
+					break
+				end
+			end
+			-- Fallback ke posisi root + offset
+			if not origin and myRoot then
+				origin = myRoot.Position + Vector3.new(0, 1.5, 0)
+			end
+			if bestPlayer and bestPos and origin then
+				-- Update cache buat visual tracer
+				GFS._cachedBestPlayer = bestPlayer
+				GFS._cachedBestPos    = bestPos
+				GFS._cachedOrigin     = origin
 				GFS._tofJustFired = true
 				local dir = (bestPos - origin).Unit
-				local args = { ... }
+				local newCFrame = CFrame.new(origin, bestPos)
+				-- SMART REPLACE: cuma replace ARG PERTAMA dari tiap type
+				-- biar gak rusak struct args yg punya multiple CFrame/Vector3
+				local cframeReplaced = false
+				local vectorReplaced = false
 				for i = 1, #args do
-					if typeof(args[i]) == "CFrame" then
-						args[i] = CFrame.new(bestPos, bestPos + dir)
-					elseif typeof(args[i]) == "Vector3" then
+					local t = typeof(args[i])
+					if t == "CFrame" and not cframeReplaced then
+						args[i] = newCFrame
+						cframeReplaced = true
+					elseif t == "Vector3" and not vectorReplaced then
 						args[i] = dir
+						vectorReplaced = true
 					end
 				end
 				if #args >= 1 then
 					return oldToFNamecall(self, unpack(args))
 				else
-					return oldToFNamecall(self, CFrame.new(bestPos, bestPos + dir))
+					return oldToFNamecall(self, newCFrame)
 				end
 			end
+			-- bestPos nil: target gak ditemu/keluar FOV → biarin fire normal (jangan block)
 		end
 		if not spearRemote then spearRemote = GFS.GetSpearRemote() end
 		if GFS.SpearAimbotEnabled and spearRemote and self == spearRemote then

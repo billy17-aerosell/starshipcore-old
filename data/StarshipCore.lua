@@ -61,9 +61,7 @@ local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
-local ContextActionService = game:GetService("ContextActionService")
-local GuiService = game:GetService("GuiService")
-local ControllerService = game:GetService("ControllerService")
+-- Services removed to save local registers (unused): ContextActionService, GuiService, ControllerService
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -1666,6 +1664,31 @@ end
 local Connections = {}
 local SpawnedGuis = {} -- Track spawned GUIs for cleanup
 
+-- PERF: Shared throttled updater for recording list rows.
+-- Replaces N per-row RenderStepped connections with ONE Heartbeat at ~10Hz.
+-- Each row registers a no-arg function in _G.StarshipRowUpdaters that diff-updates its visuals.
+do
+	local lastTick = 0
+	local INTERVAL = 0.1 -- 10Hz is plenty for selection/play indicator
+	Connections.RowUpdaters = RunService.Heartbeat:Connect(function()
+		local now = os.clock()
+		if now - lastTick < INTERVAL then
+			return
+		end
+		lastTick = now
+		local list = _G.StarshipRowUpdaters
+		if not list then
+			return
+		end
+		for i = 1, #list do
+			local fn = list[i]
+			if fn then
+				pcall(fn)
+			end
+		end
+	end)
+end
+
 local function CleanupConnections()
 	-- Disconnect all tracked connections safely
 	for _, c in pairs(Connections) do
@@ -2107,6 +2130,9 @@ do
 		"Position",
 		"Stage",
 		"stage",
+		"Shelter",
+		"shelter",
+		"SHELTER",
 		"STAGE",
 		"Level",
 		"level",
@@ -5784,12 +5810,11 @@ local function SetTheme(c)
 	end
 end
 
-local GUI_NAME = "StarshipCore"
-if CoreGui:FindFirstChild(GUI_NAME) then
-	CoreGui[GUI_NAME]:Destroy()
+if CoreGui:FindFirstChild("StarshipCore") then
+	CoreGui["StarshipCore"]:Destroy()
 end
 ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = GUI_NAME
+ScreenGui.Name = "StarshipCore"
 ScreenGui.Parent = CoreGui
 ScreenGui.IgnoreGuiInset = true
 
@@ -5814,45 +5839,18 @@ Main.Active = true
 Main.Visible = false
 
 -- Background Frame (Holds Color & Corner)
+do -- Wrap UI decoration locals in scope to free registers
 local MainBg = Instance.new("Frame", Main)
 MainBg.Name = "MainBackground"
 MainBg.Size = UDim2.new(1, 0, 1, 0)
 MainBg.BackgroundColor3 = C_MAIN -- Force Initial Color
-MainBg.BackgroundTransparency = 0.05 -- More Opaque (Darker)
+MainBg.BackgroundTransparency = 0 -- Opaque (was 0.05) -- Perf: avoid full-panel alpha blend every frame
 MainBg.ZIndex = 0
 local MainCorner = Instance.new("UICorner", MainBg)
 MainCorner.CornerRadius = UDim.new(0, 12)
 RegisterTheme(MainBg, "BackgroundColor3", "Main")
 
--- LOGO OVERLAY (Transparent watermark effect)
-local LogoOverlay = Instance.new("ImageLabel", Main)
-LogoOverlay.Name = "LogoOverlay"
-LogoOverlay.AnchorPoint = Vector2.new(0.5, 0.5)
-LogoOverlay.Position = UDim2.new(0.55, 0, 0.5, 0) -- Offset to center of content area (accounting for sidebar)
-LogoOverlay.Size = UDim2.new(0, 380, 0, 380)
-LogoOverlay.BackgroundTransparency = 1
-LogoOverlay.Image = "https://www.roblox.com/asset/?id=123840945153526" -- Starship Logo (same format as MinIcon)
-LogoOverlay.ImageTransparency = 0.78 -- Visible but subtle watermark
-LogoOverlay.ImageColor3 = Color3.fromRGB(255, 255, 255) -- White tint
-LogoOverlay.ScaleType = Enum.ScaleType.Fit
-LogoOverlay.ZIndex = 999 -- High ZIndex to ensure visibility
-
--- Add subtle pulse animation to logo overlay
-task.spawn(function()
-	while LogoOverlay and LogoOverlay.Parent do
-		TweenService:Create(LogoOverlay, TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-			ImageTransparency = 0.72,
-		}):Play()
-		task.wait(4)
-		if not LogoOverlay or not LogoOverlay.Parent then
-			break
-		end
-		TweenService:Create(LogoOverlay, TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-			ImageTransparency = 0.88,
-		}):Play()
-		task.wait(4)
-	end
-end)
+-- LOGO OVERLAY removed for performance (was causing continuous tween allocation)
 
 -- Blur Glow Effect (Behind Background)
 local MainBlur = Instance.new("ImageLabel", Main)
@@ -5880,10 +5878,12 @@ StrokeGradient.Color = ColorSequence.new({
 	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(60, 60, 80)), -- Dark middle
 	ColorSequenceKeypoint.new(1, C_ACCENT),
 })
+end -- End UI decoration scope
 
 -- Entrance Animation (will be updated with dynamic size later)
 
 -- Resize Handle
+do -- Wrap ResizeHandle locals in scope to free registers
 local ResizeHandle = Instance.new("ImageButton", Main)
 ResizeHandle.Name = "ResizeHandle"
 ResizeHandle.Size = UDim2.new(0, 30, 0, 30) -- Increased size for easier clicking
@@ -5961,6 +5961,7 @@ ResizeHandle.InputBegan:Connect(function(input)
 		end)
 	end
 end)
+end -- End ResizeHandle scope
 
 -- Minimized Icon
 local MinIcon = Instance.new("TextButton", ScreenGui)
@@ -6048,11 +6049,11 @@ AppTitle.Font = Enum.Font.GothamBold
 AppTitle.TextXAlignment = Enum.TextXAlignment.Left
 AppTitle.RichText = true
 
--- Rainbow Animation for "STARSHIP" only
+-- Rainbow Animation for "STARSHIP" only (throttled for performance)
 task.spawn(function()
 	local t = 0
 	while AppTitle and AppTitle.Parent do
-		t = t + 0.01
+		t = t + 0.03 -- compensated so cycle speed stays roughly the same
 		local c = Color3.fromHSV(t % 1, 0.7, 1) -- Softer saturation
 		local r, g, b = math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255)
 		AppTitle.Text = string.format(
@@ -6061,7 +6062,7 @@ task.spawn(function()
 			g,
 			b
 		)
-		task.wait(0.03)
+		task.wait(0.1) -- was 0.03 (~33Hz); now ~10Hz, ~3x less work
 	end
 end)
 
@@ -6084,11 +6085,11 @@ local function ToggleMin()
 end
 
 local ToggleMinConnection
-local topBtnSize = 40
+do -- Wrap CloseBtn/MiniBtn locals in scope to free registers
 local CloseBtn = Instance.new("TextButton", TopBar)
 CloseBtn.Text = "×"
-CloseBtn.Size = UDim2.new(0, topBtnSize, 1, 0)
-CloseBtn.Position = UDim2.new(1, -topBtnSize, 0, 0)
+CloseBtn.Size = UDim2.new(0, 40, 1, 0)
+CloseBtn.Position = UDim2.new(1, -40, 0, 0)
 CloseBtn.BackgroundTransparency = 1
 CloseBtn.TextColor3 = C_RED
 CloseBtn.TextSize = 22
@@ -6140,15 +6141,17 @@ end)
 
 local MiniBtn = Instance.new("TextButton", TopBar)
 MiniBtn.Text = "—"
-MiniBtn.Size = UDim2.new(0, topBtnSize, 1, 0)
-MiniBtn.Position = UDim2.new(1, -topBtnSize * 2, 0, 0)
+MiniBtn.Size = UDim2.new(0, 40, 1, 0)
+MiniBtn.Position = UDim2.new(1, -80, 0, 0)
 MiniBtn.BackgroundTransparency = 1
 MiniBtn.TextColor3 = C_TEXT_DIM
 MiniBtn.TextSize = 18
 MiniBtn.Font = Enum.Font.GothamMedium
 MiniBtn.MouseButton1Click:Connect(ToggleMin)
+end -- End CloseBtn/MiniBtn scope
 
 -- TOPBAR STATS (Hidden on mobile for space)
+do -- Wrap StatsContainer locals in scope to free registers
 local StatsContainer = Instance.new("Frame", TopBar)
 StatsContainer.Size = UDim2.new(0, 300, 1, 0)
 StatsContainer.Position = UDim2.new(1, -380, 0, 0) -- Left of buttons
@@ -6162,6 +6165,7 @@ UIListStats.VerticalAlignment = Enum.VerticalAlignment.Center
 UIListStats.Padding = UDim.new(0, 15)
 
 local function CreateTopStat(name, icon)
+
 	local l = Instance.new("TextLabel", StatsContainer)
 	l.Text = icon .. " ..."
 	l.AutomaticSize = Enum.AutomaticSize.X
@@ -6180,6 +6184,7 @@ UIHandlers.TopStats = {
 	frameCount = 0,
 	lastFpsTime = os.clock(),
 }
+end -- End StatsContainer scope
 
 Connections.FpsCounter = RunService.Heartbeat:Connect(function()
 	UIHandlers.TopStats.frameCount = UIHandlers.TopStats.frameCount + 1
@@ -6190,15 +6195,27 @@ task.spawn(function()
 	while TopBar and TopBar.Parent do
 		local now = os.clock()
 		local elapsed = now - TS.lastFpsTime
-		local fps = math.floor(TS.frameCount / elapsed)
+		if elapsed <= 0 then
+			elapsed = 0.001
+		end
+		local rawFps = TS.frameCount / elapsed
+		if rawFps ~= rawFps or rawFps == math.huge or rawFps == -math.huge then
+			rawFps = 0
+		end
+		local fps = math.clamp(math.floor(rawFps + 0.5), 0, 999)
 		TS.frameCount = 0
 		TS.lastFpsTime = now
 		TS.FpsLbl.Text = string.format("⚡ %d FPS", fps)
 		TS.FpsLbl.TextColor3 = (fps < 30) and C_RED or C_GREEN
 		local ping = 0
 		pcall(function()
-			ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+			local stats = game:GetService("Stats")
+			local dataPing = stats and stats.Network and stats.Network.ServerStatsItem and stats.Network.ServerStatsItem["Data Ping"]
+			if dataPing then
+				ping = math.floor(dataPing:GetValue() + 0.5)
+			end
 		end)
+		ping = math.clamp(tonumber(ping) or 0, 0, 999)
 		TS.PingLbl.Text = string.format("📶 %dms", ping)
 		TS.PingLbl.TextColor3 = (ping > 200) and C_RED or C_GREEN
 
@@ -6229,7 +6246,7 @@ task.spawn(function()
 
 		TS.KeyLbl.Text = "🔑 " .. durationText
 		TS.KeyLbl.TextColor3 = C_ACCENT
-		task.wait(1)
+		task.wait(0.4)
 	end
 	if Connections.FpsCounter then
 		Connections.FpsCounter:Disconnect()
@@ -6275,8 +6292,7 @@ Sidebar.Size = UDim2.new(0, 130, 1, -40)
 Sidebar.Position = UDim2.new(0, 0, 0, 40)
 Sidebar.BackgroundColor3 = C_SIDE
 Sidebar.BorderSizePixel = 0
-local SidebarCorner = Instance.new("UICorner", Sidebar)
-SidebarCorner.CornerRadius = UDim.new(0, 0) -- Flat left side
+do local c = Instance.new("UICorner", Sidebar); c.CornerRadius = UDim.new(0, 0) end -- Flat left side
 RegisterTheme(Sidebar, "BackgroundColor3", "Side")
 
 -- Sidebar Toggle Button for Mobile - Wrapped to release locals
@@ -6462,9 +6478,8 @@ TabContainer.Size = UDim2.new(1, 0, 1, -95)
 
 -- CONTENT AREA (Adjusted for Padding/Gap)
 local ContentArea = Instance.new("Frame", Main)
-local contentOffset = 130 + 10
-ContentArea.Size = UDim2.new(1, -(contentOffset + 10), 1, -55) -- Sidebar + Gap
-ContentArea.Position = UDim2.new(0, contentOffset, 0, 45) -- Starts after sidebar with gap
+ContentArea.Size = UDim2.new(1, -150, 1, -55) -- Sidebar(130) + Gap(10) + Right(10)
+ContentArea.Position = UDim2.new(0, 140, 0, 45) -- Starts after sidebar with gap
 ContentArea.BackgroundTransparency = 1
 
 -- CONFIRMATION MODAL (Re-styled) - Wrapped to save registers
@@ -6768,7 +6783,21 @@ local function SwitchTab(name)
 			TweenService:Create(ind, TweenInfo.new(0.3), { BackgroundTransparency = targetIndTrans }):Play()
 			local glow = ind:FindFirstChild("ImageLabel")
 			if glow then
-				TweenService:Create(glow, TweenInfo.new(0.3), { ImageTransparency = (isSel and 0.5 or 1) }):Play()
+				-- Perf: only render glow for the active tab. Show immediately when selected,
+				-- hide after fade-out to keep Roblox from rasterizing transparent copies.
+				if isSel then
+					glow.Visible = true
+					local t = TweenService:Create(glow, TweenInfo.new(0.3), { ImageTransparency = 0.5 })
+					t:Play()
+				else
+					local t = TweenService:Create(glow, TweenInfo.new(0.3), { ImageTransparency = 1 })
+					t:Play()
+					t.Completed:Connect(function()
+						if glow and glow.Parent then
+							glow.Visible = false
+						end
+					end)
+				end
 			end
 		end
 
@@ -6829,6 +6858,7 @@ local function CreateTab(name, icon, page)
 	indGlow.Image = "rbxassetid://5028857472"
 	indGlow.ImageColor3 = C_ACCENT
 	indGlow.ImageTransparency = 0.5
+	indGlow.Visible = false -- Perf: skip render for inactive tab glows (was still rasterized even at transparency=1)
 
 	btn.MouseButton1Click:Connect(function()
 		SwitchTab(name)
@@ -6999,37 +7029,26 @@ end
 
 -- ========================
 
--- Calculate Dynamic UI Height based on Tab Count (wrapped to release locals)
-local TAB_HEIGHT = 45
-local TAB_MARGIN_TOP = 10
-local TAB_MARGIN_BOTTOM = 60
-local TOPBAR_HEIGHT = 35
-local MIN_UI_HEIGHT = 500
-local MAX_UI_HEIGHT = 700
-
-local tabList = {
-	{ "Dashboard", "", PageDashboard },
-	{ "Recorder", "rbxassetid://10709782497", PageRecord },
-	{ "Merger", "rbxassetid://10709782823", PageMerge },
-	{ "List Map", "", PageListMap },
-	{ "Warp", "", PageWarp },
-	{ "Tools", "", PageTools },
-	{ "Helper", "", PageHelper },
-	{ "Fun", "", PageFun },
-	{ "Config", "", PageConfig },
-}
-
-local tabCount = #tabList
-local requiredHeight = TOPBAR_HEIGHT + TAB_MARGIN_TOP + (tabCount * TAB_HEIGHT) + TAB_MARGIN_BOTTOM
-requiredHeight = math.clamp(requiredHeight, MIN_UI_HEIGHT, MAX_UI_HEIGHT)
-TargetMainHeight = requiredHeight
-
--- Update Main UI Size
-Main.Size = UDim2.new(0, 550, 0, requiredHeight)
-Main.Position = UDim2.new(0.5, -275, 0.5, -requiredHeight / 2)
-
-for _, tabData in ipairs(tabList) do
-	CreateTab(tabData[1], tabData[2], tabData[3])
+-- Calculate Dynamic UI Height based on Tab Count (wrapped in do..end to release locals)
+do
+	local tabList = {
+		{ "Dashboard", "", PageDashboard },
+		{ "Recorder", "rbxassetid://10709782497", PageRecord },
+		{ "Merger", "rbxassetid://10709782823", PageMerge },
+		{ "List Map", "", PageListMap },
+		{ "Warp", "", PageWarp },
+		{ "Tools", "", PageTools },
+		{ "Helper", "", PageHelper },
+		{ "Fun", "", PageFun },
+		{ "Config", "", PageConfig },
+	}
+	local requiredHeight = math.clamp(35 + 10 + (#tabList * 45) + 60, 500, 700)
+	TargetMainHeight = requiredHeight
+	Main.Size = UDim2.new(0, 550, 0, requiredHeight)
+	Main.Position = UDim2.new(0.5, -275, 0.5, -requiredHeight / 2)
+	for _, tabData in ipairs(tabList) do
+		CreateTab(tabData[1], tabData[2], tabData[3])
+	end
 end
 
 SwitchTab("Dashboard")
@@ -7819,22 +7838,53 @@ local ShowSaveRecordingModal -- Forward Declaration
 					RegisterTheme(btnDel, "BackgroundColor3", "Item")
 
 					-- Update Play Button State & Selection (uses dynamic colors)
-					RunService.RenderStepped:Connect(function()
+					-- PERF: Event-driven update instead of per-frame RenderStepped to avoid
+					-- accumulating connections every time the list is refreshed (FPS leak).
+					local lastSelected = nil
+					local lastPlayState = nil
+					local function UpdateRowVisual()
+						if not item.Parent then
+							return
+						end
 						local colors = _G.StarshipColors or CurrentColors
 						local isSelected = (currentPlaybackFile == n)
-
-						-- Highlight Selection
-						item.BackgroundColor3 = isSelected and Color3.fromRGB(50, 50, 60) or colors.MAIN
-
+						local playState
 						if isSelected and isPlaying then
-							btnPlay.Text = "⏸"
-							btnPlay.TextColor3 = colors.YELLOW
+							playState = "playing"
 						elseif isSelected and isPlayPaused then
-							btnPlay.Text = "▶"
-							btnPlay.TextColor3 = colors.GREEN
+							playState = "paused"
 						else
-							btnPlay.Text = "▶"
-							btnPlay.TextColor3 = colors.GREEN
+							playState = "idle"
+						end
+
+						if isSelected ~= lastSelected then
+							item.BackgroundColor3 = isSelected and Color3.fromRGB(50, 50, 60) or colors.MAIN
+							lastSelected = isSelected
+						end
+						if playState ~= lastPlayState then
+							if playState == "playing" then
+								btnPlay.Text = "⏸"
+								btnPlay.TextColor3 = colors.YELLOW
+							else
+								btnPlay.Text = "▶"
+								btnPlay.TextColor3 = colors.GREEN
+							end
+							lastPlayState = playState
+						end
+					end
+					UpdateRowVisual()
+					-- Register row updater so playback state changes can refresh visuals
+					_G.StarshipRowUpdaters = _G.StarshipRowUpdaters or {}
+					table.insert(_G.StarshipRowUpdaters, UpdateRowVisual)
+					item.Destroying:Connect(function()
+						local list = _G.StarshipRowUpdaters
+						if list then
+							for i = #list, 1, -1 do
+								if list[i] == UpdateRowVisual then
+									table.remove(list, i)
+									break
+								end
+							end
 						end
 					end)
 

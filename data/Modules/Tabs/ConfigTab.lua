@@ -1050,6 +1050,7 @@ local function SetupConfigUI(PageConfig, UI, Connections, Config, LocalPlayer, U
 	CreateBindRow("ToggleShiftLock", L("toggle_shift_lock"))
 	CreateBindRow("ToggleAntiSlip", L("toggle_anti_slip"))
 	CreateBindRow("ToggleAutoJump", L("toggle_auto_jump"))
+	CreateBindRow("ToggleHighJump", "Toggle High Jump")
 	CreateBindRow("ToggleQuickBoost", L("toggle_quick_boost"))
 	CreateBindRow("ToggleRealESP", L("toggle_real_esp"))
 	CreateBindRow("ToggleAntiDelay", L("toggle_anti_delay"))

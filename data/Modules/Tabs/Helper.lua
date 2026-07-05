@@ -47,6 +47,49 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 	local FOLDER_NAME = "StarshipCore"
 
+	-- ============================================================
+	-- GAMEPAD TRIGGER RESERVATION (block game's L2/R2 shiftlock bind)
+	-- ============================================================
+	-- Beberapa game bind ButtonL2/ButtonR2 ke shiftlock toggle via CAS
+	-- di priority Default. Kita reserve di priority High + Sink biar
+	-- handler game gak ke-trigger. Raw input lewat UserInputService
+	-- (IsGamepadButtonDown / GetGamepadState) TETEP kebaca, jadi
+	-- fitur Climb Hop / Quick Boost / etc yang pake R2/L2 tetep jalan.
+	local ContextActionService = game:GetService("ContextActionService")
+	local STARSHIP_TRIGGER_GUARD = "StarshipGamepadTriggerGuard"
+
+	-- Cleanup binding lama kalau script di-reload
+	pcall(function()
+		ContextActionService:UnbindAction(STARSHIP_TRIGGER_GUARD)
+	end)
+
+	local function _triggerGuardCallback(_actionName, _inputState, _inputObject)
+		-- Sink semua trigger event biar game's shiftlock bind di bawah kita
+		-- gak ke-fire. Raw state masih bisa dibaca lewat UIS.
+		return Enum.ContextActionResult.Sink
+	end
+
+	pcall(function()
+		ContextActionService:BindActionAtPriority(
+			STARSHIP_TRIGGER_GUARD,
+			_triggerGuardCallback,
+			false, -- gak butuh touch button
+			Enum.ContextActionPriority.High.Value + 1000, -- di atas game default (2000) & High (3000)
+			Enum.KeyCode.ButtonL2,
+			Enum.KeyCode.ButtonR2
+		)
+	end)
+
+	-- Pastiin di-cleanup waktu Connections di-disconnect (script unload)
+	table.insert(Connections, {
+		Disconnect = function()
+			pcall(function()
+				ContextActionService:UnbindAction(STARSHIP_TRIGGER_GUARD)
+			end)
+		end,
+	})
+	-- ============================================================
+
 	local function CFToTbl(cf)
 		return { cf:GetComponents() }
 	end
@@ -458,7 +501,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 
 	-- 4. JUMP ASSIST
 	do
-		local CardJump = CreateCard(L("jump_assist"), 220, 4)
+		local CardJump = CreateCard(L("jump_assist"), 280, 4)
 
 		-- Auto Jump
 		local BtnAutoJump, AutoJumpContainer = CreateFeatureButton(
@@ -1092,6 +1135,114 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			ToggleAirLock()
 		end)
 		UIHandlers.ToggleAirLock = ToggleAirLock
+
+		-- High Jump (toggle + custom power input)
+		local BtnHighJump = Instance.new("TextButton", CardJump)
+		BtnHighJump.Text = "HIGH JUMP: OFF"
+		BtnHighJump.Size = UDim2.new(0.6, 0, 0, 35)
+		BtnHighJump.Position = UDim2.new(0.03, 0, 0, 215)
+		StyleBtn(BtnHighJump, C_TEXT_DIM)
+
+		local InpHighJumpPower = Instance.new("TextBox", CardJump)
+		InpHighJumpPower.PlaceholderText = "Power"
+		InpHighJumpPower.Text = "150"
+		InpHighJumpPower.Size = UDim2.new(0.3, 0, 0, 35)
+		InpHighJumpPower.Position = UDim2.new(0.66, 0, 0, 215)
+		InpHighJumpPower.BackgroundColor3 = C_SIDE
+		InpHighJumpPower.TextColor3 = C_TEXT
+		InpHighJumpPower.Font = Enum.Font.Gotham
+		InpHighJumpPower.TextSize = 12
+		Instance.new("UICorner", InpHighJumpPower).CornerRadius = UDim.new(0, 6)
+		RegisterTheme(InpHighJumpPower, "BackgroundColor3", "Side")
+		RegisterTheme(InpHighJumpPower, "TextColor3", "Text")
+
+		local LblHighJumpHint = Instance.new("TextLabel", CardJump)
+		LblHighJumpHint.Text = "Custom JumpPower (default 50)"
+		LblHighJumpHint.Size = UDim2.new(0.94, 0, 0, 14)
+		LblHighJumpHint.Position = UDim2.new(0.03, 0, 0, 252)
+		LblHighJumpHint.BackgroundTransparency = 1
+		LblHighJumpHint.TextColor3 = C_TEXT_DIM
+		LblHighJumpHint.Font = Enum.Font.Gotham
+		LblHighJumpHint.TextSize = 9
+		LblHighJumpHint.TextXAlignment = Enum.TextXAlignment.Center
+		RegisterTheme(LblHighJumpHint, "TextColor3", "TextDim")
+
+		local isHighJump, defJumpPower, defJumpHeight, hjConn = false, nil, nil, nil
+		local highJumpPower = 150
+
+		local function ApplyHighJump(h)
+			if not h then return end
+			-- Force pakai JumpPower (compatible R6/R15) lalu set custom value
+			pcall(function() h.UseJumpPower = true end)
+			h.JumpPower = highJumpPower
+		end
+
+		local function ToggleHighJump(forceEnable)
+			if forceEnable ~= nil then
+				if forceEnable == isHighJump then return end
+			end
+			isHighJump = not isHighJump
+			BtnHighJump.Text = "HIGH JUMP: " .. (isHighJump and "ON" or "OFF")
+			BtnHighJump.TextColor3 = isHighJump and C_GREEN or C_TEXT_DIM
+			BtnHighJump.UIStroke.Color = isHighJump and C_GREEN or C_TEXT_DIM
+			ShowFeatureToast("High Jump", isHighJump)
+
+			local c = LocalPlayer.Character
+			local h = c and c:FindFirstChildOfClass("Humanoid")
+
+			if isHighJump then
+				if h then
+					-- Save default values supaya bisa restore
+					if defJumpPower  == nil then defJumpPower  = h.JumpPower end
+					if defJumpHeight == nil then defJumpHeight = h.JumpHeight end
+					ApplyHighJump(h)
+				end
+				-- Re-apply tiap respawn / character change
+				hjConn = LocalPlayer.CharacterAdded:Connect(function(char)
+					task.wait(0.3)
+					if not isHighJump then return end
+					local hum = char:FindFirstChildOfClass("Humanoid")
+					if hum then
+						if defJumpPower  == nil then defJumpPower  = hum.JumpPower end
+						if defJumpHeight == nil then defJumpHeight = hum.JumpHeight end
+						ApplyHighJump(hum)
+					end
+				end)
+				table.insert(Connections, hjConn)
+			else
+				if hjConn then
+					hjConn:Disconnect()
+					hjConn = nil
+				end
+				-- Restore default
+				if h then
+					if defJumpPower  ~= nil then h.JumpPower  = defJumpPower  end
+					if defJumpHeight ~= nil then h.JumpHeight = defJumpHeight end
+				end
+				defJumpPower, defJumpHeight = nil, nil
+			end
+		end
+
+		BtnHighJump.MouseButton1Click:Connect(function()
+			ToggleHighJump()
+		end)
+
+		InpHighJumpPower.FocusLost:Connect(function()
+			local v = tonumber(InpHighJumpPower.Text)
+			if v and v > 0 then
+				highJumpPower = math.clamp(v, 1, 1000)
+				InpHighJumpPower.Text = tostring(highJumpPower)
+				if isHighJump then
+					local c = LocalPlayer.Character
+					local h = c and c:FindFirstChildOfClass("Humanoid")
+					if h then ApplyHighJump(h) end
+				end
+			else
+				InpHighJumpPower.Text = tostring(highJumpPower)
+			end
+		end)
+
+		UIHandlers.ToggleHighJump = ToggleHighJump
 	end
 
 	-- 4.35 HABEG (JUMP BUG)
@@ -4427,6 +4578,13 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		if Config.Keybinds and Config.Keybinds.ToggleAutoJump and input.KeyCode == Config.Keybinds.ToggleAutoJump then
 			if UIHandlers.ToggleAutoJump then
 				UIHandlers.ToggleAutoJump()
+			end
+		end
+
+		-- ToggleHighJump
+		if Config.Keybinds and Config.Keybinds.ToggleHighJump and input.KeyCode == Config.Keybinds.ToggleHighJump then
+			if UIHandlers.ToggleHighJump then
+				UIHandlers.ToggleHighJump()
 			end
 		end
 

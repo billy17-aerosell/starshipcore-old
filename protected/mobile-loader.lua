@@ -2332,7 +2332,11 @@ local function main()
 	-- HWID detection complete (debug print removed for production)
 
 	-- Call mobile-load API (separate whitelist from PC)
-	local authUrl = MOBILE_AUTH_API .. "?userId=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
+	-- placeId dikirim biar webhook log tau game/tempat user lagi jalanin script
+	local placeId = tostring(game.PlaceId or 0)
+	local authUrl = MOBILE_AUTH_API .. "?userId=" .. userId
+		.. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
+		.. "&placeId=" .. placeId
 	local authSuccess, authResponse = pcall(function()
 		return game:HttpGet(authUrl)
 	end)

@@ -3,6 +3,31 @@ chcp 65001 >nul
 title Starship Core Manager
 color 0B
 
+REM ═══════════════════════════════════════════════════════════
+REM CONFIG LOADER
+REM - If you run this file directly, ADMIN_SECRET is loaded from .env.
+REM - run-manager.bat can still override/provide ADMIN_SECRET before calling this.
+REM ═══════════════════════════════════════════════════════════
+pushd "%~dp0" >nul
+if not defined ADMIN_SECRET (
+    if exist ".env" (
+        for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
+            if /i "%%A"=="ADMIN_SECRET" set "ADMIN_SECRET=%%B"
+        )
+    )
+)
+
+if not defined ADMIN_SECRET (
+    cls
+    echo.
+    echo  ❌ ADMIN_SECRET belum diset.
+    echo.
+    echo  Penyebab: endpoint admin menolak request tanpa header x-admin-secret yang benar.
+    echo  Solusi: isi ADMIN_SECRET di file .env atau jalankan run-manager.bat.
+    echo.
+    pause
+    goto EXIT
+)
 :MENU
 cls
 echo.
@@ -265,6 +290,7 @@ pause
 goto MENU
 
 :EXIT
+popd >nul 2>nul
 cls
 echo.
 echo  👋 Goodbye!

@@ -1,25 +1,43 @@
-local Players = game:GetService("Players")
+-- BYPASS 1: Core Anti-Kick (MUST run before ANY other code)
+-- Adonis Detected/Kill hook bypass (silent, no notifications).
+local globalEnv = (typeof(getgenv) == "function" and getgenv()) or _G
+if not globalEnv.StarshipBypassLoaded then
+	globalEnv.StarshipBypassLoaded = true
+	pcall(function()
+		local lp = game:GetService("Players").LocalPlayer
+		local oldN
+		oldN = hookmetamethod(game, "__namecall", function(s, ...)
+			if getnamecallmethod() == "Kick" and s == lp and not checkcaller() then return end
+			return oldN(s, ...)
+		end)
 
--- BYPASS 1: Core Anti-Kick (Essential)
--- Modifies a core script to nullify kick actions. This is fundamental.
-for k, v in pairs(getgc(true)) do
-    if pcall(function()
-        return rawget(v, "indexInstance")
-    end) and type(rawget(v, "indexInstance")) == "table" and (rawget(v, "indexInstance"))[1] == "kick" then
-        setreadonly(v, false)
-        v.tvk = {
-            "kick",
-            function()
-                return game.Workspace:WaitForChild("")
-            end
-        }
-    end
+		for _, v in ipairs(getgc(true)) do
+			if typeof(v) == "table" then
+				local d, k = rawget(v, "Detected"), rawget(v, "Kill")
+				if typeof(d) == "function" then
+					hookfunction(d, function(m, ...)
+						if m ~= "_" then warn("[A] D:" .. tostring(m)) end
+						return true
+					end)
+				end
+				if typeof(k) == "function" and rawget(v, "Variables") then
+					hookfunction(k, function(...)
+						-- warn("[A] K")
+						return
+					end)
+				end
+			end
+		end
+	end)
 end
+
+local Players = game:GetService("Players")
 
 -- Continue with standard services
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 local VERSION = "1.2.7"
@@ -736,11 +754,11 @@ local Window = WindUI:CreateWindow({
 	IconSize = 45, 
 
 	Author = "Premium Edition | StarshipCore",
-	Size = UDim2.fromOffset(770, 475),
+	Size = UDim2.fromOffset(750, 450),
 	SideBarWidth = 180,
 	Transparent = true,
 	BackgroundImageTransparency = 0.92,
-	Background = "rbxassetid://132820581372516",
+	Background = nil,
 	Theme = Settings.Theme or "Crimson",
 	ModernLayout = true, 
 	BottomDragBarEnabled = true, 
@@ -857,7 +875,7 @@ else
 end
 
 -- 📌 PRE-DECLARE TABS FOR SIDEBAR CALLBACKS
-local DashboardTab, AccountTab, CustomAnimTab, AvatarTab, SkyBoxTab, ListMapTab, ToolsTab, SpoofTab, SettingsTab
+local DashboardTab, AccountTab, AvatarTab, SkyBoxTab, ListMapTab, ToolsTab, SpoofTab, SettingsTab
 
 -- Consolidate Watermark here to keep it clean
 Window:Watermark({
@@ -872,9 +890,6 @@ Window:Watermark({
 -- ══════════════════════════════════════════════════════════════════
 -- LOGO OVERLAY (Using WindUI's built-in Background Image Settings)
 -- ══════════════════════════════════════════════════════════════════
-Window:SetBackgroundImage("rbxassetid://132820581372516")
-Window:SetBackgroundImageTransparency(0.88)
-
 -- Fix: Set ScaleType to Fit so the whole logo is visible
 pcall(function()
     local bgFrame = Window.Internal.Background
@@ -1018,6 +1033,8 @@ local Config = {
 -- DEVICE PERFORMANCE (MOBILE-OPTIMIZED)
 -- Force linear interpolation for better FPS on all mobile devices
 -- ══════════════════════════════════════════════════════════════════
+local IS_MOBILE_DEVICE = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+
 _G.StarshipDevicePerformance = _G.StarshipDevicePerformance or {
 	zoomPunch = {
 		currentState = "normal",
@@ -1025,18 +1042,19 @@ _G.StarshipDevicePerformance = _G.StarshipDevicePerformance or {
 		cooldown = 0.15,
 		pendingState = nil,
 	},
-	interpolationMode = "catmullrom", -- SWITCHED TO CATMULLROM (Smoother movement)
-	isMobile = true, -- This is the mobile script
-	isLowEnd = false,
-	averageFPS = 60,
+	interpolationMode = IS_MOBILE_DEVICE and "linear" or "catmullrom", -- Linear on mobile for lower CPU cost
+	isMobile = IS_MOBILE_DEVICE,
+	isLowEnd = IS_MOBILE_DEVICE,
+	averageFPS = IS_MOBILE_DEVICE and 30 or 60,
 }
 
 -- Ensure catmullrom mode is set
-_G.StarshipDevicePerformance.interpolationMode = "catmullrom"
-_G.StarshipDevicePerformance.isMobile = true
+_G.StarshipDevicePerformance.interpolationMode = IS_MOBILE_DEVICE and "linear" or "catmullrom"
+_G.StarshipDevicePerformance.isMobile = IS_MOBILE_DEVICE
+_G.StarshipDevicePerformance.isLowEnd = IS_MOBILE_DEVICE
 
 if DEV_MODE then
-	warn("[MobileUI] Using CATMULL-ROM interpolation mode for smoother movement")
+	warn("[MobileUI] Device performance mode: " .. _G.StarshipDevicePerformance.interpolationMode)
 end
 
 -- ══════════════════════════════════════════════════════════════════
@@ -1339,6 +1357,11 @@ if _G.StarshipEventCode and _G.StarshipEventCode ~= "" then
 	_G.StarshipCloud.EventCode = _G.StarshipEventCode
 end
 
+-- Backfill fields kalau _G.StarshipCloud udah ada dari execution lama (tanpa field baru)
+_G.StarshipCloud.PrivateDropdownValues = _G.StarshipCloud.PrivateDropdownValues or {}
+_G.StarshipCloud.PrivateRecordingsCache = _G.StarshipCloud.PrivateRecordingsCache or {}
+_G.StarshipCloud.PrivateListLoading = false
+
 -- Helper function to build cloud API URL with event code and userId
 -- @param params: table of query parameters
 -- @param useChunked: boolean - if true, use chunked endpoint instead of main
@@ -1569,7 +1592,7 @@ function AvatarSystem.UpdatePreview(playerObj)
 
 		AvatarSystem.PreviewCard:SetTitle("Preview: " .. playerObj.DisplayName)
 		AvatarSystem.PreviewCard:SetDesc(
-			"Username: @" .. playerObj.Name .. "\nUser ID: " .. tostring(userId) .. "\nReady to morph!"
+			"Username: @" .. playerObj.Name .. "\nUser ID: " .. tostring(userId) .. "\nReady to copy avatar!"
 		)
 		
 		-- Update custom ImageLabel directly
@@ -1579,7 +1602,7 @@ function AvatarSystem.UpdatePreview(playerObj)
 		end
 	else
 		AvatarSystem.PreviewCard:SetTitle("No Player Selected")
-		AvatarSystem.PreviewCard:SetDesc("Select a player from the dropdown to see preview")
+		AvatarSystem.PreviewCard:SetDesc("Select a player from the dropdown to preview the avatar to copy")
 		
 		-- Hide or reset custom ImageLabel
 		if AvatarSystem.AvatarImageLabel then
@@ -1642,6 +1665,140 @@ function AvatarSystem.ApplyEffect(character)
 	end)
 end
 
+function AvatarSystem.ClearAppearance(character)
+	if not character then
+		return
+	end
+
+	for _, obj in ipairs(character:GetChildren()) do
+		if
+			obj:IsA("Shirt")
+			or obj:IsA("Pants")
+			or obj:IsA("ShirtGraphic")
+			or obj:IsA("Accessory")
+			or obj:IsA("BodyColors")
+		then
+			obj:Destroy()
+		end
+	end
+
+	local head = character:FindFirstChild("Head")
+	if head then
+		for _, decal in ipairs(head:GetChildren()) do
+			if decal:IsA("Decal") then
+				decal:Destroy()
+			end
+		end
+	end
+end
+
+function AvatarSystem.ApplyAvatarFromUserId(userId)
+	if not userId then
+		return false, nil, nil, "Missing user id"
+	end
+
+	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	if not character then
+		return false, nil, nil, "Character not found"
+	end
+
+	local humanoid = character:WaitForChild("Humanoid", 10)
+	if not humanoid then
+		return false, nil, character, "Failed to find humanoid"
+	end
+
+	local success, desc = pcall(function()
+		return Players:GetHumanoidDescriptionFromUserId(userId)
+	end)
+	if not success or not desc then
+		return false, nil, character, "Failed to load avatar data"
+	end
+
+	AvatarSystem.ClearAppearance(character)
+
+	local applySuccess = pcall(function()
+		if humanoid.ApplyDescriptionClientServer then
+			humanoid:ApplyDescriptionClientServer(desc)
+		else
+			humanoid:ApplyDescription(desc)
+		end
+	end)
+
+	return applySuccess, desc, character, nil
+end
+
+function AvatarSystem.CloneAvatar(target)
+	if not target then
+		WindUI:Notify({ Title = "Copy Avatar", Content = "No target found!", Duration = 3 })
+		return
+	end
+
+	local userId = target
+	local targetName = "Unknown"
+
+	if type(target) == "table" then
+		userId = target.UserId or target.userId or target.id or userId
+		targetName = target.Name or target.DisplayName or target.name or targetName
+	elseif typeof(target) == "Instance" and target:IsA("Player") then
+		userId = target.UserId
+		targetName = target.DisplayName or target.Name
+	end
+
+	if not userId then
+		WindUI:Notify({ Title = "Copy Avatar", Content = "Invalid target avatar!", Duration = 3 })
+		return
+	end
+
+	local thumbSuccess, thumbResult = pcall(function()
+		return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+	end)
+	local targetThumbnail = thumbSuccess and thumbResult or ""
+
+	local applySuccess, _, character, err = AvatarSystem.ApplyAvatarFromUserId(userId)
+	if applySuccess then
+		AvatarSystem.ApplyEffect(character)
+		WindUI:Notify({
+			Title = "✅ Avatar Copied",
+			Content = targetName ~= "Unknown" and ("Successfully copied " .. targetName .. "'s avatar!") or "Successfully copied avatar!",
+			Duration = 10,
+			Icon = targetThumbnail,
+			Buttons = {
+				{
+					Title = "Reset",
+					Icon = "undo-2",
+					Variant = "Secondary",
+					CloseOnClick = true,
+					Callback = function()
+						AvatarSystem.ResetAvatar()
+					end,
+				},
+				{
+					Title = "OK",
+					Icon = "check",
+					Variant = "Primary",
+					CloseOnClick = true,
+				},
+			},
+		})
+	else
+		WindUI:Notify({ Title = "Copy Avatar", Content = err or "Failed to apply avatar!", Duration = 3 })
+	end
+end
+
+function AvatarSystem.ResetAvatar()
+	local localUserId = LocalPlayer.UserId
+	local applySuccess, _, character, err = AvatarSystem.ApplyAvatarFromUserId(localUserId)
+
+	if applySuccess then
+		AvatarSystem.ApplyEffect(character)
+		AvatarSystem.SelectedPlayer = nil
+		AvatarSystem.UpdatePreview(nil)
+		WindUI:Notify({ Title = "Avatar Reset", Content = "Restored original avatar!", Duration = 3 })
+	else
+		WindUI:Notify({ Title = "Copy Avatar", Content = err or "Failed to restore original avatar!", Duration = 3 })
+	end
+end
+
 function AvatarSystem.FindPlayer(partialName)
 	if not partialName or partialName == "" then
 		return nil
@@ -1674,108 +1831,6 @@ function AvatarSystem.FindPlayer(partialName)
 	return foundPlayer
 end
 
-function AvatarSystem.Morph(target)
-	if not target then
-		WindUI:Notify({ Title = "Morph Avatar", Content = "No target found!", Duration = 3 })
-		return
-	end
-
-	local userId = target.UserId or (type(target) == "number" and target or target.UserId)
-	local targetName = target.Name or "Unknown"
-
-	if userId == LocalPlayer.UserId then
-		WindUI:Notify({ Title = "Morph Avatar", Content = "Cannot morph to yourself!", Duration = 3 })
-		return
-	end
-
-	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-	local humanoid = character:WaitForChild("Humanoid", 10)
-	if not humanoid then
-		WindUI:Notify({ Title = "Morph Avatar", Content = "Failed to find humanoid!", Duration = 3 })
-		return
-	end
-
-	local success, desc = pcall(function()
-		return Players:GetHumanoidDescriptionFromUserId(userId)
-	end)
-	if not success or not desc then
-		WindUI:Notify({ Title = "Morph Avatar", Content = "Failed to load avatar data!", Duration = 3 })
-		return
-	end
-
-	local targetThumbnail = ""
-	local thumbSuccess, thumbResult = pcall(function()
-		return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
-	end)
-	if thumbSuccess then
-		targetThumbnail = thumbResult
-	end
-
-	for _, obj in ipairs(character:GetChildren()) do
-		if
-			obj:IsA("Shirt")
-			or obj:IsA("Pants")
-			or obj:IsA("ShirtGraphic")
-			or obj:IsA("Accessory")
-			or obj:IsA("BodyColors")
-		then
-			obj:Destroy()
-		end
-	end
-	local head = character:FindFirstChild("Head")
-	if head then
-		for _, decal in ipairs(head:GetChildren()) do
-			if decal:IsA("Decal") then
-				decal:Destroy()
-			end
-		end
-	end
-
-	local applySuccess = pcall(function()
-		if humanoid.ApplyDescriptionClientServer then
-			humanoid:ApplyDescriptionClientServer(desc)
-		else
-			humanoid:ApplyDescription(desc)
-		end
-	end)
-
-	if applySuccess then
-		AvatarSystem.ApplyEffect(character)
-		WindUI:Notify({
-			Title = "✨ Morph Success",
-			Content = "Morphed to " .. targetName .. "!",
-			Duration = 10,
-			Icon = targetThumbnail,
-			Buttons = {
-				{
-					Title = "Revert",
-					Icon = "undo-2",
-					Variant = "Secondary",
-					CloseOnClick = true,
-					Callback = function()
-						pcall(function()
-							local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-							if hum then
-								local desc = Players:GetHumanoidDescriptionFromUserId(LocalPlayer.UserId)
-								if desc then hum:ApplyDescription(desc) end
-							end
-						end)
-						WindUI:Notify({ Title = "Morph Avatar", Content = "Reverted to original!", Duration = 3 })
-					end,
-				},
-				{
-					Title = "OK",
-					Icon = "check",
-					Variant = "Primary",
-					CloseOnClick = true,
-				},
-			},
-		})
-	else
-		WindUI:Notify({ Title = "Morph Avatar", Content = "Failed to apply morph!", Duration = 3 })
-	end
-end
-
 -- ══════════════════════════════════════════════════════════════════
 -- 🏠 DASHBOARD TAB
 -- ══════════════════════════════════════════════════════════════════
@@ -1793,12 +1848,6 @@ RunService.Heartbeat:Wait()
 AccountTab = Window:Tab({
 	Title = "Account",
 	Icon = "solar:user-bold",
-})
-RunService.Heartbeat:Wait()
-
-CustomAnimTab = Window:Tab({
-	Title = "Animations",
-	Icon = "solar:accessibility-bold",
 })
 RunService.Heartbeat:Wait()
 
@@ -2039,8 +2088,8 @@ pcall(function()
 	_G.DashboardMulti = DashboardTab:MultiSection({
 		Title = "Dashboard Overview",
 		Icon = "solar:widget-bold",
-		Box = true,
-		BoxBorder = true,
+		Box = false,
+		BoxBorder = false,
 		Opened = true, -- Default open
 	})
 
@@ -2146,8 +2195,8 @@ pcall(function()
 	_G.AccountMulti = AccountTab:MultiSection({
 		Title = "Account Management",
 		Icon = "solar:user-bold",
-		Box = true,
-		BoxBorder = true,
+		Box = false,
+		BoxBorder = false,
 		Opened = true, -- Auto-expand as requested
 	})
 
@@ -2498,625 +2547,35 @@ ServerActions:Button({
 	end,
 })
 
--- ══════════════════════════════════════════════════════════════════
--- CUSTOM ANIMATIONS
--- ══════════════════════════════════════════════════════════════════
-local HttpService = game:GetService("HttpService")
-
--- Load AnimDB from global (set by Loader) or module, or use fallback
-local AnimDB = nil
-
--- Try to load from _G.StarshipAnimDB (set by Loader.lua)
-if _G.StarshipAnimDB then
-	AnimDB = _G.StarshipAnimDB
-	-- Try to load from getgenv().StarshipModules (production Loader)
-elseif getgenv and getgenv().StarshipModules and getgenv().StarshipModules["Animations.lua"] then
-	AnimDB = getgenv().StarshipModules["Animations.lua"]
-	-- Try to load from file (dev mode)
-elseif isfile and isfile("StarshipCore/Modules/Animations.lua") then
-	local success, result = pcall(function()
-		return loadstring(readfile("StarshipCore/Modules/Animations.lua"))()
-	end)
-	if success and result then
-		AnimDB = result
-	end
-end
-
--- Fallback to hardcoded AnimDB if nothing loaded
-if not AnimDB or not next(AnimDB) then
-	AnimDB = {
-		["Idle"] = {
-			["2016 Animation (mm2)"] = { "387947158", "387947464" },
-			["(UGC) Oh Really?"] = { "98004748982532", "98004748982532" },
-			["Astronaut"] = { "891621366", "891633237" },
-			["Adidas Community"] = { "122257458498464", "102357151005774" },
-			["Bold"] = { "16738333868", "16738334710" },
-			["(UGC) Slasher"] = { "140051337061095", "140051337061095" },
-			["(UGC) Retro"] = { "80479383912838", "80479383912838" },
-			["(UGC) Magician"] = { "139433213852503", "139433213852503" },
-			["(UGC) John Doe"] = { "72526127498800", "72526127498800" },
-			["(UGC) Noli"] = { "139360856809483", "139360856809483" },
-			["(UGC) Coolkid"] = { "95203125292023", "95203125292023" },
-			["(UGC) Survivor Injured"] = { "73905365652295", "73905365652295" },
-			["(UGC) Retro Zombie"] = { "90806086002292", "90806086002292" },
-			["(UGC) 1x1x1x1"] = { "76780522821306", "76780522821306" },
-			["Borock"] = { "3293641938", "3293642554" },
-			["Bubbly"] = { "910004836", "910009958" },
-			["Cartoony"] = { "742637544", "742638445" },
-			["Confident"] = { "1069977950", "1069987858" },
-			["Catwalk Glam"] = { "133806214992291", "94970088341563" },
-			["Cowboy"] = { "1014390418", "1014398616" },
-			["Drooling Zombie"] = { "3489171152", "3489171152" },
-			["Elder"] = { "10921101664", "10921102574" },
-			["Ghost"] = { "616006778", "616008087" },
-			["Knight"] = { "657595757", "657568135" },
-			["Levitation"] = { "616006778", "616008087" },
-			["Mage"] = { "707742142", "707855907" },
-			["MrToilet"] = { "4417977954", "4417978624" },
-			["Ninja"] = { "656117400", "656118341" },
-			["NFL"] = { "92080889861410", "74451233229259" },
-			["OldSchool"] = { "10921230744", "10921232093" },
-			["Patrol"] = { "1149612882", "1150842221" },
-			["Pirate"] = { "750781874", "750782770" },
-			["Default Retarget"] = { "95884606664820", "95884606664820" },
-			["Very Long"] = { "18307781743", "18307781743" },
-			["Sway"] = { "560832030", "560833564" },
-			["Popstar"] = { "1212900985", "1150842221" },
-			["Princess"] = { "941003647", "941013098" },
-			["R6"] = { "12521158637", "12521162526" },
-			["R15 Reanimated"] = { "4211217646", "4211218409" },
-			["Realistic"] = { "17172918855", "17173014241" },
-			["Robot"] = { "616088211", "616089559" },
-			["Sneaky"] = { "1132473842", "1132477671" },
-			["Sports (Adidas)"] = { "18537376492", "18537371272" },
-			["Soldier"] = { "3972151362", "3972151362" },
-			["Stylish"] = { "616136790", "616138447" },
-			["Stylized Female"] = { "4708191566", "4708192150" },
-			["Superhero"] = { "10921288909", "10921290167" },
-			["Toy"] = { "782841498", "782845736" },
-			["Udzal"] = { "3303162274", "3303162549" },
-			["Vampire"] = { "1083445855", "1083450166" },
-			["Werewolf"] = { "1083195517", "1083214717" },
-			["Wicked (Popular)"] = { "118832222982049", "76049494037641" },
-			["No Boundaries (Walmart)"] = { "18747067405", "18747063918" },
-			["Zombie"] = { "616158929", "616160636" },
-			["(UGC) Zombie"] = { "77672872857991", "77672872857991" },
-			["(UGC) TailWag"] = { "129026910898635", "129026910898635" },
-		},
-		["Walk"] = {
-			["Gojo"] = "95643163365384",
-			["Geto"] = "85811471336028",
-			["Astronaut"] = "891667138",
-			["(UGC) Zombie"] = "113603435314095",
-			["Adidas Community"] = "122150855457006",
-			["Bold"] = "16738340646",
-			["Bubbly"] = "910034870",
-			["(UGC) Smooth"] = "76630051272791",
-			["Cartoony"] = "742640026",
-			["Confident"] = "1070017263",
-			["Cowboy"] = "1014421541",
-			["(UGC) Retro"] = "107806791584829",
-			["(UGC) Retro Zombie"] = "140703855480494",
-			["Catwalk Glam"] = "109168724482748",
-			["Drooling Zombie"] = "3489174223",
-			["Elder"] = "10921111375",
-			["Ghost"] = "616013216",
-			["Knight"] = "10921127095",
-			["Levitation"] = "616013216",
-			["Mage"] = "707897309",
-			["Ninja"] = "656121766",
-			["NFL"] = "110358958299415",
-			["OldSchool"] = "10921244891",
-			["Patrol"] = "1151231493",
-			["Pirate"] = "750785693",
-			["Default Retarget"] = "115825677624788",
-			["Popstar"] = "1212980338",
-			["Princess"] = "941028902",
-			["R6"] = "12518152696",
-			["R15 Reanimated"] = "4211223236",
-			["2016 Animation (mm2)"] = "387947975",
-			["Robot"] = "616095330",
-			["Sneaky"] = "1132510133",
-			["Sports (Adidas)"] = "18537392113",
-			["Stylish"] = "616146177",
-			["Stylized Female"] = "4708193840",
-			["Superhero"] = "10921298616",
-			["Toy"] = "782843345",
-			["Udzal"] = "3303162967",
-			["Vampire"] = "1083473930",
-			["Werewolf"] = "1083178339",
-			["Wicked (Popular)"] = "92072849924640",
-			["No Boundaries (Walmart)"] = "18747074203",
-			["Zombie"] = "616168032",
-		},
-		["Run"] = {
-			["2016 Animation (mm2)"] = "387947975",
-			["(UGC) Soccer"] = "116881956670910",
-			["Adidas Community"] = "82598234841035",
-			["Astronaut"] = "10921039308",
-			["Bold"] = "16738337225",
-			["Bubbly"] = "10921057244",
-			["Cartoony"] = "10921076136",
-			["(UGC) Dog"] = "130072963359721",
-			["Confident"] = "1070001516",
-			["(UGC) Pride"] = "116462200642360",
-			["(UGC) Retro"] = "107806791584829",
-			["(UGC) Retro Zombie"] = "140703855480494",
-			["Cowboy"] = "1014401683",
-			["Catwalk Glam"] = "81024476153754",
-			["Drooling Zombie"] = "3489173414",
-			["Elder"] = "10921104374",
-			["Ghost"] = "616013216",
-			["Heavy Run (Udzal / Borock)"] = "3236836670",
-			["Knight"] = "10921121197",
-			["Levitation"] = "616010382",
-			["Mage"] = "10921148209",
-			["MrToilet"] = "4417979645",
-			["Ninja"] = "656118852",
-			["NFL"] = "117333533048078",
-			["OldSchool"] = "10921240218",
-			["Patrol"] = "1150967949",
-			["Pirate"] = "750783738",
-			["Default Retarget"] = "102294264237491",
-			["Popstar"] = "1212980348",
-			["Princess"] = "941015281",
-			["R6"] = "12518152696",
-			["R15 Reanimated"] = "4211220381",
-			["Robot"] = "10921250460",
-			["Sneaky"] = "1132494274",
-			["Sports (Adidas)"] = "18537384940",
-			["Stylish"] = "10921276116",
-			["Stylized Female"] = "4708192705",
-			["Superhero"] = "10921291831",
-			["Toy"] = "10921306285",
-			["Vampire"] = "10921320299",
-			["Werewolf"] = "10921336997",
-			["Wicked (Popular)"] = "72301599441680",
-			["No Boundaries (Walmart)"] = "18747070484",
-			["Zombie"] = "616163682",
-		},
-		["Jump"] = {
-			["Astronaut"] = "891627522",
-			["Adidas Community"] = "75290611992385",
-			["Bold"] = "16738336650",
-			["Bubbly"] = "910016857",
-			["Cartoony"] = "742637942",
-			["Catwalk Glam"] = "116936326516985",
-			["Confident"] = "1069984524",
-			["Cowboy"] = "1014394726",
-			["Elder"] = "10921107367",
-			["Ghost"] = "616008936",
-			["Knight"] = "910016857",
-			["Levitation"] = "616008936",
-			["Mage"] = "10921149743",
-			["Ninja"] = "656117878",
-			["NFL"] = "119846112151352",
-			["OldSchool"] = "10921242013",
-			["Patrol"] = "1148811837",
-			["Pirate"] = "750782230",
-			["(UGC) Retro"] = "139390570947836",
-			["Default Retarget"] = "117150377950987",
-			["Popstar"] = "1212954642",
-			["Princess"] = "941008832",
-			["Robot"] = "616090535",
-			["R15 Reanimated"] = "4211219390",
-			["R6"] = "12520880485",
-			["Sneaky"] = "1132489853",
-			["Sports (Adidas)"] = "18537380791",
-			["Stylish"] = "616139451",
-			["Stylized Female"] = "4708188025",
-			["Superhero"] = "10921294559",
-			["Toy"] = "10921308158",
-			["Vampire"] = "1083455352",
-			["Werewolf"] = "1083218792",
-			["Wicked (Popular)"] = "104325245285198",
-			["No Boundaries (Walmart)"] = "18747069148",
-			["Zombie"] = "616161997",
-		},
-		["Fall"] = {
-			["Astronaut"] = "891617961",
-			["Adidas Community"] = "98600215928904",
-			["Bold"] = "16738333171",
-			["Bubbly"] = "910001910",
-			["Cartoony"] = "742637151",
-			["Catwalk Glam"] = "92294537340807",
-			["Confident"] = "1069973677",
-			["Cowboy"] = "1014384571",
-			["Elder"] = "10921105765",
-			["Knight"] = "10921122579",
-			["Levitation"] = "616005863",
-			["Mage"] = "707829716",
-			["Ninja"] = "656115606",
-			["NFL"] = "129773241321032",
-			["OldSchool"] = "10921241244",
-			["Patrol"] = "1148863382",
-			["Pirate"] = "750780242",
-			["Default Retarget"] = "110205622518029",
-			["Popstar"] = "1212900995",
-			["Princess"] = "941000007",
-			["Robot"] = "616087089",
-			["R15 Reanimated"] = "4211216152",
-			["R6"] = "12520972571",
-			["Sneaky"] = "1132469004",
-			["Sports (Adidas)"] = "18537367238",
-			["Stylish"] = "616134815",
-			["Stylized Female"] = "4708186162",
-			["Superhero"] = "10921293373",
-			["Toy"] = "782846423",
-			["Vampire"] = "1083443587",
-			["Werewolf"] = "1083189019",
-			["Wicked (Popular)"] = "121152442762481",
-			["No Boundaries (Walmart)"] = "18747062535",
-			["Zombie"] = "616157476",
-		},
-		["SwimIdle"] = {
-			["Astronaut"] = "891663592",
-			["Adidas Community"] = "109346520324160",
-			["Bold"] = "16738339817",
-			["Bubbly"] = "910030921",
-			["Cartoony"] = "10921079380",
-			["Catwalk Glam"] = "98854111361360",
-			["Confident"] = "1070012133",
-			["CowBoy"] = "1014411816",
-			["Elder"] = "10921110146",
-			["Mage"] = "707894699",
-			["Ninja"] = "656118341",
-			["NFL"] = "79090109939093",
-			["Patrol"] = "1151221899",
-			["Knight"] = "10921125935",
-			["OldSchool"] = "10921244018",
-			["Levitation"] = "10921139478",
-			["Popstar"] = "1212998578",
-			["Princess"] = "941025398",
-			["Pirate"] = "750785176",
-			["R6"] = "12518152696",
-			["Robot"] = "10921253767",
-			["Sneaky"] = "1132506407",
-			["Sports (Adidas)"] = "18537387180",
-			["Stylish"] = "10921281964",
-			["Stylized"] = "4708190607",
-			["SuperHero"] = "10921297391",
-			["Toy"] = "10921310341",
-			["Vampire"] = "10921325443",
-			["Werewolf"] = "10921341319",
-			["Wicked (Popular)"] = "113199415118199",
-			["No Boundaries (Walmart)"] = "18747071682",
-		},
-		["Swim"] = {
-			["Astronaut"] = "891663592",
-			["Adidas Community"] = "133308483266208",
-			["Bubbly"] = "910028158",
-			["Bold"] = "16738339158",
-			["Cartoony"] = "10921079380",
-			["Catwalk Glam"] = "134591743181628",
-			["CowBoy"] = "1014406523",
-			["Confident"] = "1070009914",
-			["Elder"] = "10921108971",
-			["Knight"] = "10921125160",
-			["Mage"] = "707876443",
-			["NFL"] = "132697394189921",
-			["OldSchool"] = "10921243048",
-			["PopStar"] = "1212998578",
-			["Princess"] = "941018893",
-			["Pirate"] = "750784579",
-			["Patrol"] = "1151204998",
-			["R6"] = "12518152696",
-			["Robot"] = "10921253142",
-			["Levitation"] = "10921138209",
-			["Stylish"] = "10921281000",
-			["SuperHero"] = "10921295495",
-			["Sneaky"] = "1132500520",
-			["Sports (Adidas)"] = "18537389531",
-			["Toy"] = "10921309319",
-			["Vampire"] = "10921324408",
-			["Werewolf"] = "10921340419",
-			["Wicked (Popular)"] = "99384245425157",
-			["No Boundaries (Walmart)"] = "18747073181",
-			["Zombie"] = "616165109",
-		},
-		["Climb"] = {
-			["Astronaut"] = "10921032124",
-			["Adidas Community"] = "88763136693023",
-			["Bold"] = "16738332169",
-			["Cartoony"] = "742636889",
-			["Catwalk Glam"] = "119377220967554",
-			["Confident"] = "1069946257",
-			["CowBoy"] = "1014380606",
-			["Elder"] = "845392038",
-			["Ghost"] = "616003713",
-			["Knight"] = "10921125160",
-			["Levitation"] = "10921132092",
-			["Mage"] = "707826056",
-			["Ninja"] = "656114359",
-			["(UGC) Retro"] = "121075390792786",
-			["NFL"] = "134630013742019",
-			["OldSchool"] = "10921229866",
-			["Patrol"] = "1148811837",
-			["Popstar"] = "1213044953",
-			["Princess"] = "940996062",
-			["R6"] = "12520982150",
-			["Reanimated R15"] = "4211214992",
-			["Robot"] = "616086039",
-			["Sneaky"] = "1132461372",
-			["Sports (Adidas)"] = "18537363391",
-			["Stylish"] = "10921271391",
-			["Stylized Female"] = "4708184253",
-			["SuperHero"] = "10921286911",
-			["Toy"] = "10921300839",
-			["Vampire"] = "1083439238",
-			["WereWolf"] = "10921329322",
-			["Wicked (Popular)"] = "131326830509784",
-			["No Boundaries (Walmart)"] = "18747060903",
-			["Zombie"] = "616156119",
-		},
-	}
-end -- End of fallback AnimDB
-
-local CurrentAnimType, AnimTypes, ANIM_FILE, OriginalAnims = "Idle", { "Idle", "Walk", "Run", "Jump", "Fall", "Swim", "SwimIdle", "Climb" }, "Starship_Animations.json", {}
-
--- Load saved animations
-if isfile and isfile(ANIM_FILE) then
-	pcall(function()
-		local data = HttpService:JSONDecode(readfile(ANIM_FILE))
-		for k, v in pairs(data) do
-			if AnimDB[k] then
-				for name, id in pairs(v) do
-					AnimDB[k][name] = id
-				end
-			end
-		end
-	end)
-end
-
-local function SaveAnimDB()
-	if writefile then
-		writefile(ANIM_FILE, HttpService:JSONEncode(AnimDB))
-	end
-end
-
--- OriginalAnims moved above to consolidate declarations
-local function CaptureOriginalAnims()
-	local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-	local animate = char:WaitForChild("Animate", 10)
-	if not animate then
-		return
-	end
-
-	local function getId(obj)
-		return (obj and obj:IsA("Animation")) and obj.AnimationId or nil
-	end
-
-	if not OriginalAnims.Idle then
-		OriginalAnims.Idle = {
-			getId(animate:FindFirstChild("idle") and animate.idle:FindFirstChild("Animation1")),
-			getId(animate:FindFirstChild("idle") and animate.idle:FindFirstChild("Animation2")),
-		}
-	end
-
-	local types = {
-		Walk = "WalkAnim",
-		Run = "RunAnim",
-		Jump = "JumpAnim",
-		Fall = "FallAnim",
-		Climb = "ClimbAnim",
-		Swim = "Swim",
-		SwimIdle = "SwimIdle",
-	}
-
-	for name, animName in pairs(types) do
-		local childName = name:lower()
-		if not OriginalAnims[name] then
-			OriginalAnims[name] =
-				getId(animate:FindFirstChild(childName) and animate[childName]:FindFirstChild(animName))
-		end
-	end
-end
-task.spawn(CaptureOriginalAnims)
-
-local function SetAnimation(animType, animId)
-	local char = LocalPlayer.Character
-	local animate = char and char:FindFirstChild("Animate")
-	if not animate then
-		return
-	end
-
-	local function formatId(id)
-		local s = tostring(id)
-		if s:find("://") then
-			return s
-		end
-		return "http://www.roblox.com/asset/?id=" .. s
-	end
-
-	local success, err = pcall(function()
-		if animType == "Idle" then
-			if animate:FindFirstChild("idle") then
-				if type(animId) == "table" then
-					animate.idle.Animation1.AnimationId = formatId(animId[1])
-					animate.idle.Animation2.AnimationId = formatId(animId[2])
-				else
-					animate.idle.Animation1.AnimationId = formatId(animId)
-					animate.idle.Animation2.AnimationId = formatId(animId)
-				end
-			end
-		elseif animType == "Walk" and animate:FindFirstChild("walk") then
-			animate.walk.WalkAnim.AnimationId = formatId(animId)
-		elseif animType == "Run" and animate:FindFirstChild("run") then
-			animate.run.RunAnim.AnimationId = formatId(animId)
-		elseif animType == "Jump" and animate:FindFirstChild("jump") then
-			animate.jump.JumpAnim.AnimationId = formatId(animId)
-		elseif animType == "Fall" and animate:FindFirstChild("fall") then
-			animate.fall.FallAnim.AnimationId = formatId(animId)
-		elseif animType == "Climb" and animate:FindFirstChild("climb") then
-			animate.climb.ClimbAnim.AnimationId = formatId(animId)
-		elseif animType == "Swim" and animate:FindFirstChild("swim") then
-			animate.swim.Swim.AnimationId = formatId(animId)
-		elseif animType == "SwimIdle" and animate:FindFirstChild("swimidle") then
-			animate.swimidle.SwimIdle.AnimationId = formatId(animId)
-		end
-	end)
-
-	if success then
-		local hum = char:FindFirstChild("Humanoid")
-		if hum then
-			hum:ChangeState(Enum.HumanoidStateType.Landed)
-		end
-		WindUI:Notify({ Title = "Success", Content = "Set " .. animType .. " animation", Duration = 1 })
-	else
-		WindUI:Notify({ Title = "Error", Content = "Failed to set animation", Duration = 2 })
-	end
-end
-
--- 🎭 ANIMATIONS CONTENT (Boreal MultiSection)
-task.wait(0.2) -- Pembuatan ribuan objek animasi sangat berat, perlu jeda
-pcall(function()
-	_G.AnimMulti = CustomAnimTab:MultiSection({
-		Title = "Animations",
-		Icon = "solar:accessibility-bold",
-		Box = true,
-		BoxBorder = true,
-		Opened = true,
-	})
-
-	_G.AnimLibTab = _G.AnimMulti:Tab({ Title = "Library", Icon = "solar:book-bold" })
-	_G.AnimManageTab = _G.AnimMulti:Tab({ Title = "Manage", Icon = "solar:settings-bold" })
-end)
-
--- Use fallback to CustomAnimTab if MultiSection fails
-_G.AnimGeneralContainer = _G.AnimLibTab or CustomAnimTab
-_G.AnimMoveContainer = _G.AnimLibTab or CustomAnimTab
-_G.AnimSwimContainer = _G.AnimLibTab or CustomAnimTab
-_G.AnimManageContainer = _G.AnimManageTab or CustomAnimTab
-
-_G.AnimGeneralContainer:Section({ Title = "Animation Preset", TextSize = 16 })
-_G.AnimGeneralContainer:Divider()
-_G.AnimGeneralContainer:Space({ Columns = 1 })
-
-local function ApplyAnim(animType, animName)
-	local id = nil
-	if animName == "Original" then
-		id = OriginalAnims[animType]
-	elseif AnimDB[animType] then
-		id = AnimDB[animType][animName]
-	end
-
-	if id then
-		SetAnimation(animType, id)
-	end
-end
-
-for _, animType in ipairs(AnimTypes) do
-	local values = { "Original" }
-	local list = {}
-	for name, _ in pairs(AnimDB[animType] or {}) do
-		table.insert(list, name)
-	end
-	table.sort(list)
-	for _, name in ipairs(list) do
-		table.insert(values, name)
-	end
-
-	-- Pick destination based on type
-	local targetContainer = _G.AnimGeneralContainer
-	if animType == "Jump" or animType == "Fall" or animType == "Climb" then
-		targetContainer = _G.AnimMoveContainer
-	elseif animType == "Swim" or animType == "SwimIdle" then
-		targetContainer = _G.AnimSwimContainer
-	end
-
-	targetContainer:Dropdown({
-		Title = "[◎] " .. animType .. " Animation",
-		Values = values,
-		Default = "Original",
-		Callback = function(val)
-			ApplyAnim(animType, val)
-		end,
-	})
-	RunService.Heartbeat:Wait()
-end
-
-_G.AnimManageContainer:Section({ Title = "➕ Animation Manager", TextSize = 16 })
-_G.AnimManageContainer:Divider()
-
-do -- Wrap Animation Manager variables in scope
-local newAnimName = ""
-local newAnimID = ""
-
-_G.AnimManageContainer:Dropdown({
-	Title = "Animation Type",
-	Values = AnimTypes,
-	Default = "Idle",
-	Callback = function(val)
-		CurrentAnimType = val
-	end,
-})
-
-_G.AnimManageContainer:Input({
-	Title = "Name",
-	Placeholder = "e.g. Griddy",
-	Callback = function(txt)
-		newAnimName = txt
-	end,
-})
-
-_G.AnimManageContainer:Input({
-	Title = "Asset ID",
-	Placeholder = "Numeric ID",
-	Callback = function(txt)
-		newAnimID = txt
-	end,
-})
-
-_G.AnimManageContainer:Button({
-	Title = "Save & Apply",
-	Desc = "Save to list and apply",
-	Callback = function()
-		if newAnimName == "" or newAnimID == "" then
-			WindUI:Notify({ Title = "Error", Content = "Missing Name or ID", Duration = 2 })
-			return
-		end
-		local num = newAnimID:match("%d+")
-		if not num then
-			WindUI:Notify({ Title = "Error", Content = "Invalid ID", Duration = 2 })
-			return
-		end
-
-		AnimDB[CurrentAnimType][newAnimName] = newAnimID
-		SaveAnimDB()
-		SetAnimation(CurrentAnimType, newAnimID)
-	end,
-})
-end -- End Animation Manager scope
-
 -- 🎭 AVATAR CONTENT (Boreal MultiSection)
 task.wait(0.1)
 pcall(function()
 	_G.AvatarMulti = AvatarTab:MultiSection({
 		Title = "Avatar Customizer",
-		Icon = "solar:user-plus-bold",
-		Box = true,
-		BoxBorder = true,
-		Opened = true,
+	Icon = "solar:user-plus-bold",
+	Box = false,
+	BoxBorder = false,
+	Opened = true,
 	})
 
-	_G.AvMorphTab = _G.AvatarMulti:Tab({ Title = "Morph", Icon = "solar:user-plus-bold" })
+	_G.AvMorphTab = _G.AvatarMulti:Tab({ Title = "Copy", Icon = "solar:user-plus-bold" })
 	_G.AvCloneTab = _G.AvatarMulti:Tab({ Title = "Clone", Icon = "solar:copy-bold" })
 end)
-
 -- Use fallback to AvatarTab if MultiSection fails
-_G.AvMorphContainer = _G.AvMorphTab or AvatarTab
+_G.AvatarContainer = _G.AvMorphTab or AvatarTab
 _G.AvCloneContainer = _G.AvCloneTab or AvatarTab
+_G.AvMorphContainer = _G.AvatarContainer
 
 -- ══════════════════════════════════════════════════════════════════
--- 🎭 MORPH AVATAR
+-- 🎭 COPY AVATAR
 -- ══════════════════════════════════════════════════════════════════
-_G.AvMorphContainer:Section({ Title = "🎭 Morph Avatar", Desc = "Change your appearance to look like other players" })
-_G.AvMorphContainer:Space({ Columns = 0.5 })
+_G.AvatarContainer:Section({ Title = "🎭 Copy Avatar", Desc = "Copy the appearance of other players" })
+_G.AvatarContainer:Space({ Columns = 0.5 })
 
 -- 🖼️ PREVIEW CARD
-AvatarSystem.PreviewCard = _G.AvMorphContainer:Paragraph({
+AvatarSystem.PreviewCard = _G.AvatarContainer:Paragraph({
 	Title = "No Player Selected",
-	Desc = "Select a player from the dropdown to see preview",
+	Desc = "Select a player from the dropdown to preview the avatar to copy",
 })
 
 -- Custom ImageLabel Injection for Avatar Preview
@@ -3178,20 +2637,20 @@ _G.AvMorphContainer:Button({
 })
 
 _G.AvMorphContainer:Button({
-	Title = "Apply Morph",
-	Desc = "Morph into the selected player",
+	Title = "Copy Avatar",
+	Desc = "Copy the selected player's avatar",
 	Callback = function()
 		if not AvatarSystem.SelectedPlayer then
-			WindUI:Notify({ Title = "Morph Avatar", Content = "Please select a player first!", Duration = 3 })
+			WindUI:Notify({ Title = "Copy Avatar", Content = "Please select a player first!", Duration = 3 })
 			return
 		end
 
-		AvatarSystem.Morph(AvatarSystem.SelectedPlayer)
+		AvatarSystem.CloneAvatar(AvatarSystem.SelectedPlayer)
 	end,
 })
 
--- 📋 CLONE BY USERNAME
-_G.AvCloneContainer:Section({ Title = "📋 Clone by Username", Desc = "Enter any Roblox username to clone their avatar" })
+-- 📋 COPY BY USERNAME
+_G.AvCloneContainer:Section({ Title = "📋 Copy by Username", Desc = "Enter any Roblox username to copy their avatar" })
 _G.AvCloneContainer:Space({ Columns = 1 })
 
 -- Store username input
@@ -3200,7 +2659,7 @@ local avatarUsernameInput = ""
 
 _G.AvCloneContainer:Input({
 	Title = "Roblox Username",
-	Desc = "Enter any Roblox username to clone their avatar",
+	Desc = "Enter any Roblox username to copy their avatar",
 	Placeholder = "Enter username...",
 	Callback = function(text)
 		avatarUsernameInput = text
@@ -3208,8 +2667,8 @@ _G.AvCloneContainer:Input({
 })
 
 _G.AvCloneContainer:Button({
-	Title = "🎭 Clone Username Avatar",
-	Desc = "Clone the avatar of the entered username",
+	Title = "🎭 Copy Username Avatar",
+	Desc = "Copy the avatar of the entered username",
 	Callback = function()
 		if avatarUsernameInput == "" then
 			WindUI:Notify({ Title = "Error", Content = "Please enter a username first!", Duration = 2 })
@@ -3229,59 +2688,11 @@ _G.AvCloneContainer:Button({
 				return
 			end
 
-			-- Get the character and humanoid
-			local character = LocalPlayer.Character
-			local humanoid = character and character:FindFirstChild("Humanoid")
-			if not humanoid then
-				WindUI:Notify({ Title = "Error", Content = "No character found!", Duration = 2 })
-				return
-			end
-
-			-- Load Description from user ID
-			local descSuccess, desc = pcall(function()
-				return Players:GetHumanoidDescriptionFromUserId(userId)
-			end)
-
-			if not descSuccess or not desc then
-				WindUI:Notify({ Title = "Error", Content = "Failed to load avatar for " .. avatarUsernameInput, Duration = 3 })
-				return
-			end
-
-			-- Clear existing accessories for clean morph
-			for _, obj in ipairs(character:GetChildren()) do
-				if obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") or obj:IsA("Accessory") or obj:IsA("BodyColors") then
-					obj:Destroy()
-				end
-			end
-			
-			local head = character:FindFirstChild("Head")
-			if head then
-				for _, decal in ipairs(head:GetChildren()) do
-					if decal:IsA("Decal") then
-						decal:Destroy()
-					end
-				end
-			end
-
-			-- Apply the description
-			local applySuccess = pcall(function()
-				if humanoid.ApplyDescriptionClientServer then
-					humanoid:ApplyDescriptionClientServer(desc)
-				else
-					humanoid:ApplyDescription(desc)
-				end
-			end)
-
-			if applySuccess then
-				AvatarSystem.ApplyEffect(character)
-				WindUI:Notify({ 
-					Title = "✅ Avatar Cloned!", 
-					Content = "Successfully cloned " .. avatarUsernameInput .. "'s avatar!", 
-					Duration = 3 
-				})
-			else
-				WindUI:Notify({ Title = "Error", Content = "Failed to apply avatar", Duration = 2 })
-			end
+			AvatarSystem.CloneAvatar({
+				UserId = userId,
+				Name = avatarUsernameInput,
+				DisplayName = avatarUsernameInput,
+			})
 		end)
 	end,
 })
@@ -3294,47 +2705,7 @@ AvatarTab:Button({
 	Title = "Reset Avatar",
 	Desc = "Reset to your original avatar",
 	Callback = function()
-		local character = LocalPlayer.Character
-		local humanoid = character and character:FindFirstChild("Humanoid")
-		if humanoid then
-			local success, desc = pcall(function()
-				return Players:GetHumanoidDescriptionFromUserId(LocalPlayer.UserId)
-			end)
-			if success and desc then
-				for _, obj in ipairs(character:GetChildren()) do
-					if
-						obj:IsA("Shirt")
-						or obj:IsA("Pants")
-						or obj:IsA("ShirtGraphic")
-						or obj:IsA("Accessory")
-						or obj:IsA("BodyColors")
-					then
-						obj:Destroy()
-					end
-				end
-				local head = character:FindFirstChild("Head")
-				if head then
-					for _, decal in ipairs(head:GetChildren()) do
-						if decal:IsA("Decal") then
-							decal:Destroy()
-						end
-					end
-				end
-
-				pcall(function()
-					if humanoid.ApplyDescriptionClientServer then
-						humanoid:ApplyDescriptionClientServer(desc)
-					else
-						humanoid:ApplyDescription(desc)
-					end
-				end)
-
-				AvatarSystem.ApplyEffect(character)
-				AvatarSystem.SelectedPlayer = nil
-				AvatarSystem.UpdatePreview(nil)
-				WindUI:Notify({ Title = "Avatar Reset", Content = "Restored original avatar!", Duration = 3 })
-			end
-		end
+		AvatarSystem.ResetAvatar()
 	end,
 })
 
@@ -3573,8 +2944,8 @@ pcall(function()
 	_G.AutoWalkMulti = ListMapTab:MultiSection({
 		Title = "Auto Walk System",
 		Icon = "solar:folder-open-bold",
-		Box = true,
-		BoxBorder = true,
+		Box = false,
+		BoxBorder = false,
 		Opened = true,
 	})
 
@@ -3588,8 +2959,8 @@ pcall(function()
 	-- Pre-create sections (Containers for elements)
 	_G.PlaybackSectionRef = _G.AWPlaybackTab:Section({
 		Title = "Playback Controls",
-		Box = true,
-		BoxBorder = true,
+		Box = false,
+		BoxBorder = false,
 		Opened = true,
 		Locked = true,
 		LockedTitle = "Select recording first please",
@@ -3597,8 +2968,8 @@ pcall(function()
 	
 	_G.ProtectionSectionRef = _G.AWProtectionTab:Section({
 		Title = "Protection & Safety",
-		Box = true,
-		BoxBorder = true,
+		Box = false,
+		BoxBorder = false,
 		Opened = true,
 		Locked = true,
 		LockedTitle = "Select recording first please",
@@ -3628,8 +2999,8 @@ pcall(function()
 	_G.PlayerMulti = ToolsTab:MultiSection({
 		Title = "Player Enhancement",
 		Icon = "solar:bolt-bold",
-		Box = true,
-		BoxBorder = true,
+		Box = false,
+		BoxBorder = false,
 		Opened = true,
 	})
 
@@ -4808,13 +4179,22 @@ _G.SafeToggleKeybind(_G.PlayerSettingsContainer, {
 	Keybind = Enum.KeyCode.J,
 	CanChange = true,
 	Callback = function(state)
-		InfiniteJumpState.isOn = state
+		if type(_G.InfiniteJumpState) ~= "table" then _G.InfiniteJumpState = {} end
+		local stateObj = _G.InfiniteJumpState
+		stateObj.isOn = state
 
-		if InfiniteJumpState.isOn then
-			InfiniteJumpState.connection = UserInputService.JumpRequest:Connect(function()
-				local hum = GetHumanoid()
-				if hum then
-					hum:ChangeState(Enum.HumanoidStateType.Jumping)
+		if stateObj.isOn then
+			local infJumpDebounce = false
+			stateObj.connection = UserInputService.JumpRequest:Connect(function()
+				if not infJumpDebounce then
+					infJumpDebounce = true
+					local char = LocalPlayer.Character
+					local hum = char and char:FindFirstChildWhichIsA("Humanoid")
+					if hum then
+						hum:ChangeState(Enum.HumanoidStateType.Jumping)
+					end
+					wait()
+					infJumpDebounce = false
 				end
 			end)
 
@@ -4824,9 +4204,14 @@ _G.SafeToggleKeybind(_G.PlayerSettingsContainer, {
 				Duration = 2,
 			})
 		else
-			if InfiniteJumpState.connection then
-				InfiniteJumpState.connection:Disconnect()
-				InfiniteJumpState.connection = nil
+			if stateObj.connection then
+				stateObj.connection:Disconnect()
+				stateObj.connection = nil
+			end
+			-- Clean up legacy mobileConn if it exists from previous state
+			if stateObj.mobileConn then
+				stateObj.mobileConn:Disconnect()
+				stateObj.mobileConn = nil
 			end
 
 			WindUI:Notify({
@@ -5305,6 +4690,10 @@ local PlaybackState = {
 	lastPlaybackTime = 0,
 	lastAirState = nil,
 	wasInAirLastFrame = false,
+	mobileLiteAccumulator = 0,
+	mobileRaycastCounter = 0,
+	mobileRotationCounter = 0,
+	lastToolSignature = nil,
 	
 	-- Extended State
 	isLooping = false,
@@ -5336,10 +4725,135 @@ task.spawn(function()
     end
 end)
 
+-- ═══════════════════════════════════════════════════════════════════
+-- FORCE WALKING ANIMATION (ControlModule Hook)
+-- Fixes missing walk animation on games that use custom Animate scripts
+-- ═══════════════════════════════════════════════════════════════════
+local ControlHookState = {
+	installed = false,
+	controls = nil,
+	originalFn = nil,
+}
+
+local function IsPlaybackActiveForAnim()
+	return PlaybackState.isPlaying and not PlaybackState.isPaused
+end
+
+local function InstallControlHook()
+	if ControlHookState.installed then return true end
+	local okScripts, playerScripts = pcall(function()
+		return LocalPlayer:WaitForChild("PlayerScripts", 5)
+	end)
+	if not okScripts or not playerScripts then return false, "PlayerScripts not found" end
+	local okModule, playerModule = pcall(function()
+		return playerScripts:WaitForChild("PlayerModule", 5)
+	end)
+	if not okModule or not playerModule then return false, "PlayerModule not found" end
+	local okReq, mod = pcall(require, playerModule)
+	if not okReq or not mod or type(mod.GetControls) ~= "function" then
+		return false, "Controls API unavailable"
+	end
+	local okCtrl, controls = pcall(function() return mod:GetControls() end)
+	if not okCtrl or not controls or type(controls.GetMoveVector) ~= "function" then
+		return false, "GetMoveVector not available"
+	end
+	ControlHookState.controls = controls
+	ControlHookState.originalFn = controls.GetMoveVector
+	controls.GetMoveVector = function(self, ...)
+		if _G.StarshipForceWalkAnim and IsPlaybackActiveForAnim() then
+			return Vector3.new(0, 0, -1)
+		end
+		return ControlHookState.originalFn(self, ...)
+	end
+	ControlHookState.installed = true
+	return true
+end
+
+local function UninstallControlHook()
+	if not ControlHookState.installed then return end
+	pcall(function()
+		if ControlHookState.controls and ControlHookState.originalFn then
+			ControlHookState.controls.GetMoveVector = ControlHookState.originalFn
+		end
+	end)
+	ControlHookState.controls = nil
+	ControlHookState.originalFn = nil
+	ControlHookState.installed = false
+end
+
+-- Virtual keyboard fallback: some games read keyboard/input directly
+-- and ignore ControlModule overrides. This simulates pressing W while playback runs.
+local VirtualWalkState = {
+	running = false,
+	keyDown = false,
+}
+
+local function _SendVirtualKey(down)
+	local ok, vim = pcall(function() return game:GetService("VirtualInputManager") end)
+	if not ok or not vim then return end
+	pcall(function()
+		vim:SendKeyEvent(down and true or false, Enum.KeyCode.W, false, game)
+	end)
+end
+
+local function StartVirtualWalkLoop()
+	if VirtualWalkState.running then return end
+	VirtualWalkState.running = true
+	-- Immediate response: if playback is already active, press key now
+	if IsPlaybackActiveForAnim() then
+		_SendVirtualKey(true)
+		VirtualWalkState.keyDown = true
+	end
+	-- Per-frame driver for near-instant response
+	local reassertFrames = 0
+	VirtualWalkState.connection = RunService.Heartbeat:Connect(function()
+		if not VirtualWalkState.running or not _G.StarshipForceWalkAnim then
+			if VirtualWalkState.connection then
+				VirtualWalkState.connection:Disconnect()
+				VirtualWalkState.connection = nil
+			end
+			if VirtualWalkState.keyDown then
+				_SendVirtualKey(false)
+				VirtualWalkState.keyDown = false
+			end
+			VirtualWalkState.running = false
+			return
+		end
+		local shouldPress = IsPlaybackActiveForAnim()
+		if shouldPress and not VirtualWalkState.keyDown then
+			_SendVirtualKey(true)
+			VirtualWalkState.keyDown = true
+			reassertFrames = 0
+		elseif (not shouldPress) and VirtualWalkState.keyDown then
+			_SendVirtualKey(false)
+			VirtualWalkState.keyDown = false
+		elseif shouldPress and VirtualWalkState.keyDown then
+			-- Re-assert every ~1s to prevent auto-release by some games
+			reassertFrames = reassertFrames + 1
+			if reassertFrames >= 60 then
+				reassertFrames = 0
+				_SendVirtualKey(true)
+			end
+		end
+	end)
+end
+
+local function StopVirtualWalkLoop()
+	VirtualWalkState.running = false
+	if VirtualWalkState.connection then
+		pcall(function() VirtualWalkState.connection:Disconnect() end)
+		VirtualWalkState.connection = nil
+	end
+	if VirtualWalkState.keyDown then
+		_SendVirtualKey(false)
+		VirtualWalkState.keyDown = false
+	end
+end
+
 -- Smoothing Settings
 local SMOOTH_SETTINGS = {
-	LiveSmoothingEnabled = true,
-	LiveSmoothingStrength = 2,
+	LiveSmoothingEnabled = not IS_MOBILE_DEVICE,
+	LiveSmoothingStrength = IS_MOBILE_DEVICE and 1 or 2,
 }
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -5419,6 +4933,21 @@ local function SmoothInterpolateFrames(frames, frameIdx, alpha)
 	if not f1 or not f2 then return nil, nil, nil end
 	
 	alpha = math.clamp(alpha, 0, 1)
+	local useLinear = IS_MOBILE_DEVICE or (_G.StarshipDevicePerformance and _G.StarshipDevicePerformance.interpolationMode == "linear")
+	if useLinear then
+		local smoothPos, smoothVel, smoothLook
+		if f1.posVector and f2.posVector then
+			smoothPos = f1.posVector:Lerp(f2.posVector, alpha)
+		end
+		if f1.velVector and f2.velVector then
+			smoothVel = f1.velVector:Lerp(f2.velVector, alpha)
+		end
+		if f1.charLookVector and f2.charLookVector then
+			smoothLook = f1.charLookVector:Lerp(f2.charLookVector, alpha)
+			if smoothLook.Magnitude > 0.01 then smoothLook = smoothLook.Unit end
+		end
+		return smoothPos, smoothVel, smoothLook
+	end
 
 	local i0 = math.max(1, frameIdx - 1)
 	local i3 = math.min(n, frameIdx + 2)
@@ -5641,6 +5170,21 @@ local function SmoothInterpolateFrames(frames, frameIdx, alpha)
 	local f1, f2 = frames[frameIdx], frames[frameIdx + 1]
 	if not f1 or not f2 then return nil, nil, nil end
 	alpha = math.clamp(alpha, 0, 1)
+	local useLinear = IS_MOBILE_DEVICE or (_G.StarshipDevicePerformance and _G.StarshipDevicePerformance.interpolationMode == "linear")
+	if useLinear then
+		local smoothPos, smoothVel, smoothLook
+		if f1.posVector and f2.posVector then
+			smoothPos = f1.posVector:Lerp(f2.posVector, alpha)
+		end
+		if f1.velVector and f2.velVector then
+			smoothVel = f1.velVector:Lerp(f2.velVector, alpha)
+		end
+		if f1.charLookVector and f2.charLookVector then
+			smoothLook = f1.charLookVector:Lerp(f2.charLookVector, alpha)
+			if smoothLook.Magnitude > 0.01 then smoothLook = smoothLook.Unit end
+		end
+		return smoothPos, smoothVel, smoothLook
+	end
 	local i0 = math.max(1, frameIdx - 1)
 	local i3 = math.min(n, frameIdx + 2)
 	local f0, f3 = frames[i0], frames[i3]
@@ -5737,16 +5281,18 @@ end
 
 -- Stop playback
 local function StopPlayback()
-	PlaybackState.isPlaying = false
-	PlaybackState.isPaused = false
-	PlaybackState.currentTime = 0
 	PlaybackState.lastFrameIndex = 1
-
-	if PlaybackState.connection then
-		PlaybackState.connection:Disconnect()
-		PlaybackState.connection = nil
-	end
-
+	PlaybackState.lastPlaybackTime = 0
+	PlaybackState.lastAirState = nil
+	PlaybackState.wasInAirLastFrame = false
+	PlaybackState.mobileLiteAccumulator = 0
+	PlaybackState.mobileRaycastCounter = 0
+	PlaybackState.mobileRotationCounter = 0
+	PlaybackState.lastToolSignature = nil
+	ClearPath()
+	if PlaybackState.connection then PlaybackState.connection:Disconnect(); PlaybackState.connection = nil end
+	if pathAnimationConnection then pathAnimationConnection:Disconnect(); pathAnimationConnection = nil end
+	if PlaybackState.originalHipHeight and hum then hum.HipHeight = PlaybackState.originalHipHeight end
 	ResetCharacter()
 end
 
@@ -6400,6 +5946,12 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 		PlaybackState.connection = nil
 	end
 
+	local isMobileLitePlayback = IS_MOBILE_DEVICE or (_G.StarshipDevicePerformance and _G.StarshipDevicePerformance.isLowEnd)
+	local cachedRayParams = RaycastParams.new()
+	cachedRayParams.FilterType = Enum.RaycastFilterType.Exclude
+	cachedRayParams.FilterDescendantsInstances = { char }
+	cachedRayParams.IgnoreWater = true
+
 	-- TRAVEL PHASE (Synced with StarshipCore)
 	local targetFrame = PlaybackState.frameData[PlaybackState.lastFrameIndex] or PlaybackState.frameData[1]
 	local targetPos = targetFrame.posVector or (targetFrame.pos and Vector3.new(targetFrame.pos.x, targetFrame.pos.y, targetFrame.pos.z))
@@ -6594,6 +6146,15 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 		
 		local speed = tonumber(PlaybackState.speed) or 1.0
 		local updateDt = math.min(dt, 0.1) -- [PATCH] Cap dt
+		if isMobileLitePlayback then
+			PlaybackState.mobileLiteAccumulator = (PlaybackState.mobileLiteAccumulator or 0) + updateDt
+			local mobileStep = 1 / 30
+			if PlaybackState.mobileLiteAccumulator < mobileStep then
+				return
+			end
+			updateDt = math.min(PlaybackState.mobileLiteAccumulator, mobileStep)
+			PlaybackState.mobileLiteAccumulator = math.max(0, PlaybackState.mobileLiteAccumulator - updateDt)
+		end
 		if PlaybackState.isReversing then
 			PlaybackState.currentTime = PlaybackState.currentTime - (updateDt * speed)
 			if PlaybackState.currentTime <= 0 then
@@ -6653,14 +6214,12 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 			local stateName = fA.stEnum
 			local isInAirState = (stateName == "Jumping" or stateName == "Freefall")
 			
-			if smoothPos and not isInAirState and not isTeleportFrame then
+			local shouldRaycastGround = true
+			
+			if smoothPos and not isInAirState and not isTeleportFrame and shouldRaycastGround then
 				-- Raycast down from smoothPos to find actual ground
-				local rayParams = RaycastParams.new()
-				rayParams.FilterDescendantsInstances = {char}
-				rayParams.FilterType = Enum.RaycastFilterType.Exclude
-				
 				local rayStart = Vector3.new(smoothPos.X, smoothPos.Y + 5, smoothPos.Z) -- Start 5 studs above
-				local rayResult = workspace:Raycast(rayStart, Vector3.new(0, -15, 0), rayParams)
+				local rayResult = workspace:Raycast(rayStart, Vector3.new(0, -15, 0), cachedRayParams)
 				
 				if rayResult then
 					-- Calculate expected Y based on HipHeight
@@ -6719,13 +6278,15 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 				vel = vel * speed
 				if PlaybackState.isReversing then vel = -vel end
 				
-				if fA.mdVector then
-					hum:Move(PlaybackState.isReversing and -fA.mdVector or fA.mdVector)
-				elseif vel.Magnitude > 0.1 then
-					local localMoveDir = hrp.CFrame:VectorToObjectSpace(vel.Unit)
-					hum:Move(Vector3.new(localMoveDir.X, localMoveDir.Y, localMoveDir.Z) * (vel.Magnitude / 16 * speed * 25))
-				else
-					hum:Move(Vector3.zero)
+				if not _G.StarshipForceWalkAnim then
+					if fA.mdVector then
+						hum:Move(PlaybackState.isReversing and -fA.mdVector or fA.mdVector)
+					elseif vel.Magnitude > 0.1 then
+						local localMoveDir = hrp.CFrame:VectorToObjectSpace(vel.Unit)
+						hum:Move(Vector3.new(localMoveDir.X, localMoveDir.Y, localMoveDir.Z) * (vel.Magnitude / 16 * speed * 25))
+					else
+						hum:Move(Vector3.zero)
+					end
 				end
 				hrp.AssemblyLinearVelocity = vel
 				if smoothPos then
@@ -6738,16 +6299,21 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 				local finalVel = targetVel + posDiff * 5
 				hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity:Lerp(finalVel, 0.5)
 				if posDiff.Magnitude > 2 and PlaybackState.skipSnapFrames <= 0 and not isTimeJump then
-					hrp.CFrame = CFrame.new(hrp.Position:Lerp(smoothPos, 0.2)) * hrp.CFrame.Rotation
+					local airLerpAlpha = 0.2
+					hrp.CFrame = CFrame.new(hrp.Position:Lerp(smoothPos, airLerpAlpha)) * hrp.CFrame.Rotation
 				end
 				if PlaybackState.isSpinning then hrp.CFrame = hrp.CFrame * CFrame.Angles(0, dt * 10, 0) end
 			elseif justLanded and smoothPos then
 				local targetRot = (fA.rot or 0) + (PlaybackState.isMoonwalk and 180 or 0)
-				hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(hrp.Position:Lerp(smoothPos, 0.5)) * CFrame.Angles(0, math.rad(targetRot), 0), 0.4)
+				local landedPosAlpha = 0.5
+				local landedRotAlpha = 0.4
+				hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(hrp.Position:Lerp(smoothPos, landedPosAlpha)) * CFrame.Angles(0, math.rad(targetRot), 0), landedRotAlpha)
 				local dampedVel = (smoothVel or Vector3.zero) * speed
 				local targetVel = Vector3.new(dampedVel.X * 0.5, math.min(dampedVel.Y, 0), dampedVel.Z * 0.5)
 				hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity:Lerp(targetVel, 0.6)
-				hum:Move(fA.mdVector or Vector3.zero, false)
+				if not _G.StarshipForceWalkAnim then
+					hum:Move(fA.mdVector or Vector3.zero, false)
+				end
 			else
 				-- 5. SMOOTH DRIFT CORRECTION (Synced with StarshipCore)
 				local targetVel = (smoothVel or Vector3.zero) * speed
@@ -6775,10 +6341,12 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 					PlaybackState.skipSnapFrames = 5
 				elseif dist > 3 then
 					-- MEDIUM DRIFT: Stronger correction
-					correctionVel = (smoothPos - hrp.Position).Unit * (dist * 1.5)
+					local correctionMultiplier = 1.5
+					correctionVel = (smoothPos - hrp.Position).Unit * (dist * correctionMultiplier)
 				elseif dist > 0.5 then
 					-- SMALL DRIFT: Gentle nudge
-					correctionVel = (smoothPos - hrp.Position).Unit * (dist * 0.8)
+					local correctionMultiplier = 0.8
+					correctionVel = (smoothPos - hrp.Position).Unit * (dist * correctionMultiplier)
 				end
 
 				-- Apply combined velocity with smoothing
@@ -6786,21 +6354,25 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 				hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity:Lerp(finalVel, 0.7)
 
 				-- Trigger movement animation
-				if fA.mdVector then
-					hum:Move(fA.mdVector, false)
-				elseif hrp.AssemblyLinearVelocity.Magnitude > 0.5 then
-					local flatVel = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z)
-					if flatVel.Magnitude > 0.1 then hum:Move(flatVel.Unit, false) end
-				else
-					hum:Move(Vector3.zero)
+				if not _G.StarshipForceWalkAnim then
+					if fA.mdVector then
+						hum:Move(fA.mdVector, false)
+					elseif hrp.AssemblyLinearVelocity.Magnitude > 0.5 then
+						local flatVel = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z)
+						if flatVel.Magnitude > 0.1 then hum:Move(flatVel.Unit, false) end
+					else
+						hum:Move(Vector3.zero)
+					end
 				end
 			end
 			
 			-- Rotation
 			local isUserMoving = false
-			for _, k in pairs(UserInputService:GetKeysPressed()) do
-				if k.KeyCode == Enum.KeyCode.W or k.KeyCode == Enum.KeyCode.A or k.KeyCode == Enum.KeyCode.S or k.KeyCode == Enum.KeyCode.D then
-					isUserMoving = true; break
+			if not isMobileLitePlayback then
+				for _, k in pairs(UserInputService:GetKeysPressed()) do
+					if k.KeyCode == Enum.KeyCode.W or k.KeyCode == Enum.KeyCode.A or k.KeyCode == Enum.KeyCode.S or k.KeyCode == Enum.KeyCode.D then
+						isUserMoving = true; break
+					end
 				end
 			end
 			
@@ -6823,10 +6395,20 @@ local function PlayRecording(fileName, force, skipDistanceCheck, forceFromStart)
 					if Vector3.new(smoothVel.X, 0, smoothVel.Z).Unit:Dot(lookDir) < 0.8 then isStrafing = true end
 				end
 				
-				hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(hrp.Position) * CFrame.Angles(0, math.rad(targetRot), 0), isStrafing and 0.8 or 0.3)
+				local rotationAlpha = isStrafing and 0.8 or 0.3
+				hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(hrp.Position) * CFrame.Angles(0, math.rad(targetRot), 0), rotationAlpha)
 			end
 			
-			UpdateTool(char, fA.tool, fA.toolTip, fA.toolColor, fA.toolConfig)
+			local toolSignature = table.concat({
+				tostring(fA.tool or ""),
+				tostring(fA.toolTip or ""),
+				tostring(fA.toolColor or ""),
+				tostring(fA.toolConfig or ""),
+			}, "|")
+			if PlaybackState.lastToolSignature ~= toolSignature then
+				PlaybackState.lastToolSignature = toolSignature
+				UpdateTool(char, fA.tool, fA.toolTip, fA.toolColor, fA.toolConfig)
+			end
 		end
 	end)
 	
@@ -6957,11 +6539,13 @@ _G.AWRecordingContainer:Button({
 	Title = "🔄 Refresh Cloud List",
 	Desc = "Reload recordings from cloud",
 	Callback = function()
-		WindUI:Notify({
-			Title = "🔄 Refreshing...",
-			Content = "Reloading cloud recordings...",
-			Duration = 2,
-		})
+		if not DEV_MODE then
+			WindUI:Notify({
+				Title = "🔄 Refreshing...",
+				Content = "Reloading cloud recordings...",
+				Duration = 2,
+			})
+		end
 
 	-- Clear existing data first (prevent duplicates on re-execute)
 	for k in pairs(_G.StarshipCloud.DropdownValues) do _G.StarshipCloud.DropdownValues[k] = nil end
@@ -7002,52 +6586,30 @@ _G.AWRecordingContainer:Button({
 					Duration = 4,
 				})
 			else
+				if DEV_MODE then
+					warn("[MobileUI] Failed to parse cloud data:", response)
+				else
+					WindUI:Notify({
+						Title = "❌ Error",
+						Content = "Failed to parse cloud data",
+						Duration = 2,
+					})
+				end
+			end
+		else
+			if DEV_MODE then
+				warn("[MobileUI] Failed to connect to cloud recordings API")
+			else
 				WindUI:Notify({
 					Title = "❌ Error",
-					Content = "Failed to parse cloud data",
+					Content = "Failed to connect to cloud",
 					Duration = 2,
 				})
 			end
-		else
-			WindUI:Notify({
-				Title = "❌ Error",
-				Content = "Failed to connect to cloud",
-				Duration = 2,
-			})
 		end
 	end,
 })
 
--- Clear Cache Button
--- _G.AWRecordingContainer:Button({
--- 	Title = "🗑️ Clear Cache",
--- 	Desc = "Delete locally saved recordings",
--- 	Callback = function()
--- 		local cacheInfo = GetCacheInfo()
--- 		if cacheInfo.count == 0 then
--- 			WindUI:Notify({
--- 				Title = "ℹ️ Cache Empty",
--- 				Content = "No cached recordings to clear",
--- 				Duration = 2,
--- 			})
--- 			return
--- 		end
-
--- 		if ClearCache() then
--- 			WindUI:Notify({
--- 				Title = "🗑️ Cache Cleared",
--- 				Content = cacheInfo.count .. " recordings removed from cache",
--- 				Duration = 3,
--- 			})
--- 		else
--- 			WindUI:Notify({
--- 				Title = "❌ Error",
--- 				Content = "Failed to clear cache",
--- 				Duration = 2,
--- 			})
--- 		end
--- 	end,
--- })
 
 _G.AWRecordingContainer:Space()
 
@@ -7576,7 +7138,7 @@ if _G.AWPrivateRequestContainer then
 	local function UpdatePrivateCloudUI()
 		if not PrivateRecordingDropdown then return end
 
-		local values = _G.StarshipCloud.PrivateDropdownValues
+		local values = _G.StarshipCloud.PrivateDropdownValues or {}
 		if #values == 0 then
 			values = {"No private requests"}
 		end
@@ -7614,45 +7176,63 @@ if _G.AWPrivateRequestContainer then
 			})
 		end
 
-		local newValues = {}
-		local newCache = {}
+		-- Wrap semua logic di pcall biar flag loading dijamin ke-reset walau error
+		local ok, err = pcall(function()
+			local newValues = {}
+			local newCache = {}
 
-		local apiUrl = BuildCloudURL({ list = "private" })
-		local success, response = pcall(function()
-			return game:HttpGet(apiUrl)
-		end)
+			local apiUrl = BuildCloudURL({ list = "private" })
+			print("[PrivateRequest] Fetching:", apiUrl)
 
-		if success and response then
-			local parseSuccess, data = pcall(function()
-				return httpService:JSONDecode(response)
+			-- cache=false biar respon fresh (userId access list bisa berubah kapan aja)
+			local success, response = pcall(function()
+				return game:HttpGet(apiUrl, false)
 			end)
 
-			if parseSuccess and data and data.success and data.recordings then
-				for _, rec in ipairs(data.recordings) do
-					local displayName = "[P] " .. (rec.name or rec.recordingId)
-					table.insert(newValues, displayName)
-					local recEntry = {
-						name = rec.name or rec.recordingId,
-						recordingId = rec.recordingId,
-					}
-					-- Cache with multiple keys to avoid dropdown value mismatch
-					newCache[displayName] = recEntry
-					newCache[tostring(rec.recordingId)] = recEntry
-					newCache[tostring(rec.name or rec.recordingId)] = recEntry
-				end
-
-				table.sort(newValues, function(a, b)
-					return string.lower(a) < string.lower(b)
+			if not success then
+				print("[PrivateRequest] HttpGet FAILED:", tostring(response))
+			elseif response then
+				local parseSuccess, data = pcall(function()
+					return httpService:JSONDecode(response)
 				end)
 
-				-- Atomic swap after successful parse/load
-				_G.StarshipCloud.PrivateDropdownValues = newValues
-				_G.StarshipCloud.PrivateRecordingsCache = newCache
+				if not parseSuccess then
+					print("[PrivateRequest] JSON parse FAILED")
+				elseif not data or data.success ~= true then
+					print("[PrivateRequest] Server returned error:", response:sub(1, 200))
+				elseif data.recordings then
+					print("[PrivateRequest] Got", #data.recordings, "recordings")
+					for _, rec in ipairs(data.recordings) do
+						local displayName = "[P] " .. (rec.name or rec.recordingId)
+						table.insert(newValues, displayName)
+						local recEntry = {
+							name = rec.name or rec.recordingId,
+							recordingId = rec.recordingId,
+						}
+						-- Cache with multiple keys to avoid dropdown value mismatch
+						newCache[displayName] = recEntry
+						newCache[tostring(rec.recordingId)] = recEntry
+						newCache[tostring(rec.name or rec.recordingId)] = recEntry
+					end
+
+					table.sort(newValues, function(a, b)
+						return string.lower(a) < string.lower(b)
+					end)
+
+					-- Atomic swap after successful parse/load
+					_G.StarshipCloud.PrivateDropdownValues = newValues
+					_G.StarshipCloud.PrivateRecordingsCache = newCache
+				end
 			end
+		end)
+
+		if not ok then
+			print("[PrivateRequest] Reload ERROR:", tostring(err))
 		end
 
+		-- GUARANTEED cleanup — flag reset & UI update walaupun ada error
 		_G.StarshipCloud.PrivateListLoading = false
-		UpdatePrivateCloudUI()
+		pcall(UpdatePrivateCloudUI)
 	end
 
 	PrivateParagraph = _G.AWPrivateRequestContainer:Paragraph({
@@ -8335,6 +7915,44 @@ function CreatePlaybackControls(isInit)
 		end,
 	})
 
+	-- ══════════════════════════════════════════════════════════════════
+	-- 🏃 FORCE ANIMATION FEATURE
+	-- Fixes missing walk animation on games with custom Animate scripts
+	-- ══════════════════════════════════════════════════════════════════
+	PlaybackSection:Toggle({
+		Title = "🏃 Force Animation",
+		Desc = "Bypass Force Animation (use this mif animation from player not showing)",
+		Value = false,
+		Callback = function(state)
+			_G.StarshipForceWalkAnim = state
+			if state then
+				local hookOk, hookErr = InstallControlHook()
+				StartVirtualWalkLoop()
+				if not hookOk then
+					WindUI:Notify({
+						Title = "🏃 Force Animation",
+						Content = "ENABLED (virtual key fallback). Hook skipped: " .. tostring(hookErr or "n/a"),
+						Duration = 3,
+					})
+				else
+					WindUI:Notify({
+						Title = "🏃 Force Animation",
+						Content = "ENABLED - Animation auto-trigger during playback",
+						Duration = 2,
+					})
+				end
+			else
+				UninstallControlHook()
+				StopVirtualWalkLoop()
+				WindUI:Notify({
+					Title = "🏃 Force Animation",
+					Content = "DISABLED - You'll need to hold forward to trigger animation again",
+					Duration = 2,
+				})
+			end
+		end,
+	})
+
 	-- Anti-AFK Feature (Always ON)
 	local antiAfkConnection = nil
 	local isAntiAfkOn = true -- Force to true
@@ -8957,8 +8575,8 @@ local dsOk, dsErr = pcall(function()
 _G.SpoofMulti = SpoofTab:MultiSection({
 	Title = "Spoof System",
 	Icon = "solar:user-id-bold",
-	Box = true,
-	BoxBorder = true,
+	Box = false,
+	BoxBorder = false,
 	Opened = true,
 })
 
@@ -9485,8 +9103,8 @@ pcall(function()
 		Title = "Settings",
 		Desc = "Configure your Starship experience",
 		Icon = "solar:settings-bold",
-		Box = true,
-		BoxBorder = true,
+		Box = false,
+		BoxBorder = false,
 		Opened = true,
 	})
 	_G._AppearanceTab_S = _G._SettingsMulti:Tab({
@@ -9615,8 +9233,8 @@ pcall(function()
 		Title = "Danger Zone",
 		Desc = "Destructive actions — use with caution",
 		Icon = "solar:danger-triangle-bold",
-		Box = true,
-		BoxBorder = true,
+		Box = false,
+		BoxBorder = false,
 		Opened = false,
 	})
 end)

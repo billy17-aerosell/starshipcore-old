@@ -216,7 +216,7 @@ local function verifySecurePayload(signedData, userId)
 
 	-- Check timestamp locally first (quick check)
 	local now = os.time() * 1000 -- Convert to milliseconds
-	if payload.t and payload.t > now + 5000 then
+	if payload.t and payload.t > now + 60000 then -- 1 minute grace for behind clock
 		return { valid = false, data = nil, error = "FUTURE_TIMESTAMP" }
 	end
 	if payload.e and now > payload.e then
@@ -1684,7 +1684,11 @@ local function main()
 
 	-- Standard mode: Call secure loader for authentication & webhook notification
 	-- SECURITY: Using obscured endpoint name with HWID
-	local authUrl = SERVER_URL .. "/api/pc-ld-q8r4?userId=" .. userId .. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
+	-- placeId dikirim biar webhook log tau game/tempat user lagi jalanin script
+	local placeId = tostring(game.PlaceId or 0)
+	local authUrl = SERVER_URL .. "/api/pc-ld-q8r4?userId=" .. userId
+		.. "&hwid=" .. HttpService:UrlEncode(deviceHWID)
+		.. "&placeId=" .. placeId
 	local authSuccess, authResponse = pcall(function()
 		return game:HttpGet(authUrl)
 	end)
@@ -1743,7 +1747,7 @@ local function main()
 		if verifyError == "INVALID_SIGNATURE" then
 			showError("Security Error: Data tampering detected")
 		elseif verifyError == "EXPIRED" then
-			showError("Security Error: Session expired. Please restart.")
+			showError("Security Error: Session expired. Please ensure your device clock is set to automatic.\n\n(Clock Desync Detected)")
 		else
 			showError("Server Error: " .. tostring(verifyError or "Invalid Response"))
 		end
