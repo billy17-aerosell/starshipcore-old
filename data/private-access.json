@@ -34,20 +34,20 @@
         "Cicicuit_Obstacle",
         "Elvoria_Race_Private"
     ],
-     "10817242625": [
+    "10817242625": [
         "YMM_Obstacle"
     ],
-    "10485430204" : [
+    "10485430204": [
         "MT_Dranix_Private"
     ],
-    "9451176924" : [
+    "9451176924": [
         "MT_Noxyra_Private"
     ],
-    "8714713607" : [
+    "8714713607": [
         "Abyssal_Obstacle_Private"
     ],
-    "9701545223" : [
-        "MT_Velunox_Private"
+    "9701545223": [
+        "MT_Velunox_Private",
+        "Altraz_Rush_Private"
     ]
-    
 }
