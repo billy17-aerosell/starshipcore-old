@@ -80,3 +80,4 @@ folder_recorder/
 # ===========================================
 DiscordPresence/config.json
 DiscordPresence/node_modules/
+.env*
