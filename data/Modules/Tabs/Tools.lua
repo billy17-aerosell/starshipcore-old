@@ -1180,7 +1180,15 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 	UIHandlers.ToggleShiftLock = ToggleSL
 
 	local slKeyConnection = UserInputService.InputBegan:Connect(function(input, gp)
-		if not gp and Config.Keybinds.ToggleShiftLock and input.KeyCode == Config.Keybinds.ToggleShiftLock then
+		-- Tombol controller seperti Triangle/ButtonY bisa sudah ditandai "processed"
+		-- oleh game (misalnya untuk release tool), tetapi Shift Lock tetap harus jalan.
+		local isGamepadInput = input.UserInputType.Name:find("Gamepad") ~= nil
+		local shiftLockKey = Config.Keybinds and Config.Keybinds.ToggleShiftLock
+		if not _G.StarshipIsBindingKeybind
+			and shiftLockKey
+			and input.KeyCode == shiftLockKey
+			and (isGamepadInput or not gp)
+		then
 			ToggleSL()
 		end
 	end)
