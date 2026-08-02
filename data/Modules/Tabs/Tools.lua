@@ -1179,16 +1179,87 @@ local function SetupToolsUI(PageTools, UI, Connections, Config, LocalPlayer, UIH
 	end)
 	UIHandlers.ToggleShiftLock = ToggleSL
 
-	local slKeyConnection = UserInputService.InputBegan:Connect(function(input, gp)
-		-- Tombol controller seperti Triangle/ButtonY bisa sudah ditandai "processed"
-		-- oleh game (misalnya untuk release tool), tetapi Shift Lock tetap harus jalan.
-		local isGamepadInput = input.UserInputType.Name:find("Gamepad") ~= nil
+	-- Controller guard: ambil alih tombol Shift Lock sebelum handler game
+	-- supaya ButtonY/Triangle tidak ikut me-release tool yang sedang dipegang.
+	local ContextActionService = game:GetService("ContextActionService")
+	local SHIFT_LOCK_GAMEPAD_ACTION = "StarshipShiftLockGamepadGuard"
+	local guardedSLGamepadKey = nil
+
+	pcall(function()
+		ContextActionService:UnbindAction(SHIFT_LOCK_GAMEPAD_ACTION)
+	end)
+
+	local function IsGamepadKeyCode(keyCode)
+		if not keyCode then return false end
+		local keyName = keyCode.Name
+		return keyName:find("^Button") ~= nil
+			or keyName:find("^DPad") ~= nil
+			or keyName:find("^Thumbstick") ~= nil
+	end
+
+	local function ShiftLockGamepadGuard(_actionName, inputState, input)
 		local shiftLockKey = Config.Keybinds and Config.Keybinds.ToggleShiftLock
-		if not _G.StarshipIsBindingKeybind
-			and shiftLockKey
-			and input.KeyCode == shiftLockKey
-			and (isGamepadInput or not gp)
-		then
+		if _G.StarshipIsBindingKeybind or input.KeyCode ~= shiftLockKey then
+			return Enum.ContextActionResult.Pass
+		end
+
+		if inputState == Enum.UserInputState.Begin then
+			ToggleSL()
+		end
+
+		-- Hentikan input di sini agar action ButtonY milik game tidak terpanggil.
+		return Enum.ContextActionResult.Sink
+	end
+
+	local function RefreshShiftLockGamepadGuard()
+		local shiftLockKey = Config.Keybinds and Config.Keybinds.ToggleShiftLock
+		if shiftLockKey == guardedSLGamepadKey then return end
+
+		pcall(function()
+			ContextActionService:UnbindAction(SHIFT_LOCK_GAMEPAD_ACTION)
+		end)
+		guardedSLGamepadKey = nil
+
+		if IsGamepadKeyCode(shiftLockKey) then
+			local bound = pcall(function()
+				ContextActionService:BindActionAtPriority(
+					SHIFT_LOCK_GAMEPAD_ACTION,
+					ShiftLockGamepadGuard,
+					false,
+					Enum.ContextActionPriority.High.Value + 10000,
+					shiftLockKey
+				)
+			end)
+			if bound then
+				guardedSLGamepadKey = shiftLockKey
+			end
+		end
+	end
+
+	RefreshShiftLockGamepadGuard()
+	local slGuardWatcher = RunService.Heartbeat:Connect(RefreshShiftLockGamepadGuard)
+	table.insert(Connections, slGuardWatcher)
+	table.insert(Connections, {
+		Disconnect = function()
+			pcall(function()
+				ContextActionService:UnbindAction(SHIFT_LOCK_GAMEPAD_ACTION)
+			end)
+		end,
+	})
+
+	local slKeyConnection = UserInputService.InputBegan:Connect(function(input, gp)
+		local shiftLockKey = Config.Keybinds and Config.Keybinds.ToggleShiftLock
+		if _G.StarshipIsBindingKeybind or not shiftLockKey or input.KeyCode ~= shiftLockKey then
+			return
+		end
+
+		local isGamepadInput = input.UserInputType.Name:find("Gamepad") ~= nil
+		if isGamepadInput then
+			-- CAS menangani controller. Ini hanya fallback bila binding CAS gagal.
+			if guardedSLGamepadKey ~= shiftLockKey then
+				ToggleSL()
+			end
+		elseif not gp then
 			ToggleSL()
 		end
 	end)
