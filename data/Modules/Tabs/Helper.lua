@@ -1167,60 +1167,101 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		LblHighJumpHint.TextXAlignment = Enum.TextXAlignment.Center
 		RegisterTheme(LblHighJumpHint, "TextColor3", "TextDim")
 
-		local isHighJump, defJumpPower, defJumpHeight, hjConn = false, nil, nil, nil
+		local isHighJump = false
 		local highJumpPower = 150
+		local highJumpLoop = nil
+		local originalHumanoidState = setmetatable({}, { __mode = "k" })
 
-		local function ApplyHighJump(h)
-			if not h then return end
-			-- Force pakai JumpPower (compatible R6/R15) lalu set custom value
-			pcall(function() h.UseJumpPower = true end)
-			h.JumpPower = highJumpPower
+		local function GetHighJumpHumanoid()
+			local c = LocalPlayer.Character
+			return c and c:FindFirstChildOfClass("Humanoid")
 		end
 
-		local function ToggleHighJump(forceEnable)
-			if forceEnable ~= nil then
-				if forceEnable == isHighJump then return end
-			end
-			isHighJump = not isHighJump
+		local function UpdateHighJumpButton()
 			BtnHighJump.Text = "HIGH JUMP: " .. (isHighJump and "ON" or "OFF")
 			BtnHighJump.TextColor3 = isHighJump and C_GREEN or C_TEXT_DIM
 			BtnHighJump.UIStroke.Color = isHighJump and C_GREEN or C_TEXT_DIM
-			ShowFeatureToast("High Jump", isHighJump)
+		end
 
-			local c = LocalPlayer.Character
-			local h = c and c:FindFirstChildOfClass("Humanoid")
+		local function RememberHighJumpState(h)
+			if not h or originalHumanoidState[h] then return end
 
-			if isHighJump then
-				if h then
-					-- Save default values supaya bisa restore
-					if defJumpPower  == nil then defJumpPower  = h.JumpPower end
-					if defJumpHeight == nil then defJumpHeight = h.JumpHeight end
+			local ok, useJumpPower, jumpPower = pcall(function()
+				return h.UseJumpPower, h.JumpPower
+			end)
+			if ok then
+				originalHumanoidState[h] = {
+					UseJumpPower = useJumpPower,
+					JumpPower = jumpPower,
+				}
+			end
+		end
+
+		local function ApplyHighJump(h)
+			if not h or not h.Parent then return end
+			RememberHighJumpState(h)
+
+			-- Mengikuti metode JumpPower dari jump.lua: game bisa menimpa
+			-- properti ini, jadi nilainya selalu dikoreksi kembali oleh Heartbeat.
+			pcall(function()
+				h.UseJumpPower = true
+				if h.JumpPower ~= highJumpPower then
+					h.JumpPower = highJumpPower
+				end
+			end)
+		end
+
+		local function RestoreHighJumpState()
+			for h, state in pairs(originalHumanoidState) do
+				if h and h.Parent then
+					pcall(function()
+						h.UseJumpPower = state.UseJumpPower
+						h.JumpPower = state.JumpPower
+					end)
+				end
+			end
+			table.clear(originalHumanoidState)
+		end
+
+		local function StopHighJumpLoop()
+			if highJumpLoop then
+				highJumpLoop:Disconnect()
+				highJumpLoop = nil
+			end
+		end
+
+		local function StartHighJumpLoop()
+			StopHighJumpLoop()
+			ApplyHighJump(GetHighJumpHumanoid())
+
+			highJumpLoop = RunService.Heartbeat:Connect(function()
+				if not isHighJump then return end
+
+				local h = GetHighJumpHumanoid()
+				if h and h.Health > 0 then
 					ApplyHighJump(h)
 				end
-				-- Re-apply tiap respawn / character change
-				hjConn = LocalPlayer.CharacterAdded:Connect(function(char)
-					task.wait(0.3)
-					if not isHighJump then return end
-					local hum = char:FindFirstChildOfClass("Humanoid")
-					if hum then
-						if defJumpPower  == nil then defJumpPower  = hum.JumpPower end
-						if defJumpHeight == nil then defJumpHeight = hum.JumpHeight end
-						ApplyHighJump(hum)
-					end
-				end)
-				table.insert(Connections, hjConn)
-			else
-				if hjConn then
-					hjConn:Disconnect()
-					hjConn = nil
-				end
-				-- Restore default
-				if h then
-					if defJumpPower  ~= nil then h.JumpPower  = defJumpPower  end
-					if defJumpHeight ~= nil then h.JumpHeight = defJumpHeight end
-				end
-				defJumpPower, defJumpHeight = nil, nil
+			end)
+			table.insert(Connections, highJumpLoop)
+		end
+
+		local function ToggleHighJump(forceEnable)
+			local nextState = forceEnable
+			if nextState == nil then
+				nextState = not isHighJump
 			end
+			if nextState == isHighJump then return end
+
+			isHighJump = nextState
+			if isHighJump then
+				StartHighJumpLoop()
+			else
+				StopHighJumpLoop()
+				RestoreHighJumpState()
+			end
+
+			UpdateHighJumpButton()
+			ShowFeatureToast("High Jump", isHighJump)
 		end
 
 		BtnHighJump.MouseButton1Click:Connect(function()
@@ -1228,19 +1269,25 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		end)
 
 		InpHighJumpPower.FocusLost:Connect(function()
-			local v = tonumber(InpHighJumpPower.Text)
-			if v and v > 0 then
-				highJumpPower = math.clamp(v, 1, 1000)
-				InpHighJumpPower.Text = tostring(highJumpPower)
-				if isHighJump then
-					local c = LocalPlayer.Character
-					local h = c and c:FindFirstChildOfClass("Humanoid")
-					if h then ApplyHighJump(h) end
-				end
-			else
-				InpHighJumpPower.Text = tostring(highJumpPower)
+			local value = tonumber(InpHighJumpPower.Text)
+			if value and value > 0 then
+				highJumpPower = math.clamp(value, 1, 1000)
+			end
+
+			InpHighJumpPower.Text = tostring(highJumpPower)
+			if isHighJump then
+				ApplyHighJump(GetHighJumpHumanoid())
 			end
 		end)
+
+		-- Cleanup juga memulihkan nilai asli yang direkam sebelum fitur aktif.
+		table.insert(Connections, {
+			Disconnect = function()
+				isHighJump = false
+				StopHighJumpLoop()
+				RestoreHighJumpState()
+			end,
+		})
 
 		UIHandlers.ToggleHighJump = ToggleHighJump
 	end
