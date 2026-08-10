@@ -1157,7 +1157,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		RegisterTheme(InpHighJumpPower, "TextColor3", "Text")
 
 		local LblHighJumpHint = Instance.new("TextLabel", CardJump)
-		LblHighJumpHint.Text = "Custom JumpPower (default 50)"
+		LblHighJumpHint.Text = "Custom power via JumpHeight (default 50)"
 		LblHighJumpHint.Size = UDim2.new(0.94, 0, 0, 14)
 		LblHighJumpHint.Position = UDim2.new(0.03, 0, 0, 252)
 		LblHighJumpHint.BackgroundTransparency = 1
@@ -1186,13 +1186,13 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 		local function RememberHighJumpState(h)
 			if not h or originalHumanoidState[h] then return end
 
-			local ok, useJumpPower, jumpPower = pcall(function()
-				return h.UseJumpPower, h.JumpPower
+			local ok, useJumpPower, jumpHeight = pcall(function()
+				return h.UseJumpPower, h.JumpHeight
 			end)
 			if ok then
 				originalHumanoidState[h] = {
 					UseJumpPower = useJumpPower,
-					JumpPower = jumpPower,
+					JumpHeight = jumpHeight,
 				}
 			end
 		end
@@ -1201,13 +1201,11 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 			if not h or not h.Parent then return end
 			RememberHighJumpState(h)
 
-			-- Mengikuti metode JumpPower dari jump.lua: game bisa menimpa
-			-- properti ini, jadi nilainya selalu dikoreksi kembali oleh Heartbeat.
+			-- Mengikuti metode JumpHeight dari jump.lua: mode JumpPower
+			-- dimatikan dan nilai input dikonversi menjadi tinggi lompatan.
 			pcall(function()
-				h.UseJumpPower = true
-				if h.JumpPower ~= highJumpPower then
-					h.JumpPower = highJumpPower
-				end
+				h.UseJumpPower = false
+				h.JumpHeight = highJumpPower * 0.144
 			end)
 		end
 
@@ -1216,7 +1214,7 @@ local function SetupHelperUI(PageHelper, UI, Connections, Config, LocalPlayer, U
 				if h and h.Parent then
 					pcall(function()
 						h.UseJumpPower = state.UseJumpPower
-						h.JumpPower = state.JumpPower
+						h.JumpHeight = state.JumpHeight
 					end)
 				end
 			end
