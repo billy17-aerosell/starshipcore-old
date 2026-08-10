@@ -33,11 +33,13 @@
         "MT_Yahpuky_Private",
         "MT_Bleuphori_Private",
         "MT_Floviera_Private",
-        "MT_Fury_Private"
+        "MT_Fury_Private",
+        "Hidden_Obstacle_Private"
     ],
     "9993878371": [
         "Cicicuit_Obstacle",
-        "Elvoria_Race_Private"
+        "Elvoria_Race_Private",
+        "Hidden_Obstacle_Private"
     ],
     "10817242625": [
         "YMM_Obstacle"
