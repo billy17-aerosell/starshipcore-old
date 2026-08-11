@@ -118,25 +118,18 @@ local function setupCompetitorDetection()
     -- Discord credentials stay server-side. A short-lived challenge binds each
     -- report to this user and source IP before the relay accepts it.
     local function reportSecurityViolation(reason)
-        local req = request
-            or http_request
-            or (syn and syn.request)
-            or (fluxus and fluxus.request)
-            or (http and http.request)
-            or (krnl and krnl.request)
-        if type(req) ~= "function" then
-            error("executor request API is unavailable")
-        end
+        local function decodeResponse(body, responseName)
+            if type(body) ~= "string" then
+                error(responseName .. " response body is unavailable")
+            end
 
-        local function getResponseBody(response)
-            if type(response) == "string" then return response end
-            if type(response) ~= "table" then return nil end
-            return response.Body or response.body or response.ResponseBody or response.responseBody
-        end
-
-        local function getResponseStatus(response)
-            if type(response) ~= "table" then return nil end
-            return tonumber(response.StatusCode or response.Status or response.status_code or response.status)
+            local decoded, data = pcall(function()
+                return HttpService:JSONDecode(body)
+            end)
+            if not decoded or type(data) ~= "table" then
+                error(responseName .. " response is invalid")
+            end
+            return data
         end
 
         local executor = "Unknown"
@@ -147,69 +140,31 @@ local function setupCompetitorDetection()
             end
         end)
 
-        local hwid = "Unknown"
-        pcall(function()
-            if gethwid then hwid = tostring(gethwid()) end
-        end)
-
         local userId = tostring(LocalPlayer.UserId)
-        local challengeResponse = req({
-            Url = SECURITY_REPORT_API .. "&action=challenge&userId=" .. HttpService:UrlEncode(userId),
-            Method = "GET",
-            Headers = { ["Accept"] = "application/json" }
-        })
-        local challengeStatus = getResponseStatus(challengeResponse)
-        if challengeStatus and challengeStatus >= 400 then
-            error("challenge endpoint returned HTTP " .. tostring(challengeStatus))
+        local challengeBody = game:HttpGet(
+            SECURITY_REPORT_API .. "&action=challenge&userId=" .. HttpService:UrlEncode(userId)
+        )
+        local challengeData = decodeResponse(challengeBody, "challenge")
+        if type(challengeData.challenge) ~= "string" then
+            error("challenge endpoint returned " .. tostring(challengeData.error or "no challenge"))
         end
 
-        local challengeBody = getResponseBody(challengeResponse)
-        if type(challengeBody) ~= "string" then
-            error("challenge response body is unavailable")
-        end
+        -- This compatibility transport intentionally omits raw HWID because GET
+        -- query strings may be retained by platform access logs.
+        local reportUrl = SECURITY_REPORT_API
+            .. "&action=submit"
+            .. "&challenge=" .. HttpService:UrlEncode(challengeData.challenge)
+            .. "&userId=" .. HttpService:UrlEncode(userId)
+            .. "&username=" .. HttpService:UrlEncode(tostring(LocalPlayer.Name))
+            .. "&displayName=" .. HttpService:UrlEncode(tostring(LocalPlayer.DisplayName))
+            .. "&executor=" .. HttpService:UrlEncode(executor)
+            .. "&reason=" .. HttpService:UrlEncode(tostring(reason))
+            .. "&placeId=" .. HttpService:UrlEncode(tostring(game.PlaceId or 0))
 
-        local decoded, challengeData = pcall(function()
-            return HttpService:JSONDecode(challengeBody)
-        end)
-        if not decoded or type(challengeData) ~= "table" or type(challengeData.challenge) ~= "string" then
-            error("challenge response is invalid")
-        end
-
-        local reportBody = HttpService:JSONEncode({
-            challenge = challengeData.challenge,
-            userId = userId,
-            username = tostring(LocalPlayer.Name),
-            displayName = tostring(LocalPlayer.DisplayName),
-            executor = executor,
-            hwid = hwid, -- Converted to an irreversible fingerprint by the server.
-            reason = tostring(reason),
-            placeId = tostring(game.PlaceId or 0)
-        })
-
-        local reportResponse = req({
-            Url = SECURITY_REPORT_API,
-            Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json",
-                ["Accept"] = "application/json"
-            },
-            Body = reportBody
-        })
-        local reportStatus = getResponseStatus(reportResponse)
-        local reportResponseBody = getResponseBody(reportResponse)
-        local reportData = nil
-        if type(reportResponseBody) == "string" then
-            pcall(function()
-                reportData = HttpService:JSONDecode(reportResponseBody)
-            end)
-        end
-
-        if reportStatus and reportStatus >= 400 then
-            local relayError = type(reportData) == "table" and reportData.error or "UNKNOWN_RELAY_ERROR"
-            error("report endpoint returned HTTP " .. tostring(reportStatus) .. " (" .. tostring(relayError) .. ")")
-        end
-        if type(reportData) ~= "table" or reportData.delivered ~= true then
-            error("report relay did not confirm Discord delivery")
+        local reportBody = game:HttpGet(reportUrl)
+        local reportData = decodeResponse(reportBody, "report")
+        if reportData.delivered ~= true then
+            error("report relay failed (" .. tostring(reportData.error or "DELIVERY_NOT_CONFIRMED") .. ")")
         end
 
         print("[Starship Security] Discord report delivered")

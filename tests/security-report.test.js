@@ -235,6 +235,31 @@ describe("security report endpoint", () => {
       .toMatch(/^`[a-f0-9]{24}`$/);
   });
 
+  it("accepts a signed GET submission without exposing an HWID query value", async () => {
+    const { handler, fetchMock } = createHarness();
+    const challenge = await issueChallenge(handler);
+    const response = createResponse();
+
+    await handler(
+      createRequest({
+        method: "GET",
+        query: {
+          action: "submit",
+          ...validReport(challenge),
+          hwid: "must-not-be-used-from-query",
+        },
+      }),
+      response,
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toEqual({ accepted: true, delivered: true });
+    const discordPayload = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(JSON.stringify(discordPayload)).not.toContain("must-not-be-used-from-query");
+    expect(discordPayload.embeds[0].fields.find((field) => field.name === "HWID Fingerprint").value)
+      .toBe("`Unavailable`");
+  });
+
   it("rate-limits excessive challenge requests", async () => {
     const { handler } = createHarness();
     let response;
