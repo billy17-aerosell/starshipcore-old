@@ -22,6 +22,10 @@
       "destination": "/api/load?platform=mobile"
     },
     {
+      "source": "/api/m-sec-r7q2",
+      "destination": "/api/security-report"
+    },
+    {
       "source": "/api/m-sk-p4n6",
       "destination": "/api/get-module?name=SambungKata-obfuscated.lua&platform=mobile"
     },

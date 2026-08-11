@@ -313,15 +313,15 @@ const r2Path = `pc/${filePath}`;
 
 ## 8. Hardcoded Credentials (KRITIS)
 
-### 8.1 `.env.example` — SECRET ASLI, BUKAN PLACEHOLDER
+### 8.1 `.env.example` — SECRET ASLI PERNAH TEREKSPOS
 
-**[Risiko: KRITIS]** `.env.example` berisi nilai asli, bukan placeholder:
+**[Risiko: KRITIS]** Audit menemukan `.env.example` pernah berisi nilai asli, bukan placeholder:
 ```
-ADMIN_SECRET=932885a21f402ed282d420a55e742b52cf11eae0b3d4e6280fcb7647b4860049
-STARSHIP_SECRET_KEY=538739a817cc0c94cefd894f83fd6e0e074d435d3153b85f345d461d55d2ec1c
+ADMIN_SECRET=[REDACTED]
+STARSHIP_SECRET_KEY=[REDACTED]
 ```
-→ Siapa pun yang melihat repo tahu secret production.  
-**Rekomendasi:** **SEGERA** ganti ke placeholder. **Rotasi semua key** yang sudah terekspos.
+→ Nilai sudah dihapus dari template aktif, tetapi secret lama tetap harus dianggap bocor karena pernah tercatat di repository.
+**Rekomendasi:** **SEGERA rotasi semua key** yang pernah terekspos dan bersihkan Git history jika repository pernah dibagikan.
 
 ### 8.2 `scripts/local-upload-server.js` — R2 Credentials Hardcoded
 

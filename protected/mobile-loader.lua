@@ -21,6 +21,7 @@ print("🚀 [Starship] Loader script started. LocalPlayer:", LocalPlayer)
 local SECURE_API_URL = "https://starship-core.my.id"
 local MOBILE_UI_API = SECURE_API_URL .. "/api/m-ui-v8x3q2?userId="
 local MOBILE_AUTH_API = SECURE_API_URL .. "/api/m-auth-k5r9z7"
+local SECURITY_REPORT_API = SECURE_API_URL .. "/api/m-sec-r7q2"
 
 -- Event Code System API (SECURITY: Obscured)
 local EVENT_CODE_API = SECURE_API_URL .. "/api/m-evt-j3w8p4"
@@ -60,75 +61,122 @@ local EVENT_CODE_API = SECURE_API_URL .. "/api/m-evt-j3w8p4"
 local function setupCompetitorDetection()
     local blacklistedDomains = {
         "rullzsy99.workers.dev",
+        "motioncore.web.id",
+        "vip.motioncore.web.id",
         "autowalkdev",
     }
-    -- Blacklist for Initial Scan (UIs and Globals)
+
+    -- Distinctive competitor identifiers. Avoid generic names such as
+    -- "Executed" or "isLoaded" because many unrelated scripts use them.
     local blacklist = {
-        uiNames = { "RullzsyHub", "Rulzsy" },
-        globals = { "RullzsyLoaded", "RulzsyHub", "Rulzsy", "Executed", "isLoaded" }
+        uiNames = { "RullzsyHub", "Rulzsy", "Motion Core", "MotionCore", "Motion", "AutoWalkDev" },
+        textPatterns = { "rullzsy", "rulzsy", "motion core", "motioncore", "autowalkdev" },
+        globals = { "RullzsyLoaded", "RulzsyHub", "Rullzsy", "Rulzsy", "MotionCoreLoaded", "MotionCore", "AutoWalkDev" }
     }
 
+    local securityTerminated = false
+
+    local function findPlain(text, needle)
+        return string.find(string.lower(text), string.lower(needle), 1, true) ~= nil
+    end
+
     local function checkUrl(url)
-        if not url or type(url) ~= "string" then return false end
-        local urlLower = string.lower(url)
+        if type(url) ~= "string" then return false end
+
         for _, domain in ipairs(blacklistedDomains) do
-            if string.find(urlLower, domain) then
-                return true
+            if findPlain(url, domain) then
+                return true, domain
             end
         end
         return false
     end
 
-    local function reportToWebhook(reason)
-        local webhookUrl = "https://discord.com/api/webhooks/1493402238415016026/0ldqo3Yo13kgpO-J92Y6h9WiXAV4Qjc9HslSop1mIIeo-2sL1WrYnnNCopoCyN7FenJ9"
-        
+    local function checkText(text)
+        if type(text) ~= "string" then return false end
+
+        for _, pattern in ipairs(blacklist.textPatterns) do
+            if findPlain(text, pattern) then
+                return true, pattern
+            end
+        end
+        return false
+    end
+
+    local function checkGlobalName(name)
+        if type(name) ~= "string" then return false end
+
+        for _, identifier in ipairs(blacklist.globals) do
+            if findPlain(name, identifier) then
+                return true, identifier
+            end
+        end
+        return false
+    end
+
+    -- Discord credentials stay server-side. A short-lived challenge binds each
+    -- report to this user and source IP before the relay accepts it.
+    local function reportSecurityViolation(reason)
+        local req = request
+            or http_request
+            or (syn and syn.request)
+            or (fluxus and fluxus.request)
+            or (http and http.request)
+            or (krnl and krnl.request)
+        if type(req) ~= "function" then return end
+
         local executor = "Unknown"
         pcall(function()
-            if identifyexecutor then 
-                local name, ver = identifyexecutor()
-                executor = name .. (ver and (" (" .. ver .. ")") or "")
+            if identifyexecutor then
+                local name, version = identifyexecutor()
+                executor = tostring(name) .. (version and (" (" .. tostring(version) .. ")") or "")
             end
         end)
 
         local hwid = "Unknown"
         pcall(function()
-            if gethwid then hwid = gethwid() end
+            if gethwid then hwid = tostring(gethwid()) end
         end)
 
-        local data = {
-            ["content"] = "🚨 **SECURITY VIOLATION DETECTED!** @everyone",
-            ["embeds"] = {{
-                ["title"] = "Starship Anti-Thief Logs",
-                ["color"] = 16711680, -- Pure Red
-                ["fields"] = {
-                    {["name"] = "Player", ["value"] = "**" .. LocalPlayer.DisplayName .. "** (@" .. LocalPlayer.Name .. ")", ["inline"] = true},
-                    {["name"] = "User ID", ["value"] = "[" .. tostring(LocalPlayer.UserId) .. "](https://www.roblox.com/users/" .. tostring(LocalPlayer.UserId) .. "/profile)", ["inline"] = true},
-                    {["name"] = "Executor", ["value"] = executor, ["inline"] = true},
-                    {["name"] = "HWID (Device)", ["value"] = "```" .. hwid .. "```", ["inline"] = false},
-                    {["name"] = "Detection Reason", ["value"] = reason, ["inline"] = false},
-                    {["name"] = "Location", ["value"] = "Game ID: " .. tostring(game.PlaceId), ["inline"] = false}
-                },
-                ["footer"] = {["text"] = "Starship Security System v3.0"},
-                ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
-            }}
-        }
+        local userId = tostring(LocalPlayer.UserId)
+        local challengeResponse = req({
+            Url = SECURITY_REPORT_API .. "?action=challenge&userId=" .. HttpService:UrlEncode(userId),
+            Method = "GET",
+            Headers = { ["Accept"] = "application/json" }
+        })
+        local challengeBody = type(challengeResponse) == "table" and challengeResponse.Body or challengeResponse
+        if type(challengeBody) ~= "string" then return end
 
-        local req = (request or http_request or (syn and syn.request) or (fluxus and fluxus.request))
-        if req then
-            pcall(function()
-                req({
-                    Url = webhookUrl,
-                    Method = "POST",
-                    Headers = {["Content-Type"] = "application/json"},
-                    Body = game:GetService("HttpService"):JSONEncode(data)
-                })
-            end)
-        end
+        local challengeData = HttpService:JSONDecode(challengeBody)
+        if type(challengeData) ~= "table" or type(challengeData.challenge) ~= "string" then return end
+
+        local reportBody = HttpService:JSONEncode({
+            challenge = challengeData.challenge,
+            userId = userId,
+            username = tostring(LocalPlayer.Name),
+            displayName = tostring(LocalPlayer.DisplayName),
+            executor = executor,
+            hwid = hwid, -- Converted to an irreversible fingerprint by the server.
+            reason = tostring(reason),
+            placeId = tostring(game.PlaceId or 0)
+        })
+
+        req({
+            Url = SECURITY_REPORT_API,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json",
+                ["Accept"] = "application/json"
+            },
+            Body = reportBody
+        })
     end
 
     local function terminateScript(reason)
-        -- 0. Report to Webhook First
-        pcall(function() reportToWebhook(reason) end)
+        if securityTerminated then return end
+        securityTerminated = true
+
+        -- 0. Submit the security report through the Starship server relay.
+        pcall(function() reportSecurityViolation(reason) end)
 
         -- 1. System-wide Clean Sweep (Destroy ALL Starship UIs)
         local function cleanAllStarshipUIs()
@@ -181,82 +229,133 @@ local function setupCompetitorDetection()
                 end
             end)
         end)
-        -- 3. Stop execution silently
-        task.spawn(function()
-            task.cancel(task.running())
-        end)
+        -- The caller that detected the violation is responsible for returning
+        -- or supplying an empty HTTP response. Cancelling task.running() from
+        -- a newly spawned task only cancels that new task itself.
     end
 
     -- ══════════════════════════════════════════════════════════════════
     -- INITIAL DEEP SCAN (Search memory and UI Content)
     -- ══════════════════════════════════════════════════════════════════
     local function performDeepScan()
-        local coreGui = (gethui and gethui()) or game:GetService("CoreGui")
-        -- 1. Check UI Names (Fast check)
-        for _, uiName in ipairs(blacklist.uiNames) do
-            if coreGui:FindFirstChild(uiName) then return true, "UI: " .. uiName end
+        local containers = {}
+        local seenContainers = {}
+
+        local function addContainer(container)
+            if container and not seenContainers[container] then
+                seenContainers[container] = true
+                table.insert(containers, container)
+            end
         end
 
-        -- 2. UI CONTENT SCAN (Deep search for text inside UI objects)
-        -- This detects them even if they rename their ScreenGui
-        local foundInUI = false
-        pcall(function()
-            for _, descendant in pairs(coreGui:GetDescendants()) do
-                -- SKIP STARSHIP'S OWN UI
-                if screenGui and descendant:IsDescendantOf(screenGui) then continue end
-                
-                if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
-                    local text = string.lower(descendant.Text)
-                    -- Check for "rullzsy" and "rulzsy" (common misspellings)
-                    if string.find(text, "rullzsy") or string.find(text, "rulzsy") then
-                        local uiParent = descendant:FindFirstAncestorOfClass("ScreenGui")
-                        local uiName = uiParent and uiParent.Name or "Unknown"
-                        
-                        foundInUI = "Text: '" .. descendant.Text .. "' in " .. descendant.Name .. " (UI: " .. uiName .. ")"
-                        break
+        -- Scan hidden UI, CoreGui, and PlayerGui. Different executors/libraries
+        -- may parent their interface in different containers.
+        local gotHui, hui = pcall(function()
+            return gethui and gethui() or nil
+        end)
+        if gotHui then addContainer(hui) end
+        addContainer(game:GetService("CoreGui"))
+        addContainer(LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui"))
+
+        -- 1. Check ScreenGui names case-insensitively.
+        for _, container in ipairs(containers) do
+            local objects = { container }
+            for _, descendant in ipairs(container:GetDescendants()) do
+                table.insert(objects, descendant)
+            end
+
+            for _, object in ipairs(objects) do
+                if object:IsA("ScreenGui") then
+                    for _, uiName in ipairs(blacklist.uiNames) do
+                        if string.lower(object.Name) == string.lower(uiName) then
+                            return true, "UI: " .. object.Name
+                        end
                     end
                 end
             end
-        end)
-        if foundInUI then return true, "Competitor UI ( " .. foundInUI .. " )" end
+        end
 
-        -- 3. Deep Search Global Environment for the URL string
-        for k, v in pairs(getgenv()) do
-            -- Check keys and string values
-            if type(k) == "string" and string.find(string.lower(k), "rullzsy") then return true, "Global Key" end
-            if type(v) == "string" and string.find(string.lower(v), blacklistedDomains[1]) then return true, "Global String" end
-            -- Deep search inside tables (common for configs)
-            if type(v) == "table" then
-                local foundInTable = false
-                pcall(function()
-                    for _, val in pairs(v) do
-                        if type(val) == "string" and string.find(string.lower(val), blacklistedDomains[1]) then
-                            foundInTable = true
+        -- 2. Search visible UI text using every configured competitor pattern.
+        for _, container in ipairs(containers) do
+            local foundInUI = false
+            pcall(function()
+                for _, descendant in ipairs(container:GetDescendants()) do
+                    -- Skip Starship's own interface.
+                    if screenGui and descendant:IsDescendantOf(screenGui) then continue end
+
+                    if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                        local matched, pattern = checkText(descendant.Text)
+                        if matched then
+                            local uiParent = descendant:FindFirstAncestorOfClass("ScreenGui")
+                            local uiName = uiParent and uiParent.Name or "Unknown"
+                            foundInUI = "Text: '" .. descendant.Text .. "' in " .. descendant.Name
+                                .. " (UI: " .. uiName .. ", match: " .. pattern .. ")"
                             break
                         end
                     end
-                end)
-                if foundInTable then return true, "Nested URL String" end
+                end
+            end)
+
+            if foundInUI then
+                return true, "Competitor UI (" .. foundInUI .. ")"
             end
         end
-        return false
-    end
 
-    -- Run Initial Check
-    local detected, reason = performDeepScan()
-    if detected then
-        terminateScript("Competitor detected during startup (" .. reason .. ")")
-        return true -- SIGNAL DETECTION
+        -- 3. Search global strings and nested config tables. The old scan used
+        -- blacklistedDomains[1], so newly added domains were never checked.
+        local function scanTable(tbl, visited, depth)
+            if type(tbl) ~= "table" or visited[tbl] or depth > 3 then return nil end
+            visited[tbl] = true
+
+            local scanned = 0
+            for key, value in pairs(tbl) do
+                scanned = scanned + 1
+                if scanned > 500 then break end
+
+                if type(key) == "string" then
+                    local keyDomain, domain = checkUrl(key)
+                    if keyDomain then return "Global key URL: " .. domain end
+
+                    local keyIdentifier, identifier = checkGlobalName(key)
+                    if keyIdentifier then return "Global key: " .. identifier end
+                end
+
+                if type(value) == "string" then
+                    local valueDomain, domain = checkUrl(value)
+                    if valueDomain then return "Global string URL: " .. domain end
+
+                    local valueText, pattern = checkText(value)
+                    if valueText then return "Global string: " .. pattern end
+                elseif type(value) == "table" then
+                    local nestedReason = scanTable(value, visited, depth + 1)
+                    if nestedReason then return nestedReason end
+                end
+            end
+            return nil
+        end
+
+        local globalEnvironment = _G
+        pcall(function()
+            if getgenv then globalEnvironment = getgenv() end
+        end)
+
+        local globalReason = nil
+        pcall(function()
+            globalReason = scanTable(globalEnvironment, {}, 0)
+        end)
+        if globalReason then return true, globalReason end
+
+        return false
     end
 
     -- ══════════════════════════════════════════════════════════════════
     -- INITIAL & CONTINUOUS PROTECTION
     -- ══════════════════════════════════════════════════════════════════
-    -- 1. Run Initial Check (Blocking)
+    -- Run the initial check once (blocking).
     local detected, reason = performDeepScan()
     if detected then
         terminateScript("Competitor detected during startup (" .. reason .. ")")
-        return true 
+        return true -- Signal the caller to stop the entire loader.
     end
 
     -- 2. Setup Continuous Background Scan (Non-blocking)
@@ -270,19 +369,80 @@ local function setupCompetitorDetection()
         end
     end)
 
-    -- Note: Removed __namecall hook as it triggers "namecallInstance detector" kicks in some games.
-    -- We still have the hookfunction on game.HttpGet below for basic protection.
-
-
+    -- Hook game HTTP methods as well as common executor request functions.
+    -- Blocking the response prevents loadstring from receiving competitor code.
     if hookfunction then
-        local oldHttpGet
-        oldHttpGet = hookfunction(game.HttpGet, newcclosure(function(self, url, ...)
-            if checkUrl(url) then
-                terminateScript("Competitor HttpGet detected (Mencoba buka RullsszyHub)")
-                return ""
+        local wrapClosure = newcclosure or function(callback) return callback end
+
+        local function hookGameHttpMethod(httpMethod, methodName)
+            if type(httpMethod) ~= "function" then return end
+
+            local oldMethod
+            pcall(function()
+                oldMethod = hookfunction(httpMethod, wrapClosure(function(self, url, ...)
+                    local blocked, matchedDomain = checkUrl(url)
+                    if blocked then
+                        terminateScript("Competitor " .. methodName .. " detected (" .. matchedDomain .. ")")
+                        return ""
+                    end
+                    return oldMethod(self, url, ...)
+                end))
+            end)
+        end
+
+        local function tryHookGameHttpMethod(methodName)
+            local available, httpMethod = pcall(function()
+                return game[methodName]
+            end)
+            if available then
+                hookGameHttpMethod(httpMethod, methodName)
             end
-            return oldHttpGet(self, url, ...)
-        end))
+        end
+
+        tryHookGameHttpMethod("HttpGet")
+        tryHookGameHttpMethod("HttpGetAsync")
+
+        local hookedRequestFunctions = {}
+        local function hookExecutorRequest(requestFunction, requestName)
+            if type(requestFunction) ~= "function" or hookedRequestFunctions[requestFunction] then return end
+            hookedRequestFunctions[requestFunction] = true
+
+            local oldRequest
+            local installed = pcall(function()
+                oldRequest = hookfunction(requestFunction, wrapClosure(function(options, ...)
+                    local url = nil
+                    if type(options) == "table" then
+                        url = options.Url or options.URL or options.url
+                    elseif type(options) == "string" then
+                        url = options
+                    end
+
+                    local blocked, matchedDomain = checkUrl(url)
+                    if blocked then
+                        terminateScript("Competitor " .. requestName .. " detected (" .. matchedDomain .. ")")
+                        return {
+                            Success = false,
+                            StatusCode = 403,
+                            StatusMessage = "Blocked by Starship security",
+                            Body = "",
+                            Headers = {}
+                        }
+                    end
+                    return oldRequest(options, ...)
+                end))
+            end)
+
+            if not installed or type(oldRequest) ~= "function" then
+                hookedRequestFunctions[requestFunction] = nil
+            end
+        end
+
+        hookExecutorRequest(request, "request")
+        hookExecutorRequest(http_request, "http_request")
+        hookExecutorRequest(syn and syn.request, "syn.request")
+        hookExecutorRequest(fluxus and fluxus.request, "fluxus.request")
+        hookExecutorRequest(http and http.request, "http.request")
+        hookExecutorRequest(krnl and krnl.request, "krnl.request")
     end
     
     return false 
