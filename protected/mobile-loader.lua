@@ -122,7 +122,20 @@ local function setupCompetitorDetection()
             or (fluxus and fluxus.request)
             or (http and http.request)
             or (krnl and krnl.request)
-        if type(req) ~= "function" then return end
+        if type(req) ~= "function" then
+            error("executor request API is unavailable")
+        end
+
+        local function getResponseBody(response)
+            if type(response) == "string" then return response end
+            if type(response) ~= "table" then return nil end
+            return response.Body or response.body or response.ResponseBody or response.responseBody
+        end
+
+        local function getResponseStatus(response)
+            if type(response) ~= "table" then return nil end
+            return tonumber(response.StatusCode or response.Status or response.status_code or response.status)
+        end
 
         local executor = "Unknown"
         pcall(function()
@@ -143,11 +156,22 @@ local function setupCompetitorDetection()
             Method = "GET",
             Headers = { ["Accept"] = "application/json" }
         })
-        local challengeBody = type(challengeResponse) == "table" and challengeResponse.Body or challengeResponse
-        if type(challengeBody) ~= "string" then return end
+        local challengeStatus = getResponseStatus(challengeResponse)
+        if challengeStatus and challengeStatus >= 400 then
+            error("challenge endpoint returned HTTP " .. tostring(challengeStatus))
+        end
 
-        local challengeData = HttpService:JSONDecode(challengeBody)
-        if type(challengeData) ~= "table" or type(challengeData.challenge) ~= "string" then return end
+        local challengeBody = getResponseBody(challengeResponse)
+        if type(challengeBody) ~= "string" then
+            error("challenge response body is unavailable")
+        end
+
+        local decoded, challengeData = pcall(function()
+            return HttpService:JSONDecode(challengeBody)
+        end)
+        if not decoded or type(challengeData) ~= "table" or type(challengeData.challenge) ~= "string" then
+            error("challenge response is invalid")
+        end
 
         local reportBody = HttpService:JSONEncode({
             challenge = challengeData.challenge,
@@ -160,7 +184,7 @@ local function setupCompetitorDetection()
             placeId = tostring(game.PlaceId or 0)
         })
 
-        req({
+        local reportResponse = req({
             Url = SECURITY_REPORT_API,
             Method = "POST",
             Headers = {
@@ -169,14 +193,24 @@ local function setupCompetitorDetection()
             },
             Body = reportBody
         })
+        local reportStatus = getResponseStatus(reportResponse)
+        if reportStatus and reportStatus >= 400 then
+            error("report endpoint returned HTTP " .. tostring(reportStatus))
+        end
     end
 
     local function terminateScript(reason)
         if securityTerminated then return end
         securityTerminated = true
 
-        -- 0. Submit the security report through the Starship server relay.
-        pcall(function() reportSecurityViolation(reason) end)
+        -- 0. Submit from a fresh coroutine. Executor HTTP calls may yield, which
+        -- is not allowed inside some hookfunction/newcclosure callbacks.
+        task.spawn(function()
+            local delivered, deliveryError = pcall(reportSecurityViolation, reason)
+            if not delivered then
+                warn("[Starship Security] Report delivery failed:", tostring(deliveryError))
+            end
+        end)
 
         -- 1. System-wide Clean Sweep (Destroy ALL Starship UIs)
         local function cleanAllStarshipUIs()
