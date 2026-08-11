@@ -162,8 +162,8 @@ describe("security report endpoint", () => {
 
     const first = createResponse();
     await handler(createRequest({ method: "POST", body: requestBody }), first);
-    expect(first.statusCode).toBe(202);
-    expect(first.body).toEqual({ accepted: true });
+    expect(first.statusCode).toBe(200);
+    expect(first.body).toEqual({ accepted: true, delivered: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const replay = createResponse();
@@ -171,6 +171,22 @@ describe("security report endpoint", () => {
     expect(replay.statusCode).toBe(409);
     expect(replay.body).toEqual({ error: "CHALLENGE_ALREADY_USED" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns a delivery error when Discord rejects the webhook", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 404 }));
+    const { handler } = createHarness({ fetchImpl: fetchMock });
+    const challenge = await issueChallenge(handler);
+    const response = createResponse();
+
+    await handler(createRequest({ method: "POST", body: validReport(challenge) }), response);
+
+    expect(response.statusCode).toBe(502);
+    expect(response.body).toEqual({
+      error: "DISCORD_REJECTED_REPORT",
+      delivered: false,
+      discordStatus: 404,
+    });
   });
 
   it("rejects invalid and oversized report bodies", async () => {

@@ -194,9 +194,23 @@ local function setupCompetitorDetection()
             Body = reportBody
         })
         local reportStatus = getResponseStatus(reportResponse)
-        if reportStatus and reportStatus >= 400 then
-            error("report endpoint returned HTTP " .. tostring(reportStatus))
+        local reportResponseBody = getResponseBody(reportResponse)
+        local reportData = nil
+        if type(reportResponseBody) == "string" then
+            pcall(function()
+                reportData = HttpService:JSONDecode(reportResponseBody)
+            end)
         end
+
+        if reportStatus and reportStatus >= 400 then
+            local relayError = type(reportData) == "table" and reportData.error or "UNKNOWN_RELAY_ERROR"
+            error("report endpoint returned HTTP " .. tostring(reportStatus) .. " (" .. tostring(relayError) .. ")")
+        end
+        if type(reportData) ~= "table" or reportData.delivered ~= true then
+            error("report relay did not confirm Discord delivery")
+        end
+
+        print("[Starship Security] Discord report delivered")
     end
 
     local function terminateScript(reason)
