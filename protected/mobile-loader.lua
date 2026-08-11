@@ -21,7 +21,9 @@ print("🚀 [Starship] Loader script started. LocalPlayer:", LocalPlayer)
 local SECURE_API_URL = "https://starship-core.my.id"
 local MOBILE_UI_API = SECURE_API_URL .. "/api/m-ui-v8x3q2?userId="
 local MOBILE_AUTH_API = SECURE_API_URL .. "/api/m-auth-k5r9z7"
-local SECURITY_REPORT_API = SECURE_API_URL .. "/api/m-sec-r7q2"
+-- Reuse the established mobile API path: some executor traffic receives a
+-- Vercel/WAF 403 on newly introduced aliases before reaching our handler.
+local SECURITY_REPORT_API = MOBILE_AUTH_API .. "?securityReport=1"
 
 -- Event Code System API (SECURITY: Obscured)
 local EVENT_CODE_API = SECURE_API_URL .. "/api/m-evt-j3w8p4"
@@ -152,7 +154,7 @@ local function setupCompetitorDetection()
 
         local userId = tostring(LocalPlayer.UserId)
         local challengeResponse = req({
-            Url = SECURITY_REPORT_API .. "?action=challenge&userId=" .. HttpService:UrlEncode(userId),
+            Url = SECURITY_REPORT_API .. "&action=challenge&userId=" .. HttpService:UrlEncode(userId),
             Method = "GET",
             Headers = { ["Accept"] = "application/json" }
         })
