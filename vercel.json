@@ -23,7 +23,7 @@
     },
     {
       "source": "/api/m-sec-r7q2",
-      "destination": "/api/security-report"
+      "destination": "/api/load?securityReport=1"
     },
     {
       "source": "/api/m-sk-p4n6",

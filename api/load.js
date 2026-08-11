@@ -10,6 +10,9 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { createSecurePayload, generateHoneypot, isHoneypotTriggered, generateAESKey, encryptAES, verifyTokenFromClient } from "../lib/crypto-utils.js";
+import { createSecurityReportHandler } from "../lib/security-report.js";
+
+const securityReportHandler = createSecurityReportHandler();
 
 // Event Code System API (from environment variable for security)
 const EVENT_CODE_API = process.env.EVENT_CODE_API_URL || "";
@@ -610,6 +613,12 @@ async function fetchRobloxPlaceInfo(placeId) {
 }
 
 export default async function handler(req, res) {
+  // Reuse this serverless function for the mobile security relay so the
+  // deployment stays within Vercel Hobby's 12-function limit.
+  if (req.query.securityReport === "1") {
+    return securityReportHandler(req, res);
+  }
+
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
