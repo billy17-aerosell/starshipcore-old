@@ -79,12 +79,35 @@ if not exist ".vercel\project.json" if not exist ".vercel\repo.json" (
     echo.
 )
 
-:: Start Local Upload Server in new window
-echo [1/2] Starting Upload Server on port 4000...
-start "Starship Upload Server (4000)" node scripts\local-upload-server.js
+:: Start Local Upload Server in a persistent new window.
+:: The health endpoint below is the source of truth; START can preserve an older ERRORLEVEL.
+echo [1/2] Checking Upload Server on port 4000...
+powershell -NoProfile -Command "try { $r = Invoke-RestMethod -Uri 'http://127.0.0.1:4000/' -TimeoutSec 2; if ($r.status -eq 'ok') { exit 0 } } catch {}; exit 1" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    echo [OK] Upload Server is already running on port 4000.
+) else (
+    if not exist "scripts\local-upload-server.js" (
+        color 0C
+        echo [ERROR] scripts\local-upload-server.js was not found!
+        popd
+        pause
+        exit /b 1
+    )
 
-:: Give it a moment to start
-timeout /t 3 /nobreak > nul
+    echo [INFO] Opening Upload Server in a separate window...
+    start "Starship Upload Server (4000)" /D "%~dp0" "%ComSpec%" /d /k call "START-UPLOAD-SERVER.bat"
+
+    :: Wait up to five seconds for Node to bind and answer the health endpoint.
+    powershell -NoProfile -Command "for ($i = 0; $i -lt 10; $i++) { try { $r = Invoke-RestMethod -Uri 'http://127.0.0.1:4000/' -TimeoutSec 1; if ($r.status -eq 'ok') { exit 0 } } catch {}; Start-Sleep -Milliseconds 500 }; exit 1" >nul 2>&1
+    if !ERRORLEVEL! neq 0 (
+        color 0E
+        echo [WARNING] Upload Server did not respond on port 4000.
+        echo           Check the separate Upload Server window for the error.
+    ) else (
+        color 0A
+        echo [OK] Upload Server is ready on http://localhost:4000
+    )
+)
 
 :: Start Vercel Dev in this window
 echo.

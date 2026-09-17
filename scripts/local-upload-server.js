@@ -166,9 +166,19 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: "Not found" }));
 });
 
+const HOST = "127.0.0.1";
 const PORT = 4000;
 
-server.listen(PORT, "0.0.0.0", () => {
+server.on("error", error => {
+  if (error.code === "EADDRINUSE") {
+    console.error(`❌ Port ${PORT} is already in use on ${HOST}. The upload server may already be running.`);
+  } else {
+    console.error("❌ Upload Server failed:", error.message);
+  }
+  process.exitCode = 1;
+});
+
+server.listen(PORT, HOST, () => {
   console.log("╔═══════════════════════════════════════════════════════════════╗");
   console.log("║          Local Upload Server for R2                           ║");
   console.log("╚═══════════════════════════════════════════════════════════════╝");
